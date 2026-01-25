@@ -14,7 +14,8 @@ async function migrate() {
     connectionString: process.env.DATABASE_URL
   });
 
-  // 1. Run schema.sql (Baseline)
+  try {
+    // 1. Run schema.sql (Baseline)
     try {
       const schemaPath = path.join(process.cwd(), 'src/db/schema.sql');
       if (fs.existsSync(schemaPath)) {
