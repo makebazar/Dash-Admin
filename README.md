@@ -1,36 +1,140 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# DashAdmin
 
-## Getting Started
+Административная панель для управления клубами, сотрудниками, сменами и финансами.
 
-First, run the development server:
+## 🚀 Tech Stack
+
+- **Frontend**: Next.js 16 (App Router), React 19, TypeScript
+- **Styling**: Tailwind CSS 4, Radix UI
+- **Database**: PostgreSQL
+- **Charts**: Recharts
+- **Auth**: Custom phone verification
+
+## 📋 Features
+
+- 👥 Управление пользователями и ролями
+- 🏢 Многоуровневая система клубов
+- 📊 Отслеживание смен и зарплат сотрудников
+- 💰 Финансовые отчеты и транзакции
+- 📈 Аналитика и KPI
+- 🔐 Аутентификация по номеру телефона
+- 👨‍💼 Роли: Super Admin, Club Owner, Admin, Employee
+
+## 🛠️ Development
+
+### Prerequisites
+
+- Node.js 20+
+- PostgreSQL 14+
+- npm или yarn
+
+### Installation
+
+```bash
+# Клонировать репозиторий
+git clone https://github.com/makebazar/Dash-Admin.git
+cd Dash-Admin
+
+# Установить зависимости
+npm install
+
+# Настроить переменные окружения
+cp .env.example .env
+# Отредактировать .env и указать DATABASE_URL
+```
+
+### Database Setup
+
+```bash
+# Применить схему базы данных
+psql $DATABASE_URL -f src/db/schema.sql
+
+# Применить миграции
+for f in migrations/*.sql; do psql $DATABASE_URL -f "$f"; done
+```
+
+### Running Locally
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Откройте [http://localhost:3000](http://localhost:3000) в браузере.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 🐳 Docker Deployment
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### Build Docker Image
 
-## Learn More
+```bash
+docker build -t dashadmin:latest .
+```
 
-To learn more about Next.js, take a look at the following resources:
+### Environment Variables
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `DATABASE_URL` | PostgreSQL connection string | `postgresql://user:password@host:5432/dashadmin` |
+| `NODE_ENV` | Environment mode | `production` |
+| `PORT` | Application port | `3000` |
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### Running with Docker
 
-## Deploy on Vercel
+```bash
+docker run -p 3000:3000 \
+  -e DATABASE_URL="postgresql://user:password@host:5432/dashadmin" \
+  -e NODE_ENV=production \
+  dashadmin:latest
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## 🚢 Coolify Deployment
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+1. **Создайте новый проект в Coolify**
+2. **Подключите GitHub репозиторий**: `https://github.com/makebazar/Dash-Admin.git`
+3. **Настройте переменные окружения**:
+   - `DATABASE_URL` - URL вашей PostgreSQL базы данных
+   - `NODE_ENV=production`
+4. **Настройте PostgreSQL** (если еще не создана):
+   - В Coolify создайте новый PostgreSQL сервис
+   - Используйте connection string из Coolify для `DATABASE_URL`
+5. **Инициализация БД**:
+   ```bash
+   # Выполните один раз после первого деплоя
+   ./scripts/init-db.sh
+   ```
+6. **Deploy!** - Coolify автоматически соберет и запустит приложение
+
+## 📁 Project Structure
+
+```
+DashAdmin/
+├── src/
+│   ├── app/              # Next.js App Router pages
+│   │   ├── api/          # API routes
+│   │   ├── login/        # Login page
+│   │   ├── dashboard/    # Dashboard view
+│   │   ├── employee/     # Employee workspace
+│   │   ├── clubs/        # Club management
+│   │   └── super-admin/  # Super admin panel
+│   ├── components/       # Reusable React components
+│   ├── db/              # Database schema and connection
+│   └── lib/             # Utilities and helpers
+├── migrations/          # Database migrations
+├── scripts/            # Utility scripts
+├── public/             # Static assets
+└── Dockerfile          # Docker configuration
+```
+
+## 🔒 Security
+
+- Passwords хешируются с помощью bcrypt
+- Session management через cookies
+- Role-based access control (RBAC)
+- Environment variables для sensitive data
+
+## 📝 License
+
+Private Project
+
+## 👥 Team
+
+Made with ❤️ by MakeBazar
