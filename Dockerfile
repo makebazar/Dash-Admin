@@ -19,6 +19,8 @@ COPY . .
 
 # Set environment variable for build
 ENV NEXT_TELEMETRY_DISABLED=1
+# Skip static optimization completely
+ENV NEXT_PRIVATE_SKIP_STATIC=1
 
 # Build Next.js application
 RUN npm run build
