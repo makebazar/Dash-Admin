@@ -62,6 +62,9 @@ interface PeriodBonus {
 
     // For PROGRESSIVE
     thresholds?: { from: number; percent: number }[]
+
+    // New: Mode for calculation
+    bonus_mode?: 'MONTH' | 'SHIFT'
 }
 
 interface SalaryScheme {
@@ -72,6 +75,7 @@ interface SalaryScheme {
     version: number
     formula: Formula
     period_bonuses?: PeriodBonus[]
+    standard_monthly_shifts?: number
     employee_count: number
     created_at: string
 }
@@ -107,6 +111,7 @@ export default function SalarySettingsPage({ params }: { params: Promise<{ clubI
     const [schemeDescription, setSchemeDescription] = useState('')
     const [formula, setFormula] = useState<Formula>(defaultFormula)
     const [periodBonuses, setPeriodBonuses] = useState<PeriodBonus[]>([])
+    const [standardMonthlyShifts, setStandardMonthlyShifts] = useState(15)
 
     useEffect(() => {
         params.then(p => {
@@ -153,6 +158,7 @@ export default function SalarySettingsPage({ params }: { params: Promise<{ clubI
         setSchemeDescription('')
         setFormula(defaultFormula)
         setPeriodBonuses([])
+        setStandardMonthlyShifts(15)
         setIsModalOpen(true)
     }
 
@@ -162,6 +168,7 @@ export default function SalarySettingsPage({ params }: { params: Promise<{ clubI
         setSchemeDescription(scheme.description || '')
         setFormula(scheme.formula || defaultFormula)
         setPeriodBonuses(scheme.period_bonuses || [])
+        setStandardMonthlyShifts(scheme.standard_monthly_shifts || 15)
         setIsModalOpen(true)
     }
 
@@ -185,7 +192,8 @@ export default function SalarySettingsPage({ params }: { params: Promise<{ clubI
                     name: schemeName,
                     description: schemeDescription,
                     formula,
-                    period_bonuses: periodBonuses
+                    period_bonuses: periodBonuses,
+                    standard_monthly_shifts: standardMonthlyShifts
                 })
             })
 
@@ -450,6 +458,9 @@ export default function SalarySettingsPage({ params }: { params: Promise<{ clubI
                             </CardHeader>
                             <CardContent className="space-y-4">
                                 <div className="bg-muted/50 rounded-lg p-3 text-sm">
+                                    <div className="mb-2 pb-2 border-b border-border/10">
+                                        <span className="text-muted-foreground">Эталон:</span> {scheme.standard_monthly_shifts || 15} смен/мес
+                                    </div>
                                     {formatFormulaSummary(scheme.formula)}
                                     {scheme.period_bonuses && scheme.period_bonuses.length > 0 && (
                                         <div className="mt-2 pt-2 border-t border-border/10 text-xs text-muted-foreground flex gap-2 items-center">
@@ -524,6 +535,29 @@ export default function SalarySettingsPage({ params }: { params: Promise<{ clubI
                                 />
                             </div>
                         </div>
+
+                        {/* Standard Shifts (Эталон) */}
+                        <Card className="border-blue-500/20 bg-blue-500/5">
+                            <CardContent className="p-4 flex flex-col md:flex-row items-start md:items-center gap-4">
+                                <div className="flex-1">
+                                    <Label className="text-blue-700 font-bold mb-1 flex items-center gap-2">
+                                        🎯 Эталон смен в месяц
+                                    </Label>
+                                    <p className="text-xs text-blue-600/80">
+                                        Используется для пересчета KPI планов. Если сотрудник отработает больше или меньше этого эталона, его личный план изменится пропорционально.
+                                    </p>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <Input
+                                        type="number"
+                                        value={standardMonthlyShifts}
+                                        onChange={e => setStandardMonthlyShifts(parseInt(e.target.value) || 15)}
+                                        className="w-24 h-10 border-blue-500/30 text-lg font-bold"
+                                    />
+                                    <span className="font-medium text-blue-700">смен</span>
+                                </div>
+                            </CardContent>
+                        </Card>
 
                         {/* Base Rate */}
                         <Card>
@@ -1009,6 +1043,34 @@ export default function SalarySettingsPage({ params }: { params: Promise<{ clubI
                                                             <option key={m.key} value={m.key}>{m.label}</option>
                                                         ))}
                                                     </select>
+                                                    <div className="mb-4">
+                                                        <Label className="text-[10px] text-muted-foreground mr-3 uppercase font-bold text-blue-600">Режим расчёта:</Label>
+                                                        <div className="flex gap-2 mt-1">
+                                                            <Button
+                                                                type="button"
+                                                                variant={(bonus.bonus_mode || 'MONTH') === 'MONTH' ? 'secondary' : 'outline'}
+                                                                size="sm"
+                                                                onClick={() => updatePeriodBonus(index, 'bonus_mode', 'MONTH')}
+                                                                className="h-7 text-[10px] flex-1"
+                                                            >
+                                                                За Месяц
+                                                            </Button>
+                                                            <Button
+                                                                type="button"
+                                                                variant={bonus.bonus_mode === 'SHIFT' ? 'secondary' : 'outline'}
+                                                                size="sm"
+                                                                onClick={() => updatePeriodBonus(index, 'bonus_mode', 'SHIFT')}
+                                                                className="h-7 text-[10px] flex-1"
+                                                            >
+                                                                За Смену
+                                                            </Button>
+                                                        </div>
+                                                        <p className="text-[9px] text-muted-foreground mt-1 px-1">
+                                                            {(bonus.bonus_mode || 'MONTH') === 'MONTH'
+                                                                ? `Цель пересчитывается от эталона ${standardMonthlyShifts} смен.`
+                                                                : `Цель фиксированная на каждую смену.`}
+                                                        </p>
+                                                    </div>
                                                 </div>
 
                                                 {/* TARGET MODE UI */}
@@ -1132,6 +1194,7 @@ export default function SalarySettingsPage({ params }: { params: Promise<{ clubI
                                                         >
                                                             + Добавить порог
                                                         </Button>
+
                                                     </div>
                                                 )}
                                             </div>

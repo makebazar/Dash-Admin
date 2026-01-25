@@ -89,10 +89,10 @@ export async function PATCH(
             return NextResponse.json({ error: 'Scheme not found' }, { status: 404 });
         }
 
-        const { name, description, formula, is_active, period_bonuses } = body;
+        const { name, description, formula, is_active, period_bonuses, standard_monthly_shifts } = body;
 
         // Update scheme metadata if provided
-        if (name !== undefined || description !== undefined || is_active !== undefined || period_bonuses !== undefined) {
+        if (name !== undefined || description !== undefined || is_active !== undefined || period_bonuses !== undefined || standard_monthly_shifts !== undefined) {
             const updates: string[] = [];
             const values: any[] = [];
             let idx = 1;
@@ -112,6 +112,10 @@ export async function PATCH(
             if (period_bonuses !== undefined) {
                 updates.push(`period_bonuses = $${idx++}`);
                 values.push(JSON.stringify(period_bonuses));
+            }
+            if (standard_monthly_shifts !== undefined) {
+                updates.push(`standard_monthly_shifts = $${idx++}`);
+                values.push(standard_monthly_shifts);
             }
 
             if (updates.length > 0) {

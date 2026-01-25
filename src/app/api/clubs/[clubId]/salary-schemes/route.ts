@@ -32,6 +32,7 @@ export async function GET(
                 s.name,
                 s.description,
                 s.period_bonuses,
+                s.standard_monthly_shifts,
                 s.is_active,
                 s.created_at,
                 v.version,
@@ -82,7 +83,7 @@ export async function POST(
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
-        const { name, description, formula, period_bonuses } = body;
+        const { name, description, formula, period_bonuses, standard_monthly_shifts } = body;
 
         if (!name || !formula) {
             return NextResponse.json({ error: 'Name and formula are required' }, { status: 400 });
@@ -90,10 +91,10 @@ export async function POST(
 
         // Create scheme
         const schemeResult = await query(
-            `INSERT INTO salary_schemes (club_id, name, description, period_bonuses)
-             VALUES ($1, $2, $3, $4)
+            `INSERT INTO salary_schemes (club_id, name, description, period_bonuses, standard_monthly_shifts)
+             VALUES ($1, $2, $3, $4, $5)
              RETURNING id`,
-            [clubId, name, description || '', JSON.stringify(period_bonuses || [])]
+            [clubId, name, description || '', JSON.stringify(period_bonuses || []), standard_monthly_shifts || 15]
         );
 
         const schemeId = schemeResult.rows[0].id;

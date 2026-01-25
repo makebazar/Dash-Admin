@@ -29,7 +29,8 @@ export async function GET(
                 u.id, 
                 u.full_name, 
                 r.name as role,
-                s.period_bonuses
+                s.period_bonuses,
+                s.standard_monthly_shifts
              FROM club_employees ce
              JOIN users u ON ce.user_id = u.id
              LEFT JOIN roles r ON u.role_id = r.id
@@ -149,14 +150,28 @@ export async function GET(
                             if (bonus.type === 'PROGRESSIVE' && Array.isArray(bonus.thresholds) && bonus.thresholds.length > 0) {
                                 const sorted = [...bonus.thresholds].sort((a: any, b: any) => (a.from || 0) - (b.from || 0));
 
-                                // CORRECT LOGIC: (Threshold / Planned Shifts) × Actual Shifts
-                                // Use planned_shifts from snapshot if available
-                                const current_planned_shifts = activeScheme?.planned_shifts || planned_shifts;
+                                // NEW LOGIC: Use standard_monthly_shifts (Эталон) as denominator
+                                const standard_shifts = activeScheme?.standard_monthly_shifts || emp.standard_monthly_shifts || 15;
 
-                                const scaledThresholds = sorted.map((t: any) => ({
-                                    from: (t.from || 0) / current_planned_shifts * shifts_count,
-                                    percent: t.percent || 0
-                                }));
+                                const scaledThresholds = sorted.map((t: any) => {
+                                    const threshold_from = t.from || 0;
+                                    // Default to "MONTH" mode for backward compatibility if bonus_mode not set
+                                    const mode = bonus.bonus_mode || 'MONTH';
+
+                                    let scaled_from = threshold_from;
+                                    if (mode === 'SHIFT') {
+                                        // "Per Shift" mode: From * Actual Shifts
+                                        scaled_from = threshold_from * shifts_count;
+                                    } else {
+                                        // "Per Month" mode: (From / Standard) * Actual Shifts
+                                        scaled_from = (threshold_from / standard_shifts) * shifts_count;
+                                    }
+
+                                    return {
+                                        from: scaled_from,
+                                        percent: t.percent || 0
+                                    };
+                                });
 
                                 let metThresholdIndex = -1;
                                 for (let i = scaledThresholds.length - 1; i >= 0; i--) {
@@ -189,10 +204,15 @@ export async function GET(
                                 progress_percent = target_value > 0 ? (current_value / target_value) * 100 : 0;
 
                             } else {
-                                const current_planned_shifts = activeScheme?.planned_shifts || planned_shifts;
-                                target_value = shifts_count > 0
-                                    ? shifts_count * (bonus.target_per_shift || 0)
-                                    : current_planned_shifts * (bonus.target_per_shift || 0);
+                                // TARGET mode handles... (same logic as before but with standard_shifts)
+                                const standard_shifts = activeScheme?.standard_monthly_shifts || emp.standard_monthly_shifts || 15;
+                                const mode = bonus.bonus_mode || 'MONTH';
+
+                                if (mode === 'SHIFT') {
+                                    target_value = shifts_count * (bonus.target_per_shift || 0);
+                                } else {
+                                    target_value = (bonus.target_per_shift || 0) / standard_shifts * shifts_count;
+                                }
 
                                 progress_percent = target_value > 0 ? (current_value / target_value) * 100 : (shifts_count > 0 ? 100 : 0);
                                 is_met = shifts_count > 0 && current_value >= target_value;
