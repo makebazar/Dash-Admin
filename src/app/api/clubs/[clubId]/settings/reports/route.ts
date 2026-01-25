@@ -37,8 +37,8 @@ export async function GET(
             );
             systemMetrics = metricsResult.rows;
         } catch (e) {
-            // Table may not exist yet
-            console.log('system_metrics table not found, returning empty');
+            // Table may not exist yet or other query error
+            console.warn('Error fetching system_metrics:', e);
         }
 
         // 2. Get current active template for this club
