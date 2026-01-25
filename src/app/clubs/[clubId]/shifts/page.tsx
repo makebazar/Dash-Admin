@@ -749,10 +749,10 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                                 </TableRow>
                             ) : sortedShifts.map((shift) => (
                                 <TableRow key={shift.id} className="hover:bg-muted/50">
-                                    <TableCell className="font-medium">
+                                    <TableCell className="font-medium whitespace-nowrap">
                                         {formatDate(shift.check_in)}
                                     </TableCell>
-                                    <TableCell>
+                                    <TableCell className="whitespace-nowrap">
                                         {shift.shift_type === 'NIGHT' ? (
                                             <div className="flex items-center gap-1 text-blue-500">
                                                 <Moon className="h-4 w-4" />
@@ -765,36 +765,31 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                                             </div>
                                         )}
                                     </TableCell>
-                                    <TableCell>
-                                        <div className="flex items-center gap-2">
-                                            <div className="h-8 w-8 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center text-white text-xs font-medium">
-                                                {(shift.employee_name || 'N')[0].toUpperCase()}
-                                            </div>
-                                            {shift.employee_name || 'Неизвестно'}
-                                        </div>
+                                    <TableCell className="whitespace-nowrap">
+                                        {shift.employee_name || 'Неизвестно'}
                                     </TableCell>
-                                    <TableCell className="text-sm text-muted-foreground">
+                                    <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
                                         {formatTime(shift.check_in)} — {shift.check_out ? formatTime(shift.check_out) : '...'}
                                     </TableCell>
-                                    <TableCell className="font-mono">
+                                    <TableCell className="font-mono whitespace-nowrap">
                                         {shift.total_hours && !isNaN(Number(shift.total_hours))
                                             ? `${Number(shift.total_hours).toFixed(1)}ч`
                                             : '-'}
                                     </TableCell>
-                                    <TableCell className="text-right font-medium text-green-500">{formatMoney(shift.cash_income)}</TableCell>
-                                    <TableCell className="text-right font-medium text-blue-500">{formatMoney(shift.card_income)}</TableCell>
-                                    <TableCell className="text-right font-medium text-orange-500">{formatMoney(shift.expenses)}</TableCell>
+                                    <TableCell className="text-right font-medium text-green-500 whitespace-nowrap">{formatMoney(shift.cash_income)}</TableCell>
+                                    <TableCell className="text-right font-medium text-blue-500 whitespace-nowrap">{formatMoney(shift.card_income)}</TableCell>
+                                    <TableCell className="text-right font-medium text-orange-500 whitespace-nowrap">{formatMoney(shift.expenses)}</TableCell>
                                     {reportFields.map((field: any) => (
-                                        <TableCell key={field.metric_key} className="text-right">
+                                        <TableCell key={field.metric_key} className="text-right whitespace-nowrap">
                                             {shift.report_data && shift.report_data[field.metric_key] !== undefined
                                                 ? formatMoney(shift.report_data[field.metric_key])
                                                 : '-'}
                                         </TableCell>
                                     ))}
-                                    <TableCell>
+                                    <TableCell className="whitespace-nowrap">
                                         {getStatusBadge(shift.status, !!shift.check_out)}
                                     </TableCell>
-                                    <TableCell>
+                                    <TableCell className="whitespace-nowrap">
                                         <div className="flex items-center justify-end gap-1">
                                             {shift.report_data && Object.keys(shift.report_data).length > 0 && (
                                                 <Button
