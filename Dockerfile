@@ -44,10 +44,27 @@ COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 
-# Copy database files
+# Copy database files and migrations
 COPY --from=builder /app/src/db ./src/db
 COPY --from=builder /app/migrations ./migrations
 COPY --from=builder /app/scripts ./scripts
+
+# Copy pg module for migrations (not included in standalone by default)
+COPY --from=builder /app/node_modules/pg ./node_modules/pg
+COPY --from=builder /app/node_modules/pg-pool ./node_modules/pg-pool
+COPY --from=builder /app/node_modules/pg-protocol ./node_modules/pg-protocol
+COPY --from=builder /app/node_modules/pg-types ./node_modules/pg-types
+COPY --from=builder /app/node_modules/pgpass ./node_modules/pgpass
+COPY --from=builder /app/node_modules/pg-connection-string ./node_modules/pg-connection-string
+COPY --from=builder /app/node_modules/postgres-array ./node_modules/postgres-array
+COPY --from=builder /app/node_modules/postgres-bytea ./node_modules/postgres-bytea
+COPY --from=builder /app/node_modules/postgres-date ./node_modules/postgres-date
+COPY --from=builder /app/node_modules/postgres-interval ./node_modules/postgres-interval
+COPY --from=builder /app/node_modules/obuf ./node_modules/obuf
+COPY --from=builder /app/node_modules/split2 ./node_modules/split2
+
+# Make startup script executable
+RUN chmod +x ./scripts/start.sh
 
 RUN chown -R nextjs:nodejs /app
 
@@ -58,4 +75,5 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-CMD ["node", "server.js"]
+# Use startup script that runs migrations before starting
+CMD ["sh", "./scripts/start.sh"]
