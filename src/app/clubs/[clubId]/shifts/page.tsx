@@ -533,25 +533,23 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
     const totalExpensesCore = shifts.reduce((sum, s) => sum + (parseFloat(String(s.expenses)) || 0), 0)
 
     // Calculate income and expenses from custom fields
-    const totalCustomIncome = shifts.reduce((sum, s) => {
-        let customIncome = 0
-        reportFields.forEach(field => {
-            if (field.field_type === 'INCOME' && s.report_data && s.report_data[field.metric_key]) {
-                customIncome += (parseFloat(String(s.report_data[field.metric_key])) || 0)
+    const customFieldTotals = reportFields.map(field => {
+        const total = shifts.reduce((sum, s) => {
+            if (s.report_data && s.report_data[field.metric_key]) {
+                return sum + (parseFloat(String(s.report_data[field.metric_key])) || 0)
             }
-        })
-        return sum + customIncome
-    }, 0)
+            return sum
+        }, 0)
+        return { ...field, total }
+    })
 
-    const totalCustomExpenses = shifts.reduce((sum, s) => {
-        let customExp = 0
-        reportFields.forEach(field => {
-            if (field.field_type === 'EXPENSE' && s.report_data && s.report_data[field.metric_key]) {
-                customExp += (parseFloat(String(s.report_data[field.metric_key])) || 0)
-            }
-        })
-        return sum + customExp
-    }, 0)
+    const totalCustomIncome = customFieldTotals
+        .filter(f => f.field_type === 'INCOME')
+        .reduce((sum, f) => sum + f.total, 0)
+
+    const totalCustomExpenses = customFieldTotals
+        .filter(f => f.field_type === 'EXPENSE')
+        .reduce((sum, f) => sum + f.total, 0)
 
     const totalRevenue = totalCash + totalCard + totalCustomIncome
     const totalExpenses = totalExpensesCore + totalCustomExpenses
@@ -624,64 +622,93 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
             </Card>
 
             {/* Summary Cards */}
-            <div className="grid gap-4 md:grid-cols-4">
-                <Card className="overflow-hidden relative">
-                    <div className="absolute inset-0 bg-gradient-to-br from-purple-500/10 to-transparent"></div>
+            <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5">
+                <Card className="overflow-hidden relative border-none bg-purple-500/5 shadow-none">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
-                        <CardTitle className="text-sm font-medium">Всего смен</CardTitle>
+                        <CardTitle className="text-sm font-medium text-purple-600">Всего смен</CardTitle>
                         <Clock className="h-4 w-4 text-purple-500" />
                     </CardHeader>
                     <CardContent className="relative">
                         <div className="text-3xl font-bold">{shifts.length}</div>
-                        <p className="text-xs text-muted-foreground mt-1">за все время</p>
+                        <p className="text-xs text-muted-foreground mt-1">за выбранный период</p>
                     </CardContent>
                 </Card>
 
-                <Card className="overflow-hidden relative">
-                    <div className="absolute inset-0 bg-gradient-to-br from-green-500/10 to-transparent"></div>
+                <Card className="overflow-hidden relative border-none bg-emerald-500/5 shadow-none">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
-                        <CardTitle className="text-sm font-medium">Выручка (Нал)</CardTitle>
-                        <Wallet className="h-4 w-4 text-green-500" />
+                        <CardTitle className="text-sm font-medium text-emerald-600">Выручка (Нал)</CardTitle>
+                        <Wallet className="h-4 w-4 text-emerald-500" />
                     </CardHeader>
                     <CardContent className="relative">
-                        <div className="text-3xl font-bold text-green-500">{formatMoney(totalCash)}</div>
+                        <div className="text-3xl font-bold text-emerald-600">{formatMoney(totalCash)}</div>
                     </CardContent>
                 </Card>
 
-                <Card className="overflow-hidden relative">
-                    <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 to-transparent"></div>
+                <Card className="overflow-hidden relative border-none bg-blue-500/5 shadow-none">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
-                        <CardTitle className="text-sm font-medium">Выручка (Безнал)</CardTitle>
+                        <CardTitle className="text-sm font-medium text-blue-600">Выручка (Безнал)</CardTitle>
                         <DollarSign className="h-4 w-4 text-blue-500" />
                     </CardHeader>
                     <CardContent className="relative">
-                        <div className="text-3xl font-bold text-blue-500">{formatMoney(totalCard)}</div>
+                        <div className="text-3xl font-bold text-blue-600">{formatMoney(totalCard)}</div>
                     </CardContent>
                 </Card>
 
-                <Card className="overflow-hidden relative">
-                    <div className="absolute inset-0 bg-gradient-to-br from-orange-500/10 to-transparent"></div>
+                {/* Dynamic Income Cards (like СБП) */}
+                {customFieldTotals.filter(f => f.field_type === 'INCOME').map(field => (
+                    <Card key={field.metric_key} className="overflow-hidden relative border-none bg-cyan-500/5 shadow-none">
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
+                            <CardTitle className="text-sm font-medium text-cyan-600">{field.custom_label}</CardTitle>
+                            <TrendingUp className="h-4 w-4 text-cyan-500" />
+                        </CardHeader>
+                        <CardContent className="relative">
+                            <div className="text-3xl font-bold text-cyan-600">{formatMoney(field.total)}</div>
+                        </CardContent>
+                    </Card>
+                ))}
+
+                <Card className="overflow-hidden relative border-none bg-orange-500/5 shadow-none">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
-                        <CardTitle className="text-sm font-medium">Расходы</CardTitle>
+                        <CardTitle className="text-sm font-medium text-orange-600">Расходы</CardTitle>
                         <TrendingUp className="h-4 w-4 text-orange-500" />
                     </CardHeader>
                     <CardContent className="relative">
                         <div className="text-3xl font-bold text-orange-500">{formatMoney(totalExpenses)}</div>
                     </CardContent>
                 </Card>
+
+                {/* Dynamic Expense Cards */}
+                {customFieldTotals.filter(f => f.field_type === 'EXPENSE').map(field => (
+                    <Card key={field.metric_key} className="overflow-hidden relative border-none bg-red-500/5 shadow-none">
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
+                            <CardTitle className="text-sm font-medium text-red-600">{field.custom_label}</CardTitle>
+                            <TrendingUp className="h-4 w-4 text-red-500" />
+                        </CardHeader>
+                        <CardContent className="relative">
+                            <div className="text-3xl font-bold text-red-600">{formatMoney(field.total || 0)}</div>
+                        </CardContent>
+                    </Card>
+                ))}
             </div>
 
             {/* Net Revenue */}
-            <Card className="bg-gradient-to-r from-purple-500/20 via-blue-500/20 to-green-500/20 border-none">
-                <CardContent className="py-6">
-                    <div className="flex items-center justify-between">
+            <Card className="bg-gradient-to-r from-purple-500/20 via-blue-500/20 to-green-500/20 border-none shadow-lg">
+                <CardContent className="py-8">
+                    <div className="flex flex-col md:flex-row items-center justify-between gap-6">
                         <div>
-                            <p className="text-sm text-muted-foreground mb-1">Чистая выручка</p>
-                            <p className="text-4xl font-bold">{formatMoney(totalRevenue - totalExpenses)}</p>
+                            <p className="text-base font-medium text-muted-foreground mb-1 uppercase tracking-wider">Чистая выручка</p>
+                            <p className="text-5xl font-black text-foreground drop-shadow-sm">{formatMoney(totalRevenue - totalExpenses)}</p>
                         </div>
-                        <div className="text-right text-sm text-muted-foreground">
-                            <p>Всего: {formatMoney(totalRevenue)}</p>
-                            <p>− Расходы: {formatMoney(totalExpenses)}</p>
+                        <div className="flex items-center gap-8 text-sm md:text-base border-l pl-8 border-foreground/10">
+                            <div>
+                                <p className="text-muted-foreground mb-1">Всего доход</p>
+                                <p className="font-bold text-green-600 text-xl">{formatMoney(totalRevenue)}</p>
+                            </div>
+                            <div className="text-xl opacity-20 font-light">—</div>
+                            <div>
+                                <p className="text-muted-foreground mb-1">Всего расходы</p>
+                                <p className="font-bold text-red-600 text-xl">{formatMoney(totalExpenses)}</p>
+                            </div>
                         </div>
                     </div>
                 </CardContent>
