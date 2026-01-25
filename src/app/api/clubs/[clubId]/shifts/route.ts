@@ -135,19 +135,29 @@ export async function POST(
             return NextResponse.json({ error: 'Employee not found in this club' }, { status: 400 });
         }
 
+
         // Get club settings for auto-detecting shift type
         const clubSettings = await query(
-            `SELECT day_start_hour, night_start_hour FROM clubs WHERE id = $1::integer`,
+            `SELECT day_start_hour, night_start_hour, timezone FROM clubs WHERE id = $1::integer`,
             [club_id_int]
         );
         const dayStartHour = clubSettings.rows[0]?.day_start_hour ?? 8;
         const nightStartHour = clubSettings.rows[0]?.night_start_hour ?? 20;
+        const clubTimezone = clubSettings.rows[0]?.timezone || 'Europe/Moscow';
 
         // Determine shift type based on check_in hour
         let shiftType = body.shift_type;
         if (!shiftType) {
             const checkInDate = new Date(check_in);
-            const hour = checkInDate.getHours();
+
+            // Get the hour in the club's timezone, not server's timezone
+            const hourInClubTZ = new Intl.DateTimeFormat('en-US', {
+                timeZone: clubTimezone,
+                hour: 'numeric',
+                hour12: false
+            }).format(checkInDate);
+            const hour = parseInt(hourInClubTZ);
+
             // Day shift if hour is between dayStartHour and nightStartHour
             if (!isNaN(hour)) {
                 if (hour >= dayStartHour && hour < nightStartHour) {
