@@ -7,7 +7,8 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 
 # Install ALL dependencies (including devDependencies needed for build)
-RUN npm ci
+# IMPORTANT: Force development mode to install devDependencies like typescript
+RUN NODE_ENV=development npm ci
 
 # Build stage
 FROM node:20-alpine AS builder
