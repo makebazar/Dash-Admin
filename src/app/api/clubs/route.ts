@@ -23,3 +23,31 @@ export async function GET() {
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
 }
+
+export async function POST(request: Request) {
+    try {
+        const userId = (await cookies()).get('session_user_id')?.value;
+
+        if (!userId) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
+        const { name, address } = await request.json();
+
+        if (!name || name.trim().length === 0) {
+            return NextResponse.json({ error: 'Club name is required' }, { status: 400 });
+        }
+
+        // Создать новый клуб
+        const result = await query(
+            `INSERT INTO clubs (name, address, owner_id) VALUES ($1, $2, $3) RETURNING id, name, address, created_at`,
+            [name.trim(), address?.trim() || null, userId]
+        );
+
+        return NextResponse.json({ club: result.rows[0] });
+
+    } catch (error) {
+        console.error('Create Club Error:', error);
+        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    }
+}
