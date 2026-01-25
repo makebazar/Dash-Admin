@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/db';
 import { cookies } from 'next/headers';
+import { calculateSalary } from '@/lib/salary-calculator';
 
 // GET: Get all shifts for a club
 export async function GET(
@@ -170,6 +171,40 @@ export async function POST(
             }
         }
 
+        // Calculate Salary
+        let calculatedSalary = 0;
+        let salaryBreakdown = {};
+
+        // Get assigned scheme
+        const schemeRes = await query(
+            `SELECT ss.id, ss.name, sv.formula
+             FROM employee_salary_assignments esa
+             JOIN salary_schemes ss ON esa.scheme_id = ss.id
+             JOIN salary_scheme_versions sv ON sv.scheme_id = ss.id
+             WHERE esa.user_id = $1::uuid AND esa.club_id = $2::integer
+             ORDER BY sv.version DESC
+             LIMIT 1`,
+            [employee_id, club_id_int]
+        );
+
+        if ((schemeRes.rowCount || 0) > 0) {
+            const scheme = schemeRes.rows[0];
+            const calculation = await calculateSalary({
+                id: 'new-manual-shift', // Placeholder ID
+                total_hours: Number(total_hours) || 0,
+                report_data: report_data || {}
+            }, scheme.formula, {
+                total_revenue: (Number(cash_income) || 0) + (Number(card_income) || 0),
+                revenue_cash: Number(cash_income) || 0,
+                revenue_card: Number(card_income) || 0,
+                expenses: Number(expenses) || 0,
+                ...report_data
+            });
+
+            calculatedSalary = calculation.total;
+            salaryBreakdown = calculation.breakdown;
+        }
+
         // Create shift
         const result = await query(
             `INSERT INTO shifts (
@@ -184,7 +219,9 @@ export async function POST(
                 report_comment,
                 report_data,
                 status,
-                shift_type
+                shift_type,
+                calculated_salary,
+                salary_breakdown
             ) VALUES (
                 $1::uuid, 
                 $2::integer, 
@@ -197,7 +234,9 @@ export async function POST(
                 $9, 
                 $10, 
                 $11, 
-                $12
+                $12,
+                $13::decimal,
+                $14::jsonb
             )
             RETURNING id`,
             [
@@ -212,7 +251,9 @@ export async function POST(
                 report_comment || '',
                 JSON.stringify(report_data || {}),
                 check_out ? 'CLOSED' : 'ACTIVE',
-                shiftType
+                shiftType,
+                calculatedSalary,
+                JSON.stringify(salaryBreakdown)
             ]
         );
 
