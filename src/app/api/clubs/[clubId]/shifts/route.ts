@@ -113,7 +113,8 @@ export async function POST(
             card_income,
             expenses,
             report_comment,
-            total_hours
+            total_hours,
+            report_data
         } = body;
 
         if (!employee_id || !check_in) {
@@ -171,6 +172,7 @@ export async function POST(
                 card_income, 
                 expenses, 
                 report_comment,
+                report_data,
                 status,
                 shift_type
             ) VALUES (
@@ -184,7 +186,8 @@ export async function POST(
                 $8::decimal, 
                 $9, 
                 $10, 
-                $11
+                $11, 
+                $12
             )
             RETURNING id`,
             [
@@ -197,6 +200,7 @@ export async function POST(
                 card_income || 0,
                 expenses || 0,
                 report_comment || '',
+                JSON.stringify(report_data || {}),
                 check_out ? 'CLOSED' : 'ACTIVE',
                 shiftType
             ]

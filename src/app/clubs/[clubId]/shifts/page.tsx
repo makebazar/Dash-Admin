@@ -176,17 +176,32 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
         setEditCardIncome(String(shift.card_income || 0))
         setEditExpenses(String(shift.expenses || 0))
         setEditComment(shift.report_comment || '')
-        // Format datetime for input (local timezone)
+        // Format datetime for input using club's timezone
         const formatForInput = (dateStr: string | null) => {
             if (!dateStr) return ''
+
+            // Parse the date
             const d = new Date(dateStr)
-            // Format to local time for datetime-local input
-            const year = d.getFullYear()
-            const month = String(d.getMonth() + 1).padStart(2, '0')
-            const day = String(d.getDate()).padStart(2, '0')
-            const hours = String(d.getHours()).padStart(2, '0')
-            const minutes = String(d.getMinutes()).padStart(2, '0')
-            return `${year}-${month}-${day}T${hours}:${minutes}`
+
+            // Use Intl.DateTimeFormat to get date/time parts in the club's timezone
+            const formatter = new Intl.DateTimeFormat('en-CA', {
+                timeZone: clubTimezone,
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            })
+
+            const parts = formatter.formatToParts(d)
+            const year = parts.find(p => p.type === 'year')?.value
+            const month = parts.find(p => p.type === 'month')?.value
+            const day = parts.find(p => p.type === 'day')?.value
+            const hour = parts.find(p => p.type === 'hour')?.value
+            const minute = parts.find(p => p.type === 'minute')?.value
+
+            return `${year}-${month}-${day}T${hour}:${minute}`
         }
         setEditCheckIn(formatForInput(shift.check_in))
         setEditCheckOut(formatForInput(shift.check_out))

@@ -89,6 +89,10 @@ interface ReportMetric {
     category: string
 }
 
+const generateId = () => {
+    return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+}
+
 export default function SalarySettingsPage({ params }: { params: Promise<{ clubId: string }> }) {
     const [clubId, setClubId] = useState('')
     const [schemes, setSchemes] = useState<SalaryScheme[]>([])
@@ -329,7 +333,7 @@ export default function SalarySettingsPage({ params }: { params: Promise<{ clubI
 
     const addPeriodBonus = (type: PeriodBonus['type'] = 'TARGET') => {
         const newBonus: PeriodBonus = {
-            id: crypto.randomUUID(),
+            id: generateId(),
             name: type === 'TARGET' ? 'Бонус за план' : 'Прогрессия KPI',
             metric_key: 'total_revenue',
             type: type, // Fixed: Added type property
