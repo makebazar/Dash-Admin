@@ -12,6 +12,7 @@ import { Loader2, Clock, DollarSign, FileText, Eye, TrendingUp, Wallet, Edit, Ch
 
 interface Shift {
     id: string
+    user_id: string
     employee_name: string
     check_in: string
     check_out: string | null
@@ -59,6 +60,7 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
     // Date filter state
     const [filterStartDate, setFilterStartDate] = useState('')
     const [filterEndDate, setFilterEndDate] = useState('')
+    const [filterEmployee, setFilterEmployee] = useState('')
     const [selectedMonth, setSelectedMonth] = useState<string>('')
     const [editShiftType, setEditShiftType] = useState<'DAY' | 'NIGHT'>('DAY')
 
@@ -165,6 +167,7 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
         setSelectedMonth('')
         setFilterStartDate('')
         setFilterEndDate('')
+        setFilterEmployee('')
         fetchShifts(clubId)
     }
 
@@ -485,6 +488,12 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
         )
     }
 
+    // Filter shifts based on employee
+    const filteredShifts = shifts.filter(shift => {
+        if (!filterEmployee) return true
+        return shift.user_id === filterEmployee
+    })
+
     // Handle sorting
     const handleSort = (column: string) => {
         if (sortBy === column) {
@@ -495,8 +504,8 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
         }
     }
 
-    // Sort shifts
-    const sortedShifts = [...shifts].sort((a, b) => {
+    // Sort filtered shifts
+    const sortedShifts = [...filteredShifts].sort((a, b) => {
         let aVal: any = a[sortBy as keyof Shift]
         let bVal: any = b[sortBy as keyof Shift]
 
@@ -527,14 +536,15 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
         return 0
     })
 
-    // Calculate totals
-    const totalCash = shifts.reduce((sum, s) => sum + (parseFloat(String(s.cash_income)) || 0), 0)
-    const totalCard = shifts.reduce((sum, s) => sum + (parseFloat(String(s.card_income)) || 0), 0)
-    const totalExpensesCore = shifts.reduce((sum, s) => sum + (parseFloat(String(s.expenses)) || 0), 0)
+    // Calculate totals based on filtered shifts
+    const currentDisplayShifts = filteredShifts
+    const totalCash = currentDisplayShifts.reduce((sum, s) => sum + (parseFloat(String(s.cash_income)) || 0), 0)
+    const totalCard = currentDisplayShifts.reduce((sum, s) => sum + (parseFloat(String(s.card_income)) || 0), 0)
+    const totalExpensesCore = currentDisplayShifts.reduce((sum, s) => sum + (parseFloat(String(s.expenses)) || 0), 0)
 
     // Calculate income and expenses from custom fields
     const customFieldTotals = reportFields.map(field => {
-        const total = shifts.reduce((sum, s) => {
+        const total = currentDisplayShifts.reduce((sum, s) => {
             if (s.report_data && s.report_data[field.metric_key]) {
                 return sum + (parseFloat(String(s.report_data[field.metric_key])) || 0)
             }
@@ -610,6 +620,25 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                             <Button size="sm" variant="secondary" onClick={handleCustomDateFilter}>
                                 Применить
                             </Button>
+                        </div>
+
+                        <div className="h-6 w-px bg-border hidden md:block" />
+
+                        {/* Employee filter */}
+                        <div className="flex items-center gap-2">
+                            <span className="text-sm text-muted-foreground">Сотрудник:</span>
+                            <select
+                                value={filterEmployee}
+                                onChange={e => setFilterEmployee(e.target.value)}
+                                className="w-48 h-8 px-2 rounded-md border border-input bg-background text-xs focus:outline-none ring-offset-background"
+                            >
+                                <option value="">Все сотрудники</option>
+                                {employees.map(emp => (
+                                    <option key={emp.id} value={emp.id}>
+                                        {emp.full_name}
+                                    </option>
+                                ))}
+                            </select>
                         </div>
 
                         {(filterStartDate || filterEndDate || selectedMonth) && (
