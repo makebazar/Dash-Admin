@@ -1,3 +1,6 @@
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { CheckCircle2, DollarSign, Users, BarChart3, ShieldCheck, Zap } from "lucide-react"
