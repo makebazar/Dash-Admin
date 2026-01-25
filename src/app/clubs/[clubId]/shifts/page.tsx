@@ -209,6 +209,51 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
         setEditCustomFields(shift.report_data || {})
     }
 
+    // Helper function to convert datetime-local value to ISO string in club timezone
+    const convertToClubTimezone = (datetimeLocal: string) => {
+        if (!datetimeLocal) return undefined
+
+        // The datetime-local input gives us "2025-12-02T08:00"
+        // We need to interpret this as club's local time and convert to UTC
+
+        // Parse components
+        const [datePart, timePart] = datetimeLocal.split('T')
+        const [year, month, day] = datePart.split('-')
+        const [hour, minute] = timePart.split(':')
+
+        // Build a date string that we'll format in the club's timezone
+        const dateStr = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T${hour.padStart(2, '0')}:${minute.padStart(2, '0')}:00`
+
+        // Get this exact time but interpreted in the club's timezone
+        // We do this by creating a string that represents this time in club's TZ
+        // Then parsing it back to get the UTC equivalent
+        const clubTZString = new Date(dateStr).toLocaleString('en-US', {
+            timeZone: clubTimezone,
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false
+        })
+
+        // This gives us the datetime as it appears in club TZ
+        // But we want to create a Date that represents "user input time in club TZ"
+        // The trick: create Date treating input as UTC, then offset by timezone difference
+
+        // Simpler approach: manually calculate UTC offset and adjust
+        const localDate = new Date(dateStr) // Treated as local browser time
+        const inClubTZ = new Date(localDate.toLocaleString('en-US', { timeZone: clubTimezone }))
+        const inLocalTZ = new Date(localDate.toLocaleString('en-US'))
+        const offset = inClubTZ.getTime() - inLocalTZ.getTime()
+
+        // Apply inverse offset to get correct UTC time
+        const correctUTC = new Date(localDate.getTime() - offset)
+
+        return correctUTC.toISOString()
+    }
+
     const handleSaveEdit = async () => {
         if (!editingShift) return
         setIsSaving(true)
@@ -233,8 +278,8 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                     card_income: parseFloat(editCardIncome) || 0,
                     expenses: parseFloat(editExpenses) || 0,
                     report_comment: editComment,
-                    check_in: editCheckIn || undefined,
-                    check_out: editCheckOut || undefined,
+                    check_in: convertToClubTimezone(editCheckIn),
+                    check_out: convertToClubTimezone(editCheckOut),
                     total_hours: totalHours,
                     shift_type: editShiftType,
                     report_data: updatedReportData
@@ -331,8 +376,8 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     employee_id: newShiftEmployee,
-                    check_in: newShiftCheckIn,
-                    check_out: newShiftCheckOut || undefined,
+                    check_in: convertToClubTimezone(newShiftCheckIn),
+                    check_out: convertToClubTimezone(newShiftCheckOut),
                     cash_income: parseFloat(newShiftCashIncome) || 0,
                     card_income: parseFloat(newShiftCardIncome) || 0,
                     expenses: parseFloat(newShiftExpenses) || 0,
