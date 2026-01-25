@@ -530,8 +530,31 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
     // Calculate totals
     const totalCash = shifts.reduce((sum, s) => sum + (parseFloat(String(s.cash_income)) || 0), 0)
     const totalCard = shifts.reduce((sum, s) => sum + (parseFloat(String(s.card_income)) || 0), 0)
-    const totalExpenses = shifts.reduce((sum, s) => sum + (parseFloat(String(s.expenses)) || 0), 0)
-    const totalRevenue = totalCash + totalCard
+    const totalExpensesCore = shifts.reduce((sum, s) => sum + (parseFloat(String(s.expenses)) || 0), 0)
+
+    // Calculate income and expenses from custom fields
+    const totalCustomIncome = shifts.reduce((sum, s) => {
+        let customIncome = 0
+        reportFields.forEach(field => {
+            if (field.field_type === 'INCOME' && s.report_data && s.report_data[field.metric_key]) {
+                customIncome += (parseFloat(String(s.report_data[field.metric_key])) || 0)
+            }
+        })
+        return sum + customIncome
+    }, 0)
+
+    const totalCustomExpenses = shifts.reduce((sum, s) => {
+        let customExp = 0
+        reportFields.forEach(field => {
+            if (field.field_type === 'EXPENSE' && s.report_data && s.report_data[field.metric_key]) {
+                customExp += (parseFloat(String(s.report_data[field.metric_key])) || 0)
+            }
+        })
+        return sum + customExp
+    }, 0)
+
+    const totalRevenue = totalCash + totalCard + totalCustomIncome
+    const totalExpenses = totalExpensesCore + totalCustomExpenses
 
     return (
         <div className="p-8 space-y-8">

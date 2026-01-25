@@ -25,6 +25,7 @@ interface TemplateField {
     metric_key: string
     custom_label: string // Владелец может переименовать "Cash" в "Касса Бар"
     is_required: boolean
+    field_type: 'INCOME' | 'EXPENSE' | 'OTHER'
     id?: string // for frontend dnd
 }
 
@@ -80,7 +81,8 @@ export default function ReportBuilderPage({ params }: { params: Promise<{ clubId
             {
                 metric_key: metric.key,
                 custom_label: metric.label,
-                is_required: metric.is_required
+                is_required: metric.is_required,
+                field_type: 'OTHER'
             }
         ])
     }
@@ -188,9 +190,38 @@ export default function ReportBuilderPage({ params }: { params: Promise<{ clubId
                                                     />
                                                 </div>
 
-                                                <div className="flex items-center justify-between">
-                                                    <div className="text-xs text-muted-foreground flex items-center gap-2">
-                                                        Тип: <span className="font-mono bg-muted px-1 rounded">{metric.type}</span>
+                                                <div className="flex flex-wrap items-center justify-between gap-4">
+                                                    <div className="flex flex-col gap-1.5">
+                                                        <Label className="text-[10px] uppercase text-muted-foreground">Категория для расчётов</Label>
+                                                        <div className="flex bg-muted rounded-md p-1 scale-90 origin-left">
+                                                            <button
+                                                                onClick={() => handleUpdateField(index, 'field_type', 'INCOME')}
+                                                                className={`px-3 py-1 text-[10px] font-medium rounded-sm transition-all ${field.field_type === 'INCOME'
+                                                                    ? 'bg-green-500 text-white shadow-sm'
+                                                                    : 'hover:bg-background/50 text-muted-foreground'
+                                                                    }`}
+                                                            >
+                                                                Доход
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleUpdateField(index, 'field_type', 'EXPENSE')}
+                                                                className={`px-3 py-1 text-[10px] font-medium rounded-sm transition-all ${field.field_type === 'EXPENSE'
+                                                                    ? 'bg-orange-500 text-white shadow-sm'
+                                                                    : 'hover:bg-background/50 text-muted-foreground'
+                                                                    }`}
+                                                            >
+                                                                Расход
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleUpdateField(index, 'field_type', 'OTHER')}
+                                                                className={`px-3 py-1 text-[10px] font-medium rounded-sm transition-all ${field.field_type === 'OTHER' || !field.field_type
+                                                                    ? 'bg-background text-foreground shadow-sm'
+                                                                    : 'hover:bg-background/50 text-muted-foreground'
+                                                                    }`}
+                                                            >
+                                                                Другое
+                                                            </button>
+                                                        </div>
                                                     </div>
                                                     <div className="flex items-center gap-2">
                                                         <Label htmlFor={`req-${index}`} className="text-sm">Обязательно</Label>
