@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
-import { Loader2, Clock, DollarSign, FileText, Eye, TrendingUp, Wallet, Edit, CheckCircle, CalendarDays, Sun, Moon, Trash2 } from "lucide-react"
+import { Loader2, Clock, DollarSign, FileText, Eye, TrendingUp, Wallet, Edit, CheckCircle, CalendarDays, Sun, Moon, Trash2, ArrowUpDown } from "lucide-react"
 
 interface Shift {
     id: string
@@ -63,6 +63,10 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
     const [editShiftType, setEditShiftType] = useState<'DAY' | 'NIGHT'>('DAY')
 
     const [reportFields, setReportFields] = useState<any[]>([])
+
+    // Sort state
+    const [sortBy, setSortBy] = useState<string>('check_in')
+    const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
 
     useEffect(() => {
         params.then(p => {
@@ -481,6 +485,48 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
         )
     }
 
+    // Handle sorting
+    const handleSort = (column: string) => {
+        if (sortBy === column) {
+            setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')
+        } else {
+            setSortBy(column)
+            setSortOrder('desc')
+        }
+    }
+
+    // Sort shifts
+    const sortedShifts = [...shifts].sort((a, b) => {
+        let aVal: any = a[sortBy as keyof Shift]
+        let bVal: any = b[sortBy as keyof Shift]
+
+        // Handle null/undefined
+        if (aVal === null || aVal === undefined) return 1
+        if (bVal === null || bVal === undefined) return -1
+
+        // Convert to numbers for numeric columns
+        if (['cash_income', 'card_income', 'expenses', 'total_hours'].includes(sortBy)) {
+            aVal = parseFloat(String(aVal)) || 0
+            bVal = parseFloat(String(bVal)) || 0
+        }
+
+        // Convert to dates for date columns
+        if (sortBy === 'check_in') {
+            aVal = new Date(aVal).getTime()
+            bVal = new Date(bVal).getTime()
+        }
+
+        // String comparison for employee name
+        if (sortBy === 'employee_name') {
+            aVal = String(aVal).toLowerCase()
+            bVal = String(bVal).toLowerCase()
+        }
+
+        if (aVal < bVal) return sortOrder === 'asc' ? -1 : 1
+        if (aVal > bVal) return sortOrder === 'asc' ? 1 : -1
+        return 0
+    })
+
     // Calculate totals
     const totalCash = shifts.reduce((sum, s) => sum + (parseFloat(String(s.cash_income)) || 0), 0)
     const totalCard = shifts.reduce((sum, s) => sum + (parseFloat(String(s.card_income)) || 0), 0)
@@ -628,14 +674,62 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                     <Table>
                         <TableHeader>
                             <TableRow>
-                                <TableHead>Дата</TableHead>
+                                <TableHead
+                                    className="cursor-pointer hover:bg-muted/50 select-none"
+                                    onClick={() => handleSort('check_in')}
+                                >
+                                    <div className="flex items-center gap-1">
+                                        Дата
+                                        <ArrowUpDown className="h-3 w-3" />
+                                    </div>
+                                </TableHead>
                                 <TableHead>Тип</TableHead>
-                                <TableHead>Сотрудник</TableHead>
+                                <TableHead
+                                    className="cursor-pointer hover:bg-muted/50 select-none"
+                                    onClick={() => handleSort('employee_name')}
+                                >
+                                    <div className="flex items-center gap-1">
+                                        Сотрудник
+                                        <ArrowUpDown className="h-3 w-3" />
+                                    </div>
+                                </TableHead>
                                 <TableHead>Время</TableHead>
-                                <TableHead>Часы</TableHead>
-                                <TableHead className="text-right">Нал</TableHead>
-                                <TableHead className="text-right">Безнал</TableHead>
-                                <TableHead className="text-right">Расходы</TableHead>
+                                <TableHead
+                                    className="cursor-pointer hover:bg-muted/50 select-none"
+                                    onClick={() => handleSort('total_hours')}
+                                >
+                                    <div className="flex items-center gap-1">
+                                        Часы
+                                        <ArrowUpDown className="h-3 w-3" />
+                                    </div>
+                                </TableHead>
+                                <TableHead
+                                    className="text-right cursor-pointer hover:bg-muted/50 select-none"
+                                    onClick={() => handleSort('cash_income')}
+                                >
+                                    <div className="flex items-center justify-end gap-1">
+                                        Нал
+                                        <ArrowUpDown className="h-3 w-3" />
+                                    </div>
+                                </TableHead>
+                                <TableHead
+                                    className="text-right cursor-pointer hover:bg-muted/50 select-none"
+                                    onClick={() => handleSort('card_income')}
+                                >
+                                    <div className="flex items-center justify-end gap-1">
+                                        Безнал
+                                        <ArrowUpDown className="h-3 w-3" />
+                                    </div>
+                                </TableHead>
+                                <TableHead
+                                    className="text-right cursor-pointer hover:bg-muted/50 select-none"
+                                    onClick={() => handleSort('expenses')}
+                                >
+                                    <div className="flex items-center justify-end gap-1">
+                                        Расходы
+                                        <ArrowUpDown className="h-3 w-3" />
+                                    </div>
+                                </TableHead>
                                 {reportFields.map((field: any) => (
                                     <TableHead key={field.metric_key} className="text-right min-w-[100px]">{field.custom_label}</TableHead>
                                 ))}
@@ -644,7 +738,7 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {shifts.length === 0 ? (
+                            {sortedShifts.length === 0 ? (
                                 <TableRow>
                                     <TableCell colSpan={10 + reportFields.length} className="text-center text-muted-foreground py-12">
                                         <div className="flex flex-col items-center gap-2">
@@ -653,7 +747,7 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                                         </div>
                                     </TableCell>
                                 </TableRow>
-                            ) : shifts.map((shift) => (
+                            ) : sortedShifts.map((shift) => (
                                 <TableRow key={shift.id} className="hover:bg-muted/50">
                                     <TableCell className="font-medium">
                                         {formatDate(shift.check_in)}
