@@ -177,6 +177,30 @@ CREATE INDEX IF NOT EXISTS idx_salary_payments_club ON salary_payments(club_id);
 CREATE INDEX IF NOT EXISTS idx_salary_payments_user ON salary_payments(user_id);
 
 -- ============================================
+-- SYSTEM METRICS
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS system_metrics (
+    id SERIAL PRIMARY KEY,
+    key VARCHAR(50) NOT NULL UNIQUE,
+    label VARCHAR(100) NOT NULL,
+    description TEXT,
+    type VARCHAR(20) NOT NULL,
+    category VARCHAR(50) NOT NULL,
+    is_required BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Insert default metrics
+INSERT INTO system_metrics (key, label, type, category, is_required, description) VALUES
+('cash_income', 'Выручка (Наличные)', 'MONEY', 'FINANCE', true, 'Сумма наличных за смену'),
+('card_income', 'Выручка (Безнал)', 'MONEY', 'FINANCE', true, 'Сумма по терминалу за смену'),
+('expenses_cash', 'Расходы (Наличные)', 'MONEY', 'FINANCE', false, 'Расходы из кассы'),
+('shift_comment', 'Комментарий к смене', 'TEXT', 'OPERATIONS', false, 'Текстовый отчет')
+ON CONFLICT (key) DO NOTHING;
+
+-- ============================================
 -- REPORT TEMPLATES
 -- ============================================
 

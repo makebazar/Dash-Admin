@@ -20,7 +20,7 @@ export async function GET(
             `
             SELECT 1 FROM clubs WHERE id = $1 AND owner_id = $2
             UNION
-            SELECT 1 FROM club_employees WHERE club_id = $1 AND user_id = $2
+            SELECT 1 FROM employees WHERE club_id = $1 AND user_id = $2
             `,
             [clubId, userId]
         );
@@ -29,10 +29,17 @@ export async function GET(
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
-        // 1. Get all available system metrics
-        const metricsResult = await query(
-            `SELECT * FROM system_metrics ORDER BY category, id`
-        );
+        // 1. Get all available system metrics (return empty if table doesn't exist)
+        let systemMetrics: any[] = [];
+        try {
+            const metricsResult = await query(
+                `SELECT * FROM system_metrics ORDER BY category, id`
+            );
+            systemMetrics = metricsResult.rows;
+        } catch (e) {
+            // Table may not exist yet
+            console.log('system_metrics table not found, returning empty');
+        }
 
         // 2. Get current active template for this club
         const templateResult = await query(
@@ -43,7 +50,7 @@ export async function GET(
         );
 
         return NextResponse.json({
-            systemMetrics: metricsResult.rows,
+            systemMetrics: systemMetrics,
             currentTemplate: templateResult.rows[0] || null
         });
 
