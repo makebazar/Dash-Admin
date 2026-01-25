@@ -655,7 +655,7 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                 </Card>
 
                 {/* Dynamic Income Cards (like СБП) */}
-                {customFieldTotals.filter(f => f.field_type === 'INCOME').map(field => (
+                {customFieldTotals.filter(f => f.field_type === 'INCOME' && f.show_in_stats).map(field => (
                     <Card key={field.metric_key} className="overflow-hidden relative border-none bg-cyan-500/5 shadow-none">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
                             <CardTitle className="text-sm font-medium text-cyan-600">{field.custom_label}</CardTitle>
@@ -678,7 +678,7 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                 </Card>
 
                 {/* Dynamic Expense Cards */}
-                {customFieldTotals.filter(f => f.field_type === 'EXPENSE').map(field => (
+                {customFieldTotals.filter(f => f.field_type === 'EXPENSE' && f.show_in_stats).map(field => (
                     <Card key={field.metric_key} className="overflow-hidden relative border-none bg-red-500/5 shadow-none">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
                             <CardTitle className="text-sm font-medium text-red-600">{field.custom_label}</CardTitle>
@@ -686,6 +686,19 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                         </CardHeader>
                         <CardContent className="relative">
                             <div className="text-3xl font-bold text-red-600">{formatMoney(field.total || 0)}</div>
+                        </CardContent>
+                    </Card>
+                ))}
+
+                {/* Other Stats Cards (e.g. Guest Count, Bar Revenue) */}
+                {customFieldTotals.filter(f => (f.field_type === 'OTHER' || !f.field_type) && f.show_in_stats).map(field => (
+                    <Card key={field.metric_key} className="overflow-hidden relative border-none bg-slate-500/5 shadow-none">
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
+                            <CardTitle className="text-sm font-medium text-slate-600">{field.custom_label}</CardTitle>
+                            <TrendingUp className="h-4 w-4 text-slate-500" />
+                        </CardHeader>
+                        <CardContent className="relative">
+                            <div className="text-3xl font-bold text-slate-600">{formatMoney(field.total || 0)}</div>
                         </CardContent>
                     </Card>
                 ))}

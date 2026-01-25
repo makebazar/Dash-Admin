@@ -26,6 +26,7 @@ interface TemplateField {
     custom_label: string // Владелец может переименовать "Cash" в "Касса Бар"
     is_required: boolean
     field_type: 'INCOME' | 'EXPENSE' | 'OTHER'
+    show_in_stats: boolean
     id?: string // for frontend dnd
 }
 
@@ -61,7 +62,9 @@ export default function ReportBuilderPage({ params }: { params: Promise<{ clubId
                         .map((m: SystemMetric) => ({
                             metric_key: m.key,
                             custom_label: m.label,
-                            is_required: true
+                            is_required: true,
+                            field_type: 'OTHER',
+                            show_in_stats: true
                         }))
                     setSelectedFields(defaults)
                 }
@@ -82,7 +85,8 @@ export default function ReportBuilderPage({ params }: { params: Promise<{ clubId
                 metric_key: metric.key,
                 custom_label: metric.label,
                 is_required: metric.is_required,
-                field_type: 'OTHER'
+                field_type: 'OTHER',
+                show_in_stats: true
             }
         ])
     }
@@ -223,13 +227,26 @@ export default function ReportBuilderPage({ params }: { params: Promise<{ clubId
                                                             </button>
                                                         </div>
                                                     </div>
-                                                    <div className="flex items-center gap-2">
-                                                        <Label htmlFor={`req-${index}`} className="text-sm">Обязательно</Label>
-                                                        <Switch
-                                                            id={`req-${index}`}
-                                                            checked={field.is_required}
-                                                            onCheckedChange={(checked) => handleUpdateField(index, 'is_required', checked)}
-                                                        />
+                                                    <div className="flex items-center gap-6">
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="flex flex-col text-right">
+                                                                <Label htmlFor={`stats-${index}`} className="text-sm">В сводке</Label>
+                                                                <span className="text-[10px] text-muted-foreground whitespace-nowrap">Показывать в карточках</span>
+                                                            </div>
+                                                            <Switch
+                                                                id={`stats-${index}`}
+                                                                checked={field.show_in_stats}
+                                                                onCheckedChange={(checked) => handleUpdateField(index, 'show_in_stats', checked)}
+                                                            />
+                                                        </div>
+                                                        <div className="flex items-center gap-2 border-l pl-6 border-foreground/10">
+                                                            <Label htmlFor={`req-${index}`} className="text-sm">Обязательно</Label>
+                                                            <Switch
+                                                                id={`req-${index}`}
+                                                                checked={field.is_required}
+                                                                onCheckedChange={(checked) => handleUpdateField(index, 'is_required', checked)}
+                                                            />
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </div>
