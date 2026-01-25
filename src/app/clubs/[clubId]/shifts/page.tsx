@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
-import { Loader2, Clock, DollarSign, FileText, Eye, TrendingUp, Wallet, Edit, CheckCircle, CalendarDays, Sun, Moon } from "lucide-react"
+import { Loader2, Clock, DollarSign, FileText, Eye, TrendingUp, Wallet, Edit, CheckCircle, CalendarDays, Sun, Moon, Trash2 } from "lucide-react"
 
 interface Shift {
     id: string
@@ -296,6 +296,34 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
         } catch (error) {
             console.error('Error:', error)
             alert('Ошибка сохранения')
+        } finally {
+            setIsSaving(false)
+        }
+    }
+
+    const handleDeleteShift = async () => {
+        if (!editingShift) return
+
+        if (!confirm('Вы уверены, что хотите удалить эту смену? Это действие нельзя отменить.')) {
+            return
+        }
+
+        setIsSaving(true)
+        try {
+            const res = await fetch(`/api/clubs/${clubId}/shifts/${editingShift.id}`, {
+                method: 'DELETE'
+            })
+
+            if (res.ok) {
+                setEditingShift(null)
+                fetchShifts(clubId, filterStartDate, filterEndDate)
+            } else {
+                const data = await res.json()
+                alert(data.error || 'Ошибка удаления')
+            }
+        } catch (error) {
+            console.error('Error:', error)
+            alert('Ошибка удаления')
         } finally {
             setIsSaving(false)
         }
@@ -878,12 +906,23 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                             </div>
                         )}
                     </div>
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setEditingShift(null)}>Отмена</Button>
-                        <Button onClick={handleSaveEdit} disabled={isSaving}>
-                            {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                            Сохранить
+                    <DialogFooter className="flex justify-between">
+                        <Button
+                            variant="destructive"
+                            onClick={handleDeleteShift}
+                            disabled={isSaving}
+                            className="mr-auto"
+                        >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Удалить
                         </Button>
+                        <div className="flex gap-2">
+                            <Button variant="outline" onClick={() => setEditingShift(null)}>Отмена</Button>
+                            <Button onClick={handleSaveEdit} disabled={isSaving}>
+                                {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                Сохранить
+                            </Button>
+                        </div>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
