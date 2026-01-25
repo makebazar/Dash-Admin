@@ -133,6 +133,7 @@ CREATE TABLE IF NOT EXISTS salary_schemes (
     club_id INTEGER REFERENCES clubs(id) ON DELETE CASCADE,
     name VARCHAR(100) NOT NULL,
     description TEXT,
+    period_bonuses JSONB DEFAULT '[]',
     is_active BOOLEAN DEFAULT true,
     created_at TIMESTAMP DEFAULT NOW()
 );
