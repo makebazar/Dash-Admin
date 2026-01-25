@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { query } from '@/db';
 import { cookies } from 'next/headers';
 import bcrypt from 'bcrypt';
+import { normalizePhone } from '@/lib/phone-utils';
 
 const SALT_ROUNDS = 10;
 
@@ -37,7 +38,7 @@ export async function PATCH(
             return NextResponse.json({ error: 'Employee not found in this club' }, { status: 404 });
         }
 
-        const { full_name, role_id, password } = await request.json();
+        const { full_name, role_id, password, phone_number } = await request.json();
 
         // Build update query dynamically
         const updates = [];
@@ -47,6 +48,24 @@ export async function PATCH(
         if (full_name !== undefined) {
             updates.push(`full_name = $${valueIndex}`);
             values.push(full_name);
+            valueIndex++;
+        }
+
+        if (phone_number !== undefined) {
+            const normalizedPhone = normalizePhone(phone_number);
+
+            // Check if phone number is already taken by another user
+            const phoneCheck = await query(
+                `SELECT id FROM users WHERE phone_number = $1 AND id != $2`,
+                [normalizedPhone, employeeId]
+            );
+
+            if ((phoneCheck.rowCount ?? 0) > 0) {
+                return NextResponse.json({ error: 'Phone number already in use' }, { status: 400 });
+            }
+
+            updates.push(`phone_number = $${valueIndex}`);
+            values.push(normalizedPhone);
             valueIndex++;
         }
 

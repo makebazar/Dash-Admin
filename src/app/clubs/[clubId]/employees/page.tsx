@@ -52,6 +52,7 @@ export default function EmployeesPage({ params }: { params: Promise<{ clubId: st
 
     // Form state for edit
     const [editFullName, setEditFullName] = useState('')
+    const [editPhoneNumber, setEditPhoneNumber] = useState('')
     const [editRoleId, setEditRoleId] = useState<number | null>(null)
     const [editPassword, setEditPassword] = useState('')
 
@@ -173,6 +174,7 @@ export default function EmployeesPage({ params }: { params: Promise<{ clubId: st
     const handleEditEmployee = (employee: Employee) => {
         setSelectedEmployee(employee)
         setEditFullName(employee.full_name)
+        setEditPhoneNumber(employee.phone_number)
         setEditRoleId(employee.role_id)
         setEditPassword('')
         setIsEditModalOpen(true)
@@ -188,6 +190,7 @@ export default function EmployeesPage({ params }: { params: Promise<{ clubId: st
         try {
             const body: any = {
                 full_name: editFullName,
+                phone_number: editPhoneNumber,
                 role_id: editRoleId
             }
 
@@ -430,6 +433,17 @@ export default function EmployeesPage({ params }: { params: Promise<{ clubId: st
                                 placeholder="Иван Иванов"
                                 value={editFullName}
                                 onChange={(e) => setEditFullName(e.target.value)}
+                                required
+                            />
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label htmlFor="editPhoneNumber">Номер телефона</Label>
+                            <PhoneInput
+                                id="editPhoneNumber"
+                                placeholder="+7 (999) 000-00-00"
+                                value={editPhoneNumber}
+                                onChange={setEditPhoneNumber}
                                 required
                             />
                         </div>
