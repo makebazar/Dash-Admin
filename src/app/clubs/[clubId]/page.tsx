@@ -188,7 +188,10 @@ export default function ClubDashboardPage({ params }: { params: Promise<{ clubId
                                         borderRadius: '8px'
                                     }}
                                     labelFormatter={(value) => new Date(value).toLocaleDateString('ru-RU')}
-                                    formatter={(value: number) => [`${value.toLocaleString('ru-RU')} ₽`, 'Выручка']}
+                                    formatter={(value: number | undefined) => {
+                                        if (value === undefined) return ['0 ₽', 'Выручка'];
+                                        return [`${value.toLocaleString('ru-RU')} ₽`, 'Выручка'];
+                                    }}
                                 />
                                 <Area
                                     type="monotone"
