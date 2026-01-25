@@ -21,9 +21,12 @@ COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 # Skip static optimization completely
 ENV NEXT_PRIVATE_SKIP_STATIC=1
+# IMPORTANT: Force NODE_ENV=production during build
+# Coolify injects NODE_ENV=development via ARG which breaks the build
+ENV NODE_ENV=production
 
-# Build Next.js application
-RUN npm run build
+# Build Next.js application with explicit NODE_ENV
+RUN NODE_ENV=production npm run build
 
 # Production stage
 FROM node:20-alpine AS runner
