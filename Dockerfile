@@ -49,19 +49,8 @@ COPY --from=builder /app/src/db ./src/db
 COPY --from=builder /app/migrations ./migrations
 COPY --from=builder /app/scripts ./scripts
 
-# Copy pg module for migrations (not included in standalone by default)
-COPY --from=builder /app/node_modules/pg ./node_modules/pg
-COPY --from=builder /app/node_modules/pg-pool ./node_modules/pg-pool
-COPY --from=builder /app/node_modules/pg-protocol ./node_modules/pg-protocol
-COPY --from=builder /app/node_modules/pg-types ./node_modules/pg-types
-COPY --from=builder /app/node_modules/pgpass ./node_modules/pgpass
-COPY --from=builder /app/node_modules/pg-connection-string ./node_modules/pg-connection-string
-COPY --from=builder /app/node_modules/postgres-array ./node_modules/postgres-array
-COPY --from=builder /app/node_modules/postgres-bytea ./node_modules/postgres-bytea
-COPY --from=builder /app/node_modules/postgres-date ./node_modules/postgres-date
-COPY --from=builder /app/node_modules/postgres-interval ./node_modules/postgres-interval
-COPY --from=builder /app/node_modules/obuf ./node_modules/obuf
-COPY --from=builder /app/node_modules/split2 ./node_modules/split2
+# Install pg module for migrations (simpler than copying individual modules)
+RUN npm install pg --omit=dev --no-save
 
 # Make startup script executable
 RUN chmod +x ./scripts/start.sh
