@@ -48,17 +48,17 @@ CREATE TABLE IF NOT EXISTS clubs (
     created_at TIMESTAMP DEFAULT NOW()
 );
 
--- EMPLOYEES (link users to clubs)
-CREATE TABLE IF NOT EXISTS employees (
+-- CLUB_EMPLOYEES (link users to clubs)
+CREATE TABLE IF NOT EXISTS club_employees (
     id SERIAL PRIMARY KEY,
     club_id INTEGER NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     role VARCHAR(100) NOT NULL,
     is_active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP DEFAULT NOW(),
+    hired_at TIMESTAMP DEFAULT NOW(),
     UNIQUE(club_id, user_id)
 );
-CREATE INDEX IF NOT EXISTS idx_employees_club ON employees(club_id);
+CREATE INDEX IF NOT EXISTS idx_employees_club ON club_employees(club_id);
 
 -- VERIFICATION CODES (Auth)
 CREATE TABLE IF NOT EXISTS verification_codes (

@@ -20,7 +20,7 @@ export async function GET(
             `
             SELECT 1 FROM clubs WHERE id = $1 AND owner_id = $2
             UNION
-            SELECT 1 FROM employees WHERE club_id = $1 AND user_id = $2
+            SELECT 1 FROM club_employees WHERE club_id = $1 AND user_id = $2
             `,
             [clubId, userId]
         );
