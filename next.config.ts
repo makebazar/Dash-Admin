@@ -2,11 +2,13 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: 'standalone',
-  // Completely disable static optimization
+  // Completely disable static optimization and export
   experimental: {
     // Optimize for Docker/production builds
     optimizePackageImports: ['lucide-react', 'recharts'],
   },
+  // Skip static generation completely
+  skipTrailingSlashRedirect: true,
   // Force dynamic rendering for all routes
   async headers() {
     return [
