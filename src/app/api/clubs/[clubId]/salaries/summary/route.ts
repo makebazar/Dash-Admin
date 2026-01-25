@@ -30,7 +30,7 @@ export async function GET(
                 u.full_name, 
                 r.name as role,
                 s.period_bonuses
-             FROM club_employees ce
+             FROM employees ce
              JOIN users u ON ce.user_id = u.id
              LEFT JOIN roles r ON u.role_id = r.id
              LEFT JOIN employee_salary_assignments esa ON u.id = esa.user_id

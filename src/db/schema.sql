@@ -115,13 +115,15 @@ CREATE TABLE IF NOT EXISTS shifts (
 -- EMPLOYEE SHIFT SCHEDULES
 CREATE TABLE IF NOT EXISTS employee_shift_schedules (
     id SERIAL PRIMARY KEY,
-    employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
-    schedule_type VARCHAR(20) NOT NULL DEFAULT 'pattern',
-    pattern JSONB,
-    start_date DATE,
-    month_target INTEGER,
-    created_at TIMESTAMP DEFAULT NOW()
+    club_id INTEGER NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    month INTEGER NOT NULL,
+    year INTEGER NOT NULL,
+    planned_shifts INTEGER DEFAULT 0,
+    updated_at TIMESTAMP DEFAULT NOW(),
+    UNIQUE(club_id, user_id, month, year)
 );
+CREATE INDEX IF NOT EXISTS idx_ess_club_period ON employee_shift_schedules(club_id, month, year);
 
 -- ============================================
 -- SALARY MANAGEMENT
@@ -162,19 +164,22 @@ CREATE TABLE IF NOT EXISTS employee_salary_assignments (
 CREATE INDEX IF NOT EXISTS idx_employee_salary_club ON employee_salary_assignments(club_id);
 
 -- SALARY PAYMENTS
-CREATE TABLE IF NOT EXISTS salary_payments (
+CREATE TABLE IF NOT EXISTS payments (
     id SERIAL PRIMARY KEY,
     club_id INTEGER NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    amount DECIMAL(10,2) NOT NULL,
-    payment_type VARCHAR(20) NOT NULL,
-    comment TEXT,
-    paid_at TIMESTAMP DEFAULT NOW(),
-    created_by UUID NOT NULL REFERENCES users(id),
-    created_at TIMESTAMP DEFAULT NOW()
+    amount DECIMAL(10, 2) NOT NULL,
+    payment_method VARCHAR(50) DEFAULT 'CASH', -- CASH, CARD, BANK_TRANSFER
+    payment_type VARCHAR(20) DEFAULT 'salary',
+    month INTEGER NOT NULL,
+    year INTEGER NOT NULL,
+    notes TEXT,
+    created_by UUID REFERENCES users(id),
+    created_at TIMESTAMP DEFAULT NOW(),
+    UNIQUE(club_id, user_id, month, year, created_at)
 );
-CREATE INDEX IF NOT EXISTS idx_salary_payments_club ON salary_payments(club_id);
-CREATE INDEX IF NOT EXISTS idx_salary_payments_user ON salary_payments(user_id);
+CREATE INDEX IF NOT EXISTS idx_payments_club_user ON payments(club_id, user_id);
+CREATE INDEX IF NOT EXISTS idx_payments_period ON payments(year, month);
 
 -- ============================================
 -- SYSTEM METRICS
