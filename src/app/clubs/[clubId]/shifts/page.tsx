@@ -578,6 +578,10 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                     <ShiftExcelImport
                         clubId={clubId}
                         employees={employees}
+                        customFields={reportFields.map(f => ({
+                            metric_key: f.metric_key,
+                            custom_label: f.custom_label || f.label || f.metric_key
+                        }))}
                         onSuccess={() => {
                             setSelectedMonth('')
                             setFilterStartDate('')

@@ -15,7 +15,7 @@ import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Upload, FileSpreadsheet, Check, AlertCircle, Loader2, Download } from 'lucide-react';
-import { generateTemplate, parseExcel, ShiftImportRow } from '@/lib/excel';
+import { generateTemplate, parseExcel, ShiftImportRow, CustomField } from '@/lib/excel';
 
 interface Employee {
     id: string; // UUID
@@ -28,15 +28,17 @@ interface ProcessedRow extends ShiftImportRow {
     employeeId?: string;
     parsedCheckIn?: string; // ISO string
     parsedCheckOut?: string; // ISO string
+    reportData?: Record<string, any>;
 }
 
 interface ShiftExcelImportProps {
     clubId: string;
     employees: Employee[];
+    customFields?: CustomField[];
     onSuccess: () => void;
 }
 
-export function ShiftExcelImport({ clubId, employees, onSuccess }: ShiftExcelImportProps) {
+export function ShiftExcelImport({ clubId, employees, customFields = [], onSuccess }: ShiftExcelImportProps) {
     const [open, setOpen] = useState(false);
     const [rows, setRows] = useState<ProcessedRow[]>([]);
     const [uploading, setUploading] = useState(false);
@@ -85,13 +87,22 @@ export function ShiftExcelImport({ clubId, employees, onSuccess }: ShiftExcelImp
                 else if (!checkInDate) error = 'Неверный формат даты начала';
                 else if (!checkOutDate) error = 'Неверный формат даты окончания';
 
+                // Extract custom fields data
+                const reportData: Record<string, any> = {};
+                customFields.forEach(field => {
+                    const val = row[field.custom_label];
+                    // If parsing is needed (e.g. string to number), do it here. Assuming number or string for now.
+                    reportData[field.metric_key] = val;
+                });
+
                 return {
                     ...row,
                     status: error ? 'INVALID' : 'VALID',
                     error,
                     employeeId: employee?.id,
                     parsedCheckIn: checkInDate?.toISOString(),
-                    parsedCheckOut: checkOutDate?.toISOString()
+                    parsedCheckOut: checkOutDate?.toISOString(),
+                    reportData
                 };
             });
 
@@ -119,7 +130,9 @@ export function ShiftExcelImport({ clubId, employees, onSuccess }: ShiftExcelImp
                 cash_income: row['Наличные'] || 0,
                 card_income: row['Безнал'] || 0,
                 expenses: row['Расходы'] || 0,
-                report_comment: row['Комментарий'] || ''
+
+                report_comment: row['Комментарий'] || '',
+                report_data: row.reportData || {}
             }));
 
             const res = await fetch(`/api/clubs/${clubId}/shifts/batch`, {
@@ -165,7 +178,7 @@ export function ShiftExcelImport({ clubId, employees, onSuccess }: ShiftExcelImp
 
                 <div className="space-y-4 py-4">
                     <div className="flex items-center gap-4">
-                        <Button variant="secondary" onClick={generateTemplate} className="gap-2">
+                        <Button variant="secondary" onClick={() => generateTemplate(customFields)} className="gap-2">
                             <Download className="h-4 w-4" />
                             Скачать шаблон
                         </Button>

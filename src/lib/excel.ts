@@ -20,10 +20,21 @@ export const EXCEL_COLUMNS = [
     'Комментарий'
 ];
 
-export const generateTemplate = () => {
+export interface CustomField {
+    metric_key: string;
+    custom_label: string;
+}
+
+export const generateTemplate = (customFields: CustomField[] = []) => {
+    const headers = [...EXCEL_COLUMNS, ...customFields.map(f => f.custom_label)];
+    const exampleRow = ['Иванов Иван Иванович', '25.01.2026 08:00', '25.01.2026 20:00', 5000, 15000, 0, 'Пример смены'];
+
+    // Fill custom fields with 0 or empty for example
+    customFields.forEach(() => exampleRow.push(0));
+
     const ws = XLSX.utils.aoa_to_sheet([
-        EXCEL_COLUMNS,
-        ['Иванов Иван Иванович', '25.01.2026 08:00', '25.01.2026 20:00', 5000, 15000, 0, 'Пример смены']
+        headers,
+        exampleRow
     ]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Шаблон');
