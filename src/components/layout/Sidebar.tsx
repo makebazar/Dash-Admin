@@ -50,19 +50,32 @@ export function Sidebar({ clubs }: SidebarProps) {
                             </h3>
                             <div className="space-y-1">
                                 {clubs.map((club) => (
-                                    <Link
-                                        key={club.id}
-                                        href={`/clubs/${club.id}`}
-                                        className={cn(
-                                            "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
-                                            pathname.startsWith(`/clubs/${club.id}`)
-                                                ? "bg-accent text-accent-foreground"
-                                                : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                                        )}
-                                    >
-                                        <Building2 className="h-4 w-4" />
-                                        <span className="truncate">{club.name}</span>
-                                    </Link>
+                                    <div key={club.id} className="space-y-1">
+                                        <Link
+                                            href={`/clubs/${club.id}`}
+                                            className={cn(
+                                                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
+                                                pathname === `/clubs/${club.id}`
+                                                    ? "bg-accent text-accent-foreground"
+                                                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                                            )}
+                                        >
+                                            <Building2 className="h-4 w-4" />
+                                            <span className="truncate">{club.name}</span>
+                                        </Link>
+                                        <Link
+                                            href={`/clubs/${club.id}/maintenance`}
+                                            className={cn(
+                                                "flex items-center gap-3 rounded-lg px-8 py-2 text-xs transition-colors shadow-sm",
+                                                pathname.startsWith(`/clubs/${club.id}/maintenance`)
+                                                    ? "bg-primary/10 text-primary font-bold"
+                                                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                                            )}
+                                        >
+                                            <Settings className="h-3 w-3" />
+                                            <span>Обслуживание ПК</span>
+                                        </Link>
+                                    </div>
                                 ))}
                             </div>
                         </div>
