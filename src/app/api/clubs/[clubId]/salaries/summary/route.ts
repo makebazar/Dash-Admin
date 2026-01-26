@@ -81,20 +81,35 @@ export async function GET(
                 r.name as role,
                 s.period_bonuses,
                 s.standard_monthly_shifts,
-                s.base,
-                s.bonuses,
-                s.type,
-                s.amount,
-                s.percent,
-                s.full_shift_hours
+                v.formula as scheme_formula,
+                v.version as scheme_version
              FROM club_employees ce
              JOIN users u ON ce.user_id = u.id
              LEFT JOIN roles r ON u.role_id = r.id
              LEFT JOIN employee_salary_assignments esa ON u.id = esa.user_id
              LEFT JOIN salary_schemes s ON esa.scheme_id = s.id
+             LEFT JOIN LATERAL (
+                 SELECT formula, version 
+                 FROM salary_scheme_versions 
+                 WHERE scheme_id = s.id 
+                 ORDER BY version DESC 
+                 LIMIT 1
+             ) v ON true
              WHERE ce.club_id = $1`,
             [clubId]
         );
+
+        // Process employees to merge formula into the object structure expected by logic
+        const employees = employeesRes.rows.map((row: any) => {
+            const formula = row.scheme_formula || {};
+            return {
+                ...row,
+                ...formula, // Spread base, bonuses, type, amount etc.
+                // Priority to explicit columns if they existed (they don't, but meant to override formula if needed)
+                period_bonuses: row.period_bonuses || formula.period_bonuses,
+                standard_monthly_shifts: row.standard_monthly_shifts || formula.standard_monthly_shifts
+            };
+        });
 
         // Get shifts for the period
         const shiftsRes = await query(
@@ -167,8 +182,8 @@ export async function GET(
             [clubId, month, year]
         );
 
-        // Calculate summary
-        const summary = await Promise.all(employeesRes.rows.map(async emp => {
+        // Process each employee
+        const summary = await Promise.all(employees.map(async (emp: any) => {
             const empShifts = shiftsRes.rows.filter((s: any) => s.user_id === emp.id);
             const empPayment = paymentsRes.rows.find((p: any) => p.user_id === emp.id);
             const empPlannedShifts = plannedShiftsRes.rows.find((p: any) => p.user_id === emp.id);
