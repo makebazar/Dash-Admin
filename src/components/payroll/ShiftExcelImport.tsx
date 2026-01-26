@@ -54,11 +54,12 @@ export function ShiftExcelImport({ clubId, employees, customFields = [], onSucce
             return date;
         }
 
-        // Handle "DD.MM.YYYY HH:mm"
+        // Handle "DD.MM.YYYY HH:mm" or "DD.MM.YYYY HH:mm:ss"
         if (typeof dateStr === 'string') {
-            const parts = dateStr.match(/(\d{2})\.(\d{2})\.(\d{4})\s(\d{2}):(\d{2})/);
+            const parts = dateStr.match(/(\d{2})\.(\d{2})\.(\d{4})\s+(\d{2}):(\d{2})(?::(\d{2}))?/);
             if (parts) {
-                return new Date(`${parts[3]}-${parts[2]}-${parts[1]}T${parts[4]}:${parts[5]}:00`);
+                const second = parts[6] ? parts[6] : '00';
+                return new Date(`${parts[3]}-${parts[2]}-${parts[1]}T${parts[4]}:${parts[5]}:${second}`);
             }
         }
 
@@ -115,6 +116,29 @@ export function ShiftExcelImport({ clubId, employees, customFields = [], onSucce
             console.error(err);
             alert('Ошибка при чтении файла');
         }
+    };
+
+    const handleEmployeeChange = (index: number, employeeId: string) => {
+        const newRows = [...rows];
+        const row = newRows[index];
+        const employee = employees.find(e => e.id === employeeId);
+
+        row.employeeId = employee?.id;
+
+        // Re-validate
+        let error = '';
+        if (!employee) error = 'Сотрудник не найден';
+        else if (!row.parsedCheckIn) error = 'Неверный формат даты начала';
+        else if (!row.parsedCheckOut) error = 'Неверный формат даты окончания';
+
+        row.status = error ? 'INVALID' : 'VALID';
+        row.error = error;
+
+        setRows(newRows);
+        setFileStats({
+            total: newRows.length,
+            valid: newRows.filter(r => r.status === 'VALID').length
+        });
     };
 
     const handleImport = async () => {
@@ -212,6 +236,9 @@ export function ShiftExcelImport({ clubId, employees, customFields = [], onSucce
                                         <TableHead>Окончание</TableHead>
                                         <TableHead>Выручка</TableHead>
                                         <TableHead>Комментарий</TableHead>
+                                        {customFields.map(f => (
+                                            <TableHead key={f.metric_key}>{f.custom_label}</TableHead>
+                                        ))}
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
@@ -226,11 +253,43 @@ export function ShiftExcelImport({ clubId, employees, customFields = [], onSucce
                                                     </Badge>
                                                 )}
                                             </TableCell>
-                                            <TableCell>{row['ФИО']}</TableCell>
-                                            <TableCell>{row['Дата начала']}</TableCell>
-                                            <TableCell>{row['Дата окончания']}</TableCell>
+                                            <TableCell>
+                                                <select
+                                                    value={row.employeeId || ''}
+                                                    onChange={(e) => handleEmployeeChange(i, e.target.value)}
+                                                    className={`h-8 w-[180px] rounded-md border bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring ${!row.employeeId ? 'border-red-500' : 'border-input'
+                                                        }`}
+                                                >
+                                                    <option value="">Выберите сотрудника</option>
+                                                    {employees.map(emp => (
+                                                        <option key={emp.id} value={emp.id}>
+                                                            {emp.full_name}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                                {row.status === 'INVALID' && !row.employeeId && (
+                                                    <div className="text-xs text-red-500 mt-1">
+                                                        В файле: {row['ФИО']}
+                                                    </div>
+                                                )}
+                                            </TableCell>
+                                            <TableCell>
+                                                {row.parsedCheckIn ? new Date(row.parsedCheckIn).toLocaleString('ru-RU') : (
+                                                    <span className="text-red-500">{String(row['Дата начала'])}</span>
+                                                )}
+                                            </TableCell>
+                                            <TableCell>
+                                                {row.parsedCheckOut ? new Date(row.parsedCheckOut).toLocaleString('ru-RU') : (
+                                                    <span className="text-red-500">{String(row['Дата окончания'])}</span>
+                                                )}
+                                            </TableCell>
                                             <TableCell>{(row['Наличные'] || 0) + (row['Безнал'] || 0)} ₽</TableCell>
-                                            <TableCell className="max-w-[200px] truncate" title={row['Комментарий']}>{row['Комментарий']}</TableCell>
+                                            <TableCell className="max-w-[150px] truncate" title={row['Комментарий']}>{row['Комментарий']}</TableCell>
+                                            {customFields.map(f => (
+                                                <TableCell key={f.metric_key}>
+                                                    {row.reportData?.[f.metric_key] || 0}
+                                                </TableCell>
+                                            ))}
                                         </TableRow>
                                     ))}
                                 </TableBody>
