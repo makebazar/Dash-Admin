@@ -334,17 +334,6 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                 <h3 className="font-medium text-lg">{employee.full_name}</h3>
                                                 <p className="text-sm text-muted-foreground">{employee.role || 'Сотрудник'}</p>
                                             </div>
-                                            <div className="flex flex-col items-center justify-center p-4 bg-background border rounded-lg shadow-sm">
-                                                <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Ср. эффективность</div>
-                                                <div className="flex items-center gap-2">
-                                                    <TrendingUp className="w-4 h-4 text-emerald-500" />
-                                                    <span className="text-xl font-bold">
-                                                        {(employee.metrics?.total_hours || 0) > 0
-                                                            ? formatCurrency((employee.metrics?.total_revenue || 0) / (employee.metrics?.total_hours || 1)) + '/ч'
-                                                            : '0 ₽/ч'}
-                                                    </span>
-                                                </div>
-                                            </div>
                                             {employee.has_active_kpi && <Badge variant="secondary" className="text-xs">🎯 KPI</Badge>}
                                         </div>
                                         <div className="grid grid-cols-5 gap-4 text-sm">
@@ -606,8 +595,11 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                     return (
                                                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                                                             <div className="bg-muted/30 p-3 rounded-xl border flex flex-col items-center">
-                                                                <span className="text-[10px] text-muted-foreground uppercase font-bold mb-1">Всего часов</span>
-                                                                <span className="font-bold text-sm flex items-center gap-1.5"><Clock className="h-3.5 w-3.5 text-blue-500" /> {totalHours} ч</span>
+                                                                <span className="text-[10px] text-muted-foreground uppercase font-bold mb-1">Ср. эффективность</span>
+                                                                <span className="font-bold text-sm flex items-center gap-1.5">
+                                                                    <TrendingUp className="h-3.5 w-3.5 text-emerald-500" />
+                                                                    {totalHours > 0 ? formatCurrency(totalRevenue / totalHours) + '/ч' : '0 ₽/ч'}
+                                                                </span>
                                                             </div>
                                                             <div className="bg-muted/30 p-3 rounded-xl border flex flex-col items-center">
                                                                 <span className="text-[10px] text-muted-foreground uppercase font-bold mb-1">Доля {otherMetricLabel}</span>
