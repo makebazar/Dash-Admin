@@ -170,7 +170,8 @@ export async function GET(
                                     return {
                                         from: scaled_from,
                                         original_from: threshold_from,
-                                        percent: t.percent || 0
+                                        percent: t.percent || 0,
+                                        label: t.label || null
                                     };
                                 });
                                 bonus.thresholds = scaledThresholds;

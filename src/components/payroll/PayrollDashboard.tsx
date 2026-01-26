@@ -452,8 +452,8 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                                                     </div>
                                                                                 </div>
                                                                                 <div className={`text-[11px] p-2 rounded-lg border ${isPastMonth
-                                                                                        ? (kpi.is_met ? 'text-green-800 bg-green-50 border-green-200' : 'text-amber-800 bg-amber-50 border-amber-200')
-                                                                                        : (isNearlyImpossible ? 'text-red-800 bg-red-50 border-red-200' : isUnrealistic ? 'text-amber-800 bg-amber-50 border-amber-200' : 'text-blue-800 bg-white/50 border-blue-200/50')
+                                                                                    ? (kpi.is_met ? 'text-green-800 bg-green-50 border-green-200' : 'text-amber-800 bg-amber-50 border-amber-200')
+                                                                                    : (isNearlyImpossible ? 'text-red-800 bg-red-50 border-red-200' : isUnrealistic ? 'text-amber-800 bg-amber-50 border-amber-200' : 'text-blue-800 bg-white/50 border-blue-200/50')
                                                                                     }`}>
                                                                                     {isPastMonth ? (
                                                                                         kpi.is_met ? "✅ Цель достигнута! KPI бонус начислен." : "❌ Цель не достигнута в этом периоде."
@@ -506,10 +506,31 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                                                 const segmentPercent = segmentTotal > 0 ? Math.min(100, (segmentEarned / segmentTotal) * 100) : (isCompleted ? 100 : 0);
                                                                                 return (
                                                                                     <div key={idx} className={`relative p-3 rounded-xl border-2 transition-all duration-300 ${isCompleted ? 'bg-green-50/50 border-green-200 dark:bg-green-900/10 dark:border-green-900/30' : isCurrentTarget ? 'bg-blue-50 border-blue-400 shadow-sm shadow-blue-100 dark:bg-blue-900/20 dark:border-blue-500' : 'bg-muted/10 border-muted/30 opacity-60'}`}>
-                                                                                        <div className="flex justify-between items-start mb-2"><span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase ${isCompleted ? 'bg-green-100 text-green-700' : isCurrentTarget ? 'bg-blue-100 text-blue-700 animate-pulse' : 'bg-muted text-muted-foreground'}`}>{isCompleted ? '✓ OK' : isCurrentTarget ? '🎯 Цель' : '⏳ План'}</span><span className="text-sm font-black text-primary">{threshold.percent}%</span></div>
+                                                                                        <div className="flex justify-between items-start mb-2">
+                                                                                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase ${isCompleted ? 'bg-green-100 text-green-700' : isCurrentTarget ? 'bg-blue-100 text-blue-700 animate-pulse' : 'bg-muted text-muted-foreground'}`}>
+                                                                                                {threshold.label || (isCompleted ? '✓ OK' : isCurrentTarget ? '🎯 Цель' : '⏳ План')}
+                                                                                            </span>
+                                                                                            <span className="text-sm font-black text-primary">{threshold.percent}%</span>
+                                                                                        </div>
                                                                                         <div className="space-y-2">
-                                                                                            <div><p className="text-xs font-bold">{formatCurrency(threshold.from)}</p>{threshold.original_from !== threshold.from && <p className="text-[9px] text-muted-foreground">База: {formatCurrency(threshold.original_from)}</p>}</div>
-                                                                                            <div className="space-y-1"><div className="flex justify-between items-center text-[9px] font-bold uppercase tracking-tighter"><span className={isCompleted ? 'text-green-600' : isCurrentTarget ? 'text-blue-600' : 'text-muted-foreground'}>Выполнение</span><span>{Math.round(segmentPercent)}%</span></div><div className="h-1.5 w-full bg-muted rounded-full overflow-hidden"><div className={`h-full transition-all duration-700 rounded-full ${isCompleted ? 'bg-green-500' : 'bg-blue-400'}`} style={{ width: `${segmentPercent}%` }} /></div></div>
+                                                                                            <div>
+                                                                                                <p className="text-[9px] text-muted-foreground uppercase leading-none mb-1">Личная</p>
+                                                                                                <p className="text-xs font-bold leading-none mb-1">{formatCurrency(threshold.from)}</p>
+                                                                                                {threshold.original_from !== threshold.from && (
+                                                                                                    <p className="text-[9px] text-muted-foreground">
+                                                                                                        Цель: {formatCurrency(threshold.original_from)}
+                                                                                                    </p>
+                                                                                                )}
+                                                                                            </div>
+                                                                                            <div className="space-y-1">
+                                                                                                <div className="flex justify-between items-center text-[9px] font-bold uppercase tracking-tighter">
+                                                                                                    <span className={isCompleted ? 'text-green-600' : isCurrentTarget ? 'text-blue-600' : 'text-muted-foreground'}>Выполнение</span>
+                                                                                                    <span>{Math.round(segmentPercent)}%</span>
+                                                                                                </div>
+                                                                                                <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
+                                                                                                    <div className={`h-full transition-all duration-700 rounded-full ${isCompleted ? 'bg-green-500' : 'bg-blue-400'}`} style={{ width: `${segmentPercent}%` }} />
+                                                                                                </div>
+                                                                                            </div>
                                                                                             {isCurrentTarget && <p className="text-[10px] font-medium text-blue-600">Осталось: {formatCurrency(threshold.from - kpi.current_value)}</p>}
                                                                                         </div>
                                                                                     </div>
