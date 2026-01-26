@@ -17,7 +17,8 @@ import {
     Loader2,
     Trash2,
     Plus,
-    Percent
+    Percent,
+    TrendingUp
 } from 'lucide-react';
 
 interface PayrollStats {
@@ -332,6 +333,17 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                             <div>
                                                 <h3 className="font-medium text-lg">{employee.full_name}</h3>
                                                 <p className="text-sm text-muted-foreground">{employee.role || 'Сотрудник'}</p>
+                                            </div>
+                                            <div className="flex flex-col items-center justify-center p-4 bg-background border rounded-lg shadow-sm">
+                                                <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Ср. эффективность</div>
+                                                <div className="flex items-center gap-2">
+                                                    <TrendingUp className="w-4 h-4 text-emerald-500" />
+                                                    <span className="text-xl font-bold">
+                                                        {(employee.metrics?.total_hours || 0) > 0
+                                                            ? formatCurrency((employee.metrics?.total_revenue || 0) / (employee.metrics?.total_hours || 1)) + '/ч'
+                                                            : '0 ₽/ч'}
+                                                    </span>
+                                                </div>
                                             </div>
                                             {employee.has_active_kpi && <Badge variant="secondary" className="text-xs">🎯 KPI</Badge>}
                                         </div>
