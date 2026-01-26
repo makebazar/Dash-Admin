@@ -370,35 +370,113 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
 
                                         {activeTabs[employee.id] === 'overview' && (
                                             <div className="space-y-6 animate-in slide-in-from-left-2 duration-300">
-                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                                    <div className="bg-muted/30 p-4 rounded-xl border flex flex-col justify-between">
-                                                        <div><p className="text-xs text-muted-foreground mb-1">Выручка за период</p><p className="text-xl font-bold">{formatCurrency(employee.metrics?.total_revenue || 0)}</p></div>
-                                                        <div className="mt-3 space-y-1">
-                                                            {employee.period_bonuses?.map((kpi: any) => (
-                                                                <div key={kpi.id} className="flex justify-between items-center text-[10px]"><span className="text-muted-foreground truncate mr-2">{kpi.name}:</span><span className="font-bold">{formatCurrency(kpi.current_value)}</span></div>
-                                                            ))}
-                                                            <p className="text-[10px] text-muted-foreground pt-1 border-t border-dashed mt-1">Средняя: {formatCurrency(employee.metrics?.avg_revenue_per_shift || 0)}/см</p>
+                                                {/* 1. Metrics Grid (copied from Shifts tab) */}
+                                                {(() => {
+                                                    const totalHours = employee.metrics?.total_hours || 0;
+                                                    const totalRevenue = employee.metrics?.total_revenue || 0;
+                                                    const totalKpiBonus = employee.kpi_bonus_amount || 0;
+
+                                                    // Calculate Up-sell / "Other" metrics share
+                                                    const metadata = employee.metric_metadata || {};
+                                                    const kpiKeys = (employee.period_bonuses || []).map((b: any) => b.metric_key);
+                                                    const otherMetrics = Object.keys(metadata).filter(key =>
+                                                        metadata[key].category === 'OTHER' &&
+                                                        (kpiKeys.includes(key) || metadata[key].is_numeric !== false) &&
+                                                        !key.includes('comment')
+                                                    );
+                                                    const otherMetricLabel = otherMetrics.length === 1 ? metadata[otherMetrics[0]].label : 'Доп. продажи';
+
+                                                    // sum of other metrics from revenue_by_metric if available, or 0
+                                                    let otherMetricTotal = 0;
+                                                    if (employee.metrics?.revenue_by_metric) {
+                                                        otherMetrics.forEach(key => {
+                                                            otherMetricTotal += employee.metrics?.revenue_by_metric[key]?.total || 0;
+                                                        });
+                                                    }
+
+                                                    const upsellEfficiency = totalHours > 0 ? otherMetricTotal / totalHours : 0;
+                                                    const upsellShare = totalRevenue > 0 ? (otherMetricTotal / totalRevenue) * 100 : 0;
+
+                                                    return (
+                                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                                            <div className="bg-muted/30 p-3 rounded-xl border flex flex-col items-center">
+                                                                <span className="text-[10px] text-muted-foreground uppercase font-bold mb-1">Ср. эффективность</span>
+                                                                <span className="font-bold text-sm flex items-center gap-1.5">
+                                                                    <TrendingUp className="h-3.5 w-3.5 text-emerald-500" />
+                                                                    {totalHours > 0 ? formatCurrency(totalRevenue / totalHours) + '/ч' : '0 ₽/ч'}
+                                                                </span>
+                                                            </div>
+                                                            <div className="bg-muted/30 p-3 rounded-xl border flex flex-col items-center">
+                                                                <span className="text-[10px] text-muted-foreground uppercase font-bold mb-1">Доля {otherMetricLabel}</span>
+                                                                <span className="font-bold text-sm flex items-center gap-1.5"><Percent className="h-3.5 w-3.5 text-purple-500" /> {upsellShare.toFixed(1)}%</span>
+                                                            </div>
+                                                            <div className="bg-muted/30 p-3 rounded-xl border flex flex-col items-center">
+                                                                <span className="text-[10px] text-muted-foreground uppercase font-bold mb-1">Эфф. {otherMetricLabel}</span>
+                                                                <span className="font-bold text-sm flex items-center gap-1.5"><DollarSign className="h-3.5 w-3.5 text-emerald-500" /> {formatCurrency(upsellEfficiency)}/ч</span>
+                                                            </div>
+                                                            <div className="bg-muted/30 p-3 rounded-xl border flex flex-col items-center">
+                                                                <span className="text-[10px] text-muted-foreground uppercase font-bold mb-1">Бонусы смен</span>
+                                                                <span className="font-bold text-sm flex items-center gap-1.5"><Plus className="h-3.5 w-3.5 text-purple-500" /> {formatCurrency(totalKpiBonus)}</span>
+                                                            </div>
                                                         </div>
-                                                    </div>
-                                                    <div className="bg-muted/30 p-4 rounded-xl border"><p className="text-xs text-muted-foreground mb-1">Отработано</p><p className="text-xl font-bold">{employee.shifts_count} смен</p><p className="text-[10px] text-muted-foreground mt-1">Всего {employee.metrics?.total_hours.toFixed(1)}ч ({employee.metrics?.avg_hours_per_shift.toFixed(1)}ч/см)</p></div>
-                                                    <div className="bg-muted/30 p-4 rounded-xl border"><p className="text-xs text-muted-foreground mb-1">К выплате (остаток)</p><p className="text-xl font-bold text-primary">{formatCurrency(employee.balance)}</p><p className="text-[10px] text-muted-foreground mt-1">Начислено: {formatCurrency(employee.total_accrued)}</p></div>
-                                                </div>
+                                                    );
+                                                })()}
+
+                                                {/* 2. Detailed KPI Cards (replacing progress bar) */}
                                                 {employee.has_active_kpi && employee.period_bonuses && (
                                                     <div className="space-y-3">
                                                         <h4 className="text-sm font-semibold flex items-center gap-2">🎯 Статус по KPI</h4>
-                                                        <div className="grid grid-cols-1 gap-2">
+                                                        <div className="space-y-4">
                                                             {employee.period_bonuses.map((kpi: any) => (
-                                                                <div key={kpi.id} className="flex flex-col gap-2 bg-background p-3 rounded-lg border border-dashed">
-                                                                    <div className="flex justify-between items-center text-sm">
-                                                                        <div className="flex flex-col"><span className="font-bold">{kpi.name}</span><span className="text-[10px] text-muted-foreground uppercase tracking-widest">Прогресс</span></div>
-                                                                        <div className="text-right"><div className="flex items-baseline gap-1 justify-end"><span className="font-black text-sm">{formatCurrency(kpi.current_value)}</span><span className="text-[10px] text-muted-foreground">/ {formatCurrency(kpi.target_value)}</span></div><span className="text-[10px] font-bold text-primary">{Math.round(kpi.progress_percent)}%</span></div>
+                                                                <div key={kpi.id} className="bg-background border rounded-xl p-4 space-y-4">
+                                                                    <div className="flex justify-between items-center">
+                                                                        <div className="flex items-center gap-2"><div className="font-bold text-sm">{kpi.name}</div><span className="text-[10px] text-muted-foreground uppercase tracking-widest">ПРОГРЕСС</span></div>
+                                                                        <div className="text-right"><span className="font-bold text-lg">{formatCurrency(kpi.current_value)}</span><p className="text-[10px] text-muted-foreground">из {formatCurrency(kpi.target_value)}</p></div>
                                                                     </div>
-                                                                    <div className="flex items-center gap-4">
-                                                                        <div className="flex-1 bg-muted rounded-full h-2 overflow-hidden relative">
-                                                                            <div className={`h-full transition-all duration-500 rounded-full ${kpi.is_met ? 'bg-gradient-to-r from-green-500 to-emerald-400' : 'bg-gradient-to-r from-blue-500 to-indigo-400'}`} style={{ width: `${Math.min(kpi.progress_percent, 100)}%` }} />
-                                                                        </div>
-                                                                        <div className={`px-2 py-0.5 rounded text-[9px] font-black uppercase shrink-0 ${kpi.is_met ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-amber-100 text-amber-700 border border-amber-200 animate-pulse'}`}>{kpi.is_met ? '✓ Ok' : '⏳ В работе'}</div>
+
+                                                                    {/* Threshold Cards Grid */}
+                                                                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                                                                        {(kpi.thresholds || []).map((threshold: any, idx: number) => {
+                                                                            const isCompleted = kpi.current_value >= threshold.from;
+                                                                            const prevThresholdValue = idx === 0 ? 0 : kpi.thresholds[idx - 1]?.from;
+                                                                            const isCurrentTarget = !isCompleted && kpi.current_value >= prevThresholdValue;
+                                                                            const segmentTotal = threshold.from - prevThresholdValue;
+                                                                            const segmentEarned = Math.max(0, kpi.current_value - prevThresholdValue);
+                                                                            const segmentPercent = segmentTotal > 0 ? Math.min(100, (segmentEarned / segmentTotal) * 100) : (isCompleted ? 100 : 0);
+                                                                            return (
+                                                                                <div key={idx} className={`relative p-3 rounded-xl border-2 transition-all duration-300 ${isCompleted ? 'bg-green-50/50 border-green-200 dark:bg-green-900/10 dark:border-green-900/30' : isCurrentTarget ? 'bg-blue-50 border-blue-400 shadow-sm shadow-blue-100 dark:bg-blue-900/20 dark:border-blue-500' : 'bg-muted/10 border-muted/30 opacity-60'}`}>
+                                                                                    <div className="flex justify-between items-start mb-2">
+                                                                                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase ${isCompleted ? 'bg-green-100 text-green-700' : isCurrentTarget ? 'bg-blue-100 text-blue-700 animate-pulse' : 'bg-muted text-muted-foreground'}`}>
+                                                                                            {threshold.label || (isCompleted ? '✓ OK' : isCurrentTarget ? '🎯 Цель' : '⏳ План')}
+                                                                                        </span>
+                                                                                        <span className="text-sm font-black text-primary">{threshold.percent}%</span>
+                                                                                    </div>
+                                                                                    <div className="space-y-2">
+                                                                                        <div>
+                                                                                            <p className="text-[9px] text-muted-foreground uppercase leading-none mb-1">Личная</p>
+                                                                                            <p className="text-xs font-bold leading-none mb-1">{formatCurrency(threshold.from)}</p>
+                                                                                            {threshold.original_from !== threshold.from && (
+                                                                                                <p className="text-[9px] text-muted-foreground">
+                                                                                                    Цель: {formatCurrency(threshold.original_from)}
+                                                                                                </p>
+                                                                                            )}
+                                                                                        </div>
+                                                                                        <div className="space-y-1">
+                                                                                            <div className="flex justify-between items-center text-[9px] font-bold uppercase tracking-tighter">
+                                                                                                <span className={isCompleted ? 'text-green-600' : isCurrentTarget ? 'text-blue-600' : 'text-muted-foreground'}>Выполнение</span>
+                                                                                                <span>{Math.round(segmentPercent)}%</span>
+                                                                                            </div>
+                                                                                            <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
+                                                                                                <div className={`h-full transition-all duration-700 rounded-full ${isCompleted ? 'bg-green-500' : 'bg-blue-400'}`} style={{ width: `${segmentPercent}%` }} />
+                                                                                            </div>
+                                                                                        </div>
+                                                                                        {isCurrentTarget && <p className="text-[10px] font-medium text-blue-600">Осталось: {formatCurrency(threshold.from - kpi.current_value)}</p>}
+                                                                                    </div>
+                                                                                </div>
+                                                                            );
+                                                                        })}
                                                                     </div>
+                                                                    {(kpi.thresholds || []).length === 0 && <div className="p-4 bg-muted/20 border border-dashed rounded-xl text-center text-xs text-muted-foreground">Пороги для этого KPI не настроены</div>}
                                                                 </div>
                                                             ))}
                                                         </div>
