@@ -103,7 +103,6 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                 newSet.delete(employeeId);
             } else {
                 newSet.add(employeeId);
-                // Default to 'overview' tab when opening
                 if (!activeTabs[employeeId]) {
                     setActiveTabs(current => ({ ...current, [employeeId]: 'overview' }));
                 }
@@ -114,7 +113,6 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
 
     const openPaymentModal = (employee: Employee) => {
         setPaymentModal({ open: true, employee });
-        // Default to salary (full amount with KPI)
         setPaymentForm({
             amount: employee.balance.toString(),
             method: 'CASH',
@@ -196,7 +194,7 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                 const isAdvance = paymentForm.paymentType === 'advance';
                 alert(isAdvance ? 'Аванс записан! KPI не заморожен.' : 'Выплата записана! Зарплата заморожена.');
                 closePaymentModal();
-                fetchData(); // Reload data
+                fetchData();
             } else {
                 const error = await response.json();
                 alert(`Ошибка: ${error.error}`);
@@ -220,11 +218,9 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                 `/api/clubs/${clubId}/salaries/summary?month=${selectedMonth}&year=${selectedYear}`
             );
             const json = await res.json();
-            console.log('API Response:', json);
 
-            // Map old API structure to new format
             if (json.summary && Array.isArray(json.summary)) {
-                const mappedData = {
+                setData({
                     period: { month: selectedMonth, year: selectedYear },
                     stats: {
                         total_employees: json.summary.length,
@@ -235,7 +231,7 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                     employees: json.summary.map((emp: any) => ({
                         ...emp,
                         payment_status: emp.balance <= 0 ? 'PAID' : emp.total_paid > 0 ? 'PARTIAL' : 'PENDING',
-                        has_active_kpi: emp.period_bonuses && emp.period_bonuses.length > 0, // Always show if KPI is configured
+                        has_active_kpi: emp.period_bonuses && emp.period_bonuses.length > 0,
                         kpi_summary: emp.period_bonuses?.map((b: any) => ({
                             metric: b.name || b.metric_key,
                             progress: b.progress_percent || 0,
@@ -243,17 +239,10 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                             is_met: b.is_met || false
                         })) || []
                     }))
-                };
-                console.log('Mapped data:', mappedData);
-                console.log('First employee period_bonuses:', JSON.stringify(mappedData.employees[0]?.period_bonuses, null, 2));
-                console.log('First employee has_active_kpi:', mappedData.employees[0]?.has_active_kpi);
-                console.log('First employee kpi_bonus_amount:', mappedData.employees[0]?.kpi_bonus_amount);
-                setData(mappedData);
+                });
             } else {
                 setData(json);
             }
-
-            // No longer need to fetch schedules as we use "Standard Shifts" from the scheme
         } catch (error) {
             console.error('Failed to load payroll data:', error);
         } finally {
@@ -264,15 +253,8 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
     const navigateMonth = (direction: number) => {
         let newMonth = selectedMonth + direction;
         let newYear = selectedYear;
-
-        if (newMonth > 12) {
-            newMonth = 1;
-            newYear++;
-        } else if (newMonth < 1) {
-            newMonth = 12;
-            newYear--;
-        }
-
+        if (newMonth > 12) { newMonth = 1; newYear++; }
+        else if (newMonth < 1) { newMonth = 12; newYear--; }
         setSelectedMonth(newMonth);
         setSelectedYear(newYear);
     };
@@ -296,224 +278,72 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
         }
     };
 
+    if (loading) return <div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>;
+    if (!data) return <div className="flex items-center justify-center h-64 text-muted-foreground">Нет данных</div>;
 
-
-    if (loading) {
-        return (
-            <div className="flex items-center justify-center h-64">
-                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-            </div>
-        );
-    }
-
-    if (!data) {
-        return (
-            <div className="flex items-center justify-center h-64">
-                <div className="text-muted-foreground">Нет данных</div>
-            </div>
-        );
-    }
-
-    const stats = data.stats || {
-        total_employees: 0,
-        total_accrued: 0,
-        total_paid: 0,
-        pending_payment: 0
-    };
-
-    const monthNames = [
-        'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
-        'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'
-    ];
+    const stats = data.stats || { total_employees: 0, total_accrued: 0, total_paid: 0, pending_payment: 0 };
+    const monthNames = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
 
     return (
         <div className="space-y-8 p-8">
-            {/* Header with Period Navigation */}
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
                     <h1 className="text-3xl font-bold tracking-tight">💰 Зарплаты</h1>
                     <div className="flex items-center gap-2">
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => navigateMonth(-1)}
-                        >
-                            <ChevronLeft className="h-5 w-5" />
-                        </Button>
-                        <div className="text-lg font-medium min-w-[160px] text-center">
-                            {monthNames[selectedMonth - 1]} {selectedYear}
-                        </div>
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => navigateMonth(1)}
-                        >
-                            <ChevronRight className="h-5 w-5" />
-                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => navigateMonth(-1)}><ChevronLeft className="h-5 w-5" /></Button>
+                        <div className="text-lg font-medium min-w-[160px] text-center">{monthNames[selectedMonth - 1]} {selectedYear}</div>
+                        <Button variant="ghost" size="icon" onClick={() => navigateMonth(1)}><ChevronRight className="h-5 w-5" /></Button>
                     </div>
                 </div>
-                <Button
-                    variant="ghost"
-                    onClick={() => {
-                        setSelectedMonth(new Date().getMonth() + 1);
-                        setSelectedYear(new Date().getFullYear());
-                    }}
-                >
-                    Сегодня
-                </Button>
+                <Button variant="ghost" onClick={() => { setSelectedMonth(new Date().getMonth() + 1); setSelectedYear(new Date().getFullYear()); }}>Сегодня</Button>
             </div>
 
-            {/* Stats Overview - Minimalist Style */}
             <div className="grid gap-6 md:grid-cols-4">
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium text-muted-foreground">
-                            Сотрудники
-                        </CardTitle>
-                        <div className="rounded-lg bg-primary/10 p-2">
-                            <Users className="h-4 w-4 text-primary" />
-                        </div>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold tracking-tight">{stats.total_employees}</div>
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium text-muted-foreground">
-                            Начислено
-                        </CardTitle>
-                        <div className="rounded-lg bg-primary/10 p-2">
-                            <DollarSign className="h-4 w-4 text-primary" />
-                        </div>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold tracking-tight">{formatCurrency(stats.total_accrued)}</div>
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium text-muted-foreground">
-                            Выплачено
-                        </CardTitle>
-                        <div className="rounded-lg bg-primary/10 p-2">
-                            <CheckCircle className="h-4 w-4 text-primary" />
-                        </div>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold tracking-tight">{formatCurrency(stats.total_paid)}</div>
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium text-muted-foreground">
-                            К выплате
-                        </CardTitle>
-                        <div className="rounded-lg bg-primary/10 p-2">
-                            <Clock className="h-4 w-4 text-primary" />
-                        </div>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold tracking-tight">{formatCurrency(stats.pending_payment)}</div>
-                    </CardContent>
-                </Card>
+                <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Сотрудники</CardTitle><div className="rounded-lg bg-primary/10 p-2"><Users className="h-4 w-4 text-primary" /></div></CardHeader><CardContent><div className="text-2xl font-bold tracking-tight">{stats.total_employees}</div></CardContent></Card>
+                <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Начислено</CardTitle><div className="rounded-lg bg-primary/10 p-2"><DollarSign className="h-4 w-4 text-primary" /></div></CardHeader><CardContent><div className="text-2xl font-bold tracking-tight">{formatCurrency(stats.total_accrued)}</div></CardContent></Card>
+                <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Выплачено</CardTitle><div className="rounded-lg bg-primary/10 p-2"><CheckCircle className="h-4 w-4 text-primary" /></div></CardHeader><CardContent><div className="text-2xl font-bold tracking-tight">{formatCurrency(stats.total_paid)}</div></CardContent></Card>
+                <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">К выплате</CardTitle><div className="rounded-lg bg-primary/10 p-2"><Clock className="h-4 w-4 text-primary" /></div></CardHeader><CardContent><div className="text-2xl font-bold tracking-tight">{formatCurrency(stats.pending_payment)}</div></CardContent></Card>
             </div>
 
-
-            {/* Content */}
-            {/* Search and Filters */}
             <div className="flex items-center gap-4">
                 <div className="relative flex-1 max-w-md">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                        placeholder="Поиск сотрудника..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="pl-9"
-                    />
+                    <Input placeholder="Поиск сотрудника..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-9" />
                 </div>
-                <Button variant="outline">
-                    <Filter className="h-4 w-4 mr-2" />
-                    Фильтры
-                </Button>
+                <Button variant="outline"><Filter className="h-4 w-4 mr-2" />Фильтры</Button>
             </div>
 
-            {/* Employee List - Minimalist Style */}
             {filteredEmployees.length === 0 ? (
-                <div className="text-center py-12 text-muted-foreground">
-                    Сотрудники не найдены
-                </div>
+                <div className="text-center py-12 text-muted-foreground">Сотрудники не найдены</div>
             ) : (
                 <div className="space-y-3">
                     {filteredEmployees.map((employee) => (
-                        <Card
-                            key={employee.id}
-                            className="transition-shadow hover:shadow-md"
-                        >
+                        <Card key={employee.id} className="transition-shadow hover:shadow-md">
                             <CardContent className="p-6">
                                 <div className="flex items-center justify-between">
-                                    {/* Employee Info */}
                                     <div className="flex-1">
                                         <div className="flex items-center gap-3 mb-3">
                                             <div>
                                                 <h3 className="font-medium text-lg">{employee.full_name}</h3>
                                                 <p className="text-sm text-muted-foreground">{employee.role || 'Сотрудник'}</p>
                                             </div>
-                                            {employee.has_active_kpi && (
-                                                <Badge variant="secondary" className="text-xs">
-                                                    🎯 KPI
-                                                </Badge>
-                                            )}
+                                            {employee.has_active_kpi && <Badge variant="secondary" className="text-xs">🎯 KPI</Badge>}
                                         </div>
-
                                         <div className="grid grid-cols-5 gap-4 text-sm">
-                                            <div>
-                                                <p className="text-muted-foreground mb-1">Смены</p>
-                                                <p className="font-medium">{employee.shifts_count}</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-muted-foreground mb-1">Начислено</p>
-                                                <p className="font-medium">{formatCurrency(employee.total_accrued)}</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-muted-foreground mb-1">Выплачено</p>
-                                                <p className="font-medium">{formatCurrency(employee.total_paid)}</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-muted-foreground mb-1">Остаток</p>
-                                                <p className="font-medium">{formatCurrency(employee.balance)}</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-muted-foreground mb-1">KPI премия</p>
-                                                <p className={`font-medium ${employee.kpi_bonus_amount && employee.kpi_bonus_amount > 0 ? 'text-green-600' : ''}`}>
-                                                    {formatCurrency(employee.kpi_bonus_amount || 0)}
-                                                </p>
-                                            </div>
+                                            <div><p className="text-muted-foreground mb-1">Смены</p><p className="font-medium">{employee.shifts_count}</p></div>
+                                            <div><p className="text-muted-foreground mb-1">Начислено</p><p className="font-medium">{formatCurrency(employee.total_accrued)}</p></div>
+                                            <div><p className="text-muted-foreground mb-1">Выплачено</p><p className="font-medium">{formatCurrency(employee.total_paid)}</p></div>
+                                            <div><p className="text-muted-foreground mb-1">Остаток</p><p className="font-medium">{formatCurrency(employee.balance)}</p></div>
+                                            <div><p className="text-muted-foreground mb-1">KPI премия</p><p className={`font-medium ${employee.kpi_bonus_amount && employee.kpi_bonus_amount > 0 ? 'text-green-600' : ''}`}>{formatCurrency(employee.kpi_bonus_amount || 0)}</p></div>
                                         </div>
                                     </div>
-
-                                    {/* Status and Actions */}
-                                    <div className="flex flex-col items-end gap-3 ml-6"> {/* Changed to flex-col items-end */}
-                                        <Badge
-                                            variant={
-                                                employee.payment_status === 'PAID' ? 'default' :
-                                                    employee.payment_status === 'PARTIAL' ? 'secondary' :
-                                                        'outline'
-                                            }
-                                        >
-                                            {getStatusText(employee.payment_status)}
-                                        </Badge>
-                                        {/* Original action buttons removed from here */}
+                                    <div className="flex flex-col items-end gap-3 ml-6">
+                                        <Badge variant={employee.payment_status === 'PAID' ? 'default' : employee.payment_status === 'PARTIAL' ? 'secondary' : 'outline'}>{getStatusText(employee.payment_status)}</Badge>
                                     </div>
-                                </div> {/* Closing the flex items-start justify-between div */}
+                                </div>
 
-                                {/* Expanded Details */}
                                 {expandedCards.has(employee.id) && (
                                     <div className="mt-6 pt-6 border-t animate-in fade-in duration-300">
-                                        {/* Tabs Navigation */}
                                         <div className="flex border-b mb-6 overflow-x-auto scrollbar-hide">
                                             {[
                                                 { id: 'overview', label: 'Обзор', icon: '📊' },
@@ -524,88 +354,43 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                 <button
                                                     key={tab.id}
                                                     onClick={() => setActiveTabs(prev => ({ ...prev, [employee.id]: tab.id }))}
-                                                    className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 whitespace-nowrap ${activeTabs[employee.id] === tab.id
-                                                        ? 'border-primary text-primary'
-                                                        : 'border-transparent text-muted-foreground hover:text-foreground'
-                                                        }`}
+                                                    className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 whitespace-nowrap ${activeTabs[employee.id] === tab.id ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
                                                 >
-                                                    <span className="mr-2">{tab.icon}</span>
-                                                    {tab.label}
+                                                    <span className="mr-2">{tab.icon}</span>{tab.label}
                                                 </button>
                                             ))}
                                         </div>
 
-                                        {/* Tab Content: Overview */}
                                         {activeTabs[employee.id] === 'overview' && (
                                             <div className="space-y-6 animate-in slide-in-from-left-2 duration-300">
                                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                                     <div className="bg-muted/30 p-4 rounded-xl border flex flex-col justify-between">
-                                                        <div>
-                                                            <p className="text-xs text-muted-foreground mb-1">Выручка за период</p>
-                                                            <p className="text-xl font-bold">{formatCurrency(employee.metrics?.total_revenue || 0)}</p>
-                                                        </div>
+                                                        <div><p className="text-xs text-muted-foreground mb-1">Выручка за период</p><p className="text-xl font-bold">{formatCurrency(employee.metrics?.total_revenue || 0)}</p></div>
                                                         <div className="mt-3 space-y-1">
-                                                            {/* Show breakdown by KPI metrics if available */}
                                                             {employee.period_bonuses?.map((kpi: any) => (
-                                                                <div key={kpi.id} className="flex justify-between items-center text-[10px]">
-                                                                    <span className="text-muted-foreground truncate mr-2">{kpi.name}:</span>
-                                                                    <span className="font-bold">{formatCurrency(kpi.current_value)}</span>
-                                                                </div>
+                                                                <div key={kpi.id} className="flex justify-between items-center text-[10px]"><span className="text-muted-foreground truncate mr-2">{kpi.name}:</span><span className="font-bold">{formatCurrency(kpi.current_value)}</span></div>
                                                             ))}
-                                                            <p className="text-[10px] text-muted-foreground pt-1 border-t border-dashed mt-1">
-                                                                Средняя: {formatCurrency(employee.metrics?.avg_revenue_per_shift || 0)}/см
-                                                            </p>
+                                                            <p className="text-[10px] text-muted-foreground pt-1 border-t border-dashed mt-1">Средняя: {formatCurrency(employee.metrics?.avg_revenue_per_shift || 0)}/см</p>
                                                         </div>
                                                     </div>
-                                                    <div className="bg-muted/30 p-4 rounded-xl border">
-                                                        <p className="text-xs text-muted-foreground mb-1">Отработано</p>
-                                                        <p className="text-xl font-bold">{employee.shifts_count} смен</p>
-                                                        <p className="text-[10px] text-muted-foreground mt-1">
-                                                            Всего {employee.metrics?.total_hours.toFixed(1)}ч ({employee.metrics?.avg_hours_per_shift.toFixed(1)}ч/см)
-                                                        </p>
-                                                    </div>
-                                                    <div className="bg-muted/30 p-4 rounded-xl border">
-                                                        <p className="text-xs text-muted-foreground mb-1">К выплате (остаток)</p>
-                                                        <p className="text-xl font-bold text-primary">{formatCurrency(employee.balance)}</p>
-                                                        <p className="text-[10px] text-muted-foreground mt-1">
-                                                            Начислено: {formatCurrency(employee.total_accrued)}
-                                                        </p>
-                                                    </div>
+                                                    <div className="bg-muted/30 p-4 rounded-xl border"><p className="text-xs text-muted-foreground mb-1">Отработано</p><p className="text-xl font-bold">{employee.shifts_count} смен</p><p className="text-[10px] text-muted-foreground mt-1">Всего {employee.metrics?.total_hours.toFixed(1)}ч ({employee.metrics?.avg_hours_per_shift.toFixed(1)}ч/см)</p></div>
+                                                    <div className="bg-muted/30 p-4 rounded-xl border"><p className="text-xs text-muted-foreground mb-1">К выплате (остаток)</p><p className="text-xl font-bold text-primary">{formatCurrency(employee.balance)}</p><p className="text-[10px] text-muted-foreground mt-1">Начислено: {formatCurrency(employee.total_accrued)}</p></div>
                                                 </div>
-
-                                                {/* Visual Summary of KPIs */}
                                                 {employee.has_active_kpi && employee.period_bonuses && (
                                                     <div className="space-y-3">
-                                                        <h4 className="text-sm font-semibold flex items-center gap-2">
-                                                            🎯 Статус по KPI
-                                                        </h4>
+                                                        <h4 className="text-sm font-semibold flex items-center gap-2">🎯 Статус по KPI</h4>
                                                         <div className="grid grid-cols-1 gap-2">
                                                             {employee.period_bonuses.map((kpi: any) => (
                                                                 <div key={kpi.id} className="flex flex-col gap-2 bg-background p-3 rounded-lg border border-dashed">
                                                                     <div className="flex justify-between items-center text-sm">
-                                                                        <div className="flex flex-col">
-                                                                            <span className="font-bold">{kpi.name}</span>
-                                                                            <span className="text-[10px] text-muted-foreground uppercase tracking-widest">Прогресс</span>
-                                                                        </div>
-                                                                        <div className="text-right">
-                                                                            <div className="flex items-baseline gap-1 justify-end">
-                                                                                <span className="font-black text-sm">{formatCurrency(kpi.current_value)}</span>
-                                                                                <span className="text-[10px] text-muted-foreground">/ {formatCurrency(kpi.target_value)}</span>
-                                                                            </div>
-                                                                            <span className="text-[10px] font-bold text-primary">{Math.round(kpi.progress_percent)}%</span>
-                                                                        </div>
+                                                                        <div className="flex flex-col"><span className="font-bold">{kpi.name}</span><span className="text-[10px] text-muted-foreground uppercase tracking-widest">Прогресс</span></div>
+                                                                        <div className="text-right"><div className="flex items-baseline gap-1 justify-end"><span className="font-black text-sm">{formatCurrency(kpi.current_value)}</span><span className="text-[10px] text-muted-foreground">/ {formatCurrency(kpi.target_value)}</span></div><span className="text-[10px] font-bold text-primary">{Math.round(kpi.progress_percent)}%</span></div>
                                                                     </div>
                                                                     <div className="flex items-center gap-4">
                                                                         <div className="flex-1 bg-muted rounded-full h-2 overflow-hidden relative">
-                                                                            <div
-                                                                                className={`h-full transition-all duration-500 rounded-full ${kpi.is_met ? 'bg-gradient-to-r from-green-500 to-emerald-400' : 'bg-gradient-to-r from-blue-500 to-indigo-400'}`}
-                                                                                style={{ width: `${Math.min(kpi.progress_percent, 100)}%` }}
-                                                                            />
+                                                                            <div className={`h-full transition-all duration-500 rounded-full ${kpi.is_met ? 'bg-gradient-to-r from-green-500 to-emerald-400' : 'bg-gradient-to-r from-blue-500 to-indigo-400'}`} style={{ width: `${Math.min(kpi.progress_percent, 100)}%` }} />
                                                                         </div>
-                                                                        <div className={`px-2 py-0.5 rounded text-[9px] font-black uppercase shrink-0 ${kpi.is_met ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-amber-100 text-amber-700 border border-amber-200 animate-pulse'
-                                                                            }`}>
-                                                                            {kpi.is_met ? '✓ Ok' : '⏳ В работе'}
-                                                                        </div>
+                                                                        <div className={`px-2 py-0.5 rounded text-[9px] font-black uppercase shrink-0 ${kpi.is_met ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-amber-100 text-amber-700 border border-amber-200 animate-pulse'}`}>{kpi.is_met ? '✓ Ok' : '⏳ В работе'}</div>
                                                                     </div>
                                                                 </div>
                                                             ))}
@@ -615,167 +400,89 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                             </div>
                                         )}
 
-                                        {/* Tab Content: KPI & Detailed Accruals */}
                                         {activeTabs[employee.id] === 'kpi' && (
                                             <div className="space-y-6 animate-in slide-in-from-left-2 duration-300">
-                                                {/* Forecasting & Targets Block */}
-                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                    <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-4 rounded-xl border border-blue-100 dark:from-blue-900/10 dark:to-indigo-900/10">
-                                                        <h5 className="text-xs font-bold text-blue-700 uppercase mb-3 flex items-center gap-2">
-                                                            📈 Прогноз на конец месяца
-                                                        </h5>
-                                                        {employee.period_bonuses?.[0] ? (() => {
-                                                            const kpi = employee.period_bonuses[0];
-                                                            const shiftsCompleted = employee.shifts_count || 1;
-                                                            // Calculate standard shifts if not provided (fallback logic)
-                                                            const standardShifts = employee.standard_monthly_shifts || (shiftsCompleted > 10 ? 15 : shiftsCompleted + 5);
-                                                            const avgPerShift = kpi.current_value / shiftsCompleted;
-                                                            const projectedValue = avgPerShift * standardShifts;
-                                                            const shiftsLeft = Math.max(0, standardShifts - shiftsCompleted);
-                                                            const targetPerShift = shiftsLeft > 0 ? Math.max(0, (kpi.target_value - kpi.current_value) / shiftsLeft) : 0;
-
-                                                            return (
-                                                                <div className="space-y-3">
-                                                                    <div className="flex justify-between items-end">
-                                                                        <div>
-                                                                            <p className="text-[10px] text-blue-600">Ожидаемая выручка</p>
-                                                                            <p className="text-lg font-bold">{formatCurrency(projectedValue)}</p>
-                                                                        </div>
-                                                                        <div className="text-right">
-                                                                            <p className="text-[10px] text-blue-600">Цель на смену</p>
-                                                                            <p className="text-lg font-bold text-primary">{formatCurrency(targetPerShift)}</p>
-                                                                        </div>
-                                                                    </div>
-                                                                    <div className="text-[11px] text-blue-800 bg-white/50 p-2 rounded-lg border border-blue-200/50">
-                                                                        {projectedValue >= kpi.target_value
-                                                                            ? "🚀 Сотрудник идет на выполнение плана!"
-                                                                            : `⚠️ Нужно прибавить ${formatCurrency(Math.max(0, targetPerShift - avgPerShift))} к средней смене для KPI`}
-                                                                    </div>
-                                                                </div>
-                                                            );
-                                                        })() : (
-                                                            <p className="text-sm text-muted-foreground italic">Настройте KPI для отображения прогноза</p>
-                                                        )}
-                                                    </div>
-
-                                                    <div className="bg-muted/30 p-4 rounded-xl border">
-                                                        <h5 className="text-xs font-bold uppercase mb-3 text-muted-foreground">Состав зарплаты</h5>
-                                                        <div className="space-y-2 text-sm">
-                                                            <div className="flex justify-between items-center">
-                                                                <span>База:</span>
-                                                                <span className="font-medium">{formatCurrency(employee.breakdown?.base_salary || 0)}</span>
-                                                            </div>
-                                                            <div className="flex justify-between items-center text-green-600">
-                                                                <span className="flex items-center gap-1">KPI бонусы:</span>
-                                                                <span className="font-bold">{formatCurrency(employee.breakdown?.kpi_bonuses || 0)}</span>
-                                                            </div>
-                                                            <div className="pt-2 border-t mt-2 flex justify-between items-center font-bold">
-                                                                <span>Итого начислено:</span>
-                                                                <span>{formatCurrency(employee.total_accrued)}</span>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-
-                                                {/* Detailed KPI bars */}
-                                                <div className="space-y-4">
-                                                    <h4 className="text-sm font-bold">Прогресс по порогам KPI</h4>
-                                                    {employee.period_bonuses?.map((kpi: any) => (
-                                                        <div key={kpi.id} className="bg-background border rounded-xl p-4 space-y-4">
-                                                            <div className="flex justify-between items-center">
-                                                                <div className="flex items-center gap-2">
-                                                                    <span className="text-xl">🎯</span>
-                                                                    <div>
-                                                                        <span className="font-bold text-sm">{kpi.name}</span>
-                                                                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Текущая выручка</p>
-                                                                    </div>
-                                                                </div>
-                                                                <div className="text-right">
-                                                                    <span className="font-bold text-lg">{formatCurrency(kpi.current_value)}</span>
-                                                                    <p className="text-[10px] text-muted-foreground">из {formatCurrency(kpi.target_value)}</p>
-                                                                </div>
-                                                            </div>
-
-                                                            {/* Multi-level progress bar */}
-                                                            <div className="relative pt-2 pb-6">
-                                                                <div className="h-3 w-full bg-muted rounded-full overflow-hidden relative">
-                                                                    {/* Threshold markers visual indicators */}
-                                                                    <div
-                                                                        className={`h-full transition-all duration-1000 ease-out rounded-full ${kpi.is_met ? 'bg-gradient-to-r from-green-500 to-emerald-400' : 'bg-gradient-to-r from-blue-500 to-indigo-400'}`}
-                                                                        style={{ width: `${Math.min(kpi.progress_percent, 100)}%` }}
-                                                                    />
-                                                                </div>
-
-                                                                {/* Status label under the bar */}
-                                                                <div className="flex justify-between mt-2 text-[10px] font-bold text-muted-foreground uppercase">
-                                                                    <span>Начало</span>
-                                                                    <span className={kpi.progress_percent >= 50 ? 'text-primary' : ''}>50%</span>
-                                                                    <span className={kpi.progress_percent >= 100 ? 'text-green-600' : ''}>Бонус достигнут</span>
-                                                                </div>
-                                                            </div>
-
-                                                            {/* Achievement Cards (Thresholds) */}
-                                                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 mt-4">
-                                                                {(kpi.thresholds || []).map((threshold: any, idx: number) => {
-                                                                    const isCompleted = kpi.current_value >= threshold.from;
-                                                                    const isCurrentTarget = !isCompleted && (idx === 0 || kpi.current_value >= (kpi.thresholds[idx - 1]?.from || 0));
-
-                                                                    return (
-                                                                        <div
-                                                                            key={idx}
-                                                                            className={`relative p-3 rounded-xl border-2 transition-all duration-300 ${isCompleted
-                                                                                ? 'bg-green-50/50 border-green-200 dark:bg-green-900/10 dark:border-green-900/30'
-                                                                                : isCurrentTarget
-                                                                                    ? 'bg-blue-50 border-blue-400 shadow-sm shadow-blue-100 dark:bg-blue-900/20 dark:border-blue-500'
-                                                                                    : 'bg-muted/10 border-muted/30 opacity-60'
-                                                                                }`}
-                                                                        >
-                                                                            <div className="flex justify-between items-start mb-2">
-                                                                                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase ${isCompleted
-                                                                                    ? 'bg-green-100 text-green-700'
-                                                                                    : isCurrentTarget
-                                                                                        ? 'bg-blue-100 text-blue-700 animate-pulse'
-                                                                                        : 'bg-muted text-muted-foreground'
-                                                                                    }`}>
-                                                                                    {isCompleted ? '✓ Выполнено' : isCurrentTarget ? '🎯 Текущая цель' : '⏳ Впереди'}
-                                                                                </span>
-                                                                                <span className="text-sm font-black text-primary">{threshold.percent}%</span>
-                                                                            </div>
-
-                                                                            <div className="space-y-1">
-                                                                                <div>
-                                                                                    <p className="text-xs font-bold">{formatCurrency(threshold.from)}</p>
-                                                                                    {threshold.original_from !== threshold.from && (
-                                                                                        <p className="text-[9px] text-muted-foreground">
-                                                                                            База: {formatCurrency(threshold.original_from)}
-                                                                                        </p>
-                                                                                    )}
+                                                {(() => {
+                                                    const shiftsCompletedForCalc = employee.shifts_count || 0;
+                                                    const standardShifts = employee.standard_monthly_shifts || 15;
+                                                    return (
+                                                        <>
+                                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-4 rounded-xl border border-blue-100 dark:from-blue-900/10 dark:to-indigo-900/10">
+                                                                    <h5 className="text-xs font-bold text-blue-700 uppercase mb-3 flex items-center gap-2">📈 Прогноз на конец месяца</h5>
+                                                                    {employee.period_bonuses?.[0] ? (() => {
+                                                                        const kpi = employee.period_bonuses[0];
+                                                                        const shiftsCompleted = employee.shifts_count || 1;
+                                                                        const avgPerShift = kpi.current_value / shiftsCompleted;
+                                                                        const projectedValue = avgPerShift * standardShifts;
+                                                                        const shiftsLeft = Math.max(0, standardShifts - shiftsCompleted);
+                                                                        const targetPerShift = shiftsLeft > 0 ? Math.max(0, (kpi.target_value - kpi.current_value) / shiftsLeft) : 0;
+                                                                        return (
+                                                                            <div className="space-y-3">
+                                                                                <div className="flex justify-between items-end">
+                                                                                    <div><p className="text-[10px] text-blue-600">Ожидаемая выручка</p><p className="text-lg font-bold">{formatCurrency(projectedValue)}</p></div>
+                                                                                    <div className="text-right"><p className="text-[10px] text-blue-600">Цель на смену</p><p className="text-lg font-bold text-primary">{formatCurrency(targetPerShift)}</p></div>
                                                                                 </div>
-                                                                                {isCurrentTarget && (
-                                                                                    <p className="text-[10px] font-medium text-blue-600">
-                                                                                        Осталось: {formatCurrency(threshold.from - kpi.current_value)}
-                                                                                    </p>
-                                                                                )}
-                                                                                {isCompleted && (
-                                                                                    <p className="text-[10px] text-green-600 font-medium">Бонус активирован</p>
-                                                                                )}
+                                                                                <div className="text-[11px] text-blue-800 bg-white/50 p-2 rounded-lg border border-blue-200/50">{projectedValue >= kpi.target_value ? "🚀 Сотрудник идет на выполнение плана!" : `⚠️ Нужно прибавить ${formatCurrency(Math.max(0, targetPerShift - avgPerShift))} к средней смене для KPI`}</div>
+                                                                            </div>
+                                                                        );
+                                                                    })() : <p className="text-sm text-muted-foreground italic">Настройте KPI для отображения прогноза</p>}
+                                                                </div>
+                                                                <div className="bg-muted/30 p-4 rounded-xl border">
+                                                                    <h5 className="text-xs font-bold uppercase mb-3 text-muted-foreground">Состав зарплаты</h5>
+                                                                    <div className="space-y-2 text-sm">
+                                                                        <div className="flex justify-between items-center"><span>База:</span><span className="font-medium">{formatCurrency(employee.breakdown?.base_salary || 0)}</span></div>
+                                                                        <div className="flex justify-between items-center text-green-600"><span className="flex items-center gap-1">KPI бонусы:</span><span className="font-bold">{formatCurrency(employee.breakdown?.kpi_bonuses || 0)}</span></div>
+                                                                        <div className="pt-2 border-t mt-2 flex justify-between items-center font-bold"><span>Итого начислено:</span><span>{formatCurrency(employee.total_accrued)}</span></div>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+
+                                                            <div className="space-y-4">
+                                                                <h4 className="text-sm font-bold">Прогресс по порогам KPI</h4>
+                                                                {employee.period_bonuses?.map((kpi: any) => (
+                                                                    <div key={kpi.id} className="bg-background border rounded-xl p-4 space-y-4">
+                                                                        <div className="flex justify-between items-center">
+                                                                            <div className="flex items-center gap-2"><span className="text-xl">🎯</span><div><span className="font-bold text-sm">{kpi.name}</span><p className="text-[10px] text-muted-foreground uppercase tracking-wider">Текущая выручка</p></div></div>
+                                                                            <div className="text-right"><span className="font-bold text-lg">{formatCurrency(kpi.current_value)}</span><p className="text-[10px] text-muted-foreground">из {formatCurrency(kpi.target_value)}</p></div>
+                                                                        </div>
+                                                                        <div className="bg-blue-50/50 border border-blue-100 rounded-xl p-3 flex items-start gap-3 dark:bg-blue-900/10 dark:border-blue-900/30">
+                                                                            <div className="bg-blue-100 p-1.5 rounded-lg text-blue-600 shrink-0 dark:bg-blue-900/50 dark:text-blue-400"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" /></svg></div>
+                                                                            <div className="text-[11px] leading-relaxed text-blue-800 dark:text-blue-300">
+                                                                                <p className="font-bold mb-0.5 whitespace-nowrap">Учет отработанных смен</p>
+                                                                                <p>Пороги адаптированы под <b>{employee.shifts_count}</b> смен. Базовые значения пересчитаны относительно эталона в <b>{standardShifts}</b> смен.</p>
                                                                             </div>
                                                                         </div>
-                                                                    );
-                                                                })}
-                                                                {(kpi.thresholds || []).length === 0 && (
-                                                                    <div className="col-span-full p-4 bg-muted/20 border border-dashed rounded-xl text-center text-xs text-muted-foreground">
-                                                                        Пороги для этого KPI не настроены
+                                                                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                                                                            {(kpi.thresholds || []).map((threshold: any, idx: number) => {
+                                                                                const isCompleted = kpi.current_value >= threshold.from;
+                                                                                const prevThresholdValue = idx === 0 ? 0 : kpi.thresholds[idx - 1]?.from;
+                                                                                const isCurrentTarget = !isCompleted && kpi.current_value >= prevThresholdValue;
+                                                                                const segmentTotal = threshold.from - prevThresholdValue;
+                                                                                const segmentEarned = Math.max(0, kpi.current_value - prevThresholdValue);
+                                                                                const segmentPercent = segmentTotal > 0 ? Math.min(100, (segmentEarned / segmentTotal) * 100) : (isCompleted ? 100 : 0);
+                                                                                return (
+                                                                                    <div key={idx} className={`relative p-3 rounded-xl border-2 transition-all duration-300 ${isCompleted ? 'bg-green-50/50 border-green-200 dark:bg-green-900/10 dark:border-green-900/30' : isCurrentTarget ? 'bg-blue-50 border-blue-400 shadow-sm shadow-blue-100 dark:bg-blue-900/20 dark:border-blue-500' : 'bg-muted/10 border-muted/30 opacity-60'}`}>
+                                                                                        <div className="flex justify-between items-start mb-2"><span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase ${isCompleted ? 'bg-green-100 text-green-700' : isCurrentTarget ? 'bg-blue-100 text-blue-700 animate-pulse' : 'bg-muted text-muted-foreground'}`}>{isCompleted ? '✓ OK' : isCurrentTarget ? '🎯 Цель' : '⏳ План'}</span><span className="text-sm font-black text-primary">{threshold.percent}%</span></div>
+                                                                                        <div className="space-y-2">
+                                                                                            <div><p className="text-xs font-bold">{formatCurrency(threshold.from)}</p>{threshold.original_from !== threshold.from && <p className="text-[9px] text-muted-foreground">База: {formatCurrency(threshold.original_from)}</p>}</div>
+                                                                                            <div className="space-y-1"><div className="flex justify-between items-center text-[9px] font-bold uppercase tracking-tighter"><span className={isCompleted ? 'text-green-600' : isCurrentTarget ? 'text-blue-600' : 'text-muted-foreground'}>Выполнение</span><span>{Math.round(segmentPercent)}%</span></div><div className="h-1.5 w-full bg-muted rounded-full overflow-hidden"><div className={`h-full transition-all duration-700 rounded-full ${isCompleted ? 'bg-green-500' : 'bg-blue-400'}`} style={{ width: `${segmentPercent}%` }} /></div></div>
+                                                                                            {isCurrentTarget && <p className="text-[10px] font-medium text-blue-600">Осталось: {formatCurrency(threshold.from - kpi.current_value)}</p>}
+                                                                                        </div>
+                                                                                    </div>
+                                                                                );
+                                                                            })}
+                                                                        </div>
+                                                                        {(kpi.thresholds || []).length === 0 && <div className="col-span-full p-4 bg-muted/20 border border-dashed rounded-xl text-center text-xs text-muted-foreground">Пороги для этого KPI не настроены</div>}
                                                                     </div>
-                                                                )}
+                                                                ))}
                                                             </div>
-                                                        </div>
-                                                    ))}
-                                                </div>
+                                                        </>
+                                                    );
+                                                })()}
                                             </div>
                                         )}
 
-                                        {/* Tab Content: Shifts */}
                                         {activeTabs[employee.id] === 'shifts' && (
                                             <div className="animate-in slide-in-from-left-2 duration-300">
                                                 <div className="rounded-xl border overflow-hidden">
@@ -792,102 +499,42 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                             </tr>
                                                         </thead>
                                                         <tbody className="divide-y">
-                                                            {(employee.shifts || []).map((shift) => (
-                                                                <tr key={shift.id} className={`hover:bg-muted/30 transition-colors ${shift.type === 'PERIOD_BONUS' ? 'bg-emerald-50/50' : ''}`}>
-                                                                    <td className="p-3">
-                                                                        <div className="flex flex-col">
-                                                                            <span className="font-medium">{new Date(shift.date).toLocaleDateString('ru-RU', { day: '2-digit', month: 'short' })}</span>
-                                                                            {shift.type === 'PERIOD_BONUS' && <span className="text-[9px] text-emerald-600 font-bold uppercase tracking-tighter">Мес. Премия</span>}
-                                                                        </div>
-                                                                    </td>
-                                                                    <td className="p-3 text-center text-muted-foreground">
-                                                                        {shift.type === 'PERIOD_BONUS' ? '—' : `${shift.total_hours}ч`}
-                                                                    </td>
-                                                                    <td className="p-3 text-right font-medium">
-                                                                        {shift.type === 'PERIOD_BONUS' ? '—' : formatCurrency(shift.total_revenue)}
-                                                                    </td>
-                                                                    <td className="p-3 text-right font-bold text-emerald-600">
-                                                                        {shift.kpi_bonus > 0 ? `+${formatCurrency(shift.kpi_bonus)}` : '—'}
-                                                                    </td>
-                                                                    <td className="p-3 text-right font-bold">
-                                                                        {formatCurrency(shift.calculated_salary)}
-                                                                    </td>
-                                                                    <td className="p-3 text-center">
-                                                                        {shift.is_paid ? (
-                                                                            <span className="inline-flex px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 text-[9px] font-bold">OK</span>
-                                                                        ) : (
-                                                                            <span className="inline-flex px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[9px] font-bold">ОЖ</span>
-                                                                        )}
-                                                                    </td>
-                                                                    <td className="p-3 text-right">
-                                                                        {shift.status !== 'CALCULATED' && (
-                                                                            <Button
-                                                                                variant="ghost"
-                                                                                size="icon"
-                                                                                className="h-6 w-6 text-muted-foreground hover:text-destructive"
-                                                                                onClick={(e) => {
-                                                                                    e.stopPropagation();
-                                                                                    handleDeleteShift(shift.id);
-                                                                                }}
-                                                                            >
-                                                                                <Trash2 className="h-3.5 w-3.5" />
-                                                                            </Button>
-                                                                        )}
-                                                                    </td>
+                                                            {(employee.shifts || []).map((shift: any) => (
+                                                                <tr key={shift.id} className="hover:bg-muted/50 transition-colors">
+                                                                    <td className="p-3 text-muted-foreground">{new Date(shift.date).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })}</td>
+                                                                    <td className="p-3 text-center font-medium">{shift.hours || shift.total_hours} ч</td>
+                                                                    <td className="p-3 text-right">{formatCurrency(shift.revenue || shift.total_revenue)}</td>
+                                                                    <td className="p-3 text-right text-emerald-600 font-bold">{shift.kpi_bonus > 0 ? `+${formatCurrency(shift.kpi_bonus)}` : '-'}</td>
+                                                                    <td className="p-3 text-right font-bold">{formatCurrency(shift.total_pay || shift.calculated_salary)}</td>
+                                                                    <td className="p-3 text-center"><span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${shift.status === 'PAID' || shift.is_paid ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>{shift.status === 'PAID' || shift.is_paid ? 'OK' : 'WAIT'}</span></td>
+                                                                    <td className="p-3 text-right">{(shift.status !== 'PAID' && !shift.is_paid) && <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={(e) => { e.stopPropagation(); handleDeleteShift(shift.id); }}><Trash2 className="h-3.5 w-3.5" /></Button>}</td>
                                                                 </tr>
                                                             ))}
                                                         </tbody>
                                                     </table>
-                                                    {(employee.shifts || []).length === 0 && (
-                                                        <div className="p-8 text-center text-muted-foreground italic bg-muted/10">
-                                                            Нет данных по сменам в этом периоде
-                                                        </div>
-                                                    )}
+                                                    {(employee.shifts || []).length === 0 && <div className="p-8 text-center text-muted-foreground italic bg-muted/10">Нет данных по сменам в этом периоде</div>}
                                                 </div>
                                             </div>
                                         )}
 
-                                        {/* Tab Content: Payments */}
                                         {activeTabs[employee.id] === 'payments' && (
                                             <div className="space-y-4 animate-in slide-in-from-left-2 duration-300">
                                                 <div className="bg-muted/10 rounded-xl border p-4">
                                                     <h5 className="text-sm font-bold mb-4">История всех транзакций</h5>
                                                     <div className="space-y-3">
-                                                        {(employee.payment_history || []).map((payment, idx) => (
+                                                        {(employee.payment_history || []).map((payment: any, idx: number) => (
                                                             <div key={idx} className="flex items-center justify-between p-3 bg-background rounded-lg border">
                                                                 <div className="flex items-center gap-3">
-                                                                    <div className={`p-2 rounded-lg ${payment.payment_type === 'advance' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
-                                                                        <DollarSign className="h-4 w-4" />
-                                                                    </div>
-                                                                    <div>
-                                                                        <p className="text-sm font-bold">{formatCurrency(payment.amount)}</p>
-                                                                        <p className="text-[10px] text-muted-foreground">
-                                                                            {new Date(payment.date).toLocaleDateString('ru-RU', { day: '2-digit', month: 'long' })} • {payment.method === 'CASH' ? 'Наличные' : 'Безнал'}
-                                                                        </p>
-                                                                    </div>
+                                                                    <div className={`p-2 rounded-lg ${payment.payment_type === 'advance' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}><DollarSign className="h-4 w-4" /></div>
+                                                                    <div><p className="text-sm font-bold">{formatCurrency(payment.amount)}</p><p className="text-[10px] text-muted-foreground">{new Date(payment.date).toLocaleDateString('ru-RU', { day: '2-digit', month: 'long' })} • {payment.method === 'CASH' ? 'Наличные' : 'Безнал'}</p></div>
                                                                 </div>
                                                                 <div className="flex items-center gap-3">
-                                                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${payment.payment_type === 'advance' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
-                                                                        {payment.payment_type === 'advance' ? 'Аванс' : 'Зарплата'}
-                                                                    </span>
-                                                                    {payment.id && (
-                                                                        <Button
-                                                                            variant="ghost"
-                                                                            size="icon"
-                                                                            className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                                                                            onClick={() => setConfirmingDeleteId(payment.id!)}
-                                                                        >
-                                                                            <Trash2 className="h-3.5 w-3.5" />
-                                                                        </Button>
-                                                                    )}
+                                                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${payment.payment_type === 'advance' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>{payment.payment_type === 'advance' ? 'Аванс' : 'Зарплата'}</span>
+                                                                    {payment.id && <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => setConfirmingDeleteId(payment.id!)}><Trash2 className="h-3.5 w-3.5" /></Button>}
                                                                 </div>
                                                             </div>
                                                         ))}
-                                                        {(employee.payment_history || []).length === 0 && (
-                                                            <div className="py-4 text-center text-muted-foreground italic">
-                                                                Выплат еще не было
-                                                            </div>
-                                                        )}
+                                                        {(employee.payment_history || []).length === 0 && <div className="py-4 text-center text-muted-foreground italic">Выплат еще не было</div>}
                                                     </div>
                                                 </div>
                                             </div>
@@ -895,24 +542,9 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                     </div>
                                 )}
 
-
-                                {/* Action Buttons */}
                                 <div className="flex items-center gap-2 mt-4 justify-end">
-                                    <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={() => toggleCard(employee.id)}
-                                    >
-                                        {expandedCards.has(employee.id) ? '↑ Свернуть' : '↓ Детали'}
-                                    </Button>
-                                    {employee.balance > 0 && (
-                                        <Button
-                                            size="sm"
-                                            onClick={() => openPaymentModal(employee)}
-                                        >
-                                            Выплатить
-                                        </Button>
-                                    )}
+                                    <Button variant="ghost" size="sm" onClick={() => toggleCard(employee.id)}>{expandedCards.has(employee.id) ? '↑ Свернуть' : '↓ Детали'}</Button>
+                                    {employee.balance > 0 && <Button size="sm" onClick={() => openPaymentModal(employee)}>Выплатить</Button>}
                                 </div>
                             </CardContent>
                         </Card>
@@ -920,122 +552,36 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                 </div>
             )}
 
-            {/* Payment Modal */}
             {paymentModal.open && paymentModal.employee && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
                     <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-                        <h2 className="text-xl font-semibold mb-4">
-                            Выплата: {paymentModal.employee.full_name}
-                        </h2>
-
+                        <h2 className="text-xl font-semibold mb-4">Выплата: {paymentModal.employee.full_name}</h2>
                         <div className="space-y-4">
-                            {/* Amount */}
                             <div>
                                 <label className="block text-sm font-medium mb-1">Сумма</label>
-                                <input
-                                    type="number"
-                                    step="0.01"
-                                    value={paymentForm.amount}
-                                    onChange={(e) => setPaymentForm({ ...paymentForm, amount: e.target.value })}
-                                    className="w-full border rounded px-3 py-2"
-                                    placeholder="0.00"
-                                />
-                                <p className="text-xs text-muted-foreground mt-1">
-                                    Остаток к выплате: {formatCurrency(paymentModal.employee.balance)}
-                                </p>
-                                <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
-                                    <p>База: {formatCurrency(paymentModal.employee.breakdown?.base_salary || 0)}</p>
-                                    <p className="text-emerald-600">KPI бонусы: {formatCurrency(paymentModal.employee.breakdown?.kpi_bonuses || 0)}</p>
-                                </div>
+                                <input type="number" step="0.01" value={paymentForm.amount} onChange={(e) => setPaymentForm({ ...paymentForm, amount: e.target.value })} className="w-full border rounded px-3 py-2" placeholder="0.00" />
+                                <p className="text-xs text-muted-foreground mt-1">Остаток к выплате: {formatCurrency(paymentModal.employee.balance)}</p>
                             </div>
-
-                            {/* Payment Type Toggle */}
                             <div>
                                 <label className="block text-sm font-medium mb-2">Тип выплаты</label>
                                 <div className="flex gap-2">
-                                    <Button
-                                        type="button"
-                                        variant={paymentForm.paymentType === 'advance' ? 'default' : 'outline'}
-                                        className="flex-1"
-                                        onClick={() => {
-                                            const baseAmount = paymentModal.employee?.breakdown?.base_salary || 0;
-                                            setPaymentForm(prev => ({
-                                                ...prev,
-                                                paymentType: 'advance',
-                                                amount: baseAmount.toString()
-                                            }));
-                                        }}
-                                    >
-                                        Аванс
-                                    </Button>
-                                    <Button
-                                        type="button"
-                                        variant={paymentForm.paymentType === 'salary' ? 'default' : 'outline'}
-                                        className="flex-1"
-                                        onClick={() => {
-                                            const fullAmount = paymentModal.employee?.balance || 0;
-                                            setPaymentForm(prev => ({
-                                                ...prev,
-                                                paymentType: 'salary',
-                                                amount: fullAmount.toString()
-                                            }));
-                                        }}
-                                    >
-                                        Зарплата
-                                    </Button>
+                                    <Button type="button" variant={paymentForm.paymentType === 'advance' ? 'default' : 'outline'} className="flex-1" onClick={() => { const baseAmount = paymentModal.employee?.breakdown?.base_salary || 0; setPaymentForm(prev => ({ ...prev, paymentType: 'advance', amount: baseAmount.toString() })); }}>Аванс</Button>
+                                    <Button type="button" variant={paymentForm.paymentType === 'salary' ? 'default' : 'outline'} className="flex-1" onClick={() => { const fullAmount = paymentModal.employee?.balance || 0; setPaymentForm(prev => ({ ...prev, paymentType: 'salary', amount: fullAmount.toString() })); }}>Зарплата</Button>
                                 </div>
-                                <p className="text-xs text-muted-foreground mt-1">
-                                    {
-                                        paymentForm.paymentType === 'advance'
-                                            ? 'Аванс: только базовая часть, KPI не замораживается'
-                                            : 'Зарплата: полная сумма с KPI, смены замораживаются'
-                                    }
-                                </p>
+                                <p className="text-xs text-muted-foreground mt-1">{paymentForm.paymentType === 'advance' ? 'Аванс: только базовая часть, KPI не замораживается' : 'Зарплата: полная сумма с KPI, смены замораживаются'}</p>
                             </div>
-
-                            {/* Payment Method */}
                             <div>
                                 <label className="block text-sm font-medium mb-1">Способ оплаты</label>
-                                <select
-                                    value={paymentForm.method}
-                                    onChange={(e) => setPaymentForm({ ...paymentForm, method: e.target.value })}
-                                    className="w-full border rounded px-3 py-2"
-                                >
-                                    <option value="CASH">Наличные</option>
-                                    <option value="CARD">Карта</option>
-                                    <option value="BANK_TRANSFER">Банковский перевод</option>
-                                </select>
+                                <select value={paymentForm.method} onChange={(e) => setPaymentForm({ ...paymentForm, method: e.target.value })} className="w-full border rounded px-3 py-2"><option value="CASH">Наличные</option><option value="CARD">Карта</option><option value="BANK_TRANSFER">Банковский перевод</option></select>
                             </div>
-
-                            {/* Notes */}
                             <div>
-                                <label className="block text-sm font-medium mb-1">Комментарий (опционально)</label>
-                                <textarea
-                                    value={paymentForm.notes}
-                                    onChange={(e) => setPaymentForm({ ...paymentForm, notes: e.target.value })}
-                                    className="w-full border rounded px-3 py-2"
-                                    rows={3}
-                                    placeholder="Примечание к выплате..."
-                                />
+                                <label className="block text-sm font-medium mb-1">Комментарий</label>
+                                <textarea value={paymentForm.notes} onChange={(e) => setPaymentForm({ ...paymentForm, notes: e.target.value })} className="w-full border rounded px-3 py-2" rows={3} placeholder="Примечание..." />
                             </div>
                         </div>
-
                         <div className="flex gap-3 mt-6">
-                            <Button
-                                variant="outline"
-                                onClick={closePaymentModal}
-                                className="flex-1"
-                                disabled={processingPayment}
-                            >
-                                Отмена
-                            </Button>
-                            <Button
-                                onClick={handlePayment}
-                                className="flex-1"
-                                disabled={processingPayment || !paymentForm.amount || parseFloat(paymentForm.amount) <= 0}
-                            >
-                                {processingPayment ? 'Обработка...' : 'Выплатить'}
-                            </Button>
+                            <Button variant="outline" onClick={closePaymentModal} className="flex-1" disabled={processingPayment}>Отмена</Button>
+                            <Button onClick={handlePayment} className="flex-1" disabled={processingPayment || !paymentForm.amount || parseFloat(paymentForm.amount) <= 0}>{processingPayment ? 'Обработка...' : 'Выплатить'}</Button>
                         </div>
                     </div>
                 </div>
