@@ -694,20 +694,53 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                                 </div>
                                                             </div>
 
-                                                            {/* Calculation Details */}
-                                                            <div className="grid grid-cols-2 gap-4 text-xs bg-muted/20 p-3 rounded-lg border border-dashed">
-                                                                <div>
-                                                                    <p className="text-muted-foreground mb-1">Статус текущей ставки:</p>
-                                                                    <p className={`font-bold ${kpi.is_met ? 'text-green-600' : 'text-amber-600'}`}>
-                                                                        {kpi.is_met ? `✓ Выполнено (${kpi.current_reward_value}%)` : `⏳ В работе (${kpi.thresholds?.[0]?.percent || 2}%)`}
-                                                                    </p>
-                                                                </div>
-                                                                <div className="text-right">
-                                                                    <p className="text-muted-foreground mb-1">Сумма бонуса:</p>
-                                                                    <p className="font-bold text-lg text-green-600">
-                                                                        {formatCurrency(kpi.current_value * (kpi.current_reward_value || 0) / 100)}
-                                                                    </p>
-                                                                </div>
+                                                            {/* Achievement Cards (Thresholds) */}
+                                                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 mt-4">
+                                                                {(kpi.thresholds || []).map((threshold: any, idx: number) => {
+                                                                    const isCompleted = kpi.current_value >= threshold.value;
+                                                                    const isCurrentTarget = !isCompleted && (idx === 0 || kpi.current_value >= (kpi.thresholds[idx - 1]?.value || 0));
+
+                                                                    return (
+                                                                        <div
+                                                                            key={idx}
+                                                                            className={`relative p-3 rounded-xl border-2 transition-all duration-300 ${isCompleted
+                                                                                ? 'bg-green-50/50 border-green-200 dark:bg-green-900/10 dark:border-green-900/30'
+                                                                                : isCurrentTarget
+                                                                                    ? 'bg-blue-50 border-blue-400 shadow-sm shadow-blue-100 dark:bg-blue-900/20 dark:border-blue-500'
+                                                                                    : 'bg-muted/10 border-muted/30 opacity-60'
+                                                                                }`}
+                                                                        >
+                                                                            <div className="flex justify-between items-start mb-2">
+                                                                                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase ${isCompleted
+                                                                                    ? 'bg-green-100 text-green-700'
+                                                                                    : isCurrentTarget
+                                                                                        ? 'bg-blue-100 text-blue-700 animate-pulse'
+                                                                                        : 'bg-muted text-muted-foreground'
+                                                                                    }`}>
+                                                                                    {isCompleted ? '✓ Выполнено' : isCurrentTarget ? '🎯 Текущая цель' : '⏳ Впереди'}
+                                                                                </span>
+                                                                                <span className="text-sm font-black text-primary">{threshold.percent}%</span>
+                                                                            </div>
+
+                                                                            <div className="space-y-1">
+                                                                                <p className="text-xs font-bold">{formatCurrency(threshold.value)}</p>
+                                                                                {isCurrentTarget && (
+                                                                                    <p className="text-[10px] font-medium text-blue-600">
+                                                                                        Осталось: {formatCurrency(threshold.value - kpi.current_value)}
+                                                                                    </p>
+                                                                                )}
+                                                                                {isCompleted && (
+                                                                                    <p className="text-[10px] text-green-600 font-medium">Бонус активирован</p>
+                                                                                )}
+                                                                            </div>
+                                                                        </div>
+                                                                    );
+                                                                })}
+                                                                {(kpi.thresholds || []).length === 0 && (
+                                                                    <div className="col-span-full p-4 bg-muted/20 border border-dashed rounded-xl text-center text-xs text-muted-foreground">
+                                                                        Пороги для этого KPI не настроены
+                                                                    </div>
+                                                                )}
                                                             </div>
                                                         </div>
                                                     ))}
