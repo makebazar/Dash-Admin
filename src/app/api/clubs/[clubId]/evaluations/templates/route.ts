@@ -42,7 +42,7 @@ export async function GET(
                                'sort_order', i.sort_order
                            ) ORDER BY i.sort_order
                        ) FILTER (WHERE i.id IS NOT NULL), 
-                       '[]'
+                       '[]'::json
                    ) as items
             FROM evaluation_templates t
             LEFT JOIN evaluation_template_items i ON t.id = i.template_id
