@@ -53,12 +53,51 @@ export async function POST(
         // Actually, for "batch", users expect all or nothing usually, OR partial success. Partial success is often better for big lists.
         // I will do partial success.
 
+        // Helper to parse Local ISO string (YYYY-MM-DDTHH:mm:ss) into a Date object
+        // that represents that exact wall-clock time in the CLUB's timezone.
+        // Since we don't have a library like date-fns-tz, we determine the offset iteratively.
+        const parseClubDate = (isoStr: string, timeZone: string): Date => {
+            // 1. Parse as if UTC to get the base components
+            // e.g. "2026-01-25T08:00:00" -> 08:00 UTC
+            let guess = new Date(isoStr + 'Z');
+
+            // 2. Check what time this guess actual represents in the Club's Timezone
+            // e.g. 08:00 UTC in Moscow (+3) might be 11:00
+            // We want the result to be 08:00 in Moscow.
+            // So we need to shift the guess backwards by the offset.
+
+            const getParts = (d: Date) => {
+                const parts = new Intl.DateTimeFormat('en-US', {
+                    timeZone,
+                    year: 'numeric', month: 'numeric', day: 'numeric',
+                    hour: 'numeric', minute: 'numeric', second: 'numeric',
+                    hour12: false
+                }).formatToParts(d);
+                const p: any = {};
+                parts.forEach(({ type, value }) => p[type] = parseInt(value, 10));
+                return new Date(Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second));
+            };
+
+            // Iterative adjustment to converge on the correct UTC timestamp
+            // Usually takes 1-2 iterations.
+            let utc = new Date(guess.getTime());
+            for (let i = 0; i < 3; i++) {
+                const currentInZone = getParts(utc); // What time is 'utc' in Moscow? (returned as a UTC-equivalent date for math)
+                const diff = currentInZone.getTime() - guess.getTime();
+
+                if (diff === 0) break; // Exact match found
+
+                utc = new Date(utc.getTime() - diff);
+            }
+            return utc;
+        };
+
         for (const [index, shift] of shifts.entries()) {
             try {
                 const {
                     employee_id,
-                    check_in,
-                    check_out,
+                    check_in, // format "YYYY-MM-DDTHH:mm:ss" (local wall clock)
+                    check_out, // format "YYYY-MM-DDTHH:mm:ss"
                     cash_income,
                     card_income,
                     expenses,
@@ -72,7 +111,14 @@ export async function POST(
 
                 // Determine shift type
                 let shiftType = 'DAY';
-                const checkInDate = new Date(check_in);
+
+                // Parse correctly using Club Timezone
+                // If the string contains 'Z' or offset, stick to standard parsing (fallback)
+                // But simplified logic expects local string now.
+                const isLocalStr = !check_in.includes('Z') && !check_in.includes('+');
+                const checkInDate = isLocalStr ? parseClubDate(check_in, clubTimezone) : new Date(check_in);
+                const checkOutDate = isLocalStr ? parseClubDate(check_out, clubTimezone) : new Date(check_out);
+
                 const hourInClubTZ = new Intl.DateTimeFormat('en-US', {
                     timeZone: clubTimezone,
                     hour: 'numeric',
@@ -104,8 +150,8 @@ export async function POST(
                 );
 
                 // Calculate hours
-                const start = new Date(check_in).getTime();
-                const end = new Date(check_out).getTime();
+                const start = checkInDate.getTime();
+                const end = checkOutDate.getTime();
                 const total_hours = (end - start) / (1000 * 60 * 60);
 
                 if ((schemeRes.rowCount || 0) > 0) {
@@ -150,8 +196,8 @@ export async function POST(
                     [
                         employee_id,
                         club_id_int,
-                        check_in,
-                        check_out,
+                        checkInDate, // Pass Date object; pg driver handles serialization to TIMESTAMP/TIMESTAMPTZ
+                        checkOutDate,
                         total_hours > 0 ? total_hours : 0,
                         cash_income || 0,
                         card_income || 0,

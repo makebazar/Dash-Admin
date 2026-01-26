@@ -107,13 +107,20 @@ export function ShiftExcelImport({ clubId, employees, customFields = [], onSucce
                     reportData[field.metric_key] = val;
                 });
 
+                // Format as local ISO-like string "YYYY-MM-DDTHH:mm:ss" to preserve exact wall clock time
+                const formatLocalIso = (d: Date | null) => {
+                    if (!d) return undefined;
+                    const pad = (n: number) => n.toString().padStart(2, '0');
+                    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+                };
+
                 return {
                     ...row,
                     status: error ? 'INVALID' : 'VALID',
                     error,
                     employeeId: employee?.id,
-                    parsedCheckIn: checkInDate?.toISOString(),
-                    parsedCheckOut: checkOutDate?.toISOString(),
+                    parsedCheckIn: formatLocalIso(checkInDate),
+                    parsedCheckOut: formatLocalIso(checkOutDate),
                     reportData
                 };
             });
