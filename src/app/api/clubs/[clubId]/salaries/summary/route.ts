@@ -342,7 +342,10 @@ export async function GET(
                             kpi_bonus: kpiBonus,
                             status: s.status,
                             is_paid: !!(s.salary_snapshot?.paid_at),
-                            type: s.salary_snapshot?.type || 'REGULAR'
+                            type: s.salary_snapshot?.type || 'REGULAR',
+                            // Add extra metrics for KPI source display
+                            metrics: s.report_data || {},
+                            bonuses: breakdown.bonuses || []
                         };
                     })
                 ].sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())

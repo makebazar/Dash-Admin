@@ -107,7 +107,9 @@ export async function calculateSalary(
             // Always add to breakdown to show configured bonuses, even if 0
             breakdown.bonuses.push({
                 name: bonus.name || bonus.type,
-                amount: parseFloat(bonusAmount.toFixed(2))
+                amount: parseFloat(bonusAmount.toFixed(2)),
+                source_key: sourceKey,
+                source_value: metricValue
             });
             total += bonusAmount;
         }

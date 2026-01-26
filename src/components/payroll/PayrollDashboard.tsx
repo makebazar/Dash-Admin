@@ -595,60 +595,84 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                             </tr>
                                                         </thead>
                                                         <tbody className="divide-y">
-                                                            {(employee.shifts || []).map((shift: any) => {
-                                                                const sDate = new Date(shift.date);
-                                                                const dayOfWeek = sDate.toLocaleDateString('ru-RU', { weekday: 'short' });
-                                                                const hours = shift.hours || shift.total_hours || 0;
-                                                                const revenue = shift.revenue || shift.total_revenue || 0;
-                                                                const efficiency = hours > 0 ? revenue / hours : 0;
+                                                            {(employee.shifts || [])
+                                                                .filter((s: any) => s.type !== 'PERIOD_BONUS')
+                                                                .map((shift: any) => {
+                                                                    const sDate = new Date(shift.date);
+                                                                    const dayOfWeek = sDate.toLocaleDateString('ru-RU', { weekday: 'short' });
+                                                                    const hours = shift.hours || shift.total_hours || 0;
+                                                                    const revenue = shift.revenue || shift.total_revenue || 0;
+                                                                    const efficiency = hours > 0 ? revenue / hours : 0;
 
-                                                                return (
-                                                                    <tr key={shift.id} className="hover:bg-muted/40 transition-colors group">
-                                                                        <td className="p-3">
-                                                                            <div className="flex flex-col">
-                                                                                <span className="font-bold">{sDate.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })}</span>
-                                                                                <span className="text-[10px] text-muted-foreground uppercase">{dayOfWeek}</span>
-                                                                            </div>
-                                                                        </td>
-                                                                        <td className="p-3 text-center">
-                                                                            <span className="inline-flex items-center gap-1 bg-muted/40 px-1.5 py-0.5 rounded font-medium">{hours} ч</span>
-                                                                        </td>
-                                                                        <td className="p-3 text-right font-medium">{formatCurrency(revenue)}</td>
-                                                                        <td className="p-3 text-right">
-                                                                            <span className={`text-[10px] font-bold ${efficiency > 1000 ? 'text-emerald-600' : 'text-muted-foreground'}`}>
-                                                                                {formatCurrency(efficiency)}/ч
-                                                                            </span>
-                                                                        </td>
-                                                                        <td className="p-3 text-right">
-                                                                            {shift.kpi_bonus > 0 ? (
-                                                                                <span className="text-emerald-600 font-black">+{formatCurrency(shift.kpi_bonus)}</span>
-                                                                            ) : (
-                                                                                <span className="text-muted-foreground/30">—</span>
-                                                                            )}
-                                                                        </td>
-                                                                        <td className="p-3 text-right font-black text-sm">{formatCurrency(shift.total_pay || shift.calculated_salary)}</td>
-                                                                        <td className="p-3 text-center">
-                                                                            <span className={`text-[9px] px-2 py-0.5 rounded-full font-black uppercase tracking-tight shadow-sm ${shift.status === 'PAID' || shift.is_paid
-                                                                                ? 'bg-green-100 text-green-700 border border-green-200'
-                                                                                : 'bg-amber-50 text-amber-700 border border-amber-100'}`}>
-                                                                                {shift.status === 'PAID' || shift.is_paid ? 'Оплачено' : 'Ожидает'}
-                                                                            </span>
-                                                                        </td>
-                                                                        <td className="p-3 text-right">
-                                                                            {(shift.status !== 'PAID' && !shift.is_paid) && (
-                                                                                <Button
-                                                                                    variant="ghost"
-                                                                                    size="icon"
-                                                                                    className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 transition-opacity"
-                                                                                    onClick={(e) => { e.stopPropagation(); handleDeleteShift(shift.id); }}
-                                                                                >
-                                                                                    <Trash2 className="h-3.5 w-3.5" />
-                                                                                </Button>
-                                                                            )}
-                                                                        </td>
-                                                                    </tr>
-                                                                );
-                                                            })}
+                                                                    return (
+                                                                        <tr key={shift.id} className="hover:bg-muted/40 transition-colors group">
+                                                                            <td className="p-3">
+                                                                                <div className="flex flex-col">
+                                                                                    <span className="font-bold">{sDate.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })}</span>
+                                                                                    <span className="text-[10px] text-muted-foreground uppercase">{dayOfWeek}</span>
+                                                                                </div>
+                                                                            </td>
+                                                                            <td className="p-3 text-center">
+                                                                                <span className="inline-flex items-center gap-1 bg-muted/40 px-1.5 py-0.5 rounded font-medium">{hours} ч</span>
+                                                                            </td>
+                                                                            <td className="p-3 text-right font-medium">{formatCurrency(revenue)}</td>
+                                                                            <td className="p-3 text-right">
+                                                                                <span className={`text-[10px] font-bold ${efficiency > 1000 ? 'text-emerald-600' : 'text-muted-foreground'}`}>
+                                                                                    {formatCurrency(efficiency)}/ч
+                                                                                </span>
+                                                                            </td>
+                                                                            <td className="p-3 text-right">
+                                                                                {shift.kpi_bonus > 0 ? (
+                                                                                    <div className="flex flex-col items-end">
+                                                                                        <span className="text-emerald-600 font-black">+{formatCurrency(shift.kpi_bonus)}</span>
+                                                                                        {shift.bonuses && shift.bonuses.length > 0 && (
+                                                                                            <div className="flex flex-col items-end gap-0.5 mt-1 overflow-hidden">
+                                                                                                {shift.bonuses.filter((b: any) => b.amount > 0).map((b: any, bi: number) => {
+                                                                                                    const sourceLabels: Record<string, string> = {
+                                                                                                        'total': 'Выручка',
+                                                                                                        'cash': 'Нал',
+                                                                                                        'card': 'Карта',
+                                                                                                        'revenue_bar': 'Бар',
+                                                                                                        'revenue_kitchen': 'Кухня'
+                                                                                                    };
+                                                                                                    const label = sourceLabels[b.source_key] || b.name || 'Бонус';
+                                                                                                    return (
+                                                                                                        <span key={bi} className="text-[8px] text-muted-foreground leading-tight whitespace-nowrap bg-muted/30 px-1 rounded flex items-center gap-1">
+                                                                                                            {label} {b.source_value ? `(${formatCurrency(b.source_value)})` : ''}
+                                                                                                            <span className="font-bold text-emerald-600">+{formatCurrency(b.amount)}</span>
+                                                                                                        </span>
+                                                                                                    );
+                                                                                                })}
+                                                                                            </div>
+                                                                                        )}
+                                                                                    </div>
+                                                                                ) : (
+                                                                                    <span className="text-muted-foreground/30">—</span>
+                                                                                )}
+                                                                            </td>
+                                                                            <td className="p-3 text-right font-black text-sm">{formatCurrency(shift.total_pay || shift.calculated_salary)}</td>
+                                                                            <td className="p-3 text-center">
+                                                                                <span className={`text-[9px] px-2 py-0.5 rounded-full font-black uppercase tracking-tight shadow-sm ${shift.status === 'PAID' || shift.is_paid
+                                                                                    ? 'bg-green-100 text-green-700 border border-green-200'
+                                                                                    : 'bg-amber-50 text-amber-700 border border-amber-100'}`}>
+                                                                                    {shift.status === 'PAID' || shift.is_paid ? 'Оплачено' : 'Ожидает'}
+                                                                                </span>
+                                                                            </td>
+                                                                            <td className="p-3 text-right">
+                                                                                {(shift.status !== 'PAID' && !shift.is_paid) && (
+                                                                                    <Button
+                                                                                        variant="ghost"
+                                                                                        size="icon"
+                                                                                        className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                                                        onClick={(e) => { e.stopPropagation(); handleDeleteShift(shift.id); }}
+                                                                                    >
+                                                                                        <Trash2 className="h-3.5 w-3.5" />
+                                                                                    </Button>
+                                                                                )}
+                                                                            </td>
+                                                                        </tr>
+                                                                    );
+                                                                })}
                                                         </tbody>
                                                     </table>
                                                     {(employee.shifts || []).length === 0 && (
