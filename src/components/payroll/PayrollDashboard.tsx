@@ -81,6 +81,7 @@ interface Employee {
         bonuses?: any[];
     }>;
     metric_categories?: Record<string, 'INCOME' | 'EXPENSE' | 'OTHER'>;
+    metric_metadata?: Record<string, { label: string; category: string }>;
 }
 
 interface PayrollData {
@@ -561,17 +562,15 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                     const totalRevenue = shifts.reduce((sum: number, s: any) => sum + (s.total_revenue || 0), 0);
                                                     const totalKpiBonus = shifts.reduce((sum: number, s: any) => sum + (s.kpi_bonus || 0), 0);
 
-                                                    // Detection logic moved up if needed, but defining it here for the summary
-                                                    const categories = employee.metric_categories || {};
-                                                    const kpiMetrics = employee.period_bonuses?.map((b: any) => b.metric_key) || [];
-                                                    const otherKpiKey = kpiMetrics.find(key => categories[key] === 'OTHER');
+                                                    // Find the most relevant "OTHER" metric (like Bar)
+                                                    const metadata = employee.metric_metadata || {};
+                                                    const otherKpiKey = Object.keys(metadata).find(key => metadata[key].category === 'OTHER');
 
                                                     let otherMetricTotal = 0;
                                                     let otherMetricLabel = 'Доп. продажи';
                                                     if (otherKpiKey) {
                                                         otherMetricTotal = shifts.reduce((sum: number, s: any) => sum + (s.metrics?.[otherKpiKey] || 0), 0);
-                                                        const bonusName = employee.period_bonuses?.find((b: any) => b.metric_key === otherKpiKey)?.name;
-                                                        if (bonusName) otherMetricLabel = bonusName;
+                                                        otherMetricLabel = metadata[otherKpiKey].label;
                                                     }
 
                                                     const upsellEfficiency = totalHours > 0 ? otherMetricTotal / totalHours : 0;
@@ -601,10 +600,9 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
 
                                                 {/* Define identification again for the table below */}
                                                 {(() => {
-                                                    const categories = employee.metric_categories || {};
-                                                    const kpiMetrics = employee.period_bonuses?.map((b: any) => b.metric_key) || [];
-                                                    const otherKpiKey = kpiMetrics.find(key => categories[key] === 'OTHER');
-                                                    const otherMetricLabel = otherKpiKey ? (employee.period_bonuses?.find((b: any) => b.metric_key === otherKpiKey)?.name || 'Доп. продажи') : 'Доп. продажи';
+                                                    const metadata = employee.metric_metadata || {};
+                                                    const otherKpiKey = Object.keys(metadata).find(key => metadata[key].category === 'OTHER');
+                                                    const otherMetricLabel = otherKpiKey ? metadata[otherKpiKey].label : 'Доп. продажи';
 
                                                     return (
                                                         <div className="rounded-xl border overflow-hidden">

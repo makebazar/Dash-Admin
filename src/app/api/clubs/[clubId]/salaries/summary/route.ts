@@ -26,12 +26,21 @@ export async function GET(
         const templateSchema = templateRes.rows[0]?.schema || { fields: [] };
         const fields = Array.isArray(templateSchema.fields) ? templateSchema.fields : [];
 
-        // Map of metric key -> category (INCOME, EXPENSE, OTHER)
-        const metricCategories: Record<string, string> = {};
+        // Map of metric key -> category AND label
+        const metricMetadata: Record<string, { label: string, category: string }> = {};
         fields.forEach((f: any) => {
             if (f.key) {
-                metricCategories[f.key] = f.calculation_category || 'OTHER';
+                metricMetadata[f.key] = {
+                    label: f.employee_label || f.label || f.name || f.key,
+                    category: f.calculation_category || 'OTHER'
+                };
             }
+        });
+
+        // Backward compatibility map for categories
+        const metricCategories: Record<string, string> = {};
+        Object.keys(metricMetadata).forEach(key => {
+            metricCategories[key] = metricMetadata[key].category;
         });
 
         if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -390,7 +399,8 @@ export async function GET(
                         };
                     })
                 ].sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime()),
-                metric_categories: metricCategories
+                metric_categories: metricCategories,
+                metric_metadata: metricMetadata
             };
         });
 
