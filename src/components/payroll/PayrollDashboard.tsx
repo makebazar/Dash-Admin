@@ -743,7 +743,14 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                                             </div>
 
                                                                             <div className="space-y-1">
-                                                                                <p className="text-xs font-bold">{formatCurrency(threshold.from)}</p>
+                                                                                <div>
+                                                                                    <p className="text-xs font-bold">{formatCurrency(threshold.from)}</p>
+                                                                                    {threshold.original_from !== threshold.from && (
+                                                                                        <p className="text-[9px] text-muted-foreground">
+                                                                                            База: {formatCurrency(threshold.original_from)}
+                                                                                        </p>
+                                                                                    )}
+                                                                                </div>
                                                                                 {isCurrentTarget && (
                                                                                     <p className="text-[10px] font-medium text-blue-600">
                                                                                         Осталось: {formatCurrency(threshold.from - kpi.current_value)}

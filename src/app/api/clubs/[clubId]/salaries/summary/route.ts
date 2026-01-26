@@ -169,9 +169,11 @@ export async function GET(
 
                                     return {
                                         from: scaled_from,
+                                        original_from: threshold_from,
                                         percent: t.percent || 0
                                     };
                                 });
+                                bonus.thresholds = scaledThresholds;
 
                                 let metThresholdIndex = -1;
                                 for (let i = scaledThresholds.length - 1; i >= 0; i--) {
