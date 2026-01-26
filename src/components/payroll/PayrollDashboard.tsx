@@ -562,12 +562,11 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                     const totalRevenue = shifts.reduce((sum: number, s: any) => sum + (s.total_revenue || 0), 0);
                                                     const totalKpiBonus = shifts.reduce((sum: number, s: any) => sum + (s.kpi_bonus || 0), 0);
 
-                                                    // Find the most relevant "OTHER" metric (like Bar)
+                                                    // Find all relevant "OTHER" metrics
                                                     const metadata = employee.metric_metadata || {};
                                                     const kpiKeys = (employee.period_bonuses || []).map((b: any) => b.metric_key);
 
-                                                    // Priority: OTHER category && (In KPI list OR Is Numeric)
-                                                    const otherKpiKey = Object.keys(metadata).find(key =>
+                                                    const otherMetrics = Object.keys(metadata).filter(key =>
                                                         metadata[key].category === 'OTHER' &&
                                                         (kpiKeys.includes(key) || metadata[key].is_numeric !== false) &&
                                                         !key.includes('comment')
@@ -575,9 +574,18 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
 
                                                     let otherMetricTotal = 0;
                                                     let otherMetricLabel = 'Доп. продажи';
-                                                    if (otherKpiKey) {
-                                                        otherMetricTotal = shifts.reduce((sum: number, s: any) => sum + (s.metrics?.[otherKpiKey] || 0), 0);
-                                                        otherMetricLabel = metadata[otherKpiKey].label;
+
+                                                    if (otherMetrics.length > 0) {
+                                                        otherMetrics.forEach(key => {
+                                                            otherMetricTotal += shifts.reduce((sum: number, s: any) => {
+                                                                const val = s.metrics?.[key];
+                                                                return sum + (typeof val === 'number' ? val : parseFloat(val || '0') || 0);
+                                                            }, 0);
+                                                        });
+
+                                                        if (otherMetrics.length === 1) {
+                                                            otherMetricLabel = metadata[otherMetrics[0]].label;
+                                                        }
                                                     }
 
                                                     const upsellEfficiency = totalHours > 0 ? otherMetricTotal / totalHours : 0;
@@ -609,12 +617,13 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                 {(() => {
                                                     const metadata = employee.metric_metadata || {};
                                                     const kpiKeys = (employee.period_bonuses || []).map((b: any) => b.metric_key);
-                                                    const otherKpiKey = Object.keys(metadata).find(key =>
+                                                    const otherMetrics = Object.keys(metadata).filter(key =>
                                                         metadata[key].category === 'OTHER' &&
                                                         (kpiKeys.includes(key) || metadata[key].is_numeric !== false) &&
                                                         !key.includes('comment')
                                                     );
-                                                    const otherMetricLabel = otherKpiKey ? metadata[otherKpiKey].label : 'Доп. продажи';
+
+                                                    const otherMetricLabel = otherMetrics.length === 1 ? metadata[otherMetrics[0]].label : 'Доп. продажи';
 
                                                     return (
                                                         <div className="rounded-xl border overflow-hidden">
@@ -658,11 +667,18 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                                                             <span className={`text-[10px] font-bold ${efficiency > 1000 ? 'text-emerald-600' : 'text-muted-foreground'}`}>
                                                                                                 {formatCurrency(efficiency)}/ч
                                                                                             </span>
-                                                                                            {otherKpiKey && shift.metrics?.[otherKpiKey] > 0 && (
-                                                                                                <span className="text-[8px] text-indigo-500 font-bold">
-                                                                                                    {((shift.metrics[otherKpiKey] / shift.total_revenue) * 100).toFixed(0)}% доля {otherMetricLabel}
-                                                                                                </span>
-                                                                                            )}
+                                                                                            {(() => {
+                                                                                                const shiftOtherTotal = otherMetrics.reduce((sum, key) => {
+                                                                                                    const val = shift.metrics?.[key];
+                                                                                                    return sum + (typeof val === 'number' ? val : parseFloat(val || '0') || 0);
+                                                                                                }, 0);
+
+                                                                                                return shiftOtherTotal > 0 && shift.total_revenue > 0 ? (
+                                                                                                    <span className="text-[8px] text-indigo-500 font-bold">
+                                                                                                        {((shiftOtherTotal / shift.total_revenue) * 100).toFixed(0)}% доля {otherMetricLabel}
+                                                                                                    </span>
+                                                                                                ) : null;
+                                                                                            })()}
                                                                                         </div>
                                                                                     </td>
                                                                                     <td className="p-3 text-right">

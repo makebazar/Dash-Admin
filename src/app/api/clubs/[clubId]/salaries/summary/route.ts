@@ -19,8 +19,11 @@ export async function GET(
         const endOfMonth = new Date(year, month, 0, 23, 59, 59);
 
         // Fetch report template to get metric categories
+        // Fetch current active report template for this club
         const templateRes = await query(
-            `SELECT schema FROM club_report_templates WHERE club_id = $1 AND is_active = TRUE LIMIT 1`,
+            `SELECT schema FROM club_report_templates 
+             WHERE club_id = $1 AND is_active = TRUE 
+             ORDER BY created_at DESC LIMIT 1`,
             [clubId]
         );
         const templateSchema = templateRes.rows[0]?.schema;
@@ -41,15 +44,19 @@ export async function GET(
 
                 // Fallback to system defaults or heuristics
                 if (!category) {
-                    if (key.includes('income') || key.includes('revenue')) category = 'INCOME';
-                    else if (key.includes('expense')) category = 'EXPENSE';
-                    else category = 'OTHER';
+                    if (key.includes('income') || key.includes('revenue') || key === 'cash' || key === 'card') {
+                        category = 'INCOME';
+                    } else if (key.includes('expense') || key === 'expenses') {
+                        category = 'EXPENSE';
+                    } else {
+                        category = 'OTHER';
+                    }
                 }
 
                 metricMetadata[key] = {
                     label: f.custom_label || f.employee_label || f.label || f.name || key,
                     category: category,
-                    is_numeric: ['MONEY', 'NUMBER', 'DECIMAL'].includes(sys?.type || '') || !key.includes('comment')
+                    is_numeric: sys?.type !== 'TEXT' && !key.includes('comment')
                 };
             }
         });
