@@ -42,6 +42,7 @@ interface Bonus {
     thresholds?: {
         from: number
         percent: number
+        label?: string
     }[]
     // For penalty
     penalty_reason?: string
@@ -61,7 +62,7 @@ interface PeriodBonus {
     reward_value: number
 
     // For PROGRESSIVE
-    thresholds?: { from: number; percent: number }[]
+    thresholds?: { from: number; percent: number; label?: string }[]
 
     // New: Mode for calculation
     bonus_mode?: 'MONTH' | 'SHIFT'
@@ -920,6 +921,16 @@ export default function SalarySettingsPage({ params }: { params: Promise<{ clubI
                                                         </p>
                                                         {bonus.thresholds.map((threshold, tIndex) => (
                                                             <div key={tIndex} className="flex items-center gap-2 text-sm">
+                                                                <Input
+                                                                    value={threshold.label || ''}
+                                                                    onChange={e => {
+                                                                        const newThresholds = [...bonus.thresholds!]
+                                                                        newThresholds[tIndex] = { ...threshold, label: e.target.value }
+                                                                        updateBonus(index, 'thresholds', newThresholds)
+                                                                    }}
+                                                                    placeholder="Напр: База"
+                                                                    className="w-20 h-8 text-[10px]"
+                                                                />
                                                                 <span>От</span>
                                                                 <Input
                                                                     type="number"
@@ -1139,6 +1150,16 @@ export default function SalarySettingsPage({ params }: { params: Promise<{ clubI
                                                         </p>
                                                         {bonus.thresholds.map((threshold, tIndex) => (
                                                             <div key={tIndex} className="flex items-center gap-2 text-sm">
+                                                                <Input
+                                                                    value={threshold.label || ''}
+                                                                    onChange={e => {
+                                                                        const newThresholds = [...bonus.thresholds!]
+                                                                        newThresholds[tIndex] = { ...threshold, label: e.target.value }
+                                                                        updatePeriodBonus(index, 'thresholds', newThresholds)
+                                                                    }}
+                                                                    placeholder="Напр: База"
+                                                                    className="w-20 h-8 text-[10px]"
+                                                                />
                                                                 <span>От</span>
                                                                 <Input
                                                                     type="number"
