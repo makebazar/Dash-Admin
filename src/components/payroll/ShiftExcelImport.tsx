@@ -49,9 +49,16 @@ export function ShiftExcelImport({ clubId, employees, customFields = [], onSucce
 
         // Handle Excel serial date
         if (typeof dateStr === 'number') {
-            // approximate conversion for Excel date serial
-            const date = new Date((dateStr - (25567 + 2)) * 86400 * 1000);
-            return date;
+            // Excel serial date to UTC milliseconds
+            // 25569 is the number of days from 1900-01-01 to 1970-01-01
+            const utcDays = dateStr - 25569;
+            const utcValue = utcDays * 86400 * 1000;
+
+            // Adjust for local timezone offset to preserve "wall clock" time
+            // We want 08:00 written in Excel to appear as 08:00 in local browser time.
+            // new Date(utcValue) treats value as UTC. To shift it ensuring local display matches, we add the offset.
+            const dateInfo = new Date(utcValue);
+            return new Date(utcValue + dateInfo.getTimezoneOffset() * 60 * 1000);
         }
 
         // Handle "DD.MM.YYYY HH:mm" or "DD.MM.YYYY HH:mm:ss"

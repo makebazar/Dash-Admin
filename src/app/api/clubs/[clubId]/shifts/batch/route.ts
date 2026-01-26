@@ -62,7 +62,8 @@ export async function POST(
                     cash_income,
                     card_income,
                     expenses,
-                    report_comment
+                    report_comment,
+                    report_data
                 } = shift;
 
                 if (!employee_id || !check_in) {
@@ -112,7 +113,7 @@ export async function POST(
                     const calculation = await calculateSalary({
                         id: 'batch-shift',
                         total_hours: total_hours > 0 ? total_hours : 0,
-                        report_data: {}
+                        report_data: report_data || {}
                     }, scheme.formula, {
                         total_revenue: (Number(cash_income) || 0) + (Number(card_income) || 0),
                         revenue_cash: Number(cash_income) || 0,
@@ -136,6 +137,7 @@ export async function POST(
                         card_income, 
                         expenses, 
                         report_comment,
+                        report_data,
                         status,
                         shift_type,
                         calculated_salary,
@@ -143,7 +145,7 @@ export async function POST(
                     ) VALUES (
                         $1::uuid, $2::integer, $3::timestamp, $4::timestamp, 
                         $5::decimal, $6::decimal, $7::decimal, $8::decimal, 
-                        $9, $10, $11, $12::decimal, $13::jsonb
+                        $9, $10::jsonb, $11, $12, $13::decimal, $14::jsonb
                     ) RETURNING id`,
                     [
                         employee_id,
@@ -155,6 +157,7 @@ export async function POST(
                         card_income || 0,
                         expenses || 0,
                         report_comment || '',
+                        JSON.stringify(report_data || {}),
                         'CLOSED', // Batch imported shifts are usually closed history
                         shiftType,
                         calculatedSalary,
