@@ -18,6 +18,22 @@ export async function GET(
         const startOfMonth = new Date(year, month - 1, 1);
         const endOfMonth = new Date(year, month, 0, 23, 59, 59);
 
+        // Fetch report template to get metric categories
+        const templateRes = await query(
+            `SELECT schema FROM club_report_templates WHERE club_id = $1 AND is_active = TRUE LIMIT 1`,
+            [clubId]
+        );
+        const templateSchema = templateRes.rows[0]?.schema || { fields: [] };
+        const fields = Array.isArray(templateSchema.fields) ? templateSchema.fields : [];
+
+        // Map of metric key -> category (INCOME, EXPENSE, OTHER)
+        const metricCategories: Record<string, string> = {};
+        fields.forEach((f: any) => {
+            if (f.key) {
+                metricCategories[f.key] = f.calculation_category || 'OTHER';
+            }
+        });
+
         if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
         const ownerCheck = await query(`SELECT 1 FROM clubs WHERE id=$1 AND owner_id=$2`, [clubId, userId]);
@@ -47,7 +63,8 @@ export async function GET(
                 user_id,
                 calculated_salary,
                 total_hours,
-                (COALESCE(cash_income, 0) + COALESCE(card_income, 0)) as total_revenue,
+                cash_income,
+                card_income,
                 report_data,
                 salary_snapshot,
                 salary_breakdown,
@@ -60,6 +77,29 @@ export async function GET(
                AND status IN ('CLOSED', 'PAID', 'VERIFIED', 'ACTIVE')`,
             [clubId, startOfMonth.toISOString(), endOfMonth.toISOString()]
         );
+
+        // Helper to calculate "Total Income" based on categories
+        const calculateShiftIncome = (shift: any) => {
+            let total = 0;
+            // 1. Add standard columns if they are INCOME (default for cash/card)
+            if (metricCategories['cash_income'] === 'INCOME' || !metricCategories['cash_income']) {
+                total += parseFloat(shift.cash_income || 0);
+            }
+            if (metricCategories['card_income'] === 'INCOME' || !metricCategories['card_income']) {
+                total += parseFloat(shift.card_income || 0);
+            }
+
+            // 2. Add custom report data marked as INCOME
+            if (shift.report_data) {
+                const data = typeof shift.report_data === 'string' ? JSON.parse(shift.report_data) : shift.report_data;
+                Object.keys(data).forEach(key => {
+                    if (metricCategories[key] === 'INCOME' && key !== 'cash_income' && key !== 'card_income') {
+                        total += parseFloat(data[key] || 0);
+                    }
+                });
+            }
+            return total;
+        };
 
         // Get planned shifts for the period
         const plannedShiftsRes = await query(
@@ -131,12 +171,13 @@ export async function GET(
                             );
 
                             if (bonus.metric_key === 'total_revenue') {
-                                current_value = finishedShifts.reduce((sum: number, s: any) => sum + parseFloat(s.total_revenue || '0'), 0);
+                                current_value = finishedShifts.reduce((sum: number, s: any) => sum + calculateShiftIncome(s), 0);
                             } else if (bonus.metric_key === 'total_hours') {
                                 current_value = finishedShifts.reduce((sum: number, s: any) => sum + parseFloat(s.total_hours || '0'), 0);
                             } else {
                                 current_value = finishedShifts.reduce((sum: number, s: any) => {
-                                    const val = s.report_data?.[bonus.metric_key];
+                                    const data = typeof s.report_data === 'string' ? JSON.parse(s.report_data) : s.report_data;
+                                    const val = data?.[bonus.metric_key];
                                     return sum + (typeof val === 'number' ? val : parseFloat(val || '0'));
                                 }, 0);
                             }
@@ -254,7 +295,7 @@ export async function GET(
             const total_with_kpi = total_accrued + kpi_bonus_amount;
 
             // Calculate performance metrics using finishedShifts
-            const total_revenue = finishedShifts.reduce((sum: number, s: any) => sum + parseFloat(s.total_revenue || '0'), 0);
+            const total_revenue = finishedShifts.reduce((sum: number, s: any) => sum + calculateShiftIncome(s), 0);
             const total_hours = finishedShifts.reduce((sum: number, s: any) => sum + parseFloat(s.total_hours || '0'), 0);
 
             // Revenue breakdown by metric
@@ -337,18 +378,19 @@ export async function GET(
                             id: s.id,
                             date: s.check_in,
                             total_hours: parseFloat(s.total_hours || '0'),
-                            total_revenue: parseFloat(s.total_revenue || '0'),
+                            total_revenue: calculateShiftIncome(s),
                             calculated_salary: parseFloat(s.calculated_salary || '0'),
                             kpi_bonus: kpiBonus,
                             status: s.status,
                             is_paid: !!(s.salary_snapshot?.paid_at),
                             type: s.salary_snapshot?.type || 'REGULAR',
                             // Add extra metrics for KPI source display
-                            metrics: s.report_data || {},
+                            metrics: typeof s.report_data === 'string' ? JSON.parse(s.report_data) : s.report_data || {},
                             bonuses: breakdown.bonuses || []
                         };
                     })
-                ].sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                ].sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime()),
+                metric_categories: metricCategories
             };
         });
 

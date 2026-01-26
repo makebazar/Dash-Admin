@@ -16,7 +16,8 @@ import {
     ChevronRight,
     Loader2,
     Trash2,
-    Plus
+    Plus,
+    Percent
 } from 'lucide-react';
 
 interface PayrollStats {
@@ -76,7 +77,10 @@ interface Employee {
         status: string;
         is_paid: boolean;
         type: string;
+        metrics?: Record<string, number>;
+        bonuses?: any[];
     }>;
+    metric_categories?: Record<string, 'INCOME' | 'EXPENSE' | 'OTHER'>;
 }
 
 interface PayrollData {
@@ -552,11 +556,26 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                             <div className="space-y-4 animate-in slide-in-from-left-2 duration-300">
                                                 {/* Stats Summary for Shifts */}
                                                 {(() => {
-                                                    const shifts = employee.shifts || [];
+                                                    const shifts = employee.shifts?.filter((s: any) => s.type !== 'PERIOD_BONUS') || [];
                                                     const totalHours = shifts.reduce((sum: number, s: any) => sum + (s.hours || s.total_hours || 0), 0);
-                                                    const totalRevenue = shifts.reduce((sum: number, s: any) => sum + (s.revenue || s.total_revenue || 0), 0);
+                                                    const totalRevenue = shifts.reduce((sum: number, s: any) => sum + (s.total_revenue || 0), 0);
                                                     const totalKpiBonus = shifts.reduce((sum: number, s: any) => sum + (s.kpi_bonus || 0), 0);
-                                                    const avgEfficiency = totalHours > 0 ? totalRevenue / totalHours : 0;
+
+                                                    // Detection logic moved up if needed, but defining it here for the summary
+                                                    const categories = employee.metric_categories || {};
+                                                    const kpiMetrics = employee.period_bonuses?.map((b: any) => b.metric_key) || [];
+                                                    const otherKpiKey = kpiMetrics.find(key => categories[key] === 'OTHER');
+
+                                                    let otherMetricTotal = 0;
+                                                    let otherMetricLabel = 'Доп. продажи';
+                                                    if (otherKpiKey) {
+                                                        otherMetricTotal = shifts.reduce((sum: number, s: any) => sum + (s.metrics?.[otherKpiKey] || 0), 0);
+                                                        const bonusName = employee.period_bonuses?.find((b: any) => b.metric_key === otherKpiKey)?.name;
+                                                        if (bonusName) otherMetricLabel = bonusName;
+                                                    }
+
+                                                    const upsellEfficiency = totalHours > 0 ? otherMetricTotal / totalHours : 0;
+                                                    const upsellShare = totalRevenue > 0 ? (otherMetricTotal / totalRevenue) * 100 : 0;
 
                                                     return (
                                                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -565,123 +584,140 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                                 <span className="font-bold text-sm flex items-center gap-1.5"><Clock className="h-3.5 w-3.5 text-blue-500" /> {totalHours} ч</span>
                                                             </div>
                                                             <div className="bg-muted/30 p-3 rounded-xl border flex flex-col items-center">
-                                                                <span className="text-[10px] text-muted-foreground uppercase font-bold mb-1">Ср. эффективность</span>
-                                                                <span className="font-bold text-sm flex items-center gap-1.5"><DollarSign className="h-3.5 w-3.5 text-emerald-500" /> {formatCurrency(avgEfficiency)}/ч</span>
+                                                                <span className="text-[10px] text-muted-foreground uppercase font-bold mb-1">Доля {otherMetricLabel}</span>
+                                                                <span className="font-bold text-sm flex items-center gap-1.5"><Percent className="h-3.5 w-3.5 text-purple-500" /> {upsellShare.toFixed(1)}%</span>
+                                                            </div>
+                                                            <div className="bg-muted/30 p-3 rounded-xl border flex flex-col items-center">
+                                                                <span className="text-[10px] text-muted-foreground uppercase font-bold mb-1">Эфф. {otherMetricLabel}</span>
+                                                                <span className="font-bold text-sm flex items-center gap-1.5"><DollarSign className="h-3.5 w-3.5 text-emerald-500" /> {formatCurrency(upsellEfficiency)}/ч</span>
                                                             </div>
                                                             <div className="bg-muted/30 p-3 rounded-xl border flex flex-col items-center">
                                                                 <span className="text-[10px] text-muted-foreground uppercase font-bold mb-1">Бонусы смен</span>
                                                                 <span className="font-bold text-sm flex items-center gap-1.5"><Plus className="h-3.5 w-3.5 text-purple-500" /> {formatCurrency(totalKpiBonus)}</span>
                                                             </div>
-                                                            <div className="bg-muted/30 p-3 rounded-xl border flex flex-col items-center">
-                                                                <span className="text-[10px] text-muted-foreground uppercase font-bold mb-1">Смен закрыто</span>
-                                                                <span className="font-bold text-sm flex items-center gap-1.5"><CheckCircle className="h-3.5 w-3.5 text-green-500" /> {shifts.length}</span>
-                                                            </div>
                                                         </div>
                                                     );
                                                 })()}
 
-                                                <div className="rounded-xl border overflow-hidden">
-                                                    <table className="w-full text-xs">
-                                                        <thead className="bg-muted/50 border-b">
-                                                            <tr className="text-muted-foreground text-left">
-                                                                <th className="p-3 font-bold uppercase tracking-wider">Дата</th>
-                                                                <th className="p-3 font-bold uppercase tracking-wider text-center">Часы</th>
-                                                                <th className="p-3 font-bold uppercase tracking-wider text-right">Выручка</th>
-                                                                <th className="p-3 font-bold uppercase tracking-wider text-right">Эффект.</th>
-                                                                <th className="p-3 font-bold uppercase tracking-wider text-right text-emerald-600">KPI</th>
-                                                                <th className="p-3 font-bold uppercase tracking-wider text-right">З/П</th>
-                                                                <th className="p-3 font-bold uppercase tracking-wider text-center">Статус</th>
-                                                                <th className="p-3"></th>
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody className="divide-y">
-                                                            {(employee.shifts || [])
-                                                                .filter((s: any) => s.type !== 'PERIOD_BONUS')
-                                                                .map((shift: any) => {
-                                                                    const sDate = new Date(shift.date);
-                                                                    const dayOfWeek = sDate.toLocaleDateString('ru-RU', { weekday: 'short' });
-                                                                    const hours = shift.hours || shift.total_hours || 0;
-                                                                    const revenue = shift.revenue || shift.total_revenue || 0;
-                                                                    const efficiency = hours > 0 ? revenue / hours : 0;
+                                                {/* Define identification again for the table below */}
+                                                {(() => {
+                                                    const categories = employee.metric_categories || {};
+                                                    const kpiMetrics = employee.period_bonuses?.map((b: any) => b.metric_key) || [];
+                                                    const otherKpiKey = kpiMetrics.find(key => categories[key] === 'OTHER');
+                                                    const otherMetricLabel = otherKpiKey ? (employee.period_bonuses?.find((b: any) => b.metric_key === otherKpiKey)?.name || 'Доп. продажи') : 'Доп. продажи';
 
-                                                                    return (
-                                                                        <tr key={shift.id} className="hover:bg-muted/40 transition-colors group">
-                                                                            <td className="p-3">
-                                                                                <div className="flex flex-col">
-                                                                                    <span className="font-bold">{sDate.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })}</span>
-                                                                                    <span className="text-[10px] text-muted-foreground uppercase">{dayOfWeek}</span>
-                                                                                </div>
-                                                                            </td>
-                                                                            <td className="p-3 text-center">
-                                                                                <span className="inline-flex items-center gap-1 bg-muted/40 px-1.5 py-0.5 rounded font-medium">{hours} ч</span>
-                                                                            </td>
-                                                                            <td className="p-3 text-right font-medium">{formatCurrency(revenue)}</td>
-                                                                            <td className="p-3 text-right">
-                                                                                <span className={`text-[10px] font-bold ${efficiency > 1000 ? 'text-emerald-600' : 'text-muted-foreground'}`}>
-                                                                                    {formatCurrency(efficiency)}/ч
-                                                                                </span>
-                                                                            </td>
-                                                                            <td className="p-3 text-right">
-                                                                                {shift.kpi_bonus > 0 ? (
-                                                                                    <div className="flex flex-col items-end">
-                                                                                        <span className="text-emerald-600 font-black">+{formatCurrency(shift.kpi_bonus)}</span>
-                                                                                        {shift.bonuses && shift.bonuses.length > 0 && (
-                                                                                            <div className="flex flex-col items-end gap-0.5 mt-1 overflow-hidden">
-                                                                                                {shift.bonuses.filter((b: any) => b.amount > 0).map((b: any, bi: number) => {
-                                                                                                    const sourceLabels: Record<string, string> = {
-                                                                                                        'total': 'Выручка',
-                                                                                                        'cash': 'Нал',
-                                                                                                        'card': 'Карта',
-                                                                                                        'revenue_bar': 'Бар',
-                                                                                                        'revenue_kitchen': 'Кухня'
-                                                                                                    };
-                                                                                                    const label = sourceLabels[b.source_key] || b.name || 'Бонус';
-                                                                                                    return (
-                                                                                                        <span key={bi} className="text-[8px] text-muted-foreground leading-tight whitespace-nowrap bg-muted/30 px-1 rounded flex items-center gap-1">
-                                                                                                            {label} {b.source_value ? `(${formatCurrency(b.source_value)})` : ''}
-                                                                                                            <span className="font-bold text-emerald-600">+{formatCurrency(b.amount)}</span>
-                                                                                                        </span>
-                                                                                                    );
-                                                                                                })}
+                                                    return (
+                                                        <div className="rounded-xl border overflow-hidden">
+                                                            <table className="w-full text-xs">
+                                                                <thead className="bg-muted/50 border-b">
+                                                                    <tr className="text-muted-foreground text-left">
+                                                                        <th className="p-3 font-bold uppercase tracking-wider">Дата</th>
+                                                                        <th className="p-3 font-bold uppercase tracking-wider text-center">Часы</th>
+                                                                        <th className="p-3 font-bold uppercase tracking-wider text-right">Выручка</th>
+                                                                        <th className="p-3 font-bold uppercase tracking-wider text-right">Эффект.</th>
+                                                                        <th className="p-3 font-bold uppercase tracking-wider text-right text-emerald-600">KPI</th>
+                                                                        <th className="p-3 font-bold uppercase tracking-wider text-right">З/П</th>
+                                                                        <th className="p-3 font-bold uppercase tracking-wider text-center">Статус</th>
+                                                                        <th className="p-3"></th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody className="divide-y">
+                                                                    {(employee.shifts || [])
+                                                                        .filter((s: any) => s.type !== 'PERIOD_BONUS')
+                                                                        .map((shift: any) => {
+                                                                            const sDate = new Date(shift.date);
+                                                                            const dayOfWeek = sDate.toLocaleDateString('ru-RU', { weekday: 'short' });
+                                                                            const hours = shift.hours || shift.total_hours || 0;
+                                                                            const revenue = shift.revenue || shift.total_revenue || 0;
+                                                                            const efficiency = hours > 0 ? revenue / hours : 0;
+
+                                                                            return (
+                                                                                <tr key={shift.id} className="hover:bg-muted/40 transition-colors group">
+                                                                                    <td className="p-3">
+                                                                                        <div className="flex flex-col">
+                                                                                            <span className="font-bold">{sDate.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })}</span>
+                                                                                            <span className="text-[10px] text-muted-foreground uppercase">{dayOfWeek}</span>
+                                                                                        </div>
+                                                                                    </td>
+                                                                                    <td className="p-3 text-center">
+                                                                                        <span className="inline-flex items-center gap-1 bg-muted/40 px-1.5 py-0.5 rounded font-medium">{hours} ч</span>
+                                                                                    </td>
+                                                                                    <td className="p-3 text-right font-medium">{formatCurrency(revenue)}</td>
+                                                                                    <td className="p-3 text-right">
+                                                                                        <div className="flex flex-col items-end">
+                                                                                            <span className={`text-[10px] font-bold ${efficiency > 1000 ? 'text-emerald-600' : 'text-muted-foreground'}`}>
+                                                                                                {formatCurrency(efficiency)}/ч
+                                                                                            </span>
+                                                                                            {otherKpiKey && shift.metrics?.[otherKpiKey] > 0 && (
+                                                                                                <span className="text-[8px] text-indigo-500 font-bold">
+                                                                                                    {((shift.metrics[otherKpiKey] / shift.total_revenue) * 100).toFixed(0)}% доля {otherMetricLabel}
+                                                                                                </span>
+                                                                                            )}
+                                                                                        </div>
+                                                                                    </td>
+                                                                                    <td className="p-3 text-right">
+                                                                                        {shift.kpi_bonus > 0 ? (
+                                                                                            <div className="flex flex-col items-end">
+                                                                                                <span className="text-emerald-600 font-black">+{formatCurrency(shift.kpi_bonus)}</span>
+                                                                                                {shift.bonuses && shift.bonuses.length > 0 && (
+                                                                                                    <div className="flex flex-col items-end gap-0.5 mt-1 overflow-hidden">
+                                                                                                        {shift.bonuses.filter((b: any) => b.amount > 0).map((b: any, bi: number) => {
+                                                                                                            const sourceLabels: Record<string, string> = {
+                                                                                                                'total': 'Выручка',
+                                                                                                                'cash': 'Нал',
+                                                                                                                'card': 'Карта',
+                                                                                                                'revenue_bar': 'Бар',
+                                                                                                                'revenue_kitchen': 'Кухня'
+                                                                                                            };
+                                                                                                            const label = sourceLabels[b.source_key] || b.name || 'Бонус';
+                                                                                                            return (
+                                                                                                                <span key={bi} className="text-[8px] text-muted-foreground leading-tight whitespace-nowrap bg-muted/30 px-1 rounded flex items-center gap-1">
+                                                                                                                    {label} {b.source_value ? `(${formatCurrency(b.source_value)})` : ''}
+                                                                                                                    <span className="font-bold text-emerald-600">+{formatCurrency(b.amount)}</span>
+                                                                                                                </span>
+                                                                                                            );
+                                                                                                        })}
+                                                                                                    </div>
+                                                                                                )}
                                                                                             </div>
+                                                                                        ) : (
+                                                                                            <span className="text-muted-foreground/30">—</span>
                                                                                         )}
-                                                                                    </div>
-                                                                                ) : (
-                                                                                    <span className="text-muted-foreground/30">—</span>
-                                                                                )}
-                                                                            </td>
-                                                                            <td className="p-3 text-right font-black text-sm">{formatCurrency(shift.total_pay || shift.calculated_salary)}</td>
-                                                                            <td className="p-3 text-center">
-                                                                                <span className={`text-[9px] px-2 py-0.5 rounded-full font-black uppercase tracking-tight shadow-sm ${shift.status === 'PAID' || shift.is_paid
-                                                                                    ? 'bg-green-100 text-green-700 border border-green-200'
-                                                                                    : 'bg-amber-50 text-amber-700 border border-amber-100'}`}>
-                                                                                    {shift.status === 'PAID' || shift.is_paid ? 'Оплачено' : 'Ожидает'}
-                                                                                </span>
-                                                                            </td>
-                                                                            <td className="p-3 text-right">
-                                                                                {(shift.status !== 'PAID' && !shift.is_paid) && (
-                                                                                    <Button
-                                                                                        variant="ghost"
-                                                                                        size="icon"
-                                                                                        className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 transition-opacity"
-                                                                                        onClick={(e) => { e.stopPropagation(); handleDeleteShift(shift.id); }}
-                                                                                    >
-                                                                                        <Trash2 className="h-3.5 w-3.5" />
-                                                                                    </Button>
-                                                                                )}
-                                                                            </td>
-                                                                        </tr>
-                                                                    );
-                                                                })}
-                                                        </tbody>
-                                                    </table>
-                                                    {(employee.shifts || []).length === 0 && (
-                                                        <div className="p-12 text-center bg-muted/5">
-                                                            <Clock className="h-8 w-8 text-muted-foreground/20 mx-auto mb-2" />
-                                                            <p className="text-sm text-muted-foreground italic">Нет данных по сменам в этом периоде</p>
+                                                                                    </td>
+                                                                                    <td className="p-3 text-right font-black text-sm">{formatCurrency(shift.total_pay || shift.calculated_salary)}</td>
+                                                                                    <td className="p-3 text-center">
+                                                                                        <span className={`text-[9px] px-2 py-0.5 rounded-full font-black uppercase tracking-tight shadow-sm ${shift.status === 'PAID' || shift.is_paid
+                                                                                            ? 'bg-green-100 text-green-700 border border-green-200'
+                                                                                            : 'bg-amber-50 text-amber-700 border border-amber-100'}`}>
+                                                                                            {shift.status === 'PAID' || shift.is_paid ? 'Оплачено' : 'Ожидает'}
+                                                                                        </span>
+                                                                                    </td>
+                                                                                    <td className="p-3 text-right">
+                                                                                        {(shift.status !== 'PAID' && !shift.is_paid) && (
+                                                                                            <Button
+                                                                                                variant="ghost"
+                                                                                                size="icon"
+                                                                                                className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                                                                onClick={(e) => { e.stopPropagation(); handleDeleteShift(shift.id); }}
+                                                                                            >
+                                                                                                <Trash2 className="h-3.5 w-3.5" />
+                                                                                            </Button>
+                                                                                        )}
+                                                                                    </td>
+                                                                                </tr>
+                                                                            );
+                                                                        })}
+                                                                </tbody>
+                                                            </table>
+                                                            {(employee.shifts || []).length === 0 && (
+                                                                <div className="p-12 text-center bg-muted/5">
+                                                                    <Clock className="h-8 w-8 text-muted-foreground/20 mx-auto mb-2" />
+                                                                    <p className="text-sm text-muted-foreground italic">Нет данных по сменам в этом периоде</p>
+                                                                </div>
+                                                            )}
                                                         </div>
-                                                    )}
-                                                </div>
+                                                    );
+                                                })()}
                                             </div>
                                         )}
 
