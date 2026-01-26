@@ -25,8 +25,8 @@ CREATE TABLE IF NOT EXISTS evaluations (
     id SERIAL PRIMARY KEY,
     club_id INTEGER NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
     template_id INTEGER NOT NULL REFERENCES evaluation_templates(id) ON DELETE CASCADE,
-    employee_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    evaluator_id INTEGER NOT NULL REFERENCES users(id) ON DELETE SET NULL,
+    employee_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    evaluator_id UUID REFERENCES users(id) ON DELETE SET NULL,
     total_score DECIMAL(5,2), -- Calculated percentage (e.g., 85.50)
     max_score DECIMAL(5,2),
     comments TEXT,
