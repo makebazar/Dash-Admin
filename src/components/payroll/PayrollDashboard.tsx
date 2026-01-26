@@ -405,11 +405,19 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                 {(() => {
                                                     const shiftsCompletedForCalc = employee.shifts_count || 0;
                                                     const standardShifts = employee.standard_monthly_shifts || 15;
+
+                                                    // Context Detection
+                                                    const now = new Date();
+                                                    const isCurrentMonth = selectedMonth === (now.getMonth() + 1) && selectedYear === now.getFullYear();
+                                                    const isPastMonth = selectedYear < now.getFullYear() || (selectedYear === now.getFullYear() && selectedMonth < (now.getMonth() + 1));
+
                                                     return (
                                                         <>
                                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                                                 <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-4 rounded-xl border border-blue-100 dark:from-blue-900/10 dark:to-indigo-900/10">
-                                                                    <h5 className="text-xs font-bold text-blue-700 uppercase mb-3 flex items-center gap-2">📈 Прогноз на конец месяца</h5>
+                                                                    <h5 className="text-xs font-bold text-blue-700 uppercase mb-3 flex items-center gap-2">
+                                                                        {isPastMonth ? '🏆 Итоги месяца' : '📈 Прогноз на конец месяца'}
+                                                                    </h5>
                                                                     {employee.period_bonuses?.[0] ? (() => {
                                                                         const kpi = employee.period_bonuses[0];
                                                                         const shiftsCompleted = employee.shifts_count || 1;
@@ -417,13 +425,48 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                                         const projectedValue = avgPerShift * standardShifts;
                                                                         const shiftsLeft = Math.max(0, standardShifts - shiftsCompleted);
                                                                         const targetPerShift = shiftsLeft > 0 ? Math.max(0, (kpi.target_value - kpi.current_value) / shiftsLeft) : 0;
+
+                                                                        // Realism checks (only for current month)
+                                                                        const isUnrealistic = !isPastMonth && shiftsLeft > 0 && targetPerShift > (avgPerShift * 1.5);
+                                                                        const isNearlyImpossible = !isPastMonth && shiftsLeft > 0 && targetPerShift > (avgPerShift * 2.2);
+
                                                                         return (
                                                                             <div className="space-y-3">
                                                                                 <div className="flex justify-between items-end">
-                                                                                    <div><p className="text-[10px] text-blue-600">Ожидаемая выручка</p><p className="text-lg font-bold">{formatCurrency(projectedValue)}</p></div>
-                                                                                    <div className="text-right"><p className="text-[10px] text-blue-600">Цель на смену</p><p className="text-lg font-bold text-primary">{formatCurrency(targetPerShift)}</p></div>
+                                                                                    <div>
+                                                                                        <p className="text-[10px] text-blue-600">
+                                                                                            {isPastMonth ? 'Фактическая выручка' : 'Ожидаемая выручка'}
+                                                                                        </p>
+                                                                                        <p className="text-lg font-bold">{formatCurrency(isPastMonth ? kpi.current_value : projectedValue)}</p>
+                                                                                    </div>
+                                                                                    <div className="text-right">
+                                                                                        <p className="text-[10px] text-blue-600">
+                                                                                            {isPastMonth ? 'Результат' : 'Цель на смену'}
+                                                                                        </p>
+                                                                                        <p className="text-lg font-bold text-primary">
+                                                                                            {isPastMonth
+                                                                                                ? (kpi.is_met ? 'Выполнен' : 'Не выполнен')
+                                                                                                : formatCurrency(targetPerShift)
+                                                                                            }
+                                                                                        </p>
+                                                                                    </div>
                                                                                 </div>
-                                                                                <div className="text-[11px] text-blue-800 bg-white/50 p-2 rounded-lg border border-blue-200/50">{projectedValue >= kpi.target_value ? "🚀 Сотрудник идет на выполнение плана!" : `⚠️ Нужно прибавить ${formatCurrency(Math.max(0, targetPerShift - avgPerShift))} к средней смене для KPI`}</div>
+                                                                                <div className={`text-[11px] p-2 rounded-lg border ${isPastMonth
+                                                                                        ? (kpi.is_met ? 'text-green-800 bg-green-50 border-green-200' : 'text-amber-800 bg-amber-50 border-amber-200')
+                                                                                        : (isNearlyImpossible ? 'text-red-800 bg-red-50 border-red-200' : isUnrealistic ? 'text-amber-800 bg-amber-50 border-amber-200' : 'text-blue-800 bg-white/50 border-blue-200/50')
+                                                                                    }`}>
+                                                                                    {isPastMonth ? (
+                                                                                        kpi.is_met ? "✅ Цель достигнута! KPI бонус начислен." : "❌ Цель не достигнута в этом периоде."
+                                                                                    ) : (
+                                                                                        projectedValue >= kpi.target_value
+                                                                                            ? "🚀 Сотрудник идет на выполнение плана!"
+                                                                                            : isNearlyImpossible
+                                                                                                ? `❌ План практически недостижим (требуется ${formatCurrency(targetPerShift)} за смену)`
+                                                                                                : isUnrealistic
+                                                                                                    ? `⚠️ Требуется значительное ускорение (+${Math.round((targetPerShift / avgPerShift - 1) * 100)}% к темпу)`
+                                                                                                    : `⚠️ Нужно прибавить ${formatCurrency(Math.max(0, targetPerShift - avgPerShift))} к средней смене для KPI`
+                                                                                    )}
+                                                                                </div>
                                                                             </div>
                                                                         );
                                                                     })() : <p className="text-sm text-muted-foreground italic">Настройте KPI для отображения прогноза</p>}
