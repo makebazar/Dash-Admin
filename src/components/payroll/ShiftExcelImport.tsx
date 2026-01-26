@@ -54,11 +54,15 @@ export function ShiftExcelImport({ clubId, employees, customFields = [], onSucce
             const utcDays = dateStr - 25569;
             const utcValue = utcDays * 86400 * 1000;
 
-            // Adjust for local timezone offset to preserve "wall clock" time
-            // We want 08:00 written in Excel to appear as 08:00 in local browser time.
-            // new Date(utcValue) treats value as UTC. To shift it ensuring local display matches, we add the offset.
+            // Create a Date object from the UTC value
             const dateInfo = new Date(utcValue);
-            return new Date(utcValue + dateInfo.getTimezoneOffset() * 60 * 1000);
+
+            // Construct a local date that has the SAME components as the UTC date
+            // This effectively "ignores" timezones and treats the Excel time as "Wall Clock"
+            const localDate = new Date(dateInfo.getUTCFullYear(), dateInfo.getUTCMonth(), dateInfo.getUTCDate(),
+                dateInfo.getUTCHours(), dateInfo.getUTCMinutes(), dateInfo.getUTCSeconds());
+
+            return localDate;
         }
 
         // Handle "DD.MM.YYYY HH:mm" or "DD.MM.YYYY HH:mm:ss"
