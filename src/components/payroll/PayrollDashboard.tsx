@@ -539,12 +539,23 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                         {activeTabs[employee.id] === 'overview' && (
                                             <div className="space-y-6 animate-in slide-in-from-left-2 duration-300">
                                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                                    <div className="bg-muted/30 p-4 rounded-xl border">
-                                                        <p className="text-xs text-muted-foreground mb-1">Выручка за период</p>
-                                                        <p className="text-xl font-bold">{formatCurrency(employee.metrics?.total_revenue || 0)}</p>
-                                                        <p className="text-[10px] text-muted-foreground mt-1">
-                                                            Средняя: {formatCurrency(employee.metrics?.avg_revenue_per_shift || 0)}/см
-                                                        </p>
+                                                    <div className="bg-muted/30 p-4 rounded-xl border flex flex-col justify-between">
+                                                        <div>
+                                                            <p className="text-xs text-muted-foreground mb-1">Выручка за период</p>
+                                                            <p className="text-xl font-bold">{formatCurrency(employee.metrics?.total_revenue || 0)}</p>
+                                                        </div>
+                                                        <div className="mt-3 space-y-1">
+                                                            {/* Show breakdown by KPI metrics if available */}
+                                                            {employee.period_bonuses?.map((kpi: any) => (
+                                                                <div key={kpi.id} className="flex justify-between items-center text-[10px]">
+                                                                    <span className="text-muted-foreground truncate mr-2">{kpi.name}:</span>
+                                                                    <span className="font-bold">{formatCurrency(kpi.current_value)}</span>
+                                                                </div>
+                                                            ))}
+                                                            <p className="text-[10px] text-muted-foreground pt-1 border-t border-dashed mt-1">
+                                                                Средняя: {formatCurrency(employee.metrics?.avg_revenue_per_shift || 0)}/см
+                                                            </p>
+                                                        </div>
                                                     </div>
                                                     <div className="bg-muted/30 p-4 rounded-xl border">
                                                         <p className="text-xs text-muted-foreground mb-1">Отработано</p>
@@ -570,22 +581,31 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                         </h4>
                                                         <div className="grid grid-cols-1 gap-2">
                                                             {employee.period_bonuses.map((kpi: any) => (
-                                                                <div key={kpi.id} className="flex items-center gap-4 text-sm bg-background p-3 rounded-lg border border-dashed">
-                                                                    <div className="flex-1 min-w-0">
-                                                                        <div className="flex justify-between items-center mb-1">
-                                                                            <span className="font-medium truncate">{kpi.name}</span>
-                                                                            <span className="text-xs">{Math.round(kpi.progress_percent)}%</span>
+                                                                <div key={kpi.id} className="flex flex-col gap-2 bg-background p-3 rounded-lg border border-dashed">
+                                                                    <div className="flex justify-between items-center text-sm">
+                                                                        <div className="flex flex-col">
+                                                                            <span className="font-bold">{kpi.name}</span>
+                                                                            <span className="text-[10px] text-muted-foreground uppercase tracking-widest">Прогресс</span>
                                                                         </div>
-                                                                        <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden">
+                                                                        <div className="text-right">
+                                                                            <div className="flex items-baseline gap-1 justify-end">
+                                                                                <span className="font-black text-sm">{formatCurrency(kpi.current_value)}</span>
+                                                                                <span className="text-[10px] text-muted-foreground">/ {formatCurrency(kpi.target_value)}</span>
+                                                                            </div>
+                                                                            <span className="text-[10px] font-bold text-primary">{Math.round(kpi.progress_percent)}%</span>
+                                                                        </div>
+                                                                    </div>
+                                                                    <div className="flex items-center gap-4">
+                                                                        <div className="flex-1 bg-muted rounded-full h-2 overflow-hidden relative">
                                                                             <div
-                                                                                className={`h-full transition-all duration-500 ${kpi.is_met ? 'bg-green-500' : 'bg-blue-400'}`}
+                                                                                className={`h-full transition-all duration-500 rounded-full ${kpi.is_met ? 'bg-gradient-to-r from-green-500 to-emerald-400' : 'bg-gradient-to-r from-blue-500 to-indigo-400'}`}
                                                                                 style={{ width: `${Math.min(kpi.progress_percent, 100)}%` }}
                                                                             />
                                                                         </div>
-                                                                    </div>
-                                                                    <div className={`px-2 py-1 rounded text-[10px] font-bold uppercase shrink-0 ${kpi.is_met ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
-                                                                        }`}>
-                                                                        {kpi.is_met ? 'Ok' : 'В работе'}
+                                                                        <div className={`px-2 py-0.5 rounded text-[9px] font-black uppercase shrink-0 ${kpi.is_met ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-amber-100 text-amber-700 border border-amber-200 animate-pulse'
+                                                                            }`}>
+                                                                            {kpi.is_met ? '✓ Ok' : '⏳ В работе'}
+                                                                        </div>
                                                                     </div>
                                                                 </div>
                                                             ))}
@@ -697,8 +717,8 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                             {/* Achievement Cards (Thresholds) */}
                                                             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 mt-4">
                                                                 {(kpi.thresholds || []).map((threshold: any, idx: number) => {
-                                                                    const isCompleted = kpi.current_value >= threshold.value;
-                                                                    const isCurrentTarget = !isCompleted && (idx === 0 || kpi.current_value >= (kpi.thresholds[idx - 1]?.value || 0));
+                                                                    const isCompleted = kpi.current_value >= threshold.from;
+                                                                    const isCurrentTarget = !isCompleted && (idx === 0 || kpi.current_value >= (kpi.thresholds[idx - 1]?.from || 0));
 
                                                                     return (
                                                                         <div
@@ -723,10 +743,10 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                                             </div>
 
                                                                             <div className="space-y-1">
-                                                                                <p className="text-xs font-bold">{formatCurrency(threshold.value)}</p>
+                                                                                <p className="text-xs font-bold">{formatCurrency(threshold.from)}</p>
                                                                                 {isCurrentTarget && (
                                                                                     <p className="text-[10px] font-medium text-blue-600">
-                                                                                        Осталось: {formatCurrency(threshold.value - kpi.current_value)}
+                                                                                        Осталось: {formatCurrency(threshold.from - kpi.current_value)}
                                                                                     </p>
                                                                                 )}
                                                                                 {isCompleted && (
