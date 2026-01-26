@@ -8,13 +8,15 @@ import {
     Users,
     Settings,
     LogOut,
-    Building2,
-    Briefcase,
-    FileText,
+    CheckCircle,
     Clock,
     DollarSign,
     Package,
-    Wallet
+    Wallet,
+    ClipboardCheck,
+    Building2,
+    Briefcase,
+    FileText
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -60,6 +62,7 @@ export function ClubSidebar({ clubId }: ClubSidebarProps) {
         { href: `/clubs/${clubId}/settings/general`, label: 'Общие', icon: <Settings className="h-4 w-4" /> },
         { href: `/clubs/${clubId}/settings/salary`, label: 'Зарплаты', icon: <Wallet className="h-4 w-4" /> },
         { href: `/clubs/${clubId}/settings/reports`, label: 'Отчеты', icon: <FileText className="h-4 w-4" /> },
+        { href: `/clubs/${clubId}/settings/checklists`, label: 'Чеклисты', icon: <ClipboardCheck className="h-4 w-4" /> },
     ]
 
     return (
