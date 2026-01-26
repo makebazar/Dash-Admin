@@ -236,6 +236,8 @@ export async function GET(
                     const standard_shifts = activeScheme?.standard_monthly_shifts || emp.standard_monthly_shifts || 15;
                     const mode = bonus.bonus_mode || 'MONTH';
 
+                    let resultThresholds = bonus.thresholds;
+
                     if (bonus.type === 'PROGRESSIVE' && Array.isArray(bonus.thresholds) && bonus.thresholds.length > 0) {
                         const sorted = [...bonus.thresholds].sort((a: any, b: any) => (a.from || 0) - (b.from || 0));
                         const scaledThresholds = sorted.map((t: any) => {
@@ -243,6 +245,7 @@ export async function GET(
                             let scaled_from = mode === 'SHIFT' ? threshold_from * shifts_count : (threshold_from / standard_shifts) * shifts_count;
                             return { from: scaled_from, original_from: threshold_from, percent: t.percent || 0, label: t.label || null };
                         });
+                        resultThresholds = scaledThresholds;
 
                         let metThresholdIndex = -1;
                         for (let i = scaledThresholds.length - 1; i >= 0; i--) {
@@ -269,6 +272,7 @@ export async function GET(
 
                     return {
                         ...bonus,
+                        thresholds: resultThresholds,
                         current_value,
                         target_value,
                         progress_percent,
