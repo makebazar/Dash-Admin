@@ -127,7 +127,7 @@ export default function SalarySettingsPage({ params }: { params: Promise<{ clubI
             const res = await fetch(`/api/clubs/${id}/salary-schemes`)
             const data = await res.json()
             if (res.ok) {
-                setSchemes(data.schemes || [])
+                setSchemes(Array.isArray(data.schemes) ? data.schemes : [])
             }
         } catch (error) {
             console.error('Error:', error)
@@ -140,7 +140,7 @@ export default function SalarySettingsPage({ params }: { params: Promise<{ clubI
         try {
             const res = await fetch(`/api/clubs/${id}/settings/reports`)
             const data = await res.json()
-            if (res.ok && data.systemMetrics) {
+            if (res.ok && Array.isArray(data.systemMetrics)) {
                 // Filter to numeric-type metrics that can be used for bonuses
                 // DB types: MONEY, NUMBER, DECIMAL, TEXT, BOOLEAN
                 const numericMetrics = data.systemMetrics.filter(

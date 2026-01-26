@@ -50,7 +50,7 @@ export default function ChecklistSettingsPage({ params }: { params: Promise<{ cl
         try {
             const res = await fetch(`/api/clubs/${id}/evaluations/templates`)
             const data = await res.json()
-            if (res.ok) setTemplates(data)
+            if (res.ok && Array.isArray(data)) setTemplates(data)
         } catch (error) {
             console.error(error)
         } finally {

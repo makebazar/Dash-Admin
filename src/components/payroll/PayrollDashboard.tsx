@@ -240,12 +240,12 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                         ...emp,
                         payment_status: emp.balance <= 0 ? 'PAID' : emp.total_paid > 0 ? 'PARTIAL' : 'PENDING',
                         has_active_kpi: emp.period_bonuses && emp.period_bonuses.length > 0,
-                        kpi_summary: emp.period_bonuses?.map((b: any) => ({
+                        kpi_summary: Array.isArray(emp.period_bonuses) ? emp.period_bonuses.map((b: any) => ({
                             metric: b.name || b.metric_key,
                             progress: b.progress_percent || 0,
                             target: b.target_value || 0,
                             is_met: b.is_met || false
-                        })) || []
+                        })) : []
                     }))
                 });
             } else {
@@ -412,7 +412,7 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                                     </div>
                                                                 </div>
                                                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-3 pt-3 border-t border-dashed">
-                                                                    {(employee.period_bonuses || []).map((kpi: any) => (
+                                                                    {(Array.isArray(employee.period_bonuses) ? employee.period_bonuses : []).map((kpi: any) => (
                                                                         <div key={kpi.id} className="flex justify-between items-center text-xs">
                                                                             <span className="text-muted-foreground">{kpi.name}</span>
                                                                             <span className="font-bold">{formatCurrency(kpi.current_value)}</span>
@@ -465,7 +465,7 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                     <div className="space-y-3">
                                                         <h4 className="text-sm font-semibold flex items-center gap-2">🎯 Статус по KPI</h4>
                                                         <div className="space-y-4">
-                                                            {employee.period_bonuses.map((kpi: any) => (
+                                                            {Array.isArray(employee.period_bonuses) && employee.period_bonuses.map((kpi: any) => (
                                                                 <div key={kpi.id} className="bg-background border rounded-xl p-4 space-y-4">
                                                                     <div className="flex justify-between items-center">
                                                                         <div className="flex items-center gap-2"><div className="font-bold text-sm">{kpi.name}</div><span className="text-[10px] text-muted-foreground uppercase tracking-widest">ПРОГРЕСС</span></div>
@@ -606,7 +606,7 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
 
                                                             <div className="space-y-4">
                                                                 <h4 className="text-sm font-bold">Прогресс по порогам KPI</h4>
-                                                                {employee.period_bonuses?.map((kpi: any) => (
+                                                                {Array.isArray(employee.period_bonuses) && employee.period_bonuses.map((kpi: any) => (
                                                                     <div key={kpi.id} className="bg-background border rounded-xl p-4 space-y-4">
                                                                         <div className="flex justify-between items-center">
                                                                             <div className="flex items-center gap-2"><span className="text-xl">🎯</span><div><span className="font-bold text-sm">{kpi.name}</span><p className="text-[10px] text-muted-foreground uppercase tracking-wider">Текущая выручка</p></div></div>
@@ -761,7 +761,7 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                                     </tr>
                                                                 </thead>
                                                                 <tbody className="divide-y">
-                                                                    {(employee.shifts || [])
+                                                                    {(Array.isArray(employee.shifts) ? employee.shifts : [])
                                                                         .filter((s: any) => s.type !== 'PERIOD_BONUS')
                                                                         .map((shift: any) => {
                                                                             const sDate = new Date(shift.date);

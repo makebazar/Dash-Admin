@@ -75,7 +75,9 @@ function EvaluationForm({ params }: { params: { clubId: string } }) {
             // Fetch employees
             const eRes = await fetch(`/api/clubs/${clubId}/employees`)
             const eData = await eRes.json()
-            if (eRes.ok) setEmployees(eData)
+            if (eRes.ok && eData.employees && Array.isArray(eData.employees)) {
+                setEmployees(eData.employees)
+            }
 
         } catch (error) {
             console.error(error)

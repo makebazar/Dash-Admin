@@ -116,7 +116,7 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
         try {
             const res = await fetch(`/api/clubs/${id}/employees`)
             const data = await res.json()
-            if (res.ok && data.employees) {
+            if (res.ok && Array.isArray(data.employees)) {
                 setEmployees(data.employees.map((e: any) => ({ id: e.id, full_name: e.full_name })))
             }
         } catch (error) {
@@ -135,7 +135,7 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
             const res = await fetch(url)
             const data = await res.json()
             if (res.ok) {
-                setShifts(data.shifts)
+                setShifts(Array.isArray(data.shifts) ? data.shifts : [])
             }
         } catch (error) {
             console.error('Error:', error)

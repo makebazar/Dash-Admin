@@ -50,10 +50,10 @@ export default function ReportBuilderPage({ params }: { params: Promise<{ clubId
             const res = await fetch(`/api/clubs/${id}/settings/reports`)
             const data = await res.json()
 
-            if (res.ok) {
+            if (res.ok && Array.isArray(data.systemMetrics)) {
                 setSystemMetrics(data.systemMetrics)
 
-                if (data.currentTemplate) {
+                if (data.currentTemplate && Array.isArray(data.currentTemplate.schema)) {
                     setSelectedFields(data.currentTemplate.schema)
                 } else {
                     // Default fields if no template exists
