@@ -182,6 +182,21 @@ export async function GET(
             [clubId, month, year]
         );
 
+        // Get evaluation averages for the period
+        const evaluationsRes = await query(
+            `SELECT employee_id, AVG(total_score) as avg_score, COUNT(id) as count
+             FROM evaluations 
+             WHERE club_id = $1 
+               AND evaluation_date >= $2 
+               AND evaluation_date <= $3
+             GROUP BY employee_id`,
+            [clubId, startOfMonth.toISOString(), endOfMonth.toISOString()]
+        );
+        const evalMap: Record<number, { avg: number, count: number }> = {};
+        evaluationsRes.rows.forEach(r => {
+            evalMap[r.employee_id] = { avg: parseFloat(r.avg_score), count: parseInt(r.count) };
+        });
+
         // Process each employee
         const summary = await Promise.all(employees.map(async (emp: any) => {
             const empShifts = shiftsRes.rows.filter((s: any) => s.user_id === emp.id);
@@ -205,6 +220,13 @@ export async function GET(
                     });
                 }
             });
+
+            // Add evaluation score to metrics
+            const empEval = evalMap[emp.id];
+            if (empEval) {
+                monthlyMetrics['evaluation_score'] = empEval.avg;
+                monthlyMetrics['evaluation_count'] = empEval.count;
+            }
 
             const shifts_count = finishedShifts.length;
             const planned_shifts = empPlannedShifts?.planned_shifts || 20;
@@ -299,6 +321,12 @@ export async function GET(
                 if (s.report_data) {
                     const data = typeof s.report_data === 'string' ? JSON.parse(s.report_data) : s.report_data;
                     Object.keys(data).forEach(key => { reportMetricsForShift[key] = parseFloat(data[key] || 0); });
+                }
+
+                // Inject monthly evaluation metrics into shift metrics so bonuses can use them
+                if (empEval) {
+                    reportMetricsForShift['evaluation_score'] = empEval.avg;
+                    reportMetricsForShift['evaluation_count'] = empEval.count;
                 }
 
                 // Pass the scheme WITH calculated bonuses reward levels

@@ -445,6 +445,16 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                                     <span className="text-[10px] text-muted-foreground uppercase font-bold mb-1">Бонусы смен</span>
                                                                     <span className="font-bold text-sm flex items-center gap-1.5"><Plus className="h-3.5 w-3.5 text-purple-500" /> {formatCurrency(totalKpiBonus)}</span>
                                                                 </div>
+                                                                <div className="bg-purple-50 p-3 rounded-xl border border-purple-100 flex flex-col items-center">
+                                                                    <span className="text-[10px] text-purple-600 uppercase font-bold mb-1">Оценка чеклист</span>
+                                                                    <span className="font-bold text-sm flex items-center gap-1.5 text-purple-700">
+                                                                        <CheckCircle className="h-3.5 w-3.5" />
+                                                                        {employee.metrics?.revenue_by_metric?.['evaluation_score'] ?
+                                                                            `${Number(employee.metrics.revenue_by_metric['evaluation_score'].total).toFixed(1)}%` :
+                                                                            '—'
+                                                                        }
+                                                                    </span>
+                                                                </div>
                                                             </div>
                                                         </div>
                                                     );

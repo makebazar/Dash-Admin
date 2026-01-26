@@ -146,6 +146,15 @@ export default function SalarySettingsPage({ params }: { params: Promise<{ clubI
                 const numericMetrics = data.systemMetrics.filter(
                     (m: ReportMetric) => ['MONEY', 'NUMBER', 'DECIMAL', 'currency', 'number'].includes(m.type.toUpperCase()) || m.type.toLowerCase() === 'money'
                 )
+
+                // Add Evaluation Score as a standard system metric
+                numericMetrics.push({
+                    key: 'evaluation_score',
+                    label: 'Оценка по чеклистам (%)',
+                    type: 'NUMBER',
+                    category: 'KPI'
+                })
+
                 setReportMetrics(numericMetrics)
             }
         } catch (error) {
