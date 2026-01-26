@@ -81,7 +81,7 @@ interface Employee {
         bonuses?: any[];
     }>;
     metric_categories?: Record<string, 'INCOME' | 'EXPENSE' | 'OTHER'>;
-    metric_metadata?: Record<string, { label: string; category: string }>;
+    metric_metadata?: Record<string, { label: string; category: string; is_numeric?: boolean }>;
 }
 
 interface PayrollData {
@@ -564,7 +564,14 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
 
                                                     // Find the most relevant "OTHER" metric (like Bar)
                                                     const metadata = employee.metric_metadata || {};
-                                                    const otherKpiKey = Object.keys(metadata).find(key => metadata[key].category === 'OTHER');
+                                                    const kpiKeys = (employee.period_bonuses || []).map((b: any) => b.metric_key);
+
+                                                    // Priority: OTHER category && (In KPI list OR Is Numeric)
+                                                    const otherKpiKey = Object.keys(metadata).find(key =>
+                                                        metadata[key].category === 'OTHER' &&
+                                                        (kpiKeys.includes(key) || metadata[key].is_numeric !== false) &&
+                                                        !key.includes('comment')
+                                                    );
 
                                                     let otherMetricTotal = 0;
                                                     let otherMetricLabel = 'Доп. продажи';
@@ -601,7 +608,12 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                 {/* Define identification again for the table below */}
                                                 {(() => {
                                                     const metadata = employee.metric_metadata || {};
-                                                    const otherKpiKey = Object.keys(metadata).find(key => metadata[key].category === 'OTHER');
+                                                    const kpiKeys = (employee.period_bonuses || []).map((b: any) => b.metric_key);
+                                                    const otherKpiKey = Object.keys(metadata).find(key =>
+                                                        metadata[key].category === 'OTHER' &&
+                                                        (kpiKeys.includes(key) || metadata[key].is_numeric !== false) &&
+                                                        !key.includes('comment')
+                                                    );
                                                     const otherMetricLabel = otherKpiKey ? metadata[otherKpiKey].label : 'Доп. продажи';
 
                                                     return (

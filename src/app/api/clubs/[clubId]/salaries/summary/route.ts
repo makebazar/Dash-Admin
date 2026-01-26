@@ -23,16 +23,33 @@ export async function GET(
             `SELECT schema FROM club_report_templates WHERE club_id = $1 AND is_active = TRUE LIMIT 1`,
             [clubId]
         );
-        const templateSchema = templateRes.rows[0]?.schema || { fields: [] };
-        const fields = Array.isArray(templateSchema.fields) ? templateSchema.fields : [];
+        const templateSchema = templateRes.rows[0]?.schema;
+        const fields = Array.isArray(templateSchema) ? templateSchema : (templateSchema?.fields || []);
+
+        // Fetch system metrics for default categories
+        const systemMetricsRes = await query(`SELECT key, category, type FROM system_metrics`);
+        const systemMetricsMap: Record<string, any> = {};
+        systemMetricsRes.rows.forEach(m => { systemMetricsMap[m.key] = m; });
 
         // Map of metric key -> category AND label
-        const metricMetadata: Record<string, { label: string, category: string }> = {};
+        const metricMetadata: Record<string, { label: string, category: string, is_numeric: boolean }> = {};
         fields.forEach((f: any) => {
-            if (f.key) {
-                metricMetadata[f.key] = {
-                    label: f.employee_label || f.label || f.name || f.key,
-                    category: f.calculation_category || 'OTHER'
+            const key = f.metric_key || f.key;
+            if (key) {
+                const sys = systemMetricsMap[key];
+                let category = f.field_type || f.calculation_category;
+
+                // Fallback to system defaults or heuristics
+                if (!category) {
+                    if (key.includes('income') || key.includes('revenue')) category = 'INCOME';
+                    else if (key.includes('expense')) category = 'EXPENSE';
+                    else category = 'OTHER';
+                }
+
+                metricMetadata[key] = {
+                    label: f.custom_label || f.employee_label || f.label || f.name || key,
+                    category: category,
+                    is_numeric: ['MONEY', 'NUMBER', 'DECIMAL'].includes(sys?.type || '') || !key.includes('comment')
                 };
             }
         });
