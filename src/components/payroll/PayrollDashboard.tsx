@@ -633,7 +633,7 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                                         <th className="p-3 font-bold uppercase tracking-wider">Дата</th>
                                                                         <th className="p-3 font-bold uppercase tracking-wider text-center">Часы</th>
                                                                         <th className="p-3 font-bold uppercase tracking-wider text-right">Выручка</th>
-                                                                        <th className="p-3 font-bold uppercase tracking-wider text-right">Эффект.</th>
+                                                                        <th className="p-3 font-bold uppercase tracking-wider text-right text-indigo-600">Эффект.</th>
                                                                         <th className="p-3 font-bold uppercase tracking-wider text-right text-emerald-600">KPI</th>
                                                                         <th className="p-3 font-bold uppercase tracking-wider text-right">З/П</th>
                                                                         <th className="p-3 font-bold uppercase tracking-wider text-center">Статус</th>
@@ -661,10 +661,29 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                                                     <td className="p-3 text-center">
                                                                                         <span className="inline-flex items-center gap-1 bg-muted/40 px-1.5 py-0.5 rounded font-medium">{hours} ч</span>
                                                                                     </td>
-                                                                                    <td className="p-3 text-right font-medium">{formatCurrency(revenue)}</td>
                                                                                     <td className="p-3 text-right">
                                                                                         <div className="flex flex-col items-end">
-                                                                                            <span className={`text-[10px] font-bold ${efficiency > 1000 ? 'text-emerald-600' : 'text-muted-foreground'}`}>
+                                                                                            <span className="font-medium">{formatCurrency(revenue)}</span>
+                                                                                            {(() => {
+                                                                                                // Find primary KPI metric and its value
+                                                                                                const primaryKPI = (employee.period_bonuses || [])[0];
+                                                                                                if (primaryKPI && primaryKPI.metric_key !== 'total_revenue') {
+                                                                                                    const val = shift.metrics?.[primaryKPI.metric_key];
+                                                                                                    const numVal = typeof val === 'number' ? val : parseFloat(val || '0') || 0;
+                                                                                                    const label = metadata[primaryKPI.metric_key]?.label || primaryKPI.name || primaryKPI.metric_key;
+                                                                                                    return (
+                                                                                                        <span className="text-[9px] text-muted-foreground font-bold">
+                                                                                                            {label}: {formatCurrency(numVal)}
+                                                                                                        </span>
+                                                                                                    );
+                                                                                                }
+                                                                                                return null;
+                                                                                            })()}
+                                                                                        </div>
+                                                                                    </td>
+                                                                                    <td className="p-3 text-right">
+                                                                                        <div className="flex flex-col items-end">
+                                                                                            <span className={`text-[10px] font-bold ${efficiency > 1000 ? 'text-indigo-600' : 'text-muted-foreground'}`}>
                                                                                                 {formatCurrency(efficiency)}/ч
                                                                                             </span>
                                                                                             {(() => {
@@ -673,11 +692,14 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                                                                     return sum + (typeof val === 'number' ? val : parseFloat(val || '0') || 0);
                                                                                                 }, 0);
 
-                                                                                                return shiftOtherTotal > 0 && shift.total_revenue > 0 ? (
-                                                                                                    <span className="text-[8px] text-indigo-500 font-bold">
-                                                                                                        {((shiftOtherTotal / shift.total_revenue) * 100).toFixed(0)}% доля {otherMetricLabel}
-                                                                                                    </span>
-                                                                                                ) : null;
+                                                                                                if (shiftOtherTotal > 0 && revenue > 0 && otherMetrics.length > 0) {
+                                                                                                    return (
+                                                                                                        <span className="text-[8px] text-indigo-400 font-bold">
+                                                                                                            {((shiftOtherTotal / revenue) * 100).toFixed(0)}% доля {otherMetricLabel}
+                                                                                                        </span>
+                                                                                                    );
+                                                                                                }
+                                                                                                return null;
                                                                                             })()}
                                                                                         </div>
                                                                                     </td>

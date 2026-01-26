@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/db';
 import { cookies } from 'next/headers';
+import { calculateSalary } from '@/lib/salary-calculator';
 
 export async function GET(
     request: Request,
@@ -79,7 +80,13 @@ export async function GET(
                 u.full_name, 
                 r.name as role,
                 s.period_bonuses,
-                s.standard_monthly_shifts
+                s.standard_monthly_shifts,
+                s.base,
+                s.bonuses,
+                s.type,
+                s.amount,
+                s.percent,
+                s.full_shift_hours
              FROM club_employees ce
              JOIN users u ON ce.user_id = u.id
              LEFT JOIN roles r ON u.role_id = r.id
@@ -161,7 +168,7 @@ export async function GET(
         );
 
         // Calculate summary
-        const summary = employeesRes.rows.map(emp => {
+        const summary = await Promise.all(employeesRes.rows.map(async emp => {
             const empShifts = shiftsRes.rows.filter((s: any) => s.user_id === emp.id);
             const empPayment = paymentsRes.rows.find((p: any) => p.user_id === emp.id);
             const empPlannedShifts = plannedShiftsRes.rows.find((p: any) => p.user_id === emp.id);
@@ -169,167 +176,139 @@ export async function GET(
                 .filter((p: any) => p.user_id === emp.id)
                 .slice(0, 3); // Last 3 payments
 
-            const total_accrued = empShifts.reduce((sum: number, s: any) => sum + parseFloat(s.calculated_salary || '0'), 0);
-            const total_paid = parseFloat(empPayment?.total_paid || '0');
+            // 0. Pre-calculate monthly totals for KPI metrics
+            const finishedShifts = empShifts.filter((s: any) => s.status !== 'ACTIVE' && (!s.salary_snapshot || s.salary_snapshot.type !== 'PERIOD_BONUS'));
+            const monthlyMetrics: Record<string, number> = { total_revenue: 0, total_hours: 0 };
 
-            // 1. Consolidate shift filtering
-            // workingShifts: All shifts that are not special bonus "shifts"
-            const workingShifts = empShifts.filter((s: any) => !s.salary_snapshot || s.salary_snapshot.type !== 'PERIOD_BONUS');
-            // finishedShifts: Shifts that actually contributed to metrics and salary (not ACTIVE)
-            const finishedShifts = workingShifts.filter((s: any) => s.status !== 'ACTIVE');
+            finishedShifts.forEach(s => {
+                monthlyMetrics.total_revenue += calculateShiftIncome(s);
+                monthlyMetrics.total_hours += parseFloat(s.total_hours || 0);
+                if (s.report_data) {
+                    const data = typeof s.report_data === 'string' ? JSON.parse(s.report_data) : s.report_data;
+                    Object.keys(data).forEach(key => {
+                        monthlyMetrics[key] = (monthlyMetrics[key] || 0) + parseFloat(data[key] || 0);
+                    });
+                }
+            });
 
             const shifts_count = finishedShifts.length;
-            const planned_shifts = empPlannedShifts?.planned_shifts || 20; // Default 20
-
-            console.log(`[KPI Debug] Employee ${emp.id}: planned_shifts=${planned_shifts}, finished_shifts=${shifts_count}, total_working=${workingShifts.length}`);
-
-            // Check if shifts have paid snapshot - use it instead of current scheme
+            const planned_shifts = empPlannedShifts?.planned_shifts || 20;
             const hasPaidSnapshot = empShifts.some((s: any) => s.salary_snapshot?.paid_at);
             const activeScheme = hasPaidSnapshot
                 ? empShifts.find((s: any) => s.salary_snapshot?.paid_at)?.salary_snapshot
                 : emp;
 
-            // Calculate Period Bonuses using active scheme (snapshot or current)
+            // 1. Calculate Period Bonuses rewards
             let bonuses_status: any[] = [];
-            try {
-                const period_bonuses = activeScheme?.period_bonuses || emp.period_bonuses;
-                if (Array.isArray(period_bonuses)) {
-                    bonuses_status = period_bonuses.map((bonus: any) => {
-                        try {
-                            let current_value = 0;
+            const period_bonuses = activeScheme?.period_bonuses || emp.period_bonuses;
+            if (Array.isArray(period_bonuses)) {
+                bonuses_status = period_bonuses.map((bonus: any) => {
+                    const current_value = monthlyMetrics[bonus.metric_key] ||
+                        (bonus.metric_key === 'total_revenue' ? monthlyMetrics.total_revenue :
+                            bonus.metric_key === 'total_hours' ? monthlyMetrics.total_hours : 0);
 
-                            const existingAccrual = empShifts.find((s: any) =>
-                                s.salary_snapshot?.type === 'PERIOD_BONUS' &&
-                                s.salary_snapshot?.metric_key === bonus.metric_key
-                            );
+                    const existingAccrual = empShifts.find((s: any) =>
+                        s.salary_snapshot?.type === 'PERIOD_BONUS' &&
+                        s.salary_snapshot?.metric_key === bonus.metric_key
+                    );
 
-                            if (bonus.metric_key === 'total_revenue') {
-                                current_value = finishedShifts.reduce((sum: number, s: any) => sum + calculateShiftIncome(s), 0);
-                            } else if (bonus.metric_key === 'total_hours') {
-                                current_value = finishedShifts.reduce((sum: number, s: any) => sum + parseFloat(s.total_hours || '0'), 0);
-                            } else {
-                                current_value = finishedShifts.reduce((sum: number, s: any) => {
-                                    const data = typeof s.report_data === 'string' ? JSON.parse(s.report_data) : s.report_data;
-                                    const val = data?.[bonus.metric_key];
-                                    return sum + (typeof val === 'number' ? val : parseFloat(val || '0'));
-                                }, 0);
-                            }
+                    let target_value = 0;
+                    let progress_percent = 0;
+                    let is_met = false;
+                    let current_reward_value = bonus.reward_value;
+                    let current_reward_type = bonus.reward_type;
 
-                            let target_value = 0;
-                            let progress_percent = 0;
-                            let is_met = false;
-                            let current_reward_value = bonus.reward_value;
-                            let current_reward_type = bonus.reward_type;
+                    const standard_shifts = activeScheme?.standard_monthly_shifts || emp.standard_monthly_shifts || 15;
+                    const mode = bonus.bonus_mode || 'MONTH';
 
-                            if (bonus.type === 'PROGRESSIVE' && Array.isArray(bonus.thresholds) && bonus.thresholds.length > 0) {
-                                const sorted = [...bonus.thresholds].sort((a: any, b: any) => (a.from || 0) - (b.from || 0));
+                    if (bonus.type === 'PROGRESSIVE' && Array.isArray(bonus.thresholds) && bonus.thresholds.length > 0) {
+                        const sorted = [...bonus.thresholds].sort((a: any, b: any) => (a.from || 0) - (b.from || 0));
+                        const scaledThresholds = sorted.map((t: any) => {
+                            const threshold_from = t.from || 0;
+                            let scaled_from = mode === 'SHIFT' ? threshold_from * shifts_count : (threshold_from / standard_shifts) * shifts_count;
+                            return { from: scaled_from, original_from: threshold_from, percent: t.percent || 0, label: t.label || null };
+                        });
 
-                                // NEW LOGIC: Use standard_monthly_shifts (Эталон) as denominator
-                                const standard_shifts = activeScheme?.standard_monthly_shifts || emp.standard_monthly_shifts || 15;
-
-                                const scaledThresholds = sorted.map((t: any) => {
-                                    const threshold_from = t.from || 0;
-                                    // Default to "MONTH" mode for backward compatibility if bonus_mode not set
-                                    const mode = bonus.bonus_mode || 'MONTH';
-
-                                    let scaled_from = threshold_from;
-                                    if (mode === 'SHIFT') {
-                                        // "Per Shift" mode: From * Actual Shifts
-                                        scaled_from = threshold_from * shifts_count;
-                                    } else {
-                                        // "Per Month" mode: (From / Standard) * Actual Shifts
-                                        scaled_from = (threshold_from / standard_shifts) * shifts_count;
-                                    }
-
-                                    return {
-                                        from: scaled_from,
-                                        original_from: threshold_from,
-                                        percent: t.percent || 0,
-                                        label: t.label || null
-                                    };
-                                });
-                                bonus.thresholds = scaledThresholds;
-
-                                let metThresholdIndex = -1;
-                                for (let i = scaledThresholds.length - 1; i >= 0; i--) {
-                                    if (current_value >= scaledThresholds[i].from) {
-                                        metThresholdIndex = i;
-                                        break;
-                                    }
-                                }
-
-                                // Only award bonus if at least first threshold is met and employee has shifts
-                                if (metThresholdIndex >= 0 && shifts_count > 0) {
-                                    is_met = true;
-                                    current_reward_value = scaledThresholds[metThresholdIndex].percent;
-                                    current_reward_type = 'PERCENT';
-
-                                    if (metThresholdIndex < scaledThresholds.length - 1) {
-                                        target_value = scaledThresholds[metThresholdIndex + 1].from;
-                                    } else {
-                                        target_value = scaledThresholds[metThresholdIndex].from;
-                                    }
-                                } else {
-                                    // First threshold NOT met - no bonus
-                                    is_met = false;
-                                    // If zero shifts, show the original threshold for clarity, otherwise the scaled one
-                                    target_value = shifts_count > 0 ? scaledThresholds[0].from : sorted[0].from;
-                                    current_reward_value = 0;
-                                    current_reward_type = 'PERCENT';
-                                }
-
-                                progress_percent = target_value > 0 ? (current_value / target_value) * 100 : 0;
-
-                            } else {
-                                // TARGET mode handles... (same logic as before but with standard_shifts)
-                                const standard_shifts = activeScheme?.standard_monthly_shifts || emp.standard_monthly_shifts || 15;
-                                const mode = bonus.bonus_mode || 'MONTH';
-
-                                if (mode === 'SHIFT') {
-                                    target_value = shifts_count * (bonus.target_per_shift || 0);
-                                } else {
-                                    target_value = (bonus.target_per_shift || 0) / standard_shifts * shifts_count;
-                                }
-
-                                progress_percent = target_value > 0 ? (current_value / target_value) * 100 : (shifts_count > 0 ? 100 : 0);
-                                is_met = shifts_count > 0 && current_value >= target_value;
-                            }
-
-                            return {
-                                ...bonus,
-                                current_value,
-                                target_value,
-                                progress_percent,
-                                is_met,
-                                is_accrued: !!existingAccrual,
-                                current_reward_value,
-                                current_reward_type
-                            };
-                        } catch (err) {
-                            console.error('Error calculating bonus:', bonus, err);
-                            return { ...bonus, error: 'Calculation failed' };
+                        let metThresholdIndex = -1;
+                        for (let i = scaledThresholds.length - 1; i >= 0; i--) {
+                            if (current_value >= scaledThresholds[i].from) { metThresholdIndex = i; break; }
                         }
-                    });
-                }
-            } catch (e) {
-                console.error('Error processing bonuses for emp:', emp.id, e);
+
+                        if (metThresholdIndex >= 0 && shifts_count > 0) {
+                            is_met = true;
+                            current_reward_value = scaledThresholds[metThresholdIndex].percent;
+                            current_reward_type = 'PERCENT';
+                            target_value = metThresholdIndex < scaledThresholds.length - 1 ? scaledThresholds[metThresholdIndex + 1].from : scaledThresholds[metThresholdIndex].from;
+                        } else {
+                            is_met = false;
+                            target_value = shifts_count > 0 ? scaledThresholds[0].from : sorted[0].from;
+                            current_reward_value = 0;
+                            current_reward_type = 'PERCENT';
+                        }
+                    } else {
+                        target_value = mode === 'SHIFT' ? shifts_count * (bonus.target_per_shift || 0) : (bonus.target_per_shift || 0) / standard_shifts * shifts_count;
+                        is_met = shifts_count > 0 && current_value >= target_value;
+                    }
+
+                    progress_percent = target_value > 0 ? (current_value / target_value) * 100 : (shifts_count > 0 ? 100 : 0);
+
+                    return {
+                        ...bonus,
+                        current_value,
+                        target_value,
+                        progress_percent,
+                        is_met,
+                        is_accrued: !!existingAccrual,
+                        current_reward_value,
+                        current_reward_type
+                    };
+                });
             }
 
-            // Calculate KPI bonus (from metric values, not base salary!)
+            // 2. Process shifts with calculated rewards
+            const processedShifts = await Promise.all(empShifts.map(async (s: any) => {
+                if (s.salary_snapshot?.paid_at || s.status === 'PAID') {
+                    return { ...s, calculated_salary: parseFloat(s.calculated_salary || '0'), breakdown: s.salary_breakdown || {} };
+                }
+
+                const reportMetricsForShift: Record<string, number> = {
+                    total_revenue: calculateShiftIncome(s),
+                    revenue_cash: parseFloat(s.cash_income || 0),
+                    revenue_card: parseFloat(s.card_income || 0)
+                };
+
+                if (s.report_data) {
+                    const data = typeof s.report_data === 'string' ? JSON.parse(s.report_data) : s.report_data;
+                    Object.keys(data).forEach(key => { reportMetricsForShift[key] = parseFloat(data[key] || 0); });
+                }
+
+                // Pass the scheme WITH calculated bonuses reward levels
+                const schemeWithRewards = { ...emp, period_bonuses: bonuses_status };
+
+                const result = await calculateSalary(
+                    { id: s.id, total_hours: parseFloat(s.total_hours || 0), report_data: s.report_data },
+                    schemeWithRewards,
+                    reportMetricsForShift
+                );
+
+                return { ...s, calculated_salary: result.total, breakdown: result.breakdown };
+            }));
+
+            // 3. Totals and final summary data
+            const total_accrued = processedShifts.reduce((sum: number, s: any) => sum + (s.calculated_salary || 0), 0);
+            const total_paid = parseFloat(empPayment?.total_paid || '0');
+            const total_with_kpi = total_accrued; // KPI is now included in individual shifts if percentage-based
+
+            // If any period bonus is FIXED-type and not yet in shifts, we add it back (but for now we assume they are handled)
             const kpi_bonus_amount = bonuses_status
                 .filter((b: any) => b.is_met && b.current_reward_type === 'PERCENT')
                 .reduce((sum: number, b: any) => {
-                    // Use the metric's current_value, not total_accrued
                     const bonusAmount = b.current_value * (b.current_reward_value / 100);
                     return sum + bonusAmount;
                 }, 0);
 
-            // Add KPI to total
-            const total_with_kpi = total_accrued + kpi_bonus_amount;
-
-            // Calculate performance metrics using finishedShifts
-            const total_revenue = finishedShifts.reduce((sum: number, s: any) => sum + calculateShiftIncome(s), 0);
-            const total_hours = finishedShifts.reduce((sum: number, s: any) => sum + parseFloat(s.total_hours || '0'), 0);
+            const total_revenue = monthlyMetrics.total_revenue;
+            const total_hours = monthlyMetrics.total_hours;
 
             // Revenue breakdown by metric
             const revenue_by_metric: any = {};
@@ -339,11 +318,12 @@ export async function GET(
                     if (bonus.metric_key) {
                         const metric_total = finishedShifts.reduce((sum: number, s: any) => {
                             if (bonus.metric_key === 'total_revenue') {
-                                return sum + parseFloat(s.total_revenue || '0');
+                                return sum + calculateShiftIncome(s);
                             } else if (bonus.metric_key === 'total_hours') {
                                 return sum + parseFloat(s.total_hours || '0');
                             } else {
-                                const val = s.report_data?.[bonus.metric_key];
+                                const data = typeof s.report_data === 'string' ? JSON.parse(s.report_data) : s.report_data;
+                                const val = data?.[bonus.metric_key];
                                 return sum + (typeof val === 'number' ? val : parseFloat(val || '0'));
                             }
                         }, 0);
@@ -388,36 +368,22 @@ export async function GET(
                     payment_type: p.payment_type || 'salary'
                 })),
                 shifts: [
-                    // 1. Inject dynamic monthly KPI if earned
-                    ...(kpi_bonus_amount > 0 ? [{
-                        id: `dynamic-kpi-${emp.id}`,
-                        date: new Date().toISOString(),
-                        total_hours: 0,
-                        total_revenue: 0,
-                        calculated_salary: kpi_bonus_amount,
-                        kpi_bonus: kpi_bonus_amount,
-                        status: 'CALCULATED',
-                        is_paid: false,
-                        type: 'PERIOD_BONUS'
-                    }] : []),
-                    // 2. Real shifts from DB
-                    ...empShifts.map((s: any) => {
-                        const breakdown = s.salary_breakdown || {};
-                        const kpiBonus = s.salary_snapshot?.type === 'PERIOD_BONUS'
-                            ? parseFloat(s.calculated_salary || '0')
-                            : (breakdown.bonuses?.reduce((sum: number, b: any) => sum + (parseFloat(b.amount) || 0), 0) || 0);
+                    // 1. Physical shifts from DB
+                    ...processedShifts.map((s: any) => {
+                        const breakdown = s.breakdown || {};
+                        const kpiBonus = breakdown.bonuses?.reduce((sum: number, b: any) =>
+                            sum + (b.type === 'PERIOD_BONUS_CONTRIBUTION' || b.type === 'SHIFT_BONUS' ? parseFloat(b.amount) || 0 : 0), 0) || 0;
 
                         return {
                             id: s.id,
                             date: s.check_in,
                             total_hours: parseFloat(s.total_hours || '0'),
                             total_revenue: calculateShiftIncome(s),
-                            calculated_salary: parseFloat(s.calculated_salary || '0'),
+                            calculated_salary: s.calculated_salary,
                             kpi_bonus: kpiBonus,
                             status: s.status,
                             is_paid: !!(s.salary_snapshot?.paid_at),
                             type: s.salary_snapshot?.type || 'REGULAR',
-                            // Add extra metrics for KPI source display
                             metrics: typeof s.report_data === 'string' ? JSON.parse(s.report_data) : s.report_data || {},
                             bonuses: breakdown.bonuses || []
                         };
@@ -426,7 +392,7 @@ export async function GET(
                 metric_categories: metricCategories,
                 metric_metadata: metricMetadata
             };
-        });
+        }));
 
         return NextResponse.json({ summary });
 

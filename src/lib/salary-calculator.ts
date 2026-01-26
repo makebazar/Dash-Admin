@@ -5,18 +5,19 @@ import { query } from '@/db';
 interface SalaryScheme {
     id?: number;
     base?: {
-        type: 'hourly' | 'fixed' | 'per_shift' | 'percent_revenue';
+        type: 'hourly' | 'fixed' | 'per_shift' | 'percent_revenue' | 'none';
         amount?: number;
         percent?: number;
         full_shift_hours?: number;
     };
     // Support legacy/flat structure for backward compatibility if needed
-    type?: 'hourly' | 'fixed' | 'per_shift' | 'percent_revenue';
+    type?: 'hourly' | 'fixed' | 'per_shift' | 'percent_revenue' | 'none';
     amount?: number;
     percent?: number;
     full_shift_hours?: number;
 
     bonuses?: any[];
+    period_bonuses?: any[]; // Added period_bonuses
     penalty_amount?: number;
     penalty_reason?: string;
     version?: number;
@@ -62,13 +63,11 @@ export async function calculateSalary(
     breakdown.base = parseFloat(baseAmount.toFixed(2));
     let total = baseAmount;
 
-    // 2. Bonuses
+    // 2. Per-Shift Bonuses (from scheme.bonuses)
     if (scheme.bonuses && Array.isArray(scheme.bonuses)) {
         for (const bonus of scheme.bonuses) {
             let bonusAmount = 0;
             const sourceKey = bonus.source || 'total';
-            // Map 'total' -> 'total_revenue', 'cash' -> 'revenue_cash', 'card' -> 'revenue_card'
-            // Or use metric key directly.
             let metricValue = 0;
             if (sourceKey === 'total') metricValue = reportMetrics['total_revenue'] || 0;
             else if (sourceKey === 'cash') metricValue = reportMetrics['revenue_cash'] || 0;
@@ -104,14 +103,49 @@ export async function calculateSalary(
                 bonusAmount = -(Number(bonus.amount) || 0);
             }
 
-            // Always add to breakdown to show configured bonuses, even if 0
             breakdown.bonuses.push({
                 name: bonus.name || bonus.type,
+                type: 'SHIFT_BONUS',
                 amount: parseFloat(bonusAmount.toFixed(2)),
                 source_key: sourceKey,
                 source_value: metricValue
             });
             total += bonusAmount;
+        }
+    }
+
+    // 3. Period-based Bonuses contribution (passed as reportMetrics keys or periodKPILevels)
+    // If the caller (route.ts) has pre-calculated the percentage/reward level, they can pass it 
+    // in reportMetrics with keys starting with 'kpi_reward_' or we can process period_bonuses if reward info is attached.
+    if (scheme.period_bonuses && Array.isArray(scheme.period_bonuses)) {
+        for (const bonus of scheme.period_bonuses) {
+            const rewardValue = bonus.current_reward_value ?? 0;
+            const rewardType = bonus.current_reward_type ?? 'PERCENT';
+            const metricKey = bonus.metric_key || 'total_revenue';
+            const metricValue = reportMetrics[metricKey] || 0;
+
+            let bonusAmount = 0;
+            if (rewardType === 'PERCENT') {
+                bonusAmount = metricValue * (rewardValue / 100);
+            } else if (rewardType === 'FIXED' && bonus.target_per_shift) {
+                // If it's a fixed bonus per target, we can show a portion or the full amount 
+                // if the shift met some local target. But usually fixed monthly are just one-off.
+                // However, "per-shift" targets might be different.
+                // For now, only apply percentage-based period bonuses per shift as they are clearly tied to metric value.
+            }
+
+            if (bonusAmount > 0) {
+                breakdown.bonuses.push({
+                    name: bonus.name || 'KPI',
+                    type: 'PERIOD_BONUS_CONTRIBUTION',
+                    amount: parseFloat(bonusAmount.toFixed(2)),
+                    source_key: metricKey,
+                    source_value: metricValue,
+                    reward_value: rewardValue,
+                    reward_type: rewardType
+                });
+                total += bonusAmount;
+            }
         }
     }
 
