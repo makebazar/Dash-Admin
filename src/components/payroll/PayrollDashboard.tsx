@@ -18,7 +18,8 @@ import {
     Trash2,
     Plus,
     Percent,
-    TrendingUp
+    TrendingUp,
+    Wallet
 } from 'lucide-react';
 
 interface PayrollStats {
@@ -398,25 +399,52 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                     const upsellShare = totalRevenue > 0 ? (otherMetricTotal / totalRevenue) * 100 : 0;
 
                                                     return (
-                                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                                                            <div className="bg-muted/30 p-3 rounded-xl border flex flex-col items-center">
-                                                                <span className="text-[10px] text-muted-foreground uppercase font-bold mb-1">Ср. эффективность</span>
-                                                                <span className="font-bold text-sm flex items-center gap-1.5">
-                                                                    <TrendingUp className="h-3.5 w-3.5 text-emerald-500" />
-                                                                    {totalHours > 0 ? formatCurrency(totalRevenue / totalHours) + '/ч' : '0 ₽/ч'}
-                                                                </span>
+                                                        <div className="space-y-4">
+                                                            {/* Total Revenue Card */}
+                                                            <div className="bg-background p-4 rounded-xl border shadow-sm">
+                                                                <div className="flex justify-between items-start mb-2">
+                                                                    <div>
+                                                                        <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider mb-1">Выручка за период</p>
+                                                                        <p className="text-2xl font-black tracking-tight">{formatCurrency(totalRevenue)}</p>
+                                                                    </div>
+                                                                    <div className="bg-emerald-100 p-2 rounded-lg text-emerald-700">
+                                                                        <Wallet className="h-4 w-4" />
+                                                                    </div>
+                                                                </div>
+                                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-3 pt-3 border-t border-dashed">
+                                                                    {(employee.period_bonuses || []).map((kpi: any) => (
+                                                                        <div key={kpi.id} className="flex justify-between items-center text-xs">
+                                                                            <span className="text-muted-foreground">{kpi.name}</span>
+                                                                            <span className="font-bold">{formatCurrency(kpi.current_value)}</span>
+                                                                        </div>
+                                                                    ))}
+                                                                    <div className="flex justify-between items-center text-xs text-muted-foreground">
+                                                                        <span>В среднем:</span>
+                                                                        <span className="font-medium">{formatCurrency(employee.metrics?.avg_revenue_per_shift || 0)}/смена</span>
+                                                                    </div>
+                                                                </div>
                                                             </div>
-                                                            <div className="bg-muted/30 p-3 rounded-xl border flex flex-col items-center">
-                                                                <span className="text-[10px] text-muted-foreground uppercase font-bold mb-1">Доля {otherMetricLabel}</span>
-                                                                <span className="font-bold text-sm flex items-center gap-1.5"><Percent className="h-3.5 w-3.5 text-purple-500" /> {upsellShare.toFixed(1)}%</span>
-                                                            </div>
-                                                            <div className="bg-muted/30 p-3 rounded-xl border flex flex-col items-center">
-                                                                <span className="text-[10px] text-muted-foreground uppercase font-bold mb-1">Эфф. {otherMetricLabel}</span>
-                                                                <span className="font-bold text-sm flex items-center gap-1.5"><DollarSign className="h-3.5 w-3.5 text-emerald-500" /> {formatCurrency(upsellEfficiency)}/ч</span>
-                                                            </div>
-                                                            <div className="bg-muted/30 p-3 rounded-xl border flex flex-col items-center">
-                                                                <span className="text-[10px] text-muted-foreground uppercase font-bold mb-1">Бонусы смен</span>
-                                                                <span className="font-bold text-sm flex items-center gap-1.5"><Plus className="h-3.5 w-3.5 text-purple-500" /> {formatCurrency(totalKpiBonus)}</span>
+
+                                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                                                <div className="bg-muted/30 p-3 rounded-xl border flex flex-col items-center">
+                                                                    <span className="text-[10px] text-muted-foreground uppercase font-bold mb-1">Ср. эффективность</span>
+                                                                    <span className="font-bold text-sm flex items-center gap-1.5">
+                                                                        <TrendingUp className="h-3.5 w-3.5 text-emerald-500" />
+                                                                        {totalHours > 0 ? formatCurrency(totalRevenue / totalHours) + '/ч' : '0 ₽/ч'}
+                                                                    </span>
+                                                                </div>
+                                                                <div className="bg-muted/30 p-3 rounded-xl border flex flex-col items-center">
+                                                                    <span className="text-[10px] text-muted-foreground uppercase font-bold mb-1">Доля {otherMetricLabel}</span>
+                                                                    <span className="font-bold text-sm flex items-center gap-1.5"><Percent className="h-3.5 w-3.5 text-purple-500" /> {upsellShare.toFixed(1)}%</span>
+                                                                </div>
+                                                                <div className="bg-muted/30 p-3 rounded-xl border flex flex-col items-center">
+                                                                    <span className="text-[10px] text-muted-foreground uppercase font-bold mb-1">Эфф. {otherMetricLabel}</span>
+                                                                    <span className="font-bold text-sm flex items-center gap-1.5"><DollarSign className="h-3.5 w-3.5 text-emerald-500" /> {formatCurrency(upsellEfficiency)}/ч</span>
+                                                                </div>
+                                                                <div className="bg-muted/30 p-3 rounded-xl border flex flex-col items-center">
+                                                                    <span className="text-[10px] text-muted-foreground uppercase font-bold mb-1">Бонусы смен</span>
+                                                                    <span className="font-bold text-sm flex items-center gap-1.5"><Plus className="h-3.5 w-3.5 text-purple-500" /> {formatCurrency(totalKpiBonus)}</span>
+                                                                </div>
                                                             </div>
                                                         </div>
                                                     );

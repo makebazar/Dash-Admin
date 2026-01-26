@@ -9,6 +9,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { Loader2, Clock, DollarSign, FileText, Eye, TrendingUp, Wallet, Edit, CheckCircle, CalendarDays, Sun, Moon, Trash2, ArrowUpDown } from "lucide-react"
+import { ShiftExcelImport } from "@/components/payroll/ShiftExcelImport"
+
 
 interface Shift {
     id: string
@@ -572,10 +574,22 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                     <h1 className="text-3xl font-bold tracking-tight">Смены</h1>
                     <p className="text-muted-foreground">История смен и отчетов сотрудников</p>
                 </div>
-                <Button onClick={openCreateModal} className="gap-2">
-                    <Clock className="h-4 w-4" />
-                    Добавить смену
-                </Button>
+                <div className="flex gap-2">
+                    <ShiftExcelImport
+                        clubId={clubId}
+                        employees={employees}
+                        onSuccess={() => {
+                            setSelectedMonth('')
+                            setFilterStartDate('')
+                            setFilterEndDate('')
+                            fetchShifts(clubId)
+                        }}
+                    />
+                    <Button onClick={openCreateModal} className="gap-2">
+                        <Clock className="h-4 w-4" />
+                        Добавить смену
+                    </Button>
+                </div>
             </div>
 
             {/* Date Filters */}
