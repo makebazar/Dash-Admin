@@ -441,7 +441,14 @@ export async function GET(
             };
         }));
 
-        return NextResponse.json({ summary });
+        // Filter out employees with 0 shifts, unless they have some financial activity (accruals or payments)
+        const filteredSummary = summary.filter(emp =>
+            emp.shifts_count > 0 ||
+            emp.total_accrued !== 0 ||
+            emp.total_paid !== 0
+        );
+
+        return NextResponse.json({ summary: filteredSummary });
 
     } catch (error: any) {
         console.error('Salary Summary Error:', error);
