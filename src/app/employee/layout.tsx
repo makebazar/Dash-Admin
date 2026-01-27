@@ -43,7 +43,7 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
     return (
         <div className="flex min-h-screen bg-background">
             {/* Sidebar */}
-            <aside className="fixed left-0 top-0 h-screen w-64 border-r border-border bg-card">
+            <aside className="fixed left-0 top-0 h-screen w-64 border-r border-border bg-card z-50">
                 <div className="flex h-full flex-col">
                     {/* Logo */}
                     <div className="flex h-16 items-center border-b border-border px-6">
