@@ -115,6 +115,17 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
                                                 >
                                                     <span className="flex-1">График смен</span>
                                                 </Link>
+                                                <Link
+                                                    href={`/employee/clubs/${club.id}/history`}
+                                                    className={cn(
+                                                        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
+                                                        pathname.includes('/history')
+                                                            ? "bg-purple-100 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400 font-medium"
+                                                            : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                                                    )}
+                                                >
+                                                    <span className="flex-1">История смен</span>
+                                                </Link>
                                             </div>
                                         )}
                                     </div>
