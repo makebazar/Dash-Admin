@@ -101,8 +101,7 @@ export async function GET(
                AND club_id = $2 
                AND check_in >= $3 
                AND check_in <= $4
-               AND status IN ('CLOSED', 'PAID', 'VERIFIED', 'ACTIVE')
-               AND check_out IS NOT NULL`,
+                AND (status IN ('CLOSED', 'PAID', 'VERIFIED') OR (status = 'ACTIVE'))`,
             [userId, clubId, startOfMonth, endOfMonth]
         );
 
@@ -111,7 +110,11 @@ export async function GET(
 
         // Calculate totals using the same logic as salary summary
         const monthlyMetrics: Record<string, number> = { total_revenue: 0, total_hours: 0 };
+        const activeShiftMetrics: Record<string, number> = { total_revenue: 0, total_hours: 0 };
+
         finishedShifts.forEach(s => {
+            const isActive = s.status === 'ACTIVE';
+
             // Calculate Shift Income
             let shiftIncome = 0;
             if (metricCategories['cash_income'] === 'INCOME' || !metricCategories['cash_income']) shiftIncome += parseFloat(s.cash_income || 0);
@@ -125,10 +128,16 @@ export async function GET(
                         shiftIncome += val;
                     }
                     monthlyMetrics[key] = (monthlyMetrics[key] || 0) + val;
+                    if (isActive) activeShiftMetrics[key] = (activeShiftMetrics[key] || 0) + val;
                 });
             }
             monthlyMetrics.total_revenue += shiftIncome;
             monthlyMetrics.total_hours += parseFloat(s.total_hours || 0);
+
+            if (isActive) {
+                activeShiftMetrics.total_revenue += shiftIncome;
+                activeShiftMetrics.total_hours += parseFloat(s.total_hours || 0);
+            }
         });
 
         // Days in month for projection
@@ -242,7 +251,10 @@ export async function GET(
                 projected_total,
                 projected_level,
                 projected_bonus,
-                remaining_shifts: remainingShifts
+                remaining_shifts: remainingShifts,
+                current_shift_value: activeShiftMetrics[metric_key] ||
+                    (metric_key === 'total_revenue' ? activeShiftMetrics.total_revenue :
+                        metric_key === 'total_hours' ? activeShiftMetrics.total_hours : 0)
             };
         });
 

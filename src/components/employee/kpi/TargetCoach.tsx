@@ -1,7 +1,7 @@
 "use client";
 
 import { Card, CardContent } from "@/components/ui/card";
-import { Target, TrendingUp, Zap } from "lucide-react";
+import { Target, TrendingUp, Zap, Activity } from "lucide-react";
 
 interface TargetCoachProps {
     kpi: any;
@@ -53,6 +53,21 @@ export function TargetCoach({ kpi, formatCurrency }: TargetCoachProps) {
                         <h2 className="text-3xl font-black text-white tracking-tight leading-none">
                             Нужно <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400">{formatCurrency(nextThreshold.per_shift_to_reach)}</span> <span className="text-slate-400 text-lg font-bold">/ смену</span>
                         </h2>
+
+                        {kpi.current_shift_value > 0 && (
+                            <div className="flex items-center gap-2 py-1 px-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 w-fit mt-2">
+                                <Activity className="h-4 w-4 text-emerald-400" />
+                                <span className="text-xs font-bold text-emerald-400">
+                                    Сегодня уже: {formatCurrency(kpi.current_shift_value)}
+                                    {nextThreshold.per_shift_to_reach > kpi.current_shift_value && (
+                                        <span className="text-slate-400 ml-1">
+                                            (осталось {formatCurrency(nextThreshold.per_shift_to_reach - kpi.current_shift_value)})
+                                        </span>
+                                    )}
+                                </span>
+                            </div>
+                        )}
+
                         <p className="text-slate-400 text-sm max-w-md font-medium">
                             До конца месяца {kpi.remaining_shifts} смен. Держи этот темп, чтобы забрать бонус <span className="text-slate-200 font-bold">{nextThreshold.percent}%</span>
                         </p>

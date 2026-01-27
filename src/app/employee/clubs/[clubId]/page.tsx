@@ -27,6 +27,7 @@ interface ActiveShift {
     id: number
     check_in: string
     total_hours: number
+    report_data?: any
 }
 
 interface Stats {
@@ -67,6 +68,9 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
     const [kpiData, setKpiData] = useState<any>(null)
     const [isLoading, setIsLoading] = useState(true)
     const [isActionLoading, setIsActionLoading] = useState(false)
+
+    // Indicators Modal State
+    const [isIndicatorsModalOpen, setIsIndicatorsModalOpen] = useState(false)
 
     // Live timer
     const [liveSeconds, setLiveSeconds] = useState(0)
@@ -134,6 +138,13 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                 setKpiData(kpiJson)
             }
 
+            // Fetch report template for indicators/end shift
+            const reportRes = await fetch(`/api/clubs/${id}/settings/reports`, { cache: 'no-store' })
+            const reportJson = await reportRes.json()
+            if (reportRes.ok && reportJson.currentTemplate) {
+                setReportTemplate(reportJson.currentTemplate)
+            }
+
         } catch (error) {
             console.error('Error fetching data:', error)
         } finally {
@@ -182,6 +193,30 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
             if (confirm('Завершить смену?')) {
                 submitEndShift({})
             }
+        }
+    }
+
+    const submitUpdateIndicators = async (data: any) => {
+        setIsActionLoading(true)
+        try {
+            const res = await fetch(`/api/employee/shifts/${activeShift?.id}/indicators`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ indicators: data }),
+            })
+
+            if (res.ok) {
+                setIsIndicatorsModalOpen(false)
+                await fetchData(clubId)
+            } else {
+                const err = await res.json()
+                alert(err.error || 'Не удалось обновить показатели')
+            }
+        } catch (error) {
+            console.error('Error updating indicators:', error)
+            alert('Ошибка обновления показателей')
+        } finally {
+            setIsActionLoading(false)
         }
     }
 
@@ -347,6 +382,16 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                                                     <LogOut className="mr-2 h-5 w-5" />
                                                 )}
                                                 Завершить смену
+                                            </Button>
+
+                                            <Button
+                                                variant="outline"
+                                                className="w-full h-12 text-md border-white/20 bg-white/5 text-white hover:bg-white/10"
+                                                onClick={() => setIsIndicatorsModalOpen(true)}
+                                                disabled={isActionLoading}
+                                            >
+                                                <Target className="mr-2 h-4 w-4" />
+                                                Внести промежуточные показатели
                                             </Button>
                                         </div>
                                     ) : (
@@ -586,6 +631,52 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                         >
                             {isActionLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                             Отправить отчет и закрыть смену
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Intermediate Indicators Modal */}
+            <Dialog open={isIndicatorsModalOpen} onOpenChange={setIsIndicatorsModalOpen}>
+                <DialogContent className="max-w-md bg-slate-950 border-slate-800 text-white">
+                    <DialogHeader>
+                        <DialogTitle>Промежуточные показатели</DialogTitle>
+                        <DialogDescription className="text-slate-400">
+                            Внесите текущие данные, чтобы увидеть обновленный прогноз KPI
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto pr-2">
+                        {reportTemplate?.schema?.map((field: any, idx: number) => {
+                            // Only show INCOME fields for intermediate updates? Or all?
+                            // For simplicity, showing all.
+                            return (
+                                <div key={idx} className="space-y-2">
+                                    <Label>
+                                        {field.custom_label}
+                                    </Label>
+                                    <Input
+                                        type={field.metric_key.includes('comment') ? 'text' : 'number'}
+                                        placeholder="Текущее значение"
+                                        className="bg-slate-900 border-slate-700"
+                                        onChange={(e) => setReportData({ ...reportData, [field.metric_key]: e.target.value })}
+                                        defaultValue={activeShift ? (
+                                            typeof activeShift.report_data === 'string'
+                                                ? JSON.parse(activeShift.report_data || '{}')[field.metric_key]
+                                                : (activeShift.report_data as any)?.[field.metric_key]
+                                        ) : ''}
+                                    />
+                                </div>
+                            )
+                        })}
+                    </div>
+                    <DialogFooter>
+                        <Button
+                            onClick={() => submitUpdateIndicators(reportData)}
+                            disabled={isActionLoading}
+                            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+                        >
+                            {isActionLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            Обновить показатели
                         </Button>
                     </DialogFooter>
                 </DialogContent>
