@@ -46,7 +46,7 @@ export function TargetCoach({ kpi, formatCurrency }: TargetCoachProps) {
                             </div>
                             <div className="flex items-center gap-1 text-xs text-slate-400 font-medium">
                                 <Target className="w-3 h-3" />
-                                <span>Уровень {nextThreshold.level}</span>
+                                <span>{nextThreshold.label || `Уровень ${nextThreshold.level}`}</span>
                             </div>
                         </div>
 

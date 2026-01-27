@@ -75,7 +75,7 @@ export function KpiLadder({ kpi, formatCurrency }: KpiLadderProps) {
                                             "font-bold text-sm lg:text-base mb-1",
                                             isCurrent || isCompleted ? "text-emerald-700 dark:text-emerald-400" : isNext ? "text-blue-600 tracking-tight" : "text-slate-600 dark:text-slate-400"
                                         )}>
-                                            Уровень {level.level} • {level.percent}%
+                                            {level.label || `Уровень ${level.level}`} • {level.percent}%
                                         </h4>
                                         <div className="flex flex-col">
                                             <p className="text-[10px] lg:text-xs text-slate-800 dark:text-slate-200 font-bold tracking-wide">

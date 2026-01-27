@@ -193,6 +193,7 @@ export async function GET(
 
                     return {
                         level: idx + 1,
+                        label: t.label,
                         monthly_threshold: original_from,
                         scaled_threshold: scaled_threshold,
                         percent: t.percent || 0,
