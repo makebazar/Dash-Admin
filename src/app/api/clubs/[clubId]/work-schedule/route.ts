@@ -94,13 +94,13 @@ export async function GET(
         let employees = [];
         try {
             const employeesRes = await query(
-                `SELECT u.id, u.full_name, r.name as role, ce.dismissed_at
+                `SELECT u.id, u.full_name, r.name as role, ce.dismissed_at, ce.display_order
                  FROM club_employees ce
                  JOIN users u ON u.id = ce.user_id
                  LEFT JOIN roles r ON u.role_id = r.id
                  WHERE ce.club_id = $1 
                  AND (ce.dismissed_at IS NULL OR ce.dismissed_at >= $2::date)
-                 ORDER BY ce.dismissed_at ASC NULLS FIRST, u.full_name ASC`,
+                 ORDER BY ce.dismissed_at ASC NULLS FIRST, ce.display_order ASC, u.full_name ASC`,
                 [clubId, startOfMonth]
             );
             employees = employeesRes.rows;
