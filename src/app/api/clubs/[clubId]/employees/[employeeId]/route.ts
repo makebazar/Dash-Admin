@@ -38,63 +38,80 @@ export async function PATCH(
             return NextResponse.json({ error: 'Employee not found in this club' }, { status: 404 });
         }
 
-        const { full_name, role_id, password, phone_number } = await request.json();
+        const { full_name, role_id, password, phone_number, dismissed_at, is_active } = await request.json();
 
-        // Build update query dynamically
-        const updates = [];
-        const values = [];
-        let valueIndex = 1;
+        // 1. Update USERS table
+        const userUpdates = [];
+        const userValues = [];
+        let userValIdx = 1;
 
         if (full_name !== undefined) {
-            updates.push(`full_name = $${valueIndex}`);
-            values.push(full_name);
-            valueIndex++;
+            userUpdates.push(`full_name = $${userValIdx++}`);
+            userValues.push(full_name);
         }
 
         if (phone_number !== undefined) {
             const normalizedPhone = normalizePhone(phone_number);
-
-            // Check if phone number is already taken by another user
             const phoneCheck = await query(
                 `SELECT id FROM users WHERE phone_number = $1 AND id != $2`,
                 [normalizedPhone, employeeId]
             );
-
             if ((phoneCheck.rowCount ?? 0) > 0) {
                 return NextResponse.json({ error: 'Phone number already in use' }, { status: 400 });
             }
-
-            updates.push(`phone_number = $${valueIndex}`);
-            values.push(normalizedPhone);
-            valueIndex++;
+            userUpdates.push(`phone_number = $${userValIdx++}`);
+            userValues.push(normalizedPhone);
         }
 
         if (role_id !== undefined) {
-            updates.push(`role_id = $${valueIndex}`);
-            values.push(role_id);
-            valueIndex++;
+            userUpdates.push(`role_id = $${userValIdx++}`);
+            userValues.push(role_id);
         }
 
         if (password) {
-            // Hash password
             const password_hash = await bcrypt.hash(password, SALT_ROUNDS);
-            updates.push(`password_hash = $${valueIndex}`);
-            values.push(password_hash);
-            valueIndex++;
-            updates.push(`password_set_at = NOW()`);
+            userUpdates.push(`password_hash = $${userValIdx++}`);
+            userValues.push(password_hash);
+            userUpdates.push(`password_set_at = NOW()`);
         }
 
-        if (updates.length === 0) {
+        if (userUpdates.length > 0) {
+            userValues.push(employeeId);
+            await query(
+                `UPDATE users SET ${userUpdates.join(', ')} WHERE id = $${userValIdx}`,
+                userValues
+            );
+        }
+
+        // 2. Update CLUB_EMPLOYEES table (Dismissal / Activation)
+        const empUpdates = [];
+        const empValues = [];
+        let empValIdx = 1;
+
+        if (dismissed_at !== undefined) {
+            empUpdates.push(`dismissed_at = $${empValIdx++}`);
+            empValues.push(dismissed_at);
+        }
+
+        if (is_active !== undefined) {
+            empUpdates.push(`is_active = $${empValIdx++}`);
+            empValues.push(is_active);
+        }
+
+        if (empUpdates.length > 0) {
+            empValues.push(clubId);
+            empValues.push(employeeId);
+            await query(
+                `UPDATE club_employees 
+                 SET ${empUpdates.join(', ')} 
+                 WHERE club_id = $${empValIdx++} AND user_id = $${empValIdx++}`,
+                empValues
+            );
+        }
+
+        if (userUpdates.length === 0 && empUpdates.length === 0) {
             return NextResponse.json({ error: 'No fields to update' }, { status: 400 });
         }
-
-        // Add employee ID to values
-        values.push(employeeId);
-
-        await query(
-            `UPDATE users SET ${updates.join(', ')} WHERE id = $${valueIndex}`,
-            values
-        );
 
         return NextResponse.json({ success: true });
 

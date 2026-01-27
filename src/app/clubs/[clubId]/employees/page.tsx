@@ -19,6 +19,7 @@ interface Employee {
     role_id: number | null
     hired_at: string
     is_active: boolean
+    dismissed_at?: string | null
     salary_scheme_id?: number
     salary_scheme_name?: string
 }
@@ -150,24 +151,26 @@ export default function EmployeesPage({ params }: { params: Promise<{ clubId: st
         }
     }
 
-    const handleDeleteEmployee = async (employeeId: string) => {
-        if (!confirm('Вы уверены, что хотите удалить этого сотрудника?')) {
+    const handleDismissEmployee = async (employeeId: string) => {
+        if (!confirm('Вы уверены, что хотите уволить этого сотрудника? Он останется в прошлых отчетах, но будет скрыт из актуальных списков.')) {
             return
         }
 
         try {
-            const res = await fetch(`/api/clubs/${clubId}/employees?employeeId=${employeeId}`, {
-                method: 'DELETE',
+            const res = await fetch(`/api/clubs/${clubId}/employees/${employeeId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ is_active: false, dismissed_at: new Date().toISOString() })
             })
 
             if (res.ok) {
                 fetchData(clubId)
             } else {
-                alert('Не удалось удалить сотрудника')
+                alert('Не удалось уволить сотрудника')
             }
         } catch (error) {
-            console.error('Error deleting employee:', error)
-            alert('Ошибка удаления')
+            console.error('Error dismissing employee:', error)
+            alert('Ошибка при увольнении')
         }
     }
 
@@ -300,11 +303,15 @@ export default function EmployeesPage({ params }: { params: Promise<{ clubId: st
                                             {new Date(employee.hired_at).toLocaleDateString('ru-RU')}
                                         </TableCell>
                                         <TableCell>
-                                            <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${employee.is_active
-                                                ? 'bg-green-500/10 text-green-500'
-                                                : 'bg-red-500/10 text-red-500'
+                                            <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${employee.dismissed_at
+                                                ? 'bg-red-500/10 text-red-500'
+                                                : employee.is_active
+                                                    ? 'bg-green-500/10 text-green-500'
+                                                    : 'bg-yellow-500/10 text-yellow-500'
                                                 }`}>
-                                                {employee.is_active ? 'Активен' : 'Неактивен'}
+                                                {employee.dismissed_at
+                                                    ? `Уволен: ${new Date(employee.dismissed_at).toLocaleDateString('ru-RU')}`
+                                                    : employee.is_active ? 'Активен' : 'Неактивен'}
                                             </span>
                                         </TableCell>
                                         <TableCell className="text-right">
@@ -319,7 +326,8 @@ export default function EmployeesPage({ params }: { params: Promise<{ clubId: st
                                                 <Button
                                                     variant="ghost"
                                                     size="icon"
-                                                    onClick={() => handleDeleteEmployee(employee.id)}
+                                                    onClick={() => handleDismissEmployee(employee.id)}
+                                                    title="Уволить сотрудника"
                                                 >
                                                     <Trash2 className="h-4 w-4 text-red-500" />
                                                 </Button>
