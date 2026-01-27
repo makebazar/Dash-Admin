@@ -39,11 +39,17 @@ export async function GET(
             await query(`
                 DO $$ 
                 BEGIN 
+                    -- Clubs table additions
                     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='clubs' AND column_name='day_start_hour') THEN
                         ALTER TABLE clubs ADD COLUMN day_start_hour INTEGER DEFAULT 9;
                     END IF;
                     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='clubs' AND column_name='night_start_hour') THEN
                         ALTER TABLE clubs ADD COLUMN night_start_hour INTEGER DEFAULT 21;
+                    END IF;
+                    
+                    -- Club Employees table additions
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='club_employees' AND column_name='is_active') THEN
+                        ALTER TABLE club_employees ADD COLUMN is_active BOOLEAN DEFAULT TRUE;
                     END IF;
                 END $$;
             `);
@@ -61,20 +67,24 @@ export async function GET(
                 CREATE INDEX IF NOT EXISTS idx_work_schedules_club_date ON work_schedules(club_id, date);
             `);
         } catch (dbError: any) {
-            console.error('Auto-migration failed:', dbError);
-            // We continue as it might just be a permission issue but columns/table might already exist
+            console.error('Work Schedule Auto-migration Error:', dbError);
+            // Don't return here, might still work if columns exist but DO block failed
         }
 
-        // Get club settings safely (handling potentially missing columns on prod)
-        const clubRes = await query(
-            `SELECT * FROM clubs WHERE id = $1`,
-            [clubId]
-        );
-        const clubRow = clubRes.rows[0];
-        const clubSettings = {
-            day_start_hour: clubRow?.day_start_hour ?? 9,
-            night_start_hour: clubRow?.night_start_hour ?? 21
-        };
+        // Get club settings safely
+        let clubSettings = { day_start_hour: 9, night_start_hour: 21 };
+        try {
+            const clubRes = await query(`SELECT * FROM clubs WHERE id = $1`, [clubId]);
+            if (clubRes.rows[0]) {
+                const row = clubRes.rows[0];
+                clubSettings = {
+                    day_start_hour: row.day_start_hour ?? 9,
+                    night_start_hour: row.night_start_hour ?? 21
+                };
+            }
+        } catch (e) {
+            console.warn('Failed to fetch optimized club settings:', e);
+        }
 
         const employeesRes = await query(
             `SELECT u.id, u.full_name, r.name as role 
