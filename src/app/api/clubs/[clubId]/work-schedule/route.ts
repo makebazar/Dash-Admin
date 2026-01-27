@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { query } from '@/db';
 import { cookies } from 'next/headers';
 
+export const dynamic = 'force-dynamic';
+
 // GET: Get work schedule for a specific month
 export async function GET(
     request: Request,
@@ -10,7 +12,7 @@ export async function GET(
     try {
         const userId = (await cookies()).get('session_user_id')?.value;
         const { clubId } = await params;
-        const { searchParams } = new URL(request.url);
+        const { searchParams } = new URL(request.url, `http://${request.headers.get('host') || 'localhost'}`);
         const monthStr = searchParams.get('month') || (new Date().getMonth() + 1).toString();
         const yearStr = searchParams.get('year') || new Date().getFullYear().toString();
 
