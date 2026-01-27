@@ -151,26 +151,42 @@ export default function EmployeesPage({ params }: { params: Promise<{ clubId: st
         }
     }
 
-    const handleDismissEmployee = async (employeeId: string) => {
-        if (!confirm('Вы уверены, что хотите уволить этого сотрудника? Он останется в прошлых отчетах, но будет скрыт из актуальных списков.')) {
-            return
-        }
+    // Dismissal State
+    const [isDismissModalOpen, setIsDismissModalOpen] = useState(false)
+    const [dismissalDate, setDismissalDate] = useState('')
+    const [employeeToDismiss, setEmployeeToDismiss] = useState<string | null>(null)
 
+    // ... existing logic ...
+
+    const handleDismissEmployee = (employeeId: string) => {
+        setEmployeeToDismiss(employeeId)
+        setDismissalDate(new Date().toISOString().split('T')[0]) // Default to today
+        setIsDismissModalOpen(true)
+    }
+
+    const handleConfirmDismiss = async () => {
+        if (!employeeToDismiss || !dismissalDate) return
+
+        setIsSubmitting(true)
         try {
-            const res = await fetch(`/api/clubs/${clubId}/employees/${employeeId}`, {
+            const res = await fetch(`/api/clubs/${clubId}/employees/${employeeToDismiss}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ is_active: false, dismissed_at: new Date().toISOString() })
+                body: JSON.stringify({ is_active: false, dismissed_at: dismissalDate })
             })
 
             if (res.ok) {
+                setIsDismissModalOpen(false)
                 fetchData(clubId)
+                setEmployeeToDismiss(null)
             } else {
                 alert('Не удалось уволить сотрудника')
             }
         } catch (error) {
             console.error('Error dismissing employee:', error)
             alert('Ошибка при увольнении')
+        } finally {
+            setIsSubmitting(false)
         }
     }
 
@@ -514,6 +530,56 @@ export default function EmployeesPage({ params }: { params: Promise<{ clubId: st
                             </Button>
                         </div>
                     </form>
+                </DialogContent>
+            </Dialog>
+            {/* Dismiss Employee Modal */}
+            <Dialog open={isDismissModalOpen} onOpenChange={setIsDismissModalOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Увольнение сотрудника</DialogTitle>
+                        <DialogDescription>
+                            Выберите дату увольнения. Сотрудник будет считаться уволенным начиная с этой даты, но история его смен сохранится.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="py-4 space-y-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="dismissDate">Дата увольнения</Label>
+                            <Input
+                                id="dismissDate"
+                                type="date"
+                                value={dismissalDate}
+                                onChange={(e) => setDismissalDate(e.target.value)}
+                            />
+                        </div>
+                        <p className="text-sm text-muted-foreground bg-slate-50 dark:bg-slate-900 p-3 rounded-md border text-center">
+                            В графике смен сотрудник будет отображаться <br />до <strong>{dismissalDate ? new Date(dismissalDate).toLocaleDateString('ru-RU') : 'выбранной даты'}</strong> включительно.
+                        </p>
+                    </div>
+
+                    <div className="flex gap-3 justify-end">
+                        <Button
+                            variant="outline"
+                            onClick={() => setIsDismissModalOpen(false)}
+                            disabled={isSubmitting}
+                        >
+                            Отмена
+                        </Button>
+                        <Button
+                            variant="destructive"
+                            onClick={handleConfirmDismiss}
+                            disabled={isSubmitting}
+                        >
+                            {isSubmitting ? (
+                                <>
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    Увольнение...
+                                </>
+                            ) : (
+                                'Уволить'
+                            )}
+                        </Button>
+                    </div>
                 </DialogContent>
             </Dialog>
         </div>
