@@ -303,7 +303,7 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
 
             <div className="max-w-7xl mx-auto px-6 py-8 space-y-6">
 
-                <Tabs defaultValue="dashboard" className="w-full">
+                <Tabs defaultValue="dashboard" className="w-full relative z-0">
                     <TabsList className="grid w-full grid-cols-2 lg:w-[400px] mb-8 bg-slate-200/50 dark:bg-slate-800/50 p-1">
                         <TabsTrigger value="dashboard" className="flex items-center gap-2">
                             <Activity className="h-4 w-4" />
