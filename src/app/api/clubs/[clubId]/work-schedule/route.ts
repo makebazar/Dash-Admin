@@ -11,8 +11,15 @@ export async function GET(
         const userId = (await cookies()).get('session_user_id')?.value;
         const { clubId } = await params;
         const { searchParams } = new URL(request.url);
-        const month = parseInt(searchParams.get('month') || (new Date().getMonth() + 1).toString());
-        const year = parseInt(searchParams.get('year') || new Date().getFullYear().toString());
+        const monthStr = searchParams.get('month') || (new Date().getMonth() + 1).toString();
+        const yearStr = searchParams.get('year') || new Date().getFullYear().toString();
+
+        const month = parseInt(monthStr);
+        const year = parseInt(yearStr);
+
+        if (isNaN(month) || isNaN(year) || month < 1 || month > 12) {
+            return NextResponse.json({ error: 'Invalid month or year' }, { status: 400 });
+        }
 
         if (!userId) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -27,11 +34,30 @@ export async function GET(
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
+        // Proactive: Ensure work_schedules table exists (helps with production sync issues)
+        await query(`
+            CREATE TABLE IF NOT EXISTS work_schedules (
+                id SERIAL PRIMARY KEY,
+                club_id INTEGER NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
+                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                date DATE NOT NULL,
+                shift_type VARCHAR(20) NOT NULL,
+                created_at TIMESTAMP DEFAULT NOW(),
+                UNIQUE(club_id, user_id, date)
+            );
+            CREATE INDEX IF NOT EXISTS idx_work_schedules_club_date ON work_schedules(club_id, date);
+        `);
+
+        // Get club settings safely (handling potentially missing columns on prod)
         const clubRes = await query(
-            `SELECT day_start_hour, night_start_hour FROM clubs WHERE id = $1`,
+            `SELECT * FROM clubs WHERE id = $1`,
             [clubId]
         );
-        const clubSettings = clubRes.rows[0];
+        const clubRow = clubRes.rows[0];
+        const clubSettings = {
+            day_start_hour: clubRow?.day_start_hour ?? 9,
+            night_start_hour: clubRow?.night_start_hour ?? 21
+        };
 
         const employeesRes = await query(
             `SELECT u.id, u.full_name, ce.role 
