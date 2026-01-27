@@ -85,42 +85,60 @@ export async function GET(
             console.warn('Failed to fetch club settings (using defaults):', e.message);
         }
 
-        const employeesRes = await query(
-            `SELECT u.id, u.full_name, r.name as role 
-             FROM club_employees ce
-             JOIN users u ON u.id = ce.user_id
-             LEFT JOIN roles r ON u.role_id = r.id
-             WHERE ce.club_id = $1 AND u.is_active = TRUE
-             ORDER BY u.full_name ASC`,
-            [clubId]
-        );
-        const employees = employeesRes.rows;
+        // Get employees
+        let employees = [];
+        try {
+            const employeesRes = await query(
+                `SELECT u.id, u.full_name, r.name as role 
+                 FROM club_employees ce
+                 JOIN users u ON u.id = ce.user_id
+                 LEFT JOIN roles r ON u.role_id = r.id
+                 WHERE ce.club_id = $1 AND u.is_active = TRUE
+                 ORDER BY u.full_name ASC`,
+                [clubId]
+            );
+            employees = employeesRes.rows;
+        } catch (err: any) {
+            console.error('Failed to fetch employees:', err);
+            throw new Error(`Employee query failed: ${err.message}`);
+        }
 
         const startOfMonth = `${year}-${month.toString().padStart(2, '0')}-01`;
         const endOfMonth = new Date(year, month, 0).toISOString().split('T')[0];
 
-        const scheduleRes = await query(
-            `SELECT user_id, TO_CHAR(date, 'YYYY-MM-DD') as date, shift_type 
-             FROM work_schedules 
-             WHERE club_id = $1 AND date >= $2 AND date <= $3`,
-            [clubId, startOfMonth, endOfMonth]
-        );
+        let schedule = {};
+        try {
+            const scheduleRes = await query(
+                `SELECT user_id, TO_CHAR(date, 'YYYY-MM-DD') as date, shift_type 
+                 FROM work_schedules 
+                 WHERE club_id = $1 AND date >= $2 AND date <= $3`,
+                [clubId, startOfMonth, endOfMonth]
+            );
 
-        const scheduleMap: Record<string, Record<string, string>> = {};
-        scheduleRes.rows.forEach(row => {
-            if (!scheduleMap[row.user_id]) scheduleMap[row.user_id] = {};
-            scheduleMap[row.user_id][row.date] = row.shift_type;
-        });
+            const scheduleMap: Record<string, Record<string, string>> = {};
+            scheduleRes.rows.forEach(row => {
+                if (!scheduleMap[row.user_id]) scheduleMap[row.user_id] = {};
+                scheduleMap[row.user_id][row.date] = row.shift_type;
+            });
+            schedule = scheduleMap;
+        } catch (err: any) {
+            console.error('Failed to fetch schedule:', err);
+            // Don't throw here, return empty schedule if table is missing
+            schedule = {};
+        }
 
         return NextResponse.json({
             employees,
-            schedule: scheduleMap,
+            schedule,
             clubSettings
         });
 
     } catch (error: any) {
-        console.error('Get Work Schedule Error:', error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        console.error('CRITICAL: Work Schedule API Error:', error);
+        return NextResponse.json({
+            error: error.message,
+            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+        }, { status: 500 });
     }
 }
 
