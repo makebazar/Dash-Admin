@@ -35,8 +35,7 @@ export async function PATCH(
         // We preserve existing data and merge new indicators
         await query(
             `UPDATE shifts 
-             SET report_data = COALESCE(report_data::jsonb, '{}'::jsonb) || $1::jsonb,
-                 updated_at = NOW()
+             SET report_data = COALESCE(report_data::jsonb, '{}'::jsonb) || $1::jsonb
              WHERE id = $2`,
             [JSON.stringify(indicators), shiftId]
         );
