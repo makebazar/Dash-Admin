@@ -20,6 +20,38 @@ export async function GET(
         const month = now.getMonth() + 1;
         const year = now.getFullYear();
 
+        // 1. Fetch metric categories to correctly calculate "Total Income"
+        const templateRes = await query(
+            `SELECT schema FROM club_report_templates 
+             WHERE club_id = $1 AND is_active = TRUE 
+             ORDER BY created_at DESC LIMIT 1`,
+            [clubId]
+        );
+        const templateSchema = templateRes.rows[0]?.schema;
+        const fields = Array.isArray(templateSchema) ? templateSchema : (templateSchema?.fields || []);
+
+        const systemMetricsRes = await query(`SELECT key, category, type FROM system_metrics`);
+        const systemMetricsMap: Record<string, any> = {};
+        systemMetricsRes.rows.forEach(m => { systemMetricsMap[m.key] = m; });
+
+        const metricCategories: Record<string, string> = {};
+        fields.forEach((f: any) => {
+            const key = f.metric_key || f.key;
+            if (key) {
+                let category = f.field_type || f.calculation_category;
+                if (!category) {
+                    if (key.includes('income') || key.includes('revenue') || key === 'cash' || key === 'card') {
+                        category = 'INCOME';
+                    } else if (key.includes('expense') || key === 'expenses') {
+                        category = 'EXPENSE';
+                    } else {
+                        category = 'OTHER';
+                    }
+                }
+                metricCategories[key] = category;
+            }
+        });
+
         // Get employee's salary scheme
         const schemeRes = await query(
             `SELECT ss.*, esa.scheme_id
@@ -37,6 +69,7 @@ export async function GET(
 
         const scheme = schemeRes.rows[0];
         const period_bonuses = scheme.period_bonuses || [];
+        const standard_monthly_shifts = scheme.standard_monthly_shifts || 15;
 
         // Get planned shifts for this period
         const plannedRes = await query(
@@ -46,44 +79,52 @@ export async function GET(
         );
         const planned_shifts = plannedRes.rows[0]?.planned_shifts || 20;
 
-        // Get finished shifts this period
+        // Get shifts this period
         const startOfMonth = new Date(year, month - 1, 1);
         const endOfMonth = new Date(year, month, 0, 23, 59, 59);
 
         const shiftsRes = await query(
             `SELECT 
-                COUNT(*) as shifts_count,
-                COALESCE(SUM(cash_income + card_income), 0) as total_revenue,
-                COALESCE(SUM(total_hours), 0) as total_hours
+                id,
+                cash_income,
+                card_income,
+                total_hours,
+                report_data,
+                check_in,
+                status
              FROM shifts
              WHERE user_id = $1 
                AND club_id = $2 
                AND check_in >= $3 
                AND check_in <= $4
+               AND status IN ('CLOSED', 'PAID', 'VERIFIED', 'ACTIVE')
                AND check_out IS NOT NULL`,
             [userId, clubId, startOfMonth, endOfMonth]
         );
 
-        const shifts_count = parseInt(shiftsRes.rows[0]?.shifts_count || '0');
-        const total_revenue = parseFloat(shiftsRes.rows[0]?.total_revenue || '0');
+        const finishedShifts = shiftsRes.rows;
+        const shifts_count = finishedShifts.length;
 
-        // Get report_data aggregated values for metric-based KPIs
-        const reportDataRes = await query(
-            `SELECT report_data FROM shifts
-             WHERE user_id = $1 AND club_id = $2 
-               AND check_in >= $3 AND check_in <= $4
-               AND check_out IS NOT NULL
-               AND report_data IS NOT NULL`,
-            [userId, clubId, startOfMonth, endOfMonth]
-        );
+        // Calculate totals using the same logic as salary summary
+        const monthlyMetrics: Record<string, number> = { total_revenue: 0, total_hours: 0 };
+        finishedShifts.forEach(s => {
+            // Calculate Shift Income
+            let shiftIncome = 0;
+            if (metricCategories['cash_income'] === 'INCOME' || !metricCategories['cash_income']) shiftIncome += parseFloat(s.cash_income || 0);
+            if (metricCategories['card_income'] === 'INCOME' || !metricCategories['card_income']) shiftIncome += parseFloat(s.card_income || 0);
 
-        const revenue_by_metric: Record<string, number> = { total_revenue };
-        reportDataRes.rows.forEach((row: any) => {
-            const data = row.report_data || {};
-            Object.entries(data).forEach(([key, val]) => {
-                const numVal = parseFloat(val as string) || 0;
-                revenue_by_metric[key] = (revenue_by_metric[key] || 0) + numVal;
-            });
+            if (s.report_data) {
+                const data = typeof s.report_data === 'string' ? JSON.parse(s.report_data) : s.report_data;
+                Object.keys(data).forEach(key => {
+                    const val = parseFloat(data[key] || 0);
+                    if (metricCategories[key] === 'INCOME' && key !== 'cash_income' && key !== 'card_income') {
+                        shiftIncome += val;
+                    }
+                    monthlyMetrics[key] = (monthlyMetrics[key] || 0) + val;
+                });
+            }
+            monthlyMetrics.total_revenue += shiftIncome;
+            monthlyMetrics.total_hours += parseFloat(s.total_hours || 0);
         });
 
         // Days in month for projection
@@ -92,11 +133,15 @@ export async function GET(
         const remainingDays = daysInMonth - currentDay;
         const remainingShifts = planned_shifts - shifts_count;
 
-        // Calculate KPI progress with MONTHLY thresholds (not scaled)
+        // Calculate KPI progress with SCALED thresholds (matching salary summary)
         const kpi_progress = period_bonuses.map((bonus: any) => {
             const metric_key = bonus.metric_key || 'total_revenue';
-            const current_value = revenue_by_metric[metric_key] || 0;
+            const current_value = monthlyMetrics[metric_key] ||
+                (metric_key === 'total_revenue' ? monthlyMetrics.total_revenue :
+                    metric_key === 'total_hours' ? monthlyMetrics.total_hours : 0);
+
             const avg_per_shift = shifts_count > 0 ? current_value / shifts_count : 0;
+            const mode = bonus.bonus_mode || 'MONTH';
 
             let current_level = 0;
             let current_reward = 0;
@@ -106,39 +151,40 @@ export async function GET(
             if (bonus.type === 'PROGRESSIVE' && bonus.thresholds?.length) {
                 const sorted = [...bonus.thresholds].sort((a: any, b: any) => (a.from || 0) - (b.from || 0));
 
-                // Build all thresholds with MONTHLY values (original, not scaled)
+                // Scale thresholds exactly like in salaries/summary/route.ts
                 all_thresholds = sorted.map((t: any, idx: number) => {
-                    const monthlyThreshold = t.from || 0;
-                    // Scale threshold to current progress for comparison
-                    const scaledThreshold = planned_shifts > 0
-                        ? monthlyThreshold / planned_shifts * shifts_count
-                        : monthlyThreshold;
-                    const isMet = shifts_count > 0 && current_value >= scaledThreshold;
+                    const original_from = t.from || 0;
+                    // Formula from salary summary: 
+                    // mode === 'SHIFT' ? threshold_from * shifts_count : (threshold_from / standard_shifts) * shifts_count
+                    const scaled_threshold = mode === 'SHIFT'
+                        ? original_from * shifts_count
+                        : (original_from / standard_monthly_shifts) * shifts_count;
 
-                    // Calculate remaining needed (total - current)
-                    const totalNeededForLevel = monthlyThreshold;
-                    const remainingToLevel = totalNeededForLevel - current_value;
+                    const isThresholdMet = shifts_count > 0 && current_value >= scaled_threshold;
 
-                    // Per shift to REACH this level (only for remaining shifts)
-                    const perShiftToReach = remainingShifts > 0 && remainingToLevel > 0
-                        ? remainingToLevel / remainingShifts
-                        : 0;
+                    // Remaining to meet this SCALED threshold
+                    const remainingToLevel = Math.max(0, scaled_threshold - current_value);
 
-                    // Per shift to STAY at this level (if already met)
-                    // Need to maintain pace: (threshold / planned_shifts) per shift
-                    const perShiftToStay = planned_shifts > 0
-                        ? monthlyThreshold / planned_shifts
-                        : 0;
+                    // To REACH: we need to reach the SCALED threshold at the END of the month
+                    // So we scale the monthly threshold to the TOTAL planned shifts
+                    const endOfMonthThreshold = mode === 'SHIFT'
+                        ? original_from * planned_shifts
+                        : original_from; // If MONTH mode, the threshold is the original monthly value
 
-                    const potentialBonus = monthlyThreshold * (t.percent / 100);
+                    const totalRemainingToReach = Math.max(0, endOfMonthThreshold - current_value);
+
+                    const perShiftToReach = remainingShifts > 0 ? totalRemainingToReach / remainingShifts : 0;
+                    const perShiftToStay = planned_shifts > 0 ? endOfMonthThreshold / planned_shifts : 0;
+
+                    const potentialBonus = endOfMonthThreshold * (t.percent / 100);
 
                     return {
                         level: idx + 1,
-                        monthly_threshold: monthlyThreshold,
-                        scaled_threshold: scaledThreshold,
+                        monthly_threshold: original_from,
+                        scaled_threshold: scaled_threshold,
                         percent: t.percent || 0,
-                        is_met: isMet,
-                        remaining_total: isMet ? 0 : remainingToLevel,
+                        is_met: isThresholdMet,
+                        remaining_total: totalRemainingToReach,
                         per_shift_to_reach: perShiftToReach,
                         per_shift_to_stay: perShiftToStay,
                         potential_bonus: potentialBonus
@@ -156,18 +202,21 @@ export async function GET(
                 }
             }
 
-            const bonus_amount = is_met && current_reward > 0
+            const current_bonus_amount = is_met && current_reward > 0
                 ? current_value * (current_reward / 100)
                 : 0;
 
-            // Projection: if we continue with avg_per_shift
+            // Projection logic (same as before but based on scaled metrics)
             const projected_total = current_value + (avg_per_shift * remainingShifts);
             let projected_level = 0;
             let projected_bonus = 0;
 
             if (bonus.type === 'PROGRESSIVE' && all_thresholds.length > 0) {
                 for (let i = all_thresholds.length - 1; i >= 0; i--) {
-                    if (projected_total >= all_thresholds[i].monthly_threshold) {
+                    const monthlyThreshold = all_thresholds[i].monthly_threshold;
+                    const endOfMonthThreshold = mode === 'SHIFT' ? monthlyThreshold * planned_shifts : monthlyThreshold;
+
+                    if (projected_total >= endOfMonthThreshold) {
                         projected_level = i + 1;
                         projected_bonus = projected_total * (all_thresholds[i].percent / 100);
                         break;
@@ -184,9 +233,8 @@ export async function GET(
                 current_level,
                 current_reward,
                 is_met,
-                bonus_amount,
+                bonus_amount: current_bonus_amount,
                 all_thresholds,
-                // Projection
                 projected_total,
                 projected_level,
                 projected_bonus,
