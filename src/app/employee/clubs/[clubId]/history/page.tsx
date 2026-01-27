@@ -53,6 +53,8 @@ export default function ShiftHistoryPage() {
 
     const [shifts, setShifts] = useState<Shift[]>([])
     const [summary, setSummary] = useState<Summary | null>(null)
+    const [metricMetadata, setMetricMetadata] = useState<Record<string, any>>({})
+    const [dynamicColumns, setDynamicColumns] = useState<string[]>([])
     const [isLoading, setIsLoading] = useState(true)
 
     const now = new Date()
@@ -67,6 +69,20 @@ export default function ShiftHistoryPage() {
             if (res.ok) {
                 setShifts(data.shifts)
                 setSummary(data.summary)
+                setMetricMetadata(data.metric_metadata || {})
+
+                // Determine dynamic columns based on metadata
+                // Filter for INCOME metrics that are present in at least one shift or just from metadata
+                // Excluding standard ones
+                const metadata = data.metric_metadata || {};
+                const dynCols = Object.keys(metadata).filter(key =>
+                    metadata[key].category === 'INCOME' &&
+                    key !== 'cash_income' &&
+                    key !== 'card_income' &&
+                    key !== 'total_revenue' &&
+                    key !== 'total_income'
+                );
+                setDynamicColumns(dynCols);
             }
         } catch (error) {
             console.error('Error fetching history:', error)
@@ -118,7 +134,19 @@ export default function ShiftHistoryPage() {
 
     const formatTime = (dateStr: string) => {
         if (!dateStr) return '-'
+        // Using 'en-GB' to force 24h format without AM/PM and potential timezone mess if defaulting to US
         return new Date(dateStr).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
+    }
+
+    const getShiftType = (shift: Shift) => {
+        // Prefer explicit type if available
+        if (shift.shift_type === 'night') return { icon: <Moon className="h-3 w-3 text-blue-400" />, label: 'Ночь' }
+        if (shift.shift_type === 'day') return { icon: <Sun className="h-3.5 w-3.5 text-amber-400" />, label: 'День' }
+
+        // Fallback based on check_in time
+        const hour = new Date(shift.check_in).getHours()
+        if (hour >= 20 || hour < 5) return { icon: <Moon className="h-3 w-3 text-blue-400" />, label: 'Ночь' }
+        return { icon: <Sun className="h-3.5 w-3.5 text-amber-400" />, label: 'День' }
     }
 
     const DiffBadge = ({ diff }: { diff: number }) => {
@@ -199,7 +227,7 @@ export default function ShiftHistoryPage() {
             {/* Table Header */}
             <div className="px-4 pt-4 border-t border-slate-100">
                 <h3 className="text-sm font-bold text-slate-900">История смен</h3>
-                <p className="text-[11px] text-slate-400">Последние 100 смен с отчетами</p>
+                <p className="text-[11px] text-slate-400">Последние 100 смен с отчетами. Данные пересчитываются автоматически.</p>
             </div>
 
             {/* Shifts Table */}
@@ -209,35 +237,38 @@ export default function ShiftHistoryPage() {
                         <TableRow className="border-slate-50 hover:bg-transparent">
                             <TableHead className="font-bold text-[11px] text-slate-400 uppercase tracking-tight py-4">Дата ↑↓</TableHead>
                             <TableHead className="font-bold text-[11px] text-slate-400 uppercase tracking-tight">Тип</TableHead>
-                            <TableHead className="font-bold text-[11px] text-slate-400 uppercase tracking-tight">Сотрудник ↑↓</TableHead>
+                            {/* Employee column removed */}
                             <TableHead className="font-bold text-[11px] text-slate-400 uppercase tracking-tight">Время</TableHead>
                             <TableHead className="font-bold text-[11px] text-slate-400 uppercase tracking-tight">Часы ↑↓</TableHead>
                             <TableHead className="font-bold text-[11px] text-slate-400 uppercase tracking-tight">Нал ↑↓</TableHead>
                             <TableHead className="font-bold text-[11px] text-slate-400 uppercase tracking-tight">Безнал ↑↓</TableHead>
                             <TableHead className="font-bold text-[11px] text-slate-400 uppercase tracking-tight">Расходы ↑↓</TableHead>
-                            <TableHead className="font-bold text-[11px] text-slate-400 uppercase tracking-tight">Выручка бар</TableHead>
-                            <TableHead className="font-bold text-[11px] text-slate-400 uppercase tracking-tight text-center">СБП</TableHead>
+                            {/* Dynamic Columns Header */}
+                            {dynamicColumns.map(colKey => (
+                                <TableHead key={colKey} className="font-bold text-[11px] text-slate-400 uppercase tracking-tight">
+                                    {metricMetadata[colKey]?.label || colKey}
+                                </TableHead>
+                            ))}
                             <TableHead className="font-bold text-[11px] text-slate-400 uppercase tracking-tight text-right pr-4">Статус</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
                         {isLoading ? (
                             <TableRow>
-                                <TableCell colSpan={11} className="h-32 text-center">
+                                <TableCell colSpan={8 + dynamicColumns.length} className="h-32 text-center">
                                     <Loader2 className="h-5 w-5 animate-spin mx-auto text-slate-300" />
                                 </TableCell>
                             </TableRow>
                         ) : shifts.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={11} className="h-32 text-center text-slate-400 text-xs italic">
+                                <TableCell colSpan={8 + dynamicColumns.length} className="h-32 text-center text-slate-400 text-xs italic">
                                     Нет данных за этот период
                                 </TableCell>
                             </TableRow>
                         ) : (
                             shifts.map((shift) => {
                                 const sDate = new Date(shift.check_in)
-                                const barRevenue = parseFloat(shift.report_data?.bar_revenue || shift.report_data?.revenue_bar || 0)
-                                const sbpRevenue = parseFloat(shift.report_data?.sbp || shift.report_data?.revenue_sbp || 0)
+                                const typeInfo = getShiftType(shift)
 
                                 return (
                                     <TableRow key={shift.id} className="group border-slate-50 hover:bg-slate-50/50 transition-colors">
@@ -246,15 +277,8 @@ export default function ShiftHistoryPage() {
                                         </TableCell>
                                         <TableCell>
                                             <div className="flex items-center gap-1.5 font-bold text-[12px] text-slate-600">
-                                                {shift.shift_type === 'night' ? (
-                                                    <><Moon className="h-3 w-3 text-blue-400" /> Ночь</>
-                                                ) : (
-                                                    <><Sun className="h-3.5 w-3.5 text-amber-400" /> День</>
-                                                )}
+                                                {typeInfo.icon} {typeInfo.label}
                                             </div>
-                                        </TableCell>
-                                        <TableCell className="font-bold text-[12px] text-slate-500">
-                                            {shift.employee_name?.split(' ')[0] || '—'}
                                         </TableCell>
                                         <TableCell className="text-[12px] text-slate-500 font-medium whitespace-nowrap">
                                             {formatTime(shift.check_in)} — {formatTime(shift.check_out)}
@@ -271,12 +295,15 @@ export default function ShiftHistoryPage() {
                                         <TableCell className="font-bold text-[12px]">
                                             {formatCurrency(Number(shift.total_expenses || 0), true)}
                                         </TableCell>
-                                        <TableCell className="font-bold text-[12px] text-slate-500">
-                                            {barRevenue > 0 ? formatCurrency(barRevenue) : '—'}
-                                        </TableCell>
-                                        <TableCell className="font-bold text-[12px] text-slate-500 text-center">
-                                            {sbpRevenue > 0 ? formatCurrency(sbpRevenue) : '—'}
-                                        </TableCell>
+                                        {/* Dynamic Columns Cells */}
+                                        {dynamicColumns.map(colKey => {
+                                            const val = shift.report_data?.[colKey] || 0;
+                                            return (
+                                                <TableCell key={colKey} className="font-bold text-[12px] text-slate-500">
+                                                    {val > 0 ? formatCurrency(parseFloat(val)) : '—'}
+                                                </TableCell>
+                                            )
+                                        })}
                                         <TableCell className="text-right pr-4">
                                             {getStatusBadge(shift.status)}
                                         </TableCell>

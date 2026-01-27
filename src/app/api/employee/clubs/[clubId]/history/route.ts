@@ -254,9 +254,23 @@ export async function GET(
             shifts_count: { value: currentShiftsRaw.rowCount, diff: compare(currentShiftsRaw.rowCount || 0, prevRes.rowCount || 0) }
         };
 
+        // Prepare metadata for frontend
+        const metricMetadata: Record<string, any> = {};
+        fields.forEach((f: any) => {
+            const key = f.metric_key || f.key;
+            if (key) {
+                metricMetadata[key] = {
+                    label: f.label || f.name || key,
+                    category: metricCategories[key]
+                };
+            }
+        });
+
         return NextResponse.json({
             shifts: processedShifts,
-            summary
+            summary,
+            template_fields: fields,
+            metric_metadata: metricMetadata
         });
 
     } catch (error: any) {
