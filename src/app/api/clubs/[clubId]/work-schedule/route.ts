@@ -60,9 +60,10 @@ export async function GET(
         };
 
         const employeesRes = await query(
-            `SELECT u.id, u.full_name, ce.role 
+            `SELECT u.id, u.full_name, r.name as role 
              FROM club_employees ce
              JOIN users u ON u.id = ce.user_id
+             LEFT JOIN roles r ON u.role_id = r.id
              WHERE ce.club_id = $1 AND ce.is_active = TRUE
              ORDER BY u.full_name ASC`,
             [clubId]
