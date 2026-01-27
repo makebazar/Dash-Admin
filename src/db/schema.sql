@@ -268,3 +268,15 @@ CREATE TABLE IF NOT EXISTS schedule_slots (
     end_plan TIMESTAMP NOT NULL,
     club_id INTEGER NOT NULL REFERENCES clubs(id)
 );
+
+-- WORK SCHEDULES (New Interactive Grid)
+CREATE TABLE IF NOT EXISTS work_schedules (
+    id SERIAL PRIMARY KEY,
+    club_id INTEGER NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    date DATE NOT NULL,
+    shift_type VARCHAR(20) NOT NULL, -- 'DAY', 'NIGHT'
+    created_at TIMESTAMP DEFAULT NOW(),
+    UNIQUE(club_id, user_id, date)
+);
+CREATE INDEX IF NOT EXISTS idx_work_schedules_club_date ON work_schedules(club_id, date);

@@ -16,7 +16,8 @@ import {
     ClipboardCheck,
     Building2,
     Briefcase,
-    FileText
+    FileText,
+    Calendar
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -52,6 +53,7 @@ export function ClubSidebar({ clubId }: ClubSidebarProps) {
     const mainLinks = [
         { href: `/clubs/${clubId}`, label: 'Дашборд', icon: <LayoutDashboard className="h-4 w-4" /> },
         { href: `/clubs/${clubId}/shifts`, label: 'Смены', icon: <Clock className="h-4 w-4" /> },
+        { href: `/clubs/${clubId}/schedule`, label: 'График работы', icon: <Calendar className="h-4 w-4" /> },
         { href: `/clubs/${clubId}/employees`, label: 'Сотрудники', icon: <Users className="h-4 w-4" /> },
         { href: `/clubs/${clubId}/salaries`, label: 'Зарплаты', icon: <Wallet className="h-4 w-4" /> },
         { href: `/clubs/${clubId}/finance`, label: 'Финансы', icon: <DollarSign className="h-4 w-4" /> },

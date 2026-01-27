@@ -1,0 +1,175 @@
+import { NextResponse } from 'next/server';
+import { query } from '@/db';
+import { cookies } from 'next/headers';
+
+// GET: Get work schedule for a specific month
+export async function GET(
+    request: Request,
+    { params }: { params: Promise<{ clubId: string }> }
+) {
+    try {
+        const userId = (await cookies()).get('session_user_id')?.value;
+        const { clubId } = await params;
+        const { searchParams } = new URL(request.url);
+        const month = parseInt(searchParams.get('month') || (new Date().getMonth() + 1).toString());
+        const year = parseInt(searchParams.get('year') || new Date().getFullYear().toString());
+
+        if (!userId) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
+        // Check ownership/access
+        const ownerCheck = await query(
+            `SELECT 1 FROM clubs WHERE id = $1 AND owner_id = $2`,
+            [clubId, userId]
+        );
+        if ((ownerCheck.rowCount || 0) === 0) {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+
+        const clubRes = await query(
+            `SELECT day_start_hour, night_start_hour FROM clubs WHERE id = $1`,
+            [clubId]
+        );
+        const clubSettings = clubRes.rows[0];
+
+        const employeesRes = await query(
+            `SELECT u.id, u.full_name, ce.role 
+             FROM club_employees ce
+             JOIN users u ON u.id = ce.user_id
+             WHERE ce.club_id = $1 AND ce.is_active = TRUE
+             ORDER BY u.full_name ASC`,
+            [clubId]
+        );
+        const employees = employeesRes.rows;
+
+        const startOfMonth = `${year}-${month.toString().padStart(2, '0')}-01`;
+        const endOfMonth = new Date(year, month, 0).toISOString().split('T')[0];
+
+        const scheduleRes = await query(
+            `SELECT user_id, TO_CHAR(date, 'YYYY-MM-DD') as date, shift_type 
+             FROM work_schedules 
+             WHERE club_id = $1 AND date >= $2 AND date <= $3`,
+            [clubId, startOfMonth, endOfMonth]
+        );
+
+        const scheduleMap: Record<string, Record<string, string>> = {};
+        scheduleRes.rows.forEach(row => {
+            if (!scheduleMap[row.user_id]) scheduleMap[row.user_id] = {};
+            scheduleMap[row.user_id][row.date] = row.shift_type;
+        });
+
+        return NextResponse.json({
+            employees,
+            schedule: scheduleMap,
+            clubSettings
+        });
+
+    } catch (error: any) {
+        console.error('Get Work Schedule Error:', error);
+        return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+}
+
+// PATCH: Toggle a shift
+export async function PATCH(
+    request: Request,
+    { params }: { params: Promise<{ clubId: string }> }
+) {
+    try {
+        const adminId = (await cookies()).get('session_user_id')?.value;
+        const { clubId } = await params;
+        const body = await request.json();
+        const { userId, date, shiftType } = body;
+
+        if (!adminId) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
+        const ownerCheck = await query(`SELECT 1 FROM clubs WHERE id = $1 AND owner_id = $2`, [clubId, adminId]);
+        if ((ownerCheck.rowCount || 0) === 0) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+
+        if (shiftType === null) {
+            await query(`DELETE FROM work_schedules WHERE club_id = $1 AND user_id = $2 AND date = $3`, [clubId, userId, date]);
+        } else {
+            await query(
+                `INSERT INTO work_schedules (club_id, user_id, date, shift_type) VALUES ($1, $2, $3, $4)
+                 ON CONFLICT (club_id, user_id, date) DO UPDATE SET shift_type = EXCLUDED.shift_type`,
+                [clubId, userId, date, shiftType]
+            );
+        }
+
+        const d = new Date(date);
+        const month = d.getMonth() + 1;
+        const year = d.getFullYear();
+
+        await query(
+            `INSERT INTO employee_shift_schedules (club_id, user_id, month, year, planned_shifts)
+             SELECT club_id, user_id, $1, $2, COUNT(*)
+             FROM work_schedules
+             WHERE club_id = $3 AND user_id = $4 AND EXTRACT(MONTH FROM date) = $1 AND EXTRACT(YEAR FROM date) = $2
+             GROUP BY club_id, user_id
+             ON CONFLICT (club_id, user_id, month, year) DO UPDATE 
+             SET planned_shifts = EXCLUDED.planned_shifts, updated_at = NOW()`,
+            [month, year, clubId, userId]
+        );
+
+        return NextResponse.json({ success: true });
+    } catch (error: any) {
+        console.error('Update Work Schedule Error:', error);
+        return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+}
+
+// POST: Copy schedule from previous month
+export async function POST(
+    request: Request,
+    { params }: { params: Promise<{ clubId: string }> }
+) {
+    try {
+        const adminId = (await cookies()).get('session_user_id')?.value;
+        const { clubId } = await params;
+        const { month, year } = await request.json();
+
+        if (!adminId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+        let prevMonth = month - 1;
+        let prevYear = year;
+        if (prevMonth === 0) {
+            prevMonth = 12;
+            prevYear--;
+        }
+
+        const copyRes = await query(
+            `INSERT INTO work_schedules (club_id, user_id, date, shift_type)
+             SELECT 
+                club_id, 
+                user_id, 
+                ($1::text || '-' || $2::text || '-' || LPAD(EXTRACT(DAY FROM date)::text, 2, '0'))::date,
+                shift_type
+             FROM work_schedules
+             WHERE club_id = $3 
+               AND EXTRACT(MONTH FROM date) = $4 
+               AND EXTRACT(YEAR FROM date) = $5
+               AND EXTRACT(DAY FROM date) <= EXTRACT(DAY FROM (DATE_TRUNC('month', ($1::text || '-' || $2::text || '-01')::date) + INTERVAL '1 month - 1 day'))
+             ON CONFLICT (club_id, user_id, date) DO UPDATE SET shift_type = EXCLUDED.shift_type`,
+            [year, month.toString().padStart(2, '0'), clubId, prevMonth, prevYear]
+        );
+
+        await query(
+            `INSERT INTO employee_shift_schedules (club_id, user_id, month, year, planned_shifts)
+             SELECT club_id, user_id, $1, $2, COUNT(*)
+             FROM work_schedules
+             WHERE club_id = $3 AND EXTRACT(MONTH FROM date) = $1 AND EXTRACT(YEAR FROM date) = $2
+             GROUP BY club_id, user_id
+             ON CONFLICT (club_id, user_id, month, year) DO UPDATE 
+             SET planned_shifts = EXCLUDED.planned_shifts, updated_at = NOW()`,
+            [month, year, clubId]
+        );
+
+        return NextResponse.json({ success: true, count: copyRes.rowCount });
+    } catch (error: any) {
+        console.error('Copy Work Schedule Error:', error);
+        return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+}
