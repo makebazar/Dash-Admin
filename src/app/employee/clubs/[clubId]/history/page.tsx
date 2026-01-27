@@ -161,14 +161,14 @@ export default function ShiftHistoryPage() {
                                             </TableCell>
                                             <TableCell>
                                                 <span className="font-bold text-slate-700">
-                                                    {shift.total_hours ? shift.total_hours.toFixed(1) : '–'} ч
+                                                    {shift.total_hours ? Number(shift.total_hours).toFixed(1) : '–'} ч
                                                 </span>
                                             </TableCell>
                                             <TableCell>
                                                 <div className="flex items-center gap-1">
                                                     <DollarSign className="h-3.5 w-3.5 text-emerald-500" />
                                                     <span className="font-black text-emerald-600">
-                                                        {formatCurrency(shift.earnings || 0)}
+                                                        {formatCurrency(Number(shift.earnings || 0))}
                                                     </span>
                                                 </div>
                                             </TableCell>
