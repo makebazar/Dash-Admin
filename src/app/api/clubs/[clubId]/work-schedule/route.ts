@@ -87,26 +87,27 @@ export async function GET(
             console.warn('Failed to fetch club settings (using defaults):', e.message);
         }
 
+        const startOfMonth = `${year}-${month.toString().padStart(2, '0')}-01`;
+        const endOfMonth = new Date(year, month, 0).toISOString().split('T')[0];
+
         // Get employees
         let employees = [];
         try {
             const employeesRes = await query(
-                `SELECT u.id, u.full_name, r.name as role 
+                `SELECT u.id, u.full_name, r.name as role, ce.dismissed_at
                  FROM club_employees ce
                  JOIN users u ON u.id = ce.user_id
                  LEFT JOIN roles r ON u.role_id = r.id
-                 WHERE ce.club_id = $1 AND u.is_active = TRUE
-                 ORDER BY u.full_name ASC`,
-                [clubId]
+                 WHERE ce.club_id = $1 
+                 AND (ce.dismissed_at IS NULL OR ce.dismissed_at >= $2::date)
+                 ORDER BY ce.dismissed_at ASC NULLS FIRST, u.full_name ASC`,
+                [clubId, startOfMonth]
             );
             employees = employeesRes.rows;
         } catch (err: any) {
             console.error('Failed to fetch employees:', err);
             throw new Error(`Employee query failed: ${err.message}`);
         }
-
-        const startOfMonth = `${year}-${month.toString().padStart(2, '0')}-01`;
-        const endOfMonth = new Date(year, month, 0).toISOString().split('T')[0];
 
         let schedule = {};
         try {

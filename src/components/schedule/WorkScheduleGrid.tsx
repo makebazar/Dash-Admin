@@ -115,8 +115,15 @@ export function WorkScheduleGrid({ clubId, month, year, initialData, refreshData
                         {employees.map((emp: any) => (
                             <tr key={emp.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/20 group transition-colors">
                                 <td className="sticky left-0 z-20 bg-white dark:bg-slate-950 p-4 border-r border-slate-200 dark:border-slate-800">
-                                    <div className="flex flex-col">
-                                        <span className="font-bold text-sm text-slate-800 dark:text-slate-200 truncate">{emp.full_name}</span>
+                                    <div className={cn("flex flex-col", emp.dismissed_at && "opacity-70 grayscale")}>
+                                        <div className="flex items-center gap-2">
+                                            <span className="font-bold text-sm text-slate-800 dark:text-slate-200 truncate">{emp.full_name}</span>
+                                            {emp.dismissed_at && (
+                                                <span className="text-[9px] font-bold text-red-500 bg-red-100 dark:bg-red-950/50 px-1 py-0.5 rounded border border-red-200 dark:border-red-900">
+                                                    УВОЛ
+                                                </span>
+                                            )}
+                                        </div>
                                         <span className="text-[10px] font-medium text-slate-400 uppercase tracking-tight">{emp.role}</span>
                                     </div>
                                 </td>
