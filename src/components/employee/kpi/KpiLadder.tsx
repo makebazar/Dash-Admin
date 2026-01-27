@@ -77,9 +77,16 @@ export function KpiLadder({ kpi, formatCurrency }: KpiLadderProps) {
                                         )}>
                                             Уровень {level.level} • {level.percent}%
                                         </h4>
-                                        <p className="text-[10px] lg:text-xs text-slate-500 font-medium tracking-wide">
-                                            Порог: {formatCurrency(level.monthly_threshold)} {level.level === levels.length && "💎"}
-                                        </p>
+                                        <div className="flex flex-col">
+                                            <p className="text-[10px] lg:text-xs text-slate-800 dark:text-slate-200 font-bold tracking-wide">
+                                                Порог: {formatCurrency(level.scaled_threshold)} {isCompleted && "✓"}
+                                            </p>
+                                            {level.scaled_threshold !== level.monthly_threshold && (
+                                                <p className="text-[9px] text-slate-500 font-medium">
+                                                    Цель месяца: {formatCurrency(level.monthly_threshold)}
+                                                </p>
+                                            )}
+                                        </div>
                                     </div>
 
                                     {isCompleted && (

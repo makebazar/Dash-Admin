@@ -35,6 +35,7 @@ interface Stats {
     week_earnings: number
     month_earnings: number
     hourly_rate: number
+    kpi_bonus: number
     last_week_hours?: number
 }
 
@@ -377,6 +378,7 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                         </Card>
                     </div>
 
+
                     {/* Stats Column */}
                     <div className="space-y-4">
                         {/* Today */}
@@ -420,11 +422,11 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                             <CardContent className="pt-6">
                                 <div className="flex items-start justify-between">
                                     <div>
-                                        <p className="text-sm font-medium text-white/70">Зарплата (месяц)</p>
+                                        <p className="text-sm font-medium text-white/70">Зарплата (ориентировочно)</p>
                                         <p className="text-3xl font-bold mt-1">{formatCurrency(stats?.month_earnings || 0)}</p>
-                                        {kpiData && kpiData.total_kpi_bonus > 0 && (
+                                        {stats && stats.kpi_bonus > 0 && (
                                             <p className="text-sm text-emerald-300 font-medium mt-1">
-                                                +{formatCurrency(kpiData.total_kpi_bonus)} KPI
+                                                Включая {formatCurrency(stats.kpi_bonus)} бонусов
                                             </p>
                                         )}
                                     </div>

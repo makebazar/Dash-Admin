@@ -34,6 +34,7 @@ interface Employee {
     full_name: string;
     role: string;
     shifts_count: number;
+    planned_shifts: number;
     standard_monthly_shifts: number;
     total_accrued: number;
     total_paid: number;
@@ -527,7 +528,7 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                             <div className="space-y-6 animate-in slide-in-from-left-2 duration-300">
                                                 {(() => {
                                                     const shiftsCompletedForCalc = employee.shifts_count || 0;
-                                                    const standardShifts = employee.standard_monthly_shifts || 15;
+                                                    const standardShifts = employee.planned_shifts || employee.standard_monthly_shifts || 15;
 
                                                     // Context Detection
                                                     const now = new Date();
