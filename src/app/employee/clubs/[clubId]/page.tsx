@@ -12,6 +12,10 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { cn } from "@/lib/utils"
+import { TargetCoach } from "@/components/employee/kpi/TargetCoach"
+import { KpiLadder } from "@/components/employee/kpi/KpiLadder"
+import { EarningsProjection } from "@/components/employee/kpi/EarningsProjection"
 
 interface ClubInfo {
     id: number
@@ -433,176 +437,98 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                     </div>
                 </div>
 
-                {/* KPI Tracker */}
-                {kpiData && kpiData.kpi.length > 0 && (
-                    <Card className="border-0 shadow-lg bg-white dark:bg-slate-800/50 backdrop-blur">
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2">
-                                <Target className="h-5 w-5 text-purple-500" />
-                                Прогресс KPI
-                                <span className="ml-auto text-sm font-normal text-muted-foreground">
-                                    {kpiData.shifts_count} смен из {kpiData.planned_shifts} • {kpiData.days_remaining} дней осталось
-                                </span>
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-6">
-                            {kpiData.kpi.map((kpi: any) => (
-                                <div key={kpi.id} className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700">
-                                    <div className="flex items-center justify-between mb-4">
-                                        <span className="font-semibold text-lg">{kpi.name}</span>
-                                        {kpi.is_met ? (
-                                            <span className="px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-600 text-sm font-medium">
-                                                Уровень {kpi.current_level} • {kpi.current_reward}%
-                                            </span>
-                                        ) : (
-                                            <span className="px-3 py-1 rounded-full bg-orange-500/10 text-orange-600 text-sm font-medium">
-                                                Без бонуса
-                                            </span>
-                                        )}
-                                    </div>
-
-                                    {/* Current Stats */}
-                                    <div className="grid grid-cols-2 gap-4 mb-4 p-3 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-                                        <div>
-                                            <p className="text-xs text-muted-foreground">Текущая выручка</p>
-                                            <p className="text-xl font-bold">{formatCurrency(kpi.current_value)}</p>
-                                        </div>
-                                        <div>
-                                            <p className="text-xs text-muted-foreground">Средняя за смену</p>
-                                            <p className="text-xl font-bold">{formatCurrency(kpi.avg_per_shift)}</p>
-                                        </div>
-                                    </div>
-
-                                    {/* All Thresholds - Monthly Values */}
-                                    {kpi.all_thresholds && kpi.all_thresholds.length > 0 && (
-                                        <div className="space-y-2 mb-4">
-                                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Месячные уровни бонусов</p>
-                                            {kpi.all_thresholds.map((threshold: any) => (
-                                                <div
-                                                    key={threshold.level}
-                                                    className={`p-3 rounded-lg border ${threshold.is_met
-                                                            ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800'
-                                                            : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700'
-                                                        }`}
-                                                >
-                                                    <div className="flex items-center justify-between mb-2">
-                                                        <div className="flex items-center gap-2">
-                                                            <span className={threshold.is_met ? 'text-emerald-500 text-lg' : 'text-slate-400'}>
-                                                                {threshold.is_met ? '✓' : '○'}
-                                                            </span>
-                                                            <span className="font-semibold">Уровень {threshold.level}</span>
-                                                            <span className="text-sm text-muted-foreground">
-                                                                ({formatCurrency(threshold.monthly_threshold)}/мес → {threshold.percent}%)
-                                                            </span>
-                                                        </div>
-                                                        {threshold.is_met && (
-                                                            <span className="text-emerald-600 font-bold">
-                                                                +{formatCurrency(kpi.current_value * threshold.percent / 100)}
-                                                            </span>
-                                                        )}
-                                                    </div>
-
-                                                    {/* Per-shift recommendations */}
-                                                    <div className="text-sm grid grid-cols-2 gap-2">
-                                                        {threshold.is_met ? (
-                                                            <>
-                                                                <div className="text-emerald-700 dark:text-emerald-400">
-                                                                    <span className="text-muted-foreground">Чтобы остаться:</span>{' '}
-                                                                    <span className="font-semibold">{formatCurrency(threshold.per_shift_to_stay)}/смену</span>
-                                                                </div>
-                                                            </>
-                                                        ) : (
-                                                            <>
-                                                                <div>
-                                                                    <span className="text-muted-foreground">Осталось:</span>{' '}
-                                                                    <span className="font-semibold">{formatCurrency(threshold.remaining_total)}</span>
-                                                                </div>
-                                                                {threshold.per_shift_to_reach > 0 && kpi.remaining_shifts > 0 && (
-                                                                    <div className="text-purple-600 dark:text-purple-400">
-                                                                        <span className="text-muted-foreground">Нужно:</span>{' '}
-                                                                        <span className="font-semibold">{formatCurrency(threshold.per_shift_to_reach)}/смену</span>
-                                                                    </div>
-                                                                )}
-                                                            </>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-
-                                    {/* Current Bonus */}
-                                    {kpi.is_met && kpi.bonus_amount > 0 && (
-                                        <div className="p-4 rounded-lg bg-gradient-to-r from-emerald-500 to-green-500 text-white">
-                                            <div className="flex items-center justify-between">
-                                                <div>
-                                                    <p className="text-emerald-100">Текущий бонус (Уровень {kpi.current_level}, {kpi.current_reward}%)</p>
-                                                    <p className="text-xs text-emerald-200">{formatCurrency(kpi.current_value)} × {kpi.current_reward}%</p>
-                                                </div>
-                                                <span className="text-2xl font-bold">{formatCurrency(kpi.bonus_amount)}</span>
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {/* Projection */}
-                                    {kpi.projected_total > kpi.current_value && kpi.remaining_shifts > 0 && (
-                                        <div className="mt-4 p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
-                                            <div className="flex items-center gap-2 mb-2">
-                                                <TrendingUp className="h-4 w-4 text-blue-500" />
-                                                <p className="text-sm font-medium text-blue-700 dark:text-blue-300">
-                                                    Прогноз при текущем темпе ({kpi.remaining_shifts} смен осталось)
-                                                </p>
-                                            </div>
-                                            <div className="grid grid-cols-2 gap-4 text-sm">
-                                                <div>
-                                                    <p className="text-blue-600/70">Прогноз выручки:</p>
-                                                    <p className="font-semibold text-blue-700 dark:text-blue-300">~{formatCurrency(kpi.projected_total)}</p>
-                                                </div>
-                                                <div>
-                                                    <p className="text-blue-600/70">Уровень / Бонус:</p>
-                                                    <p className="font-semibold text-blue-700 dark:text-blue-300">
-                                                        Ур. {kpi.projected_level} / ~{formatCurrency(kpi.projected_bonus)}
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            ))}
-
-                            {/* Total Summary */}
-                            <div className="grid gap-4 md:grid-cols-2">
-                                {kpiData.total_kpi_bonus > 0 && (
-                                    <div className="p-4 rounded-xl bg-gradient-to-r from-emerald-500/10 to-green-500/10 border border-emerald-500/20">
-                                        <div className="flex items-center justify-between">
-                                            <div className="flex items-center gap-2">
-                                                <Trophy className="h-5 w-5 text-emerald-500" />
-                                                <span className="font-medium text-emerald-700 dark:text-emerald-400">Текущие KPI бонусы:</span>
-                                            </div>
-                                            <span className="text-2xl font-bold text-emerald-600">
-                                                {formatCurrency(kpiData.total_kpi_bonus)}
-                                            </span>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {kpiData.total_projected_bonus > 0 && (
-                                    <div className="p-4 rounded-xl bg-gradient-to-r from-blue-500/10 to-indigo-500/10 border border-blue-500/20">
-                                        <div className="flex items-center justify-between">
-                                            <div className="flex items-center gap-2">
-                                                <TrendingUp className="h-5 w-5 text-blue-500" />
-                                                <span className="font-medium text-blue-700 dark:text-blue-400">Прогноз к концу месяца:</span>
-                                            </div>
-                                            <span className="text-2xl font-bold text-blue-600">
-                                                ~{formatCurrency(kpiData.total_projected_bonus)}
-                                            </span>
-                                        </div>
-                                    </div>
-                                )}
+                {/* KPI Tracker - The Redesigned Experience */}
+                {kpiData && kpiData.kpi && kpiData.kpi.length > 0 && kpiData.kpi.map((kpi: any) => (
+                    <div key={kpi.id} className="space-y-6 pt-4 first:pt-0">
+                        {kpiData.kpi.length > 1 && (
+                            <div className="flex items-center gap-3 px-1">
+                                <div className="h-6 w-1 bg-purple-600 rounded-full" />
+                                <h2 className="text-xl font-black text-slate-800 dark:text-white uppercase tracking-tight">{kpi.name}</h2>
                             </div>
-                        </CardContent>
-                    </Card>
-                )}
+                        )}
+
+                        {/* 1. The Coach - High impact daily target */}
+                        <TargetCoach
+                            kpi={{ ...kpi, remaining_shifts: kpiData.remaining_shifts, current_value: kpi.current_value }}
+                            formatCurrency={formatCurrency}
+                        />
+
+                        <div className="grid gap-6 lg:grid-cols-5">
+                            {/* 2. The Ladder - Progression visualization (Left side on desktop) */}
+                            <div className="lg:col-span-3">
+                                <Card className="border-0 shadow-xl bg-white dark:bg-slate-900 overflow-hidden">
+                                    <CardHeader className="border-b border-slate-50 dark:border-slate-800">
+                                        <div className="flex items-center justify-between">
+                                            <CardTitle className="text-xl font-bold flex items-center gap-2">
+                                                <Target className="h-5 w-5 text-purple-600" />
+                                                Твой прогресс
+                                            </CardTitle>
+                                            <div className="text-xs text-muted-foreground font-medium">
+                                                {kpiData.shifts_count} смен из {kpiData.planned_shifts} • {kpiData.days_remaining}д. до конца
+                                            </div>
+                                        </div>
+                                    </CardHeader>
+                                    <CardContent className="p-0">
+                                        <div className="p-6">
+                                            <KpiLadder
+                                                kpi={kpi}
+                                                formatCurrency={formatCurrency}
+                                            />
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            </div>
+
+                            {/* 3. Stats & Projection (Right side on desktop) */}
+                            <div className="lg:col-span-2 space-y-6">
+                                <EarningsProjection
+                                    kpi={kpi}
+                                    formatCurrency={formatCurrency}
+                                />
+
+                                {/* Mini Stats Card */}
+                                <Card className="border-0 shadow-lg bg-slate-50 dark:bg-slate-800/50 backdrop-blur">
+                                    <CardHeader className="pb-2">
+                                        <CardTitle className="text-sm font-bold uppercase tracking-wider text-slate-500">Эффективность смены</CardTitle>
+                                    </CardHeader>
+                                    <CardContent className="space-y-4">
+                                        <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex justify-between items-center group hover:border-purple-500/50 transition-colors">
+                                            <div>
+                                                <p className="text-[10px] text-slate-500 uppercase font-black">Средняя выручка</p>
+                                                <p className="text-xl font-black text-slate-800 dark:text-white">{formatCurrency(kpi.avg_per_shift)}</p>
+                                            </div>
+                                            <div className="h-10 w-10 flex items-center justify-center rounded-xl bg-purple-100 dark:bg-purple-900/30 text-purple-600 group-hover:scale-110 transition-transform">
+                                                <TrendingUp className="h-5 w-5" />
+                                            </div>
+                                        </div>
+
+                                        <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3">
+                                            <p className="text-[10px] text-slate-500 uppercase font-black">Ставки бонусов</p>
+                                            <div className="grid grid-cols-3 gap-2">
+                                                {kpi.all_thresholds?.map((t: any) => (
+                                                    <div key={t.level} className={cn(
+                                                        "p-2 rounded-lg border text-center transition-all",
+                                                        t.is_met
+                                                            ? "bg-emerald-500 border-emerald-600 text-white shadow-md shadow-emerald-500/20"
+                                                            : "bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-400"
+                                                    )}>
+                                                        <p className="text-[10px] font-black">{t.percent}%</p>
+                                                        <p className="text-[8px] font-medium leading-none mt-0.5">Lvl {t.level}</p>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </CardContent>
+                                    <div className="px-6 pb-6 mt-auto">
+                                        <Button className="w-full bg-slate-900 dark:bg-white dark:text-slate-950 font-bold hover:scale-[1.02] transition-transform" variant="secondary">
+                                            Как заработать больше?
+                                        </Button>
+                                    </div>
+                                </Card>
+                            </div>
+                        </div>
+                    </div>
+                ))}
 
                 {/* Workday Progress (if shift active) */}
                 {activeShift && kpiData && (
