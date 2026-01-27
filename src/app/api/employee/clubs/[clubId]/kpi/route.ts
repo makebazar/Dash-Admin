@@ -20,6 +20,10 @@ export async function GET(
         const month = now.getMonth() + 1;
         const year = now.getFullYear();
 
+        // Date boundaries
+        const startOfMonth = new Date(year, month - 1, 1);
+        const endOfMonth = new Date(year, month, 0, 23, 59, 59);
+
         // 1. Fetch metric categories to correctly calculate "Total Income"
         const templateRes = await query(
             `SELECT schema FROM club_report_templates 
@@ -71,17 +75,17 @@ export async function GET(
         const period_bonuses = scheme.period_bonuses || [];
         const standard_monthly_shifts = scheme.standard_monthly_shifts || 15;
 
-        // Get planned shifts for this period
+        // Get planned shifts from ACTUAL schedule (work_schedules)
+        // We count how many shifts are assigned to this user in this month
+        // Dates in work_schedules are YYYY-MM-DD strings.
+        const monthStr = month.toString().padStart(2, '0');
         const plannedRes = await query(
-            `SELECT planned_shifts FROM employee_shift_schedules
-             WHERE club_id = $1 AND user_id = $2 AND month = $3 AND year = $4`,
-            [clubId, userId, month, year]
+            `SELECT COUNT(*) as count FROM work_schedules
+             WHERE club_id = $1 AND user_id = $2 
+             AND date >= $3 AND date <= $4`,
+            [clubId, userId, `${year}-${monthStr}-01`, `${year}-${monthStr}-31`]
         );
-        const planned_shifts = plannedRes.rows[0]?.planned_shifts || 20;
-
-        // Get shifts this period
-        const startOfMonth = new Date(year, month - 1, 1);
-        const endOfMonth = new Date(year, month, 0, 23, 59, 59);
+        const planned_shifts = parseInt(plannedRes.rows[0]?.count || '0');
 
         const shiftsRes = await query(
             `SELECT 

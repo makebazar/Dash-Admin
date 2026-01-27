@@ -16,6 +16,8 @@ import { cn } from "@/lib/utils"
 import { TargetCoach } from "@/components/employee/kpi/TargetCoach"
 import { KpiLadder } from "@/components/employee/kpi/KpiLadder"
 import { EarningsProjection } from "@/components/employee/kpi/EarningsProjection"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { WorkScheduleGrid } from "@/components/schedule/WorkScheduleGrid"
 
 interface ClubInfo {
     id: number
@@ -65,6 +67,7 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
     const [activeShift, setActiveShift] = useState<ActiveShift | null>(null)
     const [stats, setStats] = useState<Stats | null>(null)
     const [kpiData, setKpiData] = useState<any>(null)
+    const [scheduleData, setScheduleData] = useState<any>(null)
     const [recentShifts, setRecentShifts] = useState<RecentShift[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [isActionLoading, setIsActionLoading] = useState(false)
@@ -97,6 +100,18 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
 
         return () => clearInterval(interval)
     }, [activeShift])
+
+    const fetchSchedule = async (id: string) => {
+        try {
+            const res = await fetch(`/api/employee/clubs/${id}/schedule`)
+            const data = await res.json()
+            if (res.ok) {
+                setScheduleData(data)
+            }
+        } catch (error) {
+            console.error('Error fetching schedule:', error)
+        }
+    }
 
     const fetchData = async (id: string) => {
         try {
@@ -133,6 +148,9 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
             if (kpiRes.ok) {
                 setKpiData(kpiJson)
             }
+
+            // Fetch Schedule
+            await fetchSchedule(id)
 
         } catch (error) {
             console.error('Error fetching data:', error)
@@ -285,272 +303,315 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
 
             <div className="max-w-7xl mx-auto px-6 py-8 space-y-6">
 
-                {/* Main Grid */}
-                <div className="grid gap-6 lg:grid-cols-3">
+                <Tabs defaultValue="dashboard" className="w-full">
+                    <TabsList className="grid w-full grid-cols-2 lg:w-[400px] mb-8 bg-slate-200/50 dark:bg-slate-800/50 p-1">
+                        <TabsTrigger value="dashboard" className="flex items-center gap-2">
+                            <Activity className="h-4 w-4" />
+                            Дашборд
+                        </TabsTrigger>
+                        <TabsTrigger value="schedule" className="flex items-center gap-2">
+                            <Calendar className="h-4 w-4" />
+                            График смен
+                        </TabsTrigger>
+                    </TabsList>
 
-                    {/* Shift Control - Main Card */}
-                    <div className="lg:col-span-2">
-                        <Card className="overflow-hidden border-0 shadow-2xl bg-gradient-to-br from-slate-900 via-purple-900 to-indigo-900 text-white">
-                            <div className="absolute inset-0 bg-[url('/grid.svg')] opacity-10" />
-                            <div className="relative">
-                                <CardHeader className="pb-2">
-                                    <div className="flex items-center justify-between">
-                                        <CardTitle className="flex items-center gap-2 text-white/90">
-                                            <Clock className="h-5 w-5 text-purple-400" />
-                                            Управление сменой
-                                        </CardTitle>
-                                        {activeShift && (
-                                            <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/30">
-                                                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                                                <span className="text-sm font-medium text-emerald-400">Активна</span>
-                                            </div>
-                                        )}
-                                    </div>
-                                </CardHeader>
-                                <CardContent className="pt-4">
-                                    {activeShift ? (
-                                        <div className="space-y-6">
-                                            {/* Live Timer */}
-                                            <div className="flex flex-col items-center justify-center py-8">
-                                                <div className="flex items-baseline gap-1 font-mono">
-                                                    <span className="text-6xl font-bold text-white">{liveTime.hours}</span>
-                                                    <span className="text-4xl text-white/50">:</span>
-                                                    <span className="text-6xl font-bold text-white">{liveTime.minutes}</span>
-                                                    <span className="text-4xl text-white/50">:</span>
-                                                    <span className="text-4xl font-medium text-purple-400">{liveTime.seconds}</span>
-                                                </div>
-                                                <p className="mt-4 text-white/60">
-                                                    Начало в {new Date(activeShift.check_in).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
-                                                </p>
+                    <TabsContent value="dashboard" className="space-y-6 animate-in fade-in-50 duration-500">
+                        {/* Main Grid */}
+                        <div className="grid gap-6 lg:grid-cols-3">
 
-                                                {/* Live Earnings */}
-                                                <div className="mt-6 px-6 py-3 rounded-2xl bg-white/10 backdrop-blur border border-white/10">
-                                                    <div className="flex items-center gap-2">
-                                                        <Zap className="h-5 w-5 text-yellow-400" />
-                                                        <span className="text-sm text-white/70">Заработано за смену:</span>
-                                                        <span className="text-xl font-bold text-emerald-400">
-                                                            +{formatCurrency(currentEarnings)}
-                                                        </span>
+                            {/* Shift Control - Main Card */}
+                            <div className="lg:col-span-2">
+                                <Card className="overflow-hidden border-0 shadow-2xl bg-gradient-to-br from-slate-900 via-purple-900 to-indigo-900 text-white">
+                                    <div className="absolute inset-0 bg-[url('/grid.svg')] opacity-10" />
+                                    <div className="relative">
+                                        <CardHeader className="pb-2">
+                                            <div className="flex items-center justify-between">
+                                                <CardTitle className="flex items-center gap-2 text-white/90">
+                                                    <Clock className="h-5 w-5 text-purple-400" />
+                                                    Управление сменой
+                                                </CardTitle>
+                                                {activeShift && (
+                                                    <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/30">
+                                                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                                                        <span className="text-sm font-medium text-emerald-400">Активна</span>
                                                     </div>
-                                                </div>
-                                            </div>
-
-                                            <Button
-                                                variant="destructive"
-                                                className="w-full h-14 text-lg shadow-lg bg-red-600 hover:bg-red-700 transition-all"
-                                                onClick={handleEndShiftClick}
-                                                disabled={isActionLoading}
-                                            >
-                                                {isActionLoading && !isReportModalOpen ? (
-                                                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                                                ) : (
-                                                    <LogOut className="mr-2 h-5 w-5" />
                                                 )}
-                                                Завершить смену
-                                            </Button>
-                                        </div>
-                                    ) : (
-                                        <div className="py-8 space-y-6">
-                                            <div className="flex flex-col items-center justify-center">
-                                                <div className="h-28 w-28 rounded-full bg-white/5 border border-white/10 flex items-center justify-center mb-6">
-                                                    <CoffeeIcon className="h-12 w-12 text-white/40" />
+                                            </div>
+                                        </CardHeader>
+                                        <CardContent className="pt-4">
+                                            {activeShift ? (
+                                                <div className="space-y-6">
+                                                    {/* Live Timer */}
+                                                    <div className="flex flex-col items-center justify-center py-8">
+                                                        <div className="flex items-baseline gap-1 font-mono">
+                                                            <span className="text-6xl font-bold text-white">{liveTime.hours}</span>
+                                                            <span className="text-4xl text-white/50">:</span>
+                                                            <span className="text-6xl font-bold text-white">{liveTime.minutes}</span>
+                                                            <span className="text-4xl text-white/50">:</span>
+                                                            <span className="text-4xl font-medium text-purple-400">{liveTime.seconds}</span>
+                                                        </div>
+                                                        <p className="mt-4 text-white/60">
+                                                            Начало в {new Date(activeShift.check_in).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
+                                                        </p>
+
+                                                        {/* Live Earnings */}
+                                                        <div className="mt-6 px-6 py-3 rounded-2xl bg-white/10 backdrop-blur border border-white/10">
+                                                            <div className="flex items-center gap-2">
+                                                                <Zap className="h-5 w-5 text-yellow-400" />
+                                                                <span className="text-sm text-white/70">Заработано за смену:</span>
+                                                                <span className="text-xl font-bold text-emerald-400">
+                                                                    +{formatCurrency(currentEarnings)}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <Button
+                                                        variant="destructive"
+                                                        className="w-full h-14 text-lg shadow-lg bg-red-600 hover:bg-red-700 transition-all"
+                                                        onClick={handleEndShiftClick}
+                                                        disabled={isActionLoading}
+                                                    >
+                                                        {isActionLoading && !isReportModalOpen ? (
+                                                            <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                                                        ) : (
+                                                            <LogOut className="mr-2 h-5 w-5" />
+                                                        )}
+                                                        Завершить смену
+                                                    </Button>
                                                 </div>
-                                                <h3 className="text-xl font-medium text-white/80">Вы сейчас не на работе</h3>
-                                                <p className="text-white/50 mt-1">Начните смену для учёта времени</p>
-                                            </div>
+                                            ) : (
+                                                <div className="py-8 space-y-6">
+                                                    <div className="flex flex-col items-center justify-center">
+                                                        <div className="h-28 w-28 rounded-full bg-white/5 border border-white/10 flex items-center justify-center mb-6">
+                                                            <CoffeeIcon className="h-12 w-12 text-white/40" />
+                                                        </div>
+                                                        <h3 className="text-xl font-medium text-white/80">Вы сейчас не на работе</h3>
+                                                        <p className="text-white/50 mt-1">Начните смену для учёта времени</p>
+                                                    </div>
 
-                                            <Button
-                                                className="w-full h-14 text-lg bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 shadow-lg shadow-emerald-500/25 transition-all"
-                                                onClick={handleStartShift}
-                                                disabled={isActionLoading}
-                                            >
-                                                {isActionLoading ? (
-                                                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                                                ) : (
-                                                    <LogIn className="mr-2 h-5 w-5" />
-                                                )}
-                                                Начать смену
-                                            </Button>
-                                        </div>
-                                    )}
-                                </CardContent>
-                            </div>
-                        </Card>
-                    </div>
-
-
-                    {/* Stats Column */}
-                    <div className="space-y-4">
-                        {/* Today */}
-                        <Card className="border-0 shadow-lg bg-white dark:bg-slate-800/50 backdrop-blur">
-                            <CardContent className="pt-6">
-                                <div className="flex items-start justify-between">
-                                    <div>
-                                        <p className="text-sm font-medium text-muted-foreground">Сегодня</p>
-                                        <p className="text-3xl font-bold mt-1">{stats?.today_hours.toFixed(1)}ч</p>
-                                        <p className="text-sm text-emerald-500 font-medium mt-1">
-                                            +{formatCurrency(stats ? stats.today_hours * stats.hourly_rate : 0)}
-                                        </p>
+                                                    <Button
+                                                        className="w-full h-14 text-lg bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 shadow-lg shadow-emerald-500/25 transition-all"
+                                                        onClick={handleStartShift}
+                                                        disabled={isActionLoading}
+                                                    >
+                                                        {isActionLoading ? (
+                                                            <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                                                        ) : (
+                                                            <LogIn className="mr-2 h-5 w-5" />
+                                                        )}
+                                                        Начать смену
+                                                    </Button>
+                                                </div>
+                                            )}
+                                        </CardContent>
                                     </div>
-                                    <div className="p-3 rounded-xl bg-purple-500/10">
-                                        <Activity className="h-6 w-6 text-purple-500" />
-                                    </div>
-                                </div>
-                            </CardContent>
-                        </Card>
-
-                        {/* This Week */}
-                        <Card className="border-0 shadow-lg bg-white dark:bg-slate-800/50 backdrop-blur">
-                            <CardContent className="pt-6">
-                                <div className="flex items-start justify-between">
-                                    <div>
-                                        <p className="text-sm font-medium text-muted-foreground">Эта неделя</p>
-                                        <p className="text-3xl font-bold mt-1">{stats?.week_hours.toFixed(1)}ч</p>
-                                        <p className="text-sm text-muted-foreground mt-1">
-                                            {formatCurrency(stats?.week_earnings || 0)}
-                                        </p>
-                                    </div>
-                                    <div className="p-3 rounded-xl bg-blue-500/10">
-                                        <Calendar className="h-6 w-6 text-blue-500" />
-                                    </div>
-                                </div>
-                            </CardContent>
-                        </Card>
-
-                        {/* Monthly Salary */}
-                        <Card className="border-0 shadow-lg bg-gradient-to-br from-purple-500 to-indigo-600 text-white">
-                            <CardContent className="pt-6">
-                                <div className="flex items-start justify-between">
-                                    <div>
-                                        <p className="text-sm font-medium text-white/70">Зарплата (ориентировочно)</p>
-                                        <p className="text-3xl font-bold mt-1">{formatCurrency(stats?.month_earnings || 0)}</p>
-                                        {stats && stats.kpi_bonus > 0 && (
-                                            <p className="text-sm text-emerald-300 font-medium mt-1">
-                                                Включая {formatCurrency(stats.kpi_bonus)} бонусов
-                                            </p>
-                                        )}
-                                    </div>
-                                    <div className="p-3 rounded-xl bg-white/20">
-                                        <Wallet className="h-6 w-6 text-white" />
-                                    </div>
-                                </div>
-                            </CardContent>
-                        </Card>
-                    </div>
-                </div>
-
-                {/* KPI Tracker - The Redesigned Experience */}
-                {kpiData && kpiData.kpi && kpiData.kpi.length > 0 && kpiData.kpi.map((kpi: any) => (
-                    <div key={kpi.id} className="space-y-6 pt-4 first:pt-0">
-                        {kpiData.kpi.length > 1 && (
-                            <div className="flex items-center gap-3 px-1">
-                                <div className="h-6 w-1 bg-purple-600 rounded-full" />
-                                <h2 className="text-xl font-black text-slate-800 dark:text-white uppercase tracking-tight">{kpi.name}</h2>
-                            </div>
-                        )}
-
-                        {/* 1. The Coach - High impact daily target */}
-                        <TargetCoach
-                            kpi={{ ...kpi, remaining_shifts: kpiData.remaining_shifts, current_value: kpi.current_value }}
-                            formatCurrency={formatCurrency}
-                        />
-
-                        <div className="grid gap-6 lg:grid-cols-5">
-                            {/* 2. The Ladder - Progression visualization (Left side on desktop) */}
-                            <div className="lg:col-span-3">
-                                <Card className="border-0 shadow-xl bg-white dark:bg-slate-900 overflow-hidden">
-                                    <CardHeader className="border-b border-slate-50 dark:border-slate-800">
-                                        <div className="flex items-center justify-between">
-                                            <CardTitle className="text-xl font-bold flex items-center gap-2">
-                                                <Target className="h-5 w-5 text-purple-600" />
-                                                Твой прогресс
-                                            </CardTitle>
-                                            <div className="text-xs text-muted-foreground font-medium">
-                                                {kpiData.shifts_count} смен из {kpiData.planned_shifts} • {kpiData.days_remaining}д. до конца
-                                            </div>
-                                        </div>
-                                    </CardHeader>
-                                    <CardContent className="p-0">
-                                        <div className="p-6">
-                                            <KpiLadder
-                                                kpi={kpi}
-                                                formatCurrency={formatCurrency}
-                                            />
-                                        </div>
-                                    </CardContent>
                                 </Card>
                             </div>
 
-                            {/* 3. Stats & Projection (Right side on desktop) */}
-                            <div className="lg:col-span-2 space-y-6">
-                                <EarningsProjection
-                                    kpi={kpi}
-                                    formatCurrency={formatCurrency}
-                                />
 
-                                {/* Mini Stats Card */}
-                                <Card className="border-0 shadow-lg bg-slate-50 dark:bg-slate-800/50 backdrop-blur">
-                                    <CardHeader className="pb-2">
-                                        <CardTitle className="text-sm font-bold uppercase tracking-wider text-slate-500">Эффективность смены</CardTitle>
-                                    </CardHeader>
-                                    <CardContent className="space-y-4">
-                                        <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex justify-between items-center group hover:border-purple-500/50 transition-colors">
+                            {/* Stats Column */}
+                            <div className="space-y-4">
+                                {/* Today */}
+                                <Card className="border-0 shadow-lg bg-white dark:bg-slate-800/50 backdrop-blur">
+                                    <CardContent className="pt-6">
+                                        <div className="flex items-start justify-between">
                                             <div>
-                                                <p className="text-[10px] text-slate-500 uppercase font-black">Средняя выручка</p>
-                                                <p className="text-xl font-black text-slate-800 dark:text-white">{formatCurrency(kpi.avg_per_shift)}</p>
+                                                <p className="text-sm font-medium text-muted-foreground">Сегодня</p>
+                                                <p className="text-3xl font-bold mt-1">{stats?.today_hours.toFixed(1)}ч</p>
+                                                <p className="text-sm text-emerald-500 font-medium mt-1">
+                                                    +{formatCurrency(stats ? stats.today_hours * stats.hourly_rate : 0)}
+                                                </p>
                                             </div>
-                                            <div className="h-10 w-10 flex items-center justify-center rounded-xl bg-purple-100 dark:bg-purple-900/30 text-purple-600 group-hover:scale-110 transition-transform">
-                                                <TrendingUp className="h-5 w-5" />
-                                            </div>
-                                        </div>
-
-                                        <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3">
-                                            <p className="text-[10px] text-slate-500 uppercase font-black">Ставки бонусов</p>
-                                            <div className="grid grid-cols-3 gap-2">
-                                                {kpi.all_thresholds?.map((t: any) => (
-                                                    <div key={t.level} className={cn(
-                                                        "p-2 rounded-lg border text-center transition-all",
-                                                        t.is_met
-                                                            ? "bg-emerald-500 border-emerald-600 text-white shadow-md shadow-emerald-500/20"
-                                                            : "bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-400"
-                                                    )}>
-                                                        <p className="text-[10px] font-black">{t.percent}%</p>
-                                                        <p className="text-[8px] font-medium leading-none mt-0.5">Lvl {t.level}</p>
-                                                    </div>
-                                                ))}
+                                            <div className="p-3 rounded-xl bg-purple-500/10">
+                                                <Activity className="h-6 w-6 text-purple-500" />
                                             </div>
                                         </div>
                                     </CardContent>
-                                    <div className="px-6 pb-6 mt-auto">
-                                        <Button className="w-full bg-slate-900 dark:bg-white dark:text-slate-950 font-bold hover:scale-[1.02] transition-transform" variant="secondary">
-                                            Как заработать больше?
-                                        </Button>
-                                    </div>
+                                </Card>
+
+                                {/* This Week */}
+                                <Card className="border-0 shadow-lg bg-white dark:bg-slate-800/50 backdrop-blur">
+                                    <CardContent className="pt-6">
+                                        <div className="flex items-start justify-between">
+                                            <div>
+                                                <p className="text-sm font-medium text-muted-foreground">Эта неделя</p>
+                                                <p className="text-3xl font-bold mt-1">{stats?.week_hours.toFixed(1)}ч</p>
+                                                <p className="text-sm text-muted-foreground mt-1">
+                                                    {formatCurrency(stats?.week_earnings || 0)}
+                                                </p>
+                                            </div>
+                                            <div className="p-3 rounded-xl bg-blue-500/10">
+                                                <Calendar className="h-6 w-6 text-blue-500" />
+                                            </div>
+                                        </div>
+                                    </CardContent>
+                                </Card>
+
+                                {/* Monthly Salary */}
+                                <Card className="border-0 shadow-lg bg-gradient-to-br from-purple-500 to-indigo-600 text-white">
+                                    <CardContent className="pt-6">
+                                        <div className="flex items-start justify-between">
+                                            <div>
+                                                <p className="text-sm font-medium text-white/70">Зарплата (ориентировочно)</p>
+                                                <p className="text-3xl font-bold mt-1">{formatCurrency(stats?.month_earnings || 0)}</p>
+                                                {stats && stats.kpi_bonus > 0 && (
+                                                    <p className="text-sm text-emerald-300 font-medium mt-1">
+                                                        Включая {formatCurrency(stats.kpi_bonus)} бонусов
+                                                    </p>
+                                                )}
+                                            </div>
+                                            <div className="p-3 rounded-xl bg-white/20">
+                                                <Wallet className="h-6 w-6 text-white" />
+                                            </div>
+                                        </div>
+                                    </CardContent>
                                 </Card>
                             </div>
                         </div>
-                    </div>
-                ))}
 
-                {/* Workday Progress (if shift active) */}
-                {activeShift && kpiData && (
-                    <Card className="border-0 shadow-lg bg-white dark:bg-slate-800/50 backdrop-blur">
-                        <CardContent className="py-4">
-                            <div className="flex items-center justify-between mb-2">
-                                <span className="text-sm font-medium text-muted-foreground">Прогресс рабочего дня</span>
-                                <span className="text-sm font-medium">
-                                    {(liveSeconds / 3600).toFixed(1)}ч из ~12ч
-                                </span>
-                            </div>
-                            <div className="h-3 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
-                                <div
-                                    className="h-full rounded-full bg-gradient-to-r from-purple-500 via-indigo-500 to-blue-500 transition-all duration-1000"
-                                    style={{ width: `${Math.min((liveSeconds / 3600 / 12) * 100, 100)}%` }}
+                        {/* KPI Tracker - The Redesigned Experience */}
+                        {kpiData && kpiData.kpi && kpiData.kpi.length > 0 && kpiData.kpi.map((kpi: any) => (
+                            <div key={kpi.id} className="space-y-6 pt-4 first:pt-0">
+                                {kpiData.kpi.length > 1 && (
+                                    <div className="flex items-center gap-3 px-1">
+                                        <div className="h-6 w-1 bg-purple-600 rounded-full" />
+                                        <h2 className="text-xl font-black text-slate-800 dark:text-white uppercase tracking-tight">{kpi.name}</h2>
+                                    </div>
+                                )}
+
+                                {/* 1. The Coach - High impact daily target */}
+                                <TargetCoach
+                                    kpi={{ ...kpi, remaining_shifts: kpiData.remaining_shifts, current_value: kpi.current_value }}
+                                    formatCurrency={formatCurrency}
                                 />
+
+                                <div className="grid gap-6 lg:grid-cols-5">
+                                    {/* 2. The Ladder - Progression visualization (Left side on desktop) */}
+                                    <div className="lg:col-span-3">
+                                        <Card className="border-0 shadow-xl bg-white dark:bg-slate-900 overflow-hidden">
+                                            <CardHeader className="border-b border-slate-50 dark:border-slate-800">
+                                                <div className="flex items-center justify-between">
+                                                    <CardTitle className="text-xl font-bold flex items-center gap-2">
+                                                        <Target className="h-5 w-5 text-purple-600" />
+                                                        Твой прогресс
+                                                    </CardTitle>
+                                                    <div className="text-xs text-muted-foreground font-medium">
+                                                        {kpiData.shifts_count} смен из {kpiData.planned_shifts} • {kpiData.days_remaining}д. до конца
+                                                    </div>
+                                                </div>
+                                            </CardHeader>
+                                            <CardContent className="p-0">
+                                                <div className="p-6">
+                                                    <KpiLadder
+                                                        kpi={kpi}
+                                                        formatCurrency={formatCurrency}
+                                                    />
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+                                    </div>
+
+                                    {/* 3. Stats & Projection (Right side on desktop) */}
+                                    <div className="lg:col-span-2 space-y-6">
+                                        <EarningsProjection
+                                            kpi={kpi}
+                                            formatCurrency={formatCurrency}
+                                        />
+
+                                        {/* Mini Stats Card */}
+                                        <Card className="border-0 shadow-lg bg-slate-50 dark:bg-slate-800/50 backdrop-blur">
+                                            <CardHeader className="pb-2">
+                                                <CardTitle className="text-sm font-bold uppercase tracking-wider text-slate-500">Эффективность смены</CardTitle>
+                                            </CardHeader>
+                                            <CardContent className="space-y-4">
+                                                <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex justify-between items-center group hover:border-purple-500/50 transition-colors">
+                                                    <div>
+                                                        <p className="text-[10px] text-slate-500 uppercase font-black">Средняя выручка</p>
+                                                        <p className="text-xl font-black text-slate-800 dark:text-white">{formatCurrency(kpi.avg_per_shift)}</p>
+                                                    </div>
+                                                    <div className="h-10 w-10 flex items-center justify-center rounded-xl bg-purple-100 dark:bg-purple-900/30 text-purple-600 group-hover:scale-110 transition-transform">
+                                                        <TrendingUp className="h-5 w-5" />
+                                                    </div>
+                                                </div>
+
+                                                <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3">
+                                                    <p className="text-[10px] text-slate-500 uppercase font-black">Ставки бонусов</p>
+                                                    <div className="grid grid-cols-3 gap-2">
+                                                        {kpi.all_thresholds?.map((t: any) => (
+                                                            <div key={t.level} className={cn(
+                                                                "p-2 rounded-lg border text-center transition-all",
+                                                                t.is_met
+                                                                    ? "bg-emerald-500 border-emerald-600 text-white shadow-md shadow-emerald-500/20"
+                                                                    : "bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-400"
+                                                            )}>
+                                                                <p className="text-[10px] font-black">{t.percent}%</p>
+                                                                <p className="text-[8px] font-medium leading-none mt-0.5">Lvl {t.level}</p>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            </CardContent>
+                                            <div className="px-6 pb-6 mt-auto">
+                                                <Button className="w-full bg-slate-900 dark:bg-white dark:text-slate-950 font-bold hover:scale-[1.02] transition-transform" variant="secondary">
+                                                    Как заработать больше?
+                                                </Button>
+                                            </div>
+                                        </Card>
+                                    </div>
+                                </div>
                             </div>
-                        </CardContent>
-                    </Card>
-                )}
+                        ))}
+
+                        {/* Workday Progress (if shift active) */}
+                        {activeShift && kpiData && (
+                            <Card className="border-0 shadow-lg bg-white dark:bg-slate-800/50 backdrop-blur">
+                                <CardContent className="py-4">
+                                    <div className="flex items-center justify-between mb-2">
+                                        <span className="text-sm font-medium text-muted-foreground">Прогресс рабочего дня</span>
+                                        <span className="text-sm font-medium">
+                                            {(liveSeconds / 3600).toFixed(1)}ч из ~12ч
+                                        </span>
+                                    </div>
+                                    <div className="h-3 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                                        <div
+                                            className="h-full rounded-full bg-gradient-to-r from-purple-500 via-indigo-500 to-blue-500 transition-all duration-1000"
+                                            style={{ width: `${Math.min((liveSeconds / 3600 / 12) * 100, 100)}%` }}
+                                        />
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        )}
+                    </TabsContent>
+
+                    <TabsContent value="schedule" className="animate-in fade-in-50 duration-500">
+                        <Card className="border-0 shadow-2xl bg-white dark:bg-slate-900 overflow-hidden">
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2">
+                                    <Calendar className="h-5 w-5 text-purple-600" />
+                                    График работы администраторов
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent className="p-0">
+                                {scheduleData ? (
+                                    <WorkScheduleGrid
+                                        clubId={clubId}
+                                        month={new Date().getMonth() + 1}
+                                        year={new Date().getFullYear()}
+                                        initialData={scheduleData}
+                                        refreshData={() => fetchSchedule(clubId)}
+                                        readOnly={true}
+                                    />
+                                ) : (
+                                    <div className="flex h-64 items-center justify-center text-muted-foreground">
+                                        <Loader2 className="h-6 w-6 animate-spin mr-2" />
+                                        Загрузка графика...
+                                    </div>
+                                )}
+                            </CardContent>
+                        </Card>
+                    </TabsContent>
+                </Tabs>
             </div>
 
             {/* Report Modal */}

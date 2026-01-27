@@ -156,12 +156,16 @@ export async function GET(
             return total;
         };
 
-        // Get planned shifts for the period
+        // Get planned shifts for the period from ACTUAL schedule
+        const monthStr = month.toString().padStart(2, '0');
+        const lastDay = new Date(year, month, 0).getDate();
         const plannedShiftsRes = await query(
-            `SELECT user_id, planned_shifts 
-             FROM employee_shift_schedules 
-             WHERE club_id = $1 AND month = $2 AND year = $3`,
-            [clubId, month, year]
+            `SELECT user_id, COUNT(*)::int as planned_shifts 
+             FROM work_schedules 
+             WHERE club_id = $1 
+               AND date >= $2 AND date <= $3
+             GROUP BY user_id`,
+            [clubId, `${year}-${monthStr}-01`, `${year}-${monthStr}-${lastDay}`]
         );
 
         // Get payments summary
