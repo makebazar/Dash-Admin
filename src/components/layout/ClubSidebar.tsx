@@ -68,7 +68,7 @@ export function ClubSidebar({ clubId }: ClubSidebarProps) {
     ]
 
     return (
-        <aside className="fixed left-0 top-0 h-screen w-64 border-r border-border bg-card">
+        <aside className="w-64 border-r border-border bg-card flex-col flex">
             <div className="flex h-full flex-col">
                 {/* Logo */}
                 <div className="flex h-16 items-center border-b border-border px-6">

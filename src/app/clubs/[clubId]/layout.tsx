@@ -10,9 +10,9 @@ export default async function ClubLayout({
     const { clubId } = await params
 
     return (
-        <div className="flex min-h-screen bg-background">
+        <div className="flex h-screen overflow-hidden bg-background">
             <ClubSidebar clubId={clubId} />
-            <main className="ml-64 flex-1">{children}</main>
+            <main className="flex-1 overflow-auto">{children}</main>
         </div>
     )
 }
