@@ -34,20 +34,6 @@ export async function GET(
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
-        // Proactive: Ensure work_schedules table exists (helps with production sync issues)
-        await query(`
-            CREATE TABLE IF NOT EXISTS work_schedules (
-                id SERIAL PRIMARY KEY,
-                club_id INTEGER NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
-                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                date DATE NOT NULL,
-                shift_type VARCHAR(20) NOT NULL,
-                created_at TIMESTAMP DEFAULT NOW(),
-                UNIQUE(club_id, user_id, date)
-            );
-            CREATE INDEX IF NOT EXISTS idx_work_schedules_club_date ON work_schedules(club_id, date);
-        `);
-
         // Get club settings safely (handling potentially missing columns on prod)
         const clubRes = await query(
             `SELECT * FROM clubs WHERE id = $1`,
