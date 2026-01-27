@@ -74,21 +74,52 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
                             Мои клубы
                         </div>
                         <nav className="space-y-1">
-                            {clubs.map((club) => (
-                                <Link
-                                    key={club.id}
-                                    href={`/employee/clubs/${club.id}`}
-                                    className={cn(
-                                        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
-                                        pathname === `/employee/clubs/${club.id}`
-                                            ? "bg-accent text-accent-foreground"
-                                            : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                                    )}
-                                >
-                                    <Building2 className="h-4 w-4" />
-                                    <span className="flex-1 truncate">{club.name}</span>
-                                </Link>
-                            ))}
+                            {clubs.map((club) => {
+                                const isClubActive = pathname.startsWith(`/employee/clubs/${club.id}`)
+                                return (
+                                    <div key={club.id} className="space-y-1 mt-2">
+                                        <Link
+                                            href={`/employee/clubs/${club.id}`}
+                                            className={cn(
+                                                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
+                                                isClubActive
+                                                    ? "bg-accent text-accent-foreground font-semibold"
+                                                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                                            )}
+                                        >
+                                            <Building2 className="h-4 w-4" />
+                                            <span className="flex-1 truncate">{club.name}</span>
+                                        </Link>
+
+                                        {isClubActive && (
+                                            <div className="ml-4 space-y-1 border-l border-border/50 pl-3">
+                                                <Link
+                                                    href={`/employee/clubs/${club.id}`}
+                                                    className={cn(
+                                                        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
+                                                        pathname === `/employee/clubs/${club.id}`
+                                                            ? "bg-purple-100 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400 font-medium"
+                                                            : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                                                    )}
+                                                >
+                                                    <span className="flex-1">Дашборд</span>
+                                                </Link>
+                                                <Link
+                                                    href={`/employee/clubs/${club.id}/schedule`}
+                                                    className={cn(
+                                                        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
+                                                        pathname.includes('/schedule')
+                                                            ? "bg-purple-100 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400 font-medium"
+                                                            : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                                                    )}
+                                                >
+                                                    <span className="flex-1">График смен</span>
+                                                </Link>
+                                            </div>
+                                        )}
+                                    </div>
+                                )
+                            })}
                         </nav>
                     </div>
 
