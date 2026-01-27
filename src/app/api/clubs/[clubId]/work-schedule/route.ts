@@ -34,6 +34,37 @@ export async function GET(
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
+        // AUTO-MIGRATION: Ensure database is ready (necessary for prod sync)
+        try {
+            await query(`
+                DO $$ 
+                BEGIN 
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='clubs' AND column_name='day_start_hour') THEN
+                        ALTER TABLE clubs ADD COLUMN day_start_hour INTEGER DEFAULT 9;
+                    END IF;
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='clubs' AND column_name='night_start_hour') THEN
+                        ALTER TABLE clubs ADD COLUMN night_start_hour INTEGER DEFAULT 21;
+                    END IF;
+                END $$;
+            `);
+
+            await query(`
+                CREATE TABLE IF NOT EXISTS work_schedules (
+                    id SERIAL PRIMARY KEY,
+                    club_id INTEGER NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
+                    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    date DATE NOT NULL,
+                    shift_type VARCHAR(20) NOT NULL,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    UNIQUE(club_id, user_id, date)
+                );
+                CREATE INDEX IF NOT EXISTS idx_work_schedules_club_date ON work_schedules(club_id, date);
+            `);
+        } catch (dbError: any) {
+            console.error('Auto-migration failed:', dbError);
+            // We continue as it might just be a permission issue but columns/table might already exist
+        }
+
         // Get club settings safely (handling potentially missing columns on prod)
         const clubRes = await query(
             `SELECT * FROM clubs WHERE id = $1`,
