@@ -26,10 +26,11 @@ export async function GET(
         const prevStart = new Date(year, month - 2, 1);
         const prevEnd = new Date(year, month - 1, 0, 23, 59, 59);
 
-        // 1. Fetch employee's salary scheme
+        // 1. Fetch employee's salary scheme and info
         const employeeRes = await query(
             `SELECT 
                 u.id, 
+                u.full_name,
                 s.period_bonuses,
                 s.standard_monthly_shifts,
                 v.formula as scheme_formula
@@ -101,6 +102,19 @@ export async function GET(
             return rev;
         };
 
+        const calculateShiftExpenses = (s: any) => {
+            let exp = 0;
+            if (s.report_data) {
+                const data = typeof s.report_data === 'string' ? JSON.parse(s.report_data) : s.report_data;
+                Object.keys(data).forEach(key => {
+                    if (metricCategories[key] === 'EXPENSE') {
+                        exp += parseFloat(data[key] || 0);
+                    }
+                });
+            }
+            return exp;
+        }
+
         // 3. Fetch shifts for current period
         const currentShiftsRaw = await query(
             `SELECT 
@@ -114,7 +128,7 @@ export async function GET(
             [userId, clubId, startOfMonth.toISOString(), endOfMonth.toISOString()]
         );
 
-        // 4. Calculate monthly metrics for KPI scaling (similar to PayrollDashboard)
+        // 4. Calculate monthly metrics for KPI scaling
         const finishedShifts = currentShiftsRaw.rows.filter(s => s.status !== 'ACTIVE');
         const monthlyMetrics: Record<string, number> = { total_revenue: 0, total_hours: 0 };
         finishedShifts.forEach(s => {
@@ -178,10 +192,8 @@ export async function GET(
                 revenue_cash: parseFloat(s.cash_income || 0),
                 revenue_card: parseFloat(s.card_income || 0)
             };
-            if (s.report_data) {
-                const data = typeof s.report_data === 'string' ? JSON.parse(s.report_data) : s.report_data;
-                Object.keys(data).forEach(key => { reportMetricsForShift[key] = parseFloat(data[key] || 0); });
-            }
+            const rData = typeof s.report_data === 'string' ? JSON.parse(s.report_data) : s.report_data || {};
+            Object.keys(rData).forEach(key => { reportMetricsForShift[key] = parseFloat(rData[key] || 0); });
 
             const schemeWithRewards = { ...employeeScheme, period_bonuses: bonusesStatus };
             const calc = await calculateSalary(
@@ -196,10 +208,13 @@ export async function GET(
 
             return {
                 ...s,
+                employee_name: employeeScheme.full_name,
                 total_revenue: reportMetricsForShift.total_revenue,
+                total_expenses: calculateShiftExpenses(s),
                 earnings: calc.total,
                 kpi_bonus: kpiBonus,
-                salary_breakdown: calc.breakdown
+                salary_breakdown: calc.breakdown,
+                report_data: rData
             };
         }));
 
