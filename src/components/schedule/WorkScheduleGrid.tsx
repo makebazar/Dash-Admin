@@ -14,6 +14,8 @@ interface WorkScheduleGridProps {
 }
 
 export function WorkScheduleGrid({ clubId, month, year, initialData, refreshData }: WorkScheduleGridProps) {
+    if (!initialData) return null
+
     const { employees, schedule, clubSettings } = initialData
     const [localSchedule, setLocalSchedule] = useState(schedule || {})
     const [isUpdating, setIsUpdating] = useState<string | null>(null)

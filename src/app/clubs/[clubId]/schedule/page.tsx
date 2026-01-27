@@ -103,6 +103,16 @@ export default function SchedulePage() {
                 <div className="flex items-center justify-center py-20">
                     <Loader2 className="h-10 w-10 animate-spin text-purple-600" />
                 </div>
+            ) : data?.error ? (
+                <Card className="p-12 text-center border-dashed">
+                    <div className="text-red-500 font-bold mb-2">Произошла ошибка при загрузке</div>
+                    <p className="text-muted-foreground">{data.error}</p>
+                    <Button variant="outline" className="mt-4" onClick={fetchData}>Попробовать снова</Button>
+                </Card>
+            ) : !data || !data.employees ? (
+                <Card className="p-12 text-center border-dashed">
+                    <p className="text-muted-foreground">Данные не найдены или отсутствуют сотрудники</p>
+                </Card>
             ) : (
                 <WorkScheduleGrid
                     clubId={clubId}

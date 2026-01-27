@@ -103,15 +103,21 @@ export async function PATCH(
         const month = d.getMonth() + 1;
         const year = d.getFullYear();
 
+        const countRes = await query(
+            `SELECT COUNT(*) FROM work_schedules 
+             WHERE club_id = $1 AND user_id = $2 
+             AND EXTRACT(MONTH FROM date) = $3 
+             AND EXTRACT(YEAR FROM date) = $4`,
+            [clubId, userId, month, year]
+        );
+        const plannedShifts = parseInt(countRes.rows[0].count);
+
         await query(
             `INSERT INTO employee_shift_schedules (club_id, user_id, month, year, planned_shifts)
-             SELECT club_id, user_id, $1, $2, COUNT(*)
-             FROM work_schedules
-             WHERE club_id = $3 AND user_id = $4 AND EXTRACT(MONTH FROM date) = $1 AND EXTRACT(YEAR FROM date) = $2
-             GROUP BY club_id, user_id
+             VALUES ($1, $2, $3, $4, $5)
              ON CONFLICT (club_id, user_id, month, year) DO UPDATE 
              SET planned_shifts = EXCLUDED.planned_shifts, updated_at = NOW()`,
-            [month, year, clubId, userId]
+            [clubId, userId, month, year, plannedShifts]
         );
 
         return NextResponse.json({ success: true });

@@ -44,6 +44,8 @@ CREATE TABLE IF NOT EXISTS clubs (
     address TEXT,
     owner_id UUID NOT NULL REFERENCES users(id),
     timezone VARCHAR(50) DEFAULT 'Europe/Moscow',
+    day_start_hour INTEGER DEFAULT 9,
+    night_start_hour INTEGER DEFAULT 21,
     default_monthly_shifts INTEGER DEFAULT 20,
     created_at TIMESTAMP DEFAULT NOW()
 );
