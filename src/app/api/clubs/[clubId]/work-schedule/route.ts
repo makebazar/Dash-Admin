@@ -47,7 +47,7 @@ export async function GET(
                         ALTER TABLE clubs ADD COLUMN night_start_hour INTEGER DEFAULT 21;
                     END IF;
                     
-                    -- Club Employees table additions
+                    -- Club Employees table additions (is_active)
                     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='club_employees' AND column_name='is_active') THEN
                         ALTER TABLE club_employees ADD COLUMN is_active BOOLEAN DEFAULT TRUE;
                     END IF;
@@ -67,8 +67,7 @@ export async function GET(
                 CREATE INDEX IF NOT EXISTS idx_work_schedules_club_date ON work_schedules(club_id, date);
             `);
         } catch (dbError: any) {
-            console.error('Work Schedule Auto-migration Error:', dbError);
-            // Don't return here, might still work if columns exist but DO block failed
+            console.error('Work Schedule Auto-migration Failure (Non-fatal):', dbError.message);
         }
 
         // Get club settings safely
@@ -82,8 +81,8 @@ export async function GET(
                     night_start_hour: row.night_start_hour ?? 21
                 };
             }
-        } catch (e) {
-            console.warn('Failed to fetch optimized club settings:', e);
+        } catch (e: any) {
+            console.warn('Failed to fetch club settings (using defaults):', e.message);
         }
 
         const employeesRes = await query(
@@ -91,7 +90,7 @@ export async function GET(
              FROM club_employees ce
              JOIN users u ON u.id = ce.user_id
              LEFT JOIN roles r ON u.role_id = r.id
-             WHERE ce.club_id = $1 AND ce.is_active = TRUE
+             WHERE ce.club_id = $1 AND u.is_active = TRUE
              ORDER BY u.full_name ASC`,
             [clubId]
         );
