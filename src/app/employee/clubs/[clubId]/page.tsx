@@ -13,9 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
-import { TargetCoach } from "@/components/employee/kpi/TargetCoach"
-import { KpiLadder } from "@/components/employee/kpi/KpiLadder"
-import { EarningsProjection } from "@/components/employee/kpi/EarningsProjection"
+import { KpiOverview } from "@/components/employee/kpi/KpiOverview"
 
 interface ClubInfo {
     id: number
@@ -484,9 +482,9 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                     </div>
                 </div>
 
-                {/* KPI Tracker - The Redesigned Experience */}
+                {/* KPI Tracker - Simplified Experience */}
                 {kpiData && kpiData.kpi && kpiData.kpi.length > 0 && kpiData.kpi.map((kpi: any) => (
-                    <div key={kpi.id} className="space-y-6 pt-4 first:pt-0">
+                    <div key={kpi.id} className="space-y-4">
                         {kpiData.kpi.length > 1 && (
                             <div className="flex items-center gap-3 px-1">
                                 <div className="h-6 w-1 bg-purple-600 rounded-full" />
@@ -494,86 +492,14 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                             </div>
                         )}
 
-                        {/* 1. The Coach - High impact daily target */}
-                        <TargetCoach
-                            kpi={{ ...kpi, remaining_shifts: kpiData.remaining_shifts, current_value: kpi.current_value }}
+                        <KpiOverview
+                            kpi={kpi}
                             formatCurrency={formatCurrency}
+                            remainingShifts={kpiData.remaining_shifts}
+                            shiftsCount={kpiData.shifts_count}
+                            plannedShifts={kpiData.planned_shifts}
+                            daysRemaining={kpiData.days_remaining}
                         />
-
-                        <div className="grid gap-6 lg:grid-cols-5">
-                            {/* 2. The Ladder - Progression visualization (Left side on desktop) */}
-                            <div className="lg:col-span-3">
-                                <Card className="border-0 shadow-xl bg-white dark:bg-slate-900 overflow-hidden">
-                                    <CardHeader className="border-b border-slate-50 dark:border-slate-800">
-                                        <div className="flex items-center justify-between">
-                                            <CardTitle className="text-xl font-bold flex items-center gap-2">
-                                                <Target className="h-5 w-5 text-purple-600" />
-                                                Твой прогресс
-                                            </CardTitle>
-                                            <div className="text-xs text-muted-foreground font-medium">
-                                                {kpiData.shifts_count} смен из {kpiData.planned_shifts} • {kpiData.days_remaining}д. до конца
-                                            </div>
-                                        </div>
-                                    </CardHeader>
-                                    <CardContent className="p-0">
-                                        <div className="p-6">
-                                            <KpiLadder
-                                                kpi={kpi}
-                                                formatCurrency={formatCurrency}
-                                            />
-                                        </div>
-                                    </CardContent>
-                                </Card>
-                            </div>
-
-                            {/* 3. Stats & Projection (Right side on desktop) */}
-                            <div className="lg:col-span-2 space-y-6">
-                                <EarningsProjection
-                                    kpi={kpi}
-                                    formatCurrency={formatCurrency}
-                                />
-
-                                {/* Mini Stats Card */}
-                                <Card className="border-0 shadow-lg bg-slate-50 dark:bg-slate-800/50 backdrop-blur">
-                                    <CardHeader className="pb-2">
-                                        <CardTitle className="text-sm font-bold uppercase tracking-wider text-slate-500">Эффективность смены</CardTitle>
-                                    </CardHeader>
-                                    <CardContent className="space-y-4">
-                                        <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex justify-between items-center group hover:border-purple-500/50 transition-colors">
-                                            <div>
-                                                <p className="text-[10px] text-slate-500 uppercase font-black">Средняя выручка</p>
-                                                <p className="text-xl font-black text-slate-800 dark:text-white">{formatCurrency(kpi.avg_per_shift)}</p>
-                                            </div>
-                                            <div className="h-10 w-10 flex items-center justify-center rounded-xl bg-purple-100 dark:bg-purple-900/30 text-purple-600 group-hover:scale-110 transition-transform">
-                                                <TrendingUp className="h-5 w-5" />
-                                            </div>
-                                        </div>
-
-                                        <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3">
-                                            <p className="text-[10px] text-slate-500 uppercase font-black">Ставки бонусов</p>
-                                            <div className="grid grid-cols-3 gap-2">
-                                                {kpi.all_thresholds?.map((t: any) => (
-                                                    <div key={t.level} className={cn(
-                                                        "p-2 rounded-lg border text-center transition-all",
-                                                        t.is_met
-                                                            ? "bg-emerald-500 border-emerald-600 text-white shadow-md shadow-emerald-500/20"
-                                                            : "bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-400"
-                                                    )}>
-                                                        <p className="text-[10px] font-black">{t.percent}%</p>
-                                                        <p className="text-[8px] font-medium leading-none mt-0.5">Lvl {t.level}</p>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    </CardContent>
-                                    <div className="px-6 pb-6 mt-auto">
-                                        <Button className="w-full bg-slate-900 dark:bg-white dark:text-slate-950 font-bold hover:scale-[1.02] transition-transform" variant="secondary">
-                                            Как заработать больше?
-                                        </Button>
-                                    </div>
-                                </Card>
-                            </div>
-                        </div>
                     </div>
                 ))}
 
