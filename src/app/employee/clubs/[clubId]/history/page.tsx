@@ -356,25 +356,7 @@ export default function EmployeeShiftHistoryPage() {
                     </CardContent>
                 </Card>
 
-                <Card className="overflow-hidden relative border-none bg-emerald-500/5 shadow-none">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
-                        <CardTitle className="text-sm font-medium text-emerald-600">Выручка (Нал)</CardTitle>
-                        <Wallet className="h-4 w-4 text-emerald-500" />
-                    </CardHeader>
-                    <CardContent className="relative">
-                        <div className="text-3xl font-bold text-emerald-600">{formatMoney(totalCash)}</div>
-                    </CardContent>
-                </Card>
 
-                <Card className="overflow-hidden relative border-none bg-blue-500/5 shadow-none">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
-                        <CardTitle className="text-sm font-medium text-blue-600">Выручка (Безнал)</CardTitle>
-                        <DollarSign className="h-4 w-4 text-blue-500" />
-                    </CardHeader>
-                    <CardContent className="relative">
-                        <div className="text-3xl font-bold text-blue-600">{formatMoney(totalCard)}</div>
-                    </CardContent>
-                </Card>
 
                 {/* Dynamic Cards (Income + Other) */}
                 {customFieldTotals.filter(f => f.field_type !== 'EXPENSE' && f.show_in_stats !== false).map(field => (
