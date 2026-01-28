@@ -27,6 +27,7 @@ interface TemplateField {
     is_required: boolean
     field_type: 'INCOME' | 'EXPENSE' | 'OTHER'
     show_in_stats: boolean
+    show_for_employee?: boolean
     id?: string // for frontend dnd
 }
 
@@ -230,8 +231,19 @@ export default function ReportBuilderPage({ params }: { params: Promise<{ clubId
                                                     <div className="flex items-center gap-6">
                                                         <div className="flex items-center gap-2">
                                                             <div className="flex flex-col text-right">
+                                                                <Label htmlFor={`emp-${index}`} className="text-sm">Сотруднику</Label>
+                                                                <span className="text-[10px] text-muted-foreground whitespace-nowrap">Показывать в истории</span>
+                                                            </div>
+                                                            <Switch
+                                                                id={`emp-${index}`}
+                                                                checked={field.show_for_employee !== false}
+                                                                onCheckedChange={(checked) => handleUpdateField(index, 'show_for_employee', checked)}
+                                                            />
+                                                        </div>
+                                                        <div className="flex items-center gap-2 border-l pl-6 border-foreground/10">
+                                                            <div className="flex flex-col text-right">
                                                                 <Label htmlFor={`stats-${index}`} className="text-sm">В сводке</Label>
-                                                                <span className="text-[10px] text-muted-foreground whitespace-nowrap">Показывать в карточках</span>
+                                                                <span className="text-[10px] text-muted-foreground whitespace-nowrap">Показывать в админке</span>
                                                             </div>
                                                             <Switch
                                                                 id={`stats-${index}`}

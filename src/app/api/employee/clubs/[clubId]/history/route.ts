@@ -156,13 +156,21 @@ export async function GET(
         // 4. Calculate monthly metrics for KPI scaling
         const finishedShifts = currentShiftsRaw.rows.filter(s => s.status !== 'ACTIVE');
         const monthlyMetrics: Record<string, number> = { total_revenue: 0, total_hours: 0 };
+        const customMetricsAgg: Record<string, number> = {};
+
         finishedShifts.forEach(s => {
             monthlyMetrics.total_revenue += calculateShiftRevenue(s);
             monthlyMetrics.total_hours += parseFloat(s.total_hours || 0);
             if (s.report_data) {
                 const data = typeof s.report_data === 'string' ? JSON.parse(s.report_data) : s.report_data;
                 Object.keys(data).forEach(key => {
-                    monthlyMetrics[key] = (monthlyMetrics[key] || 0) + parseFloat(data[key] || 0);
+                    const val = parseFloat(data[key] || 0);
+                    monthlyMetrics[key] = (monthlyMetrics[key] || 0) + val;
+
+                    // Aggregate for custom metrics summary
+                    if (metricCategories[key] && metricCategories[key] !== 'EXPENSE') {
+                        customMetricsAgg[key] = (customMetricsAgg[key] || 0) + val;
+                    }
                 });
             }
         });
@@ -260,10 +268,21 @@ export async function GET(
             return acc;
         }, { earnings: 0, hours: 0, revenue: 0 });
 
+        const prevCustomMetrics: Record<string, number> = {};
         const prevStats = prevRes.rows.reduce((acc, s) => {
             acc.earnings += parseFloat(s.earnings || 0);
             acc.hours += parseFloat(s.total_hours || 0);
             acc.revenue += calculateShiftRevenue(s);
+
+            if (s.report_data) {
+                const data = typeof s.report_data === 'string' ? JSON.parse(s.report_data) : s.report_data;
+                Object.keys(data).forEach(key => {
+                    if (metricCategories[key] && metricCategories[key] !== 'EXPENSE') {
+                        prevCustomMetrics[key] = (prevCustomMetrics[key] || 0) + parseFloat(data[key] || 0);
+                    }
+                });
+            }
+
             return acc;
         }, { earnings: 0, hours: 0, revenue: 0 });
 
@@ -272,12 +291,25 @@ export async function GET(
             return ((curr - prev) / prev) * 100;
         };
 
-        const summary = {
+        const summary: any = {
             earnings: { value: currentStats.earnings, diff: compare(currentStats.earnings, prevStats.earnings) },
             hours: { value: currentStats.hours, diff: compare(currentStats.hours, prevStats.hours) },
             revenue: { value: currentStats.revenue, diff: compare(currentStats.revenue, prevStats.revenue) },
-            shifts_count: { value: currentShiftsRaw.rowCount, diff: compare(currentShiftsRaw.rowCount || 0, prevRes.rowCount || 0) }
+            shifts_count: { value: currentShiftsRaw.rowCount, diff: compare(currentShiftsRaw.rowCount || 0, prevRes.rowCount || 0) },
+            custom_metrics: {}
         };
+
+        // Populate custom metrics diffs
+        Object.keys(metricCategories).forEach(key => {
+            if (metricCategories[key] !== 'EXPENSE') {
+                const curr = customMetricsAgg[key] || 0;
+                const prev = prevCustomMetrics[key] || 0;
+                summary.custom_metrics[key] = {
+                    value: curr,
+                    diff: compare(curr, prev)
+                };
+            }
+        });
 
         // Prepare metadata for frontend
         const metricMetadata: Record<string, any> = {};
