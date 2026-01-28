@@ -4,7 +4,7 @@
 -- =====================================================
 -- 1. WORKPLACES (club_workstations)
 -- =====================================================
--- Create table if not exists
+-- Create table if not exists (defines the schema for new installations)
 CREATE TABLE IF NOT EXISTS club_workstations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     club_id INTEGER REFERENCES clubs(id) ON DELETE CASCADE,
@@ -15,6 +15,17 @@ CREATE TABLE IF NOT EXISTS club_workstations (
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Ensure missing columns exist if the table was created by a previous migration
+DO $$ 
+BEGIN 
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='club_workstations' AND column_name='type') THEN
+        ALTER TABLE club_workstations ADD COLUMN type TEXT DEFAULT 'PC';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='club_workstations' AND column_name='description') THEN
+        ALTER TABLE club_workstations ADD COLUMN description TEXT;
+    END IF;
+END $$;
 
 -- Create index for club filtering
 CREATE INDEX IF NOT EXISTS idx_workstations_club_id ON club_workstations(club_id);
