@@ -232,6 +232,20 @@ export async function GET(
                 monthlyMetrics['evaluation_count'] = empEval.count;
             }
 
+            // Fetch maintenance bonuses for this month
+            const maintenanceRes = await query(
+                `SELECT COALESCE(SUM(bonus_earned), 0) as total_maintenance_bonus
+                 FROM equipment_maintenance_tasks mt
+                 JOIN equipment e ON mt.equipment_id = e.id
+                 WHERE e.club_id = $1 AND mt.completed_by = $2 
+                   AND mt.completed_at >= $3 AND mt.completed_at <= $4
+                   AND mt.status = 'COMPLETED'`,
+                [clubId, emp.id, startOfMonth.toISOString(), endOfMonth.toISOString()]
+            );
+            const totalMaintenanceBonus = parseFloat(maintenanceRes.rows[0]?.total_maintenance_bonus || 0);
+
+            monthlyMetrics['maintenance_bonus'] = totalMaintenanceBonus;
+
             const shifts_count = finishedShifts.length;
             const planned_shifts = empPlannedShifts?.planned_shifts || 20;
             const hasPaidSnapshot = empShifts.some((s: any) => s.salary_snapshot?.paid_at);

@@ -149,6 +149,18 @@ export async function calculateSalary(
         }
     }
 
+    // 4. Equipment Maintenance & Issue Bonuses
+    if (reportMetrics['maintenance_bonus'] && reportMetrics['maintenance_bonus'] > 0) {
+        const amount = parseFloat(reportMetrics['maintenance_bonus'].toFixed(2));
+        breakdown.bonuses.push({
+            name: 'Обслуживание оборудования',
+            type: 'EQUIPMENT_MAINTENANCE',
+            amount: amount,
+            source_key: 'maintenance_bonus'
+        });
+        total += amount;
+    }
+
     breakdown.total = parseFloat(total.toFixed(2));
 
     return {

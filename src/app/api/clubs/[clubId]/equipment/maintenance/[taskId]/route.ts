@@ -1,0 +1,181 @@
+import { NextResponse } from 'next/server';
+import { query } from '@/db';
+import { cookies } from 'next/headers';
+
+// PATCH - Update/complete maintenance task
+export async function PATCH(
+    request: Request,
+    { params }: { params: Promise<{ clubId: string; taskId: string }> }
+) {
+    try {
+        const userId = (await cookies()).get('session_user_id')?.value;
+        const { clubId, taskId } = await params;
+        const body = await request.json();
+
+        if (!userId) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
+        // Verify access
+        const accessCheck = await query(
+            `SELECT 1 FROM clubs WHERE id = $1 AND owner_id = $2
+             UNION
+             SELECT 1 FROM club_employees WHERE club_id = $1 AND user_id = $2`,
+            [clubId, userId]
+        );
+
+        if ((accessCheck.rowCount || 0) === 0) {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+
+        // Verify task belongs to club
+        const taskCheck = await query(
+            `SELECT mt.*, e.id as equipment_id 
+             FROM equipment_maintenance_tasks mt
+             JOIN equipment e ON mt.equipment_id = e.id
+             WHERE mt.id = $1 AND e.club_id = $2`,
+            [taskId, clubId]
+        );
+
+        if ((taskCheck.rowCount || 0) === 0) {
+            return NextResponse.json({ error: 'Task not found' }, { status: 404 });
+        }
+
+        const { status, assigned_user_id, notes, claim } = body;
+
+        const updates: string[] = [];
+        const values: any[] = [];
+        let paramIndex = 1;
+
+        // "Claim" action - employee takes the task
+        if (claim === true) {
+            updates.push(`assigned_user_id = $${paramIndex}`);
+            values.push(userId);
+            paramIndex++;
+
+            updates.push(`status = 'IN_PROGRESS'`);
+        } else {
+            if (status !== undefined) {
+                updates.push(`status = $${paramIndex}`);
+                values.push(status);
+                paramIndex++;
+
+                // If completing, set completed_by, completed_at, and update equipment's last_cleaned_at
+                if (status === 'COMPLETED') {
+                    updates.push(`completed_by = $${paramIndex}`);
+                    values.push(userId);
+                    paramIndex++;
+
+                    updates.push(`completed_at = CURRENT_TIMESTAMP`);
+
+                    // Also update equipment's last_cleaned_at if this is a cleaning task
+                    const task = taskCheck.rows[0];
+                    if (task.task_type === 'CLEANING') {
+                        await query(
+                            `UPDATE equipment SET last_cleaned_at = CURRENT_TIMESTAMP WHERE id = $1`,
+                            [task.equipment_id]
+                        );
+                    }
+
+                    // Calculate KPI bonus
+                    const kpiConfig = await query(
+                        `SELECT * FROM maintenance_kpi_config WHERE club_id = $1`,
+                        [clubId]
+                    );
+
+                    if (kpiConfig.rows[0]?.enabled) {
+                        const config = kpiConfig.rows[0];
+                        const dueDate = new Date(task.due_date);
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
+
+                        const isOnTime = today <= dueDate;
+                        const multiplier = isOnTime ?
+                            parseFloat(config.on_time_multiplier) :
+                            parseFloat(config.late_penalty_multiplier);
+
+                        const points = task.kpi_points || config.points_per_cleaning || 1;
+                        const bonus = points * parseFloat(config.bonus_per_point) * multiplier;
+
+                        updates.push(`bonus_earned = $${paramIndex}`);
+                        values.push(bonus);
+                        paramIndex++;
+                    }
+                }
+            }
+
+            if (assigned_user_id !== undefined) {
+                updates.push(`assigned_user_id = $${paramIndex}`);
+                values.push(assigned_user_id === '' ? null : assigned_user_id);
+                paramIndex++;
+            }
+
+            if (notes !== undefined) {
+                updates.push(`notes = $${paramIndex}`);
+                values.push(notes);
+                paramIndex++;
+            }
+        }
+
+        if (updates.length === 0) {
+            return NextResponse.json({ error: 'No fields to update' }, { status: 400 });
+        }
+
+        values.push(taskId);
+
+        const result = await query(
+            `UPDATE equipment_maintenance_tasks 
+             SET ${updates.join(', ')}
+             WHERE id = $${paramIndex}
+             RETURNING *`,
+            values
+        );
+
+        return NextResponse.json(result.rows[0]);
+    } catch (error) {
+        console.error('Update Maintenance Task Error:', error);
+        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    }
+}
+
+// DELETE - Delete maintenance task
+export async function DELETE(
+    request: Request,
+    { params }: { params: Promise<{ clubId: string; taskId: string }> }
+) {
+    try {
+        const userId = (await cookies()).get('session_user_id')?.value;
+        const { clubId, taskId } = await params;
+
+        if (!userId) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
+        // Verify ownership
+        const ownerCheck = await query(
+            `SELECT 1 FROM clubs WHERE id = $1 AND owner_id = $2`,
+            [clubId, userId]
+        );
+
+        if ((ownerCheck.rowCount || 0) === 0) {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+
+        const result = await query(
+            `DELETE FROM equipment_maintenance_tasks mt
+             USING equipment e
+             WHERE mt.equipment_id = e.id AND mt.id = $1 AND e.club_id = $2
+             RETURNING mt.id`,
+            [taskId, clubId]
+        );
+
+        if (result.rowCount === 0) {
+            return NextResponse.json({ error: 'Task not found' }, { status: 404 });
+        }
+
+        return NextResponse.json({ success: true });
+    } catch (error) {
+        console.error('Delete Maintenance Task Error:', error);
+        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    }
+}
