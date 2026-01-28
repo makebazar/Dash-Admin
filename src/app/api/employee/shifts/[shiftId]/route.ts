@@ -99,16 +99,16 @@ export async function PATCH(
         // End shift and save report
         await query(
             `UPDATE shifts 
-       SET check_out = $8,
-           total_hours = $9,
+       SET check_out = NOW(),
+           total_hours = $8,
            report_data = $1,
            template_id = $2,
            cash_income = $3,
            card_income = $4,
            expenses = $5,
            report_comment = $6,
-           calculated_salary = $10,
-           salary_breakdown = $11
+           calculated_salary = $9,
+           salary_breakdown = $10
        WHERE id = $7`,
             [
                 JSON.stringify(reportData),
@@ -118,10 +118,10 @@ export async function PATCH(
                 expenses,
                 comment,
                 shiftId,
-                now, // $8 check_out
-                totalHours.toFixed(2), // $9 total_hours
-                calculatedSalary, // $10
-                JSON.stringify(salaryBreakdown) // $11
+                // check_out handled by NOW()
+                totalHours.toFixed(2), // $8 total_hours
+                calculatedSalary, // $9
+                JSON.stringify(salaryBreakdown) // $10
             ]
         );
 
