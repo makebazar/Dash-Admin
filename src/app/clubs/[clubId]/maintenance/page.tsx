@@ -41,77 +41,61 @@ interface Employee {
 const MaintenanceRow = memo(({
     task,
     employees,
-    onAssign,
-    formatCurrency
+    onAssign
 }: {
     task: MaintenanceTask,
     employees: Employee[],
-    onAssign: (taskId: string, userId: string) => void,
-    formatCurrency?: (val: number) => string
+    onAssign: (taskId: string, userId: string) => void
 }) => {
+    const isCompleted = task.status === 'COMPLETED';
+
     return (
-        <tr className="hover:bg-muted/40 transition-colors group">
-            <td className="p-5">
-                <div className="flex items-center gap-4">
-                    <div className={cn(
-                        "p-2.5 rounded-xl transition-all",
-                        task.status === 'COMPLETED' ? "bg-green-100 text-green-600" : "bg-primary/5 text-primary"
-                    )}>
-                        <Monitor className="h-5 w-5" />
+        <tr className="hover:bg-accent">
+            <td className="p-4">
+                <div className="flex items-center gap-3">
+                    <div className={isCompleted ? "bg-green-100 p-2 rounded-lg" : "bg-muted p-2 rounded-lg"}>
+                        <Monitor className={cn("h-4 w-4", isCompleted ? "text-green-600" : "text-primary")} />
                     </div>
                     <div>
-                        <p className="font-black text-base">{task.workstation_name}</p>
-                        <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-tighter">
-                            Workstation ID: {task.workstation_id.slice(0, 8)}
-                        </p>
+                        <p className="font-semibold text-sm">{task.workstation_name}</p>
+                        <p className="text-xs text-muted-foreground">ID: {task.workstation_id.slice(0, 8)}</p>
                     </div>
                 </div>
             </td>
-            <td className="p-5">
-                <Badge variant="outline" className="bg-muted/50 font-bold border-none capitalize">{task.zone}</Badge>
+            <td className="p-4">
+                <span className="inline-block px-2 py-1 text-xs font-medium bg-muted rounded">{task.zone}</span>
             </td>
-            <td className="p-5">
-                <div className="relative max-w-[220px]">
-                    <select
-                        className="w-full appearance-none bg-background border rounded-xl px-4 py-2 text-xs font-bold focus:outline-none focus:ring-2 ring-primary/20 cursor-pointer shadow-sm hover:border-primary/50 transition-all pr-8"
-                        value={task.assigned_user_id || ''}
-                        onChange={(e) => onAssign(task.id, e.target.value)}
-                    >
-                        <option value="">🚫 Не назначен</option>
-                        {employees.map(emp => (
-                            <option key={emp.id} value={emp.id}>👤 {emp.full_name}</option>
-                        ))}
-                    </select>
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none opacity-40">
-                        <UserPlus className="h-3.5 w-3.5" />
-                    </div>
-                </div>
+            <td className="p-4">
+                <select
+                    className="w-full max-w-[200px] bg-background border rounded-lg px-3 py-1.5 text-xs font-medium cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    value={task.assigned_user_id || ''}
+                    onChange={(e) => onAssign(task.id, e.target.value)}
+                >
+                    <option value="">🚫 Не назначен</option>
+                    {employees.map(emp => (
+                        <option key={emp.id} value={emp.id}>👤 {emp.full_name}</option>
+                    ))}
+                </select>
             </td>
-            <td className="p-5">
-                {task.status === 'COMPLETED' ? (
-                    <div className="flex items-center gap-1.5 text-green-600 font-bold px-3 py-1 bg-green-50 rounded-full w-fit border border-green-100">
-                        <CheckCircle2 className="h-4 w-4" />
-                        <span className="text-[11px] uppercase tracking-wider">Завершено</span>
-                    </div>
+            <td className="p-4">
+                {isCompleted ? (
+                    <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 bg-green-50 px-2 py-1 rounded">
+                        <CheckCircle2 className="h-3.5 w-3.5" /> Готово
+                    </span>
                 ) : (
-                    <div className="flex items-center gap-1.5 text-amber-600 font-bold px-3 py-1 bg-amber-50 rounded-full w-fit border border-amber-100">
-                        <Clock className="h-4 w-4" />
-                        <span className="text-[11px] uppercase tracking-wider">В работе</span>
-                    </div>
+                    <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-700 bg-amber-50 px-2 py-1 rounded">
+                        <Clock className="h-3.5 w-3.5" /> В работе
+                    </span>
                 )}
             </td>
-            <td className="p-5 text-right">
+            <td className="p-4 text-right text-sm">
                 {task.completed_at ? (
-                    <div className="flex flex-col items-end">
-                        <span className="font-black text-foreground">
-                            {new Date(task.completed_at).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })}
-                        </span>
-                        <span className="text-[10px] text-muted-foreground font-medium">
-                            {new Date(task.completed_at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
-                        </span>
+                    <div className="text-xs">
+                        <div className="font-medium">{new Date(task.completed_at).toLocaleDateString('ru-RU')}</div>
+                        <div className="text-muted-foreground">{new Date(task.completed_at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</div>
                     </div>
                 ) : (
-                    <span className="text-muted-foreground italic font-medium opacity-40">—</span>
+                    <span className="text-muted-foreground">—</span>
                 )}
             </td>
         </tr>
@@ -271,11 +255,11 @@ export default function MaintenanceDashboard() {
                                 </Button>
                             ) : (
                                 <>
-                                    <div className="bg-background/80 backdrop-blur-sm p-4 rounded-2xl border shadow-sm text-center min-w-[140px]">
+                                    <div className="bg-background p-4 rounded-2xl border shadow-sm text-center min-w-[140px]">
                                         <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest mb-1">Осталось ПК</p>
                                         <p className="text-3xl font-black">{tasks.length - stats.completedCount}</p>
                                     </div>
-                                    <div className="bg-background/80 backdrop-blur-sm p-4 rounded-2xl border shadow-sm text-center min-w-[140px]">
+                                    <div className="bg-background p-4 rounded-2xl border shadow-sm text-center min-w-[140px]">
                                         <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest mb-1">Без админа</p>
                                         <p className="text-3xl font-black text-amber-500">{stats.unassignedCount}</p>
                                     </div>
@@ -297,7 +281,7 @@ export default function MaintenanceDashboard() {
                     </div>
                 </div>
 
-                <div className="rounded-2xl border bg-card/50 backdrop-blur-sm shadow-xl shadow-foreground/5 overflow-hidden">
+                <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
                     <div className="overflow-x-auto">
                         <table className="w-full text-sm">
                             <thead className="bg-muted/50 border-b">
