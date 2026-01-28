@@ -82,7 +82,12 @@ export function KpiOverview({
                             </div>
                             <div>
                                 <p className="text-xs text-white/50 uppercase tracking-wider font-bold">{kpi.name || 'KPI'}</p>
-                                <p className="text-sm text-purple-400 font-medium">{nextThreshold.label} • {nextThreshold.percent}%</p>
+                                <p className="text-sm text-purple-400 font-medium">
+                                    {currentAchievedLevel
+                                        ? `${currentAchievedLevel.label} ${currentAchievedLevel.percent}% → ${nextThreshold.label} ${nextThreshold.percent}%`
+                                        : `Следующая цель: ${nextThreshold.label} ${nextThreshold.percent}%`
+                                    }
+                                </p>
                             </div>
                         </div>
                         <div className="text-right">
@@ -90,6 +95,17 @@ export function KpiOverview({
                             <p className="text-lg font-bold">{remainingShifts} {remainingShifts === 1 ? 'смена' : remainingShifts < 5 ? 'смены' : 'смен'}</p>
                         </div>
                     </div>
+
+                    {/* Current Level Indicator */}
+                    {currentAchievedLevel && (
+                        <div className="flex justify-center mb-4">
+                            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-500/20 border border-emerald-500/30">
+                                <span className="text-xs font-bold text-emerald-400">
+                                    ✓ Ваш уровень: {currentAchievedLevel.label} {currentAchievedLevel.percent}%
+                                </span>
+                            </div>
+                        </div>
+                    )}
 
                     {/* Main Target */}
                     <div className="text-center space-y-4">
@@ -229,10 +245,19 @@ export function KpiOverview({
                                                 )}>
                                                     {isCompleted ? "✓" : level.level}
                                                 </div>
-                                                <div>
+                                                <div className="flex-1">
                                                     <p className="font-bold text-sm">{level.label}</p>
-                                                    <p className="text-xs text-muted-foreground">
-                                                        {formatCurrency(level.scaled_threshold)} за {shiftsCount} смен
+
+                                                    {/* Месячный план */}
+                                                    <p className="text-xs text-muted-foreground mt-1">
+                                                        План на месяц: {formatCurrency(level.monthly_threshold)} за {plannedShifts} смен
+                                                    </p>
+
+                                                    {/* Актуальный порог для закрытых смен */}
+                                                    <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
+                                                        Пройдено {shiftsCount} смен: {formatCurrency(level.scaled_threshold)}
+                                                        {isCompleted && ' ✓'}
+                                                        {isNext && level.remaining_total > 0 && ` (еще ${formatCurrency(level.remaining_total)})`}
                                                     </p>
                                                 </div>
                                             </div>
