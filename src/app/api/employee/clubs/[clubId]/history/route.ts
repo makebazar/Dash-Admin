@@ -9,9 +9,40 @@ export async function GET(
 ) {
     try {
         const { searchParams } = new URL(request.url);
-        const now = new Date();
-        const month = parseInt(searchParams.get('month') || (now.getMonth() + 1).toString());
-        const year = parseInt(searchParams.get('year') || now.getFullYear().toString());
+
+        let startOfMonth: Date;
+        let endOfMonth: Date;
+        let prevStart: Date;
+        let prevEnd: Date;
+
+        const startDateParam = searchParams.get('startDate');
+        const endDateParam = searchParams.get('endDate');
+
+        if (startDateParam && endDateParam) {
+            startOfMonth = new Date(startDateParam);
+            // Check if end date has time component, if not add end of day
+            endOfMonth = new Date(endDateParam);
+            if (endDateParam.length === 10) { // YYYY-MM-DD
+                endOfMonth.setHours(23, 59, 59, 999);
+            }
+
+            // Calculate previous period (shift back 1 month)
+            prevStart = new Date(startOfMonth);
+            prevStart.setMonth(prevStart.getMonth() - 1);
+
+            prevEnd = new Date(endOfMonth);
+            prevEnd.setMonth(prevEnd.getMonth() - 1);
+        } else {
+            const now = new Date();
+            const month = parseInt(searchParams.get('month') || (now.getMonth() + 1).toString());
+            const year = parseInt(searchParams.get('year') || now.getFullYear().toString());
+
+            startOfMonth = new Date(year, month - 1, 1);
+            endOfMonth = new Date(year, month, 0, 23, 59, 59);
+
+            prevStart = new Date(year, month - 2, 1);
+            prevEnd = new Date(year, month - 1, 0, 23, 59, 59);
+        }
 
         const userId = (await cookies()).get('session_user_id')?.value;
         const { clubId } = await params;
@@ -19,12 +50,6 @@ export async function GET(
         if (!userId) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
-
-        const startOfMonth = new Date(year, month - 1, 1);
-        const endOfMonth = new Date(year, month, 0, 23, 59, 59);
-
-        const prevStart = new Date(year, month - 2, 1);
-        const prevEnd = new Date(year, month - 1, 0, 23, 59, 59);
 
         // 1. Fetch employee's salary scheme and info
         const employeeRes = await query(

@@ -376,8 +376,8 @@ export default function EmployeeShiftHistoryPage() {
                     </CardContent>
                 </Card>
 
-                {/* Dynamic Income Cards */}
-                {customFieldTotals.filter(f => f.field_type === 'INCOME' && f.show_in_stats !== false).map(field => (
+                {/* Dynamic Cards (Income + Other) */}
+                {customFieldTotals.filter(f => f.field_type !== 'EXPENSE' && f.show_in_stats !== false).map(field => (
                     <Card key={field.metric_key} className="overflow-hidden relative border-none bg-cyan-500/5 shadow-none">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
                             <CardTitle className="text-sm font-medium text-cyan-600">{field.custom_label}</CardTitle>
