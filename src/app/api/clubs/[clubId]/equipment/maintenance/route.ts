@@ -13,11 +13,11 @@ export async function GET(
         const { searchParams } = new URL(request.url);
 
         const status = searchParams.get('status');
-        const assignedTo = searchParams.get('assigned_to');
+        const assignedTo = searchParams.get('assigned_to') || searchParams.get('assigned');
         const equipmentId = searchParams.get('equipment_id');
         const dateFrom = searchParams.get('date_from');
         const dateTo = searchParams.get('date_to');
-        const myTasks = searchParams.get('my_tasks') === 'true';
+        const myTasks = searchParams.get('my_tasks') === 'true' || assignedTo === 'me';
 
         if (!userId) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -72,8 +72,14 @@ export async function GET(
         }
 
         if (status) {
-            sql += ` AND mt.status = $${paramIndex}`;
-            queryParams.push(status);
+            const statusList = status.split(',');
+            if (statusList.length > 1) {
+                sql += ` AND mt.status = ANY($${paramIndex})`;
+                queryParams.push(statusList);
+            } else {
+                sql += ` AND mt.status = $${paramIndex}`;
+                queryParams.push(status);
+            }
             paramIndex++;
         }
 

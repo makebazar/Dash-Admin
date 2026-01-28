@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import {
     Clock, Loader2, LogIn, LogOut, Wallet, Activity, Calendar,
-    TrendingUp, Target, Zap, ChevronRight, Trophy
+    TrendingUp, Target, Zap, ChevronRight, Trophy, Brush
 } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -66,6 +66,7 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
     const [kpiData, setKpiData] = useState<any>(null)
     const [isLoading, setIsLoading] = useState(true)
     const [isActionLoading, setIsActionLoading] = useState(false)
+    const [pendingTasksCount, setPendingTasksCount] = useState(0)
 
     // Indicators Modal State
     const [isIndicatorsModalOpen, setIsIndicatorsModalOpen] = useState(false)
@@ -141,6 +142,13 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
             const reportJson = await reportRes.json()
             if (reportRes.ok && reportJson.currentTemplate) {
                 setReportTemplate(reportJson.currentTemplate)
+            }
+
+            // Fetch pending maintenance tasks count
+            const tasksRes = await fetch(`/api/clubs/${id}/equipment/maintenance?assigned=me&status=PENDING,IN_PROGRESS`)
+            const tasksData = await tasksRes.json()
+            if (tasksRes.ok) {
+                setPendingTasksCount(tasksData.total || 0)
             }
 
         } catch (error) {
@@ -424,6 +432,43 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
 
                     {/* Stats Column */}
                     <div className="space-y-4">
+                        {/* Maintenance Tasks */}
+                        <Link href={`/employee/clubs/${clubId}/tasks`}>
+                            <Card className={cn(
+                                "border-0 shadow-lg transition-all hover:scale-[1.02] active:scale-[0.98]",
+                                pendingTasksCount > 0
+                                    ? "bg-gradient-to-br from-amber-500 to-orange-600 text-white"
+                                    : "bg-white dark:bg-slate-800/50 backdrop-blur"
+                            )}>
+                                <CardContent className="pt-6">
+                                    <div className="flex items-start justify-between">
+                                        <div>
+                                            <p className={cn(
+                                                "text-sm font-medium",
+                                                pendingTasksCount > 0 ? "text-white/80" : "text-muted-foreground"
+                                            )}>Задачи по обслуживанию</p>
+                                            <p className="text-3xl font-bold mt-1">{pendingTasksCount} задач</p>
+                                            <p className={cn(
+                                                "text-sm mt-1",
+                                                pendingTasksCount > 0 ? "text-white/70" : "text-emerald-500 font-medium"
+                                            )}>
+                                                {pendingTasksCount > 0 ? "Требуют внимания" : "Все оборудование чистое"}
+                                            </p>
+                                        </div>
+                                        <div className={cn(
+                                            "p-3 rounded-xl",
+                                            pendingTasksCount > 0 ? "bg-white/20" : "bg-amber-500/10"
+                                        )}>
+                                            <Brush className={cn(
+                                                "h-6 w-6",
+                                                pendingTasksCount > 0 ? "text-white" : "text-amber-500"
+                                            )} />
+                                        </div>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        </Link>
+
                         {/* Today */}
                         <Card className="border-0 shadow-lg bg-white dark:bg-slate-800/50 backdrop-blur">
                             <CardContent className="pt-6">
