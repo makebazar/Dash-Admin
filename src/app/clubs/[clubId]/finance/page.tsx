@@ -10,6 +10,9 @@ import {
     Percent, Target, Clock, ChevronLeft, ChevronRight
 } from "lucide-react"
 import { useParams } from 'next/navigation'
+import TransactionList from '@/components/finance/TransactionList'
+import RecurringPayments from '@/components/finance/RecurringPayments'
+import FinanceReports from '@/components/finance/FinanceReports'
 
 interface FinanceStats {
     total_income: number
@@ -347,51 +350,31 @@ export default function FinancePage() {
                 </TabsContent>
 
                 <TabsContent value="transactions">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Транзакции</CardTitle>
-                            <CardDescription>В разработке</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <p className="text-muted-foreground">Компонент управления транзакциями...</p>
-                        </CardContent>
-                    </Card>
+                    <TransactionList clubId={clubId} />
                 </TabsContent>
 
                 <TabsContent value="recurring">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Повторяющиеся платежи</CardTitle>
-                            <CardDescription>В разработке</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <p className="text-muted-foreground">Компонент управления повторяющимися платежами...</p>
-                        </CardContent>
-                    </Card>
+                    <RecurringPayments clubId={clubId} />
                 </TabsContent>
 
                 <TabsContent value="credits">
                     <Card>
                         <CardHeader>
-                            <CardTitle>Кредиты</CardTitle>
-                            <CardDescription>В разработке</CardDescription>
+                            <CardTitle>Кредиты и займы</CardTitle>
+                            <CardDescription>Отслеживание долговых обязательств</CardDescription>
                         </CardHeader>
                         <CardContent>
-                            <p className="text-muted-foreground">Компонент управления кредитами...</p>
+                            <p className="text-muted-foreground text-center py-8">
+                                Функционал управления кредитами будет добавлен в следующей версии.
+                                <br />
+                                <span className="text-xs">(Таблица finance_credits уже создана в БД)</span>
+                            </p>
                         </CardContent>
                     </Card>
                 </TabsContent>
 
                 <TabsContent value="reports">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Отчеты</CardTitle>
-                            <CardDescription>В разработке</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <p className="text-muted-foreground">Компонент отчетов и экспорта...</p>
-                        </CardContent>
-                    </Card>
+                    <FinanceReports clubId={clubId} />
                 </TabsContent>
             </Tabs>
         </div>
