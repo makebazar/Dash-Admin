@@ -195,10 +195,10 @@ export default function ReportBuilderPage({ params }: { params: Promise<{ clubId
                                                     />
                                                 </div>
 
-                                                <div className="flex flex-wrap items-center justify-between gap-4">
+                                                <div className="space-y-4">
                                                     <div className="flex flex-col gap-1.5">
                                                         <Label className="text-[10px] uppercase text-muted-foreground">Категория для расчётов</Label>
-                                                        <div className="flex bg-muted rounded-md p-1 scale-90 origin-left">
+                                                        <div className="flex bg-muted rounded-md p-1 scale-90 origin-left w-fit">
                                                             <button
                                                                 onClick={() => handleUpdateField(index, 'field_type', 'INCOME')}
                                                                 className={`px-3 py-1 text-[10px] font-medium rounded-sm transition-all ${field.field_type === 'INCOME'
@@ -228,11 +228,12 @@ export default function ReportBuilderPage({ params }: { params: Promise<{ clubId
                                                             </button>
                                                         </div>
                                                     </div>
-                                                    <div className="flex items-center gap-6">
-                                                        <div className="flex items-center gap-2">
-                                                            <div className="flex flex-col text-right">
+
+                                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t pt-4 border-foreground/5">
+                                                        <div className="flex items-center justify-between gap-2">
+                                                            <div className="flex flex-col">
                                                                 <Label htmlFor={`emp-${index}`} className="text-sm">Сотруднику</Label>
-                                                                <span className="text-[10px] text-muted-foreground whitespace-nowrap">Показывать в истории</span>
+                                                                <span className="text-[10px] text-muted-foreground">Показывать в истории</span>
                                                             </div>
                                                             <Switch
                                                                 id={`emp-${index}`}
@@ -240,10 +241,11 @@ export default function ReportBuilderPage({ params }: { params: Promise<{ clubId
                                                                 onCheckedChange={(checked) => handleUpdateField(index, 'show_for_employee', checked)}
                                                             />
                                                         </div>
-                                                        <div className="flex items-center gap-2 border-l pl-6 border-foreground/10">
-                                                            <div className="flex flex-col text-right">
+
+                                                        <div className="flex items-center justify-between gap-2">
+                                                            <div className="flex flex-col">
                                                                 <Label htmlFor={`stats-${index}`} className="text-sm">В сводке</Label>
-                                                                <span className="text-[10px] text-muted-foreground whitespace-nowrap">Показывать в админке</span>
+                                                                <span className="text-[10px] text-muted-foreground">Показывать в админке</span>
                                                             </div>
                                                             <Switch
                                                                 id={`stats-${index}`}
@@ -251,8 +253,9 @@ export default function ReportBuilderPage({ params }: { params: Promise<{ clubId
                                                                 onCheckedChange={(checked) => handleUpdateField(index, 'show_in_stats', checked)}
                                                             />
                                                         </div>
-                                                        <div className="flex items-center gap-2 border-l pl-6 border-foreground/10">
-                                                            <Label htmlFor={`req-${index}`} className="text-sm">Обязательно</Label>
+
+                                                        <div className="flex items-center justify-between gap-2 sm:col-span-2">
+                                                            <Label htmlFor={`req-${index}`} className="text-sm">Обязательное поле</Label>
                                                             <Switch
                                                                 id={`req-${index}`}
                                                                 checked={field.is_required}
