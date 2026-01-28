@@ -17,7 +17,8 @@ import {
     Building2,
     Briefcase,
     FileText,
-    Calendar
+    Calendar,
+    Wrench
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -58,6 +59,7 @@ export function ClubSidebar({ clubId }: ClubSidebarProps) {
         { href: `/clubs/${clubId}/salaries`, label: 'Зарплаты', icon: <Wallet className="h-4 w-4" /> },
         { href: `/clubs/${clubId}/finance`, label: 'Финансы', icon: <DollarSign className="h-4 w-4" /> },
         { href: `/clubs/${clubId}/inventory`, label: 'Склад', icon: <Package className="h-4 w-4" /> },
+        { href: `/clubs/${clubId}/maintenance`, label: 'Обслуживание ПК', icon: <Wrench className="h-4 w-4" /> },
     ]
 
     const settingsLinks = [

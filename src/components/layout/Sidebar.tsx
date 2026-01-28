@@ -63,18 +63,6 @@ export function Sidebar({ clubs }: SidebarProps) {
                                             <Building2 className="h-4 w-4" />
                                             <span className="truncate">{club.name}</span>
                                         </Link>
-                                        <Link
-                                            href={`/clubs/${club.id}/maintenance`}
-                                            className={cn(
-                                                "flex items-center gap-3 rounded-lg px-8 py-2 text-xs transition-colors shadow-sm",
-                                                pathname.startsWith(`/clubs/${club.id}/maintenance`)
-                                                    ? "bg-primary/10 text-primary font-bold"
-                                                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                                            )}
-                                        >
-                                            <Settings className="h-3 w-3" />
-                                            <span>Обслуживание ПК</span>
-                                        </Link>
                                     </div>
                                 ))}
                             </div>
