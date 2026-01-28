@@ -35,13 +35,14 @@ export default function EmployeeShiftHistoryPage() {
     const [isLoading, setIsLoading] = useState(true)
     const [selectedShift, setSelectedShift] = useState<Shift | null>(null)
 
-    // Date filter state
+    // Date filter state. Default to current month ('0')
     const [filterStartDate, setFilterStartDate] = useState('')
     const [filterEndDate, setFilterEndDate] = useState('')
-    const [selectedMonth, setSelectedMonth] = useState<string>('')
+    const [selectedMonth, setSelectedMonth] = useState<string>('0')
 
     const [reportFields, setReportFields] = useState<any[]>([])
     const [clubTimezone, setClubTimezone] = useState('Europe/Moscow')
+    const [summary, setSummary] = useState<any>(null)
 
     // Sort state
     const [sortBy, setSortBy] = useState<string>('check_in')
@@ -50,40 +51,33 @@ export default function EmployeeShiftHistoryPage() {
     const fetchShifts = useCallback(async (startDate?: string, endDate?: string) => {
         setIsLoading(true)
         try {
-            // Use the EMPLOYEE history API, but map parameters
-            // API expects month/year or date range. 
-            // The owner page uses startDate/endDate.
-            // My employee history API supports month/year.
-            // Let's modify the filtering logic slightly or adapt the API call.
-            // If explicit dates are provided:
             let url = `/api/employee/clubs/${clubId}/history`
             const queryParams = new URLSearchParams()
 
+            // If explicit dates provided (usually from manual date picker)
             if (startDate && endDate) {
-                // If the API supports startDate/endDate, great. If not, we might need to rely on the month param if the user selected a month.
-                // Looking at previous tools, the API took month/year.
-                // However, the owner view uses handleMonthSelect which sets start/end dates.
-                // I will append them and hope/ensure the API handles them or I will just pass the month if selected.
                 queryParams.append('startDate', startDate)
                 queryParams.append('endDate', endDate)
             } else if (selectedMonth) {
-                // Fallback if startDate/endDate logic is different
-            } else {
-                // Default to current month or similar?
-                // The owner view default is blank and fetches all? Or paginated?
-                // The owner view `fetchShifts` appends startDate/endDate if present.
+                // The API supports month param which defaults to current if missing.
+                // We pass month param if needed, but since our API handles 'month' query param:
+                // "const month = parseInt(searchParams.get('month') || (now.getMonth() + 1).toString());"
+                // And selectedMonth is offset (0, -1, -2). 
+                // We need to convert offset to actual month number for API or trust API to handle default.
+                // Actually, let's use the startDate/endDate logic derived from month for consistency with backend range query
+                // But wait, the previous code derived dates in handleMonthSelect and passed them.
+                // So if startDate/endDate are present (which handleMonthSelect sets), we use them.
+                // If intrinsic default load (useEffect), we want to ensure startDate/endDate are set correctly or API handles it.
             }
             if (queryParams.toString()) url += '?' + queryParams.toString()
 
             const res = await fetch(url)
             const data = await res.json()
             if (res.ok) {
-                // The API returns { shifts: [], metric_metadata: {} }
                 setShifts(Array.isArray(data.shifts) ? data.shifts : [])
+                setSummary(data.summary || null)
 
-                // Also capture metadata if needed to dynamically build reportFields if not fetched separately
                 if (data.template_fields) {
-                    // Filter out standard keys similar to owner page
                     const standardKeys = ['cash_income', 'card_income', 'expenses_cash', 'shift_comment', 'expenses']
                     const fields = data.template_fields.filter((f: any) =>
                         !standardKeys.includes(f.metric_key) &&
@@ -99,16 +93,51 @@ export default function EmployeeShiftHistoryPage() {
         }
     }, [clubId, selectedMonth])
 
+    const handleMonthSelect = (monthOffset: number) => {
+        const now = new Date()
+        // Calculate target month year/month
+        let year = now.getFullYear()
+        let month = now.getMonth() + monthOffset
+
+        // Handle year wrap
+        const targetDate = new Date(year, month, 1)
+        year = targetDate.getFullYear()
+        month = targetDate.getMonth()
+
+        // Construct local string dates YYYY-MM-DD
+        const pad = (n: number) => n.toString().padStart(2, '0')
+
+        const startStr = `${year}-${pad(month + 1)}-01`
+
+        // End of month
+        const lastDay = new Date(year, month + 1, 0).getDate()
+        const endStr = `${year}-${pad(month + 1)}-${pad(lastDay)}`
+
+        setSelectedMonth(String(monthOffset))
+        setFilterStartDate(startStr)
+        setFilterEndDate(endStr)
+    }
+
+    // Initial load: trigger default month selection to set dates
     useEffect(() => {
-        if (clubId) {
-            fetchShifts(filterStartDate, filterEndDate)
-            fetchClubSettings(clubId)
+        if (selectedMonth === '0' && !filterStartDate) {
+            handleMonthSelect(0)
         }
+    }, [])
+
+    useEffect(() => {
+        if (clubId && filterStartDate && filterEndDate) {
+            fetchShifts(filterStartDate, filterEndDate)
+        } else if (clubId && !filterStartDate) {
+            // Initial/Default load
+            fetchShifts()
+        }
+        fetchClubSettings(clubId)
     }, [clubId, fetchShifts, filterStartDate, filterEndDate])
 
     const fetchClubSettings = async (id: string) => {
         try {
-            const res = await fetch(`/api/clubs/${id}/settings`) // Employee might not have access to full settings, but timezone usually public/shared
+            const res = await fetch(`/api/clubs/${id}/settings`)
             const data = await res.json()
             if (res.ok && data.club?.timezone) {
                 setClubTimezone(data.club.timezone)
@@ -118,29 +147,12 @@ export default function EmployeeShiftHistoryPage() {
         }
     }
 
-    const handleMonthSelect = (monthOffset: number) => {
-        const now = new Date()
-        const targetDate = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1)
-        const startOfMonth = new Date(targetDate.getFullYear(), targetDate.getMonth(), 1)
-        const endOfMonth = new Date(targetDate.getFullYear(), targetDate.getMonth() + 1, 0, 23, 59, 59)
-
-        const formatDate = (d: Date) => d.toISOString().slice(0, 10)
-
-        setSelectedMonth(String(monthOffset))
-        setFilterStartDate(formatDate(startOfMonth))
-        setFilterEndDate(formatDate(endOfMonth))
-        // fetchShifts is triggered by useEffect on date change
-    }
-
     const handleCustomDateFilter = () => {
         setSelectedMonth('')
-        // fetchShifts triggered by state change
     }
 
     const clearFilters = () => {
-        setSelectedMonth('')
-        setFilterStartDate('')
-        setFilterEndDate('')
+        handleMonthSelect(0) // Reset to current month
     }
 
     const getMonthName = (offset: number) => {
@@ -201,7 +213,7 @@ export default function EmployeeShiftHistoryPage() {
         if (aVal === null || aVal === undefined) return 1
         if (bVal === null || bVal === undefined) return -1
 
-        if (['cash_income', 'card_income', 'expenses', 'total_hours'].includes(sortBy)) {
+        if (['cash_income', 'card_income', 'total_hours'].includes(sortBy)) {
             aVal = parseFloat(String(aVal)) || 0
             bVal = parseFloat(String(bVal)) || 0
         }
@@ -211,23 +223,19 @@ export default function EmployeeShiftHistoryPage() {
             bVal = new Date(bVal).getTime()
         }
 
-        if (sortBy === 'employee_name') {
-            // Redundant for single user but kept for code parity consistency
-            aVal = String(aVal).toLowerCase()
-            bVal = String(bVal).toLowerCase()
-        }
-
         if (aVal < bVal) return sortOrder === 'asc' ? -1 : 1
         if (aVal > bVal) return sortOrder === 'asc' ? 1 : -1
         return 0
     })
 
-    // Calculate totals
-    const currentDisplayShifts = shifts // Shifts are already filtered by API/User
+    // Calculate totals for Custom Fields locally for display if needed, 
+    // but we primarily use API summary for the main cards now.
+    const currentDisplayShifts = shifts
     const totalCash = currentDisplayShifts.reduce((sum, s) => sum + (parseFloat(String(s.cash_income)) || 0), 0)
     const totalCard = currentDisplayShifts.reduce((sum, s) => sum + (parseFloat(String(s.card_income)) || 0), 0)
-    const totalExpensesCore = currentDisplayShifts.reduce((sum, s) => sum + (parseFloat(String(s.expenses)) || 0), 0)
+    // Removed expenses calculation
 
+    // Revenue = Cash + Card + Other Incomes
     const customFieldTotals = reportFields.map(field => {
         const total = currentDisplayShifts.reduce((sum, s) => {
             if (s.report_data && s.report_data[field.metric_key]) {
@@ -242,12 +250,18 @@ export default function EmployeeShiftHistoryPage() {
         .filter(f => f.field_type === 'INCOME')
         .reduce((sum, f) => sum + f.total, 0)
 
-    const totalCustomExpenses = customFieldTotals
-        .filter(f => f.field_type === 'EXPENSE')
-        .reduce((sum, f) => sum + f.total, 0)
-
     const totalRevenue = totalCash + totalCard + totalCustomIncome
-    const totalExpenses = totalExpensesCore + totalCustomExpenses
+
+    const renderDiff = (diff?: number) => {
+        if (diff === undefined || diff === null) return null
+        if (diff === 0) return <span className="text-xs text-muted-foreground ml-2">0%</span>
+        const isPositive = diff > 0
+        return (
+            <span className={`text-xs ml-2 font-medium ${isPositive ? 'text-emerald-500' : 'text-red-500'}`}>
+                {isPositive ? '+' : ''}{diff.toFixed(1)}%
+            </span>
+        )
+    }
 
     return (
         <div className="p-8 space-y-8 min-h-screen bg-background">
@@ -286,20 +300,25 @@ export default function EmployeeShiftHistoryPage() {
                             <Input
                                 type="date"
                                 value={filterStartDate}
-                                onChange={e => setFilterStartDate(e.target.value)}
+                                onChange={e => {
+                                    setFilterStartDate(e.target.value)
+                                    handleCustomDateFilter()
+                                }}
                                 className="w-36 h-8"
                             />
                             <span className="text-muted-foreground">—</span>
                             <Input
                                 type="date"
                                 value={filterEndDate}
-                                onChange={e => setFilterEndDate(e.target.value)}
+                                onChange={e => {
+                                    setFilterEndDate(e.target.value)
+                                    handleCustomDateFilter()
+                                }}
                                 className="w-36 h-8"
                             />
-                            {/* Auto-applied via Effect, but button kept for similarity */}
                         </div>
 
-                        {(filterStartDate || filterEndDate || selectedMonth) && (
+                        {(filterStartDate || filterEndDate || selectedMonth !== '0') && (
                             <Button size="sm" variant="ghost" onClick={clearFilters} className="text-muted-foreground">
                                 Сбросить
                             </Button>
@@ -316,8 +335,24 @@ export default function EmployeeShiftHistoryPage() {
                         <Clock className="h-4 w-4 text-purple-500" />
                     </CardHeader>
                     <CardContent className="relative">
-                        <div className="text-3xl font-bold">{shifts.length}</div>
+                        <div className="text-3xl font-bold flex items-baseline">
+                            {shifts.length}
+                            {renderDiff(summary?.shifts_count?.diff)}
+                        </div>
                         <p className="text-xs text-muted-foreground mt-1">за выбранный период</p>
+                    </CardContent>
+                </Card>
+
+                <Card className="overflow-hidden relative border-none bg-indigo-500/5 shadow-none">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
+                        <CardTitle className="text-sm font-medium text-indigo-600">Общая выручка</CardTitle>
+                        <TrendingUp className="h-4 w-4 text-indigo-500" />
+                    </CardHeader>
+                    <CardContent className="relative">
+                        <div className="text-3xl font-bold text-indigo-600 flex items-baseline">
+                            {formatMoney(totalRevenue)}
+                            {renderDiff(summary?.revenue?.diff)}
+                        </div>
                     </CardContent>
                 </Card>
 
@@ -353,53 +388,7 @@ export default function EmployeeShiftHistoryPage() {
                         </CardContent>
                     </Card>
                 ))}
-
-                <Card className="overflow-hidden relative border-none bg-orange-500/5 shadow-none">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
-                        <CardTitle className="text-sm font-medium text-orange-600">Расходы</CardTitle>
-                        <TrendingUp className="h-4 w-4 text-orange-500" />
-                    </CardHeader>
-                    <CardContent className="relative">
-                        <div className="text-3xl font-bold text-orange-500">{formatMoney(totalExpenses)}</div>
-                    </CardContent>
-                </Card>
-
-                {/* Dynamic Expense Cards */}
-                {customFieldTotals.filter(f => f.field_type === 'EXPENSE' && f.show_in_stats !== false).map(field => (
-                    <Card key={field.metric_key} className="overflow-hidden relative border-none bg-red-500/5 shadow-none">
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
-                            <CardTitle className="text-sm font-medium text-red-600">{field.custom_label}</CardTitle>
-                            <TrendingUp className="h-4 w-4 text-red-500" />
-                        </CardHeader>
-                        <CardContent className="relative">
-                            <div className="text-3xl font-bold text-red-600">{formatMoney(field.total || 0)}</div>
-                        </CardContent>
-                    </Card>
-                ))}
             </div>
-
-            {/* Net Revenue */}
-            <Card className="bg-gradient-to-r from-purple-500/20 via-blue-500/20 to-green-500/20 border-none shadow-lg">
-                <CardContent className="py-8">
-                    <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-                        <div>
-                            <p className="text-base font-medium text-muted-foreground mb-1 uppercase tracking-wider">Чистая выручка (ваша)</p>
-                            <p className="text-5xl font-black text-foreground drop-shadow-sm">{formatMoney(totalRevenue - totalExpenses)}</p>
-                        </div>
-                        <div className="flex items-center gap-8 text-sm md:text-base border-l pl-8 border-foreground/10">
-                            <div>
-                                <p className="text-muted-foreground mb-1">Всего доход</p>
-                                <p className="font-bold text-green-600 text-xl">{formatMoney(totalRevenue)}</p>
-                            </div>
-                            <div className="text-xl opacity-20 font-light">—</div>
-                            <div>
-                                <p className="text-muted-foreground mb-1">Всего расходы</p>
-                                <p className="font-bold text-red-600 text-xl">{formatMoney(totalExpenses)}</p>
-                            </div>
-                        </div>
-                    </div>
-                </CardContent>
-            </Card>
 
             {/* Shifts Table */}
             <Card>
@@ -449,15 +438,6 @@ export default function EmployeeShiftHistoryPage() {
                                         <ArrowUpDown className="h-3 w-3" />
                                     </div>
                                 </TableHead>
-                                <TableHead
-                                    className="text-right cursor-pointer hover:bg-muted/50 select-none"
-                                    onClick={() => handleSort('expenses')}
-                                >
-                                    <div className="flex items-center justify-end gap-1">
-                                        Расходы
-                                        <ArrowUpDown className="h-3 w-3" />
-                                    </div>
-                                </TableHead>
                                 {reportFields.map((field: any) => (
                                     <TableHead key={field.metric_key} className="text-right min-w-[100px]">{field.custom_label || field.label || field.metric_key}</TableHead>
                                 ))}
@@ -468,13 +448,13 @@ export default function EmployeeShiftHistoryPage() {
                         <TableBody>
                             {isLoading ? (
                                 <TableRow>
-                                    <TableCell colSpan={9 + reportFields.length} className="text-center py-12">
+                                    <TableCell colSpan={8 + reportFields.length} className="text-center py-12">
                                         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground mx-auto" />
                                     </TableCell>
                                 </TableRow>
                             ) : sortedShifts.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={9 + reportFields.length} className="text-center text-muted-foreground py-12">
+                                    <TableCell colSpan={8 + reportFields.length} className="text-center text-muted-foreground py-12">
                                         <div className="flex flex-col items-center gap-2">
                                             <Clock className="h-8 w-8 opacity-30" />
                                             <p>Смен пока нет</p>
@@ -509,7 +489,6 @@ export default function EmployeeShiftHistoryPage() {
                                     </TableCell>
                                     <TableCell className="text-right font-medium text-green-500 whitespace-nowrap">{formatMoney(shift.cash_income)}</TableCell>
                                     <TableCell className="text-right font-medium text-blue-500 whitespace-nowrap">{formatMoney(shift.card_income)}</TableCell>
-                                    <TableCell className="text-right font-medium text-orange-500 whitespace-nowrap">{formatMoney(shift.expenses)}</TableCell>
                                     {reportFields.map((field: any) => (
                                         <TableCell key={field.metric_key} className="text-right whitespace-nowrap">
                                             {shift.report_data && shift.report_data[field.metric_key] !== undefined
