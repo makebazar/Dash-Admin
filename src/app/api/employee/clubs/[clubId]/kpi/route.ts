@@ -182,7 +182,7 @@ export async function GET(
                     // So we scale the monthly threshold to the TOTAL planned shifts
                     const endOfMonthThreshold = mode === 'SHIFT'
                         ? original_from * planned_shifts
-                        : original_from; // If MONTH mode, the threshold is the original monthly value
+                        : (original_from / standard_monthly_shifts) * planned_shifts; // Scale MONTH threshold for planned shifts
 
                     const totalRemainingToReach = Math.max(0, endOfMonthThreshold - current_value);
 
