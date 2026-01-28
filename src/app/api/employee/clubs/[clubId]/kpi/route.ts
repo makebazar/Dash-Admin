@@ -195,6 +195,7 @@ export async function GET(
                         level: idx + 1,
                         label: t.label,
                         monthly_threshold: original_from,
+                        planned_month_threshold: endOfMonthThreshold,
                         scaled_threshold: scaled_threshold,
                         percent: t.percent || 0,
                         is_met: isThresholdMet,

@@ -62,7 +62,7 @@ export function KpiOverview({
         );
     }
 
-    const progressPercent = Math.min((kpi.current_value / nextThreshold.monthly_threshold) * 100, 100);
+    const progressPercent = Math.min((kpi.current_value / (nextThreshold.planned_month_threshold || nextThreshold.monthly_threshold)) * 100, 100);
     const onTrack = kpi.avg_per_shift >= nextThreshold.per_shift_to_reach;
 
     return (
@@ -165,7 +165,7 @@ export function KpiOverview({
                         </div>
                         <div className="flex justify-between text-xs">
                             <span className="text-white/40">0 ₽</span>
-                            <span className="text-white/40">{formatCurrency(nextThreshold.monthly_threshold)}</span>
+                            <span className="text-white/40">{formatCurrency(nextThreshold.planned_month_threshold || nextThreshold.monthly_threshold)}</span>
                         </div>
                     </div>
 
@@ -250,7 +250,7 @@ export function KpiOverview({
 
                                                     {/* Месячный план */}
                                                     <p className="text-xs text-muted-foreground mt-1">
-                                                        План на месяц: {formatCurrency(level.monthly_threshold)} за {plannedShifts} смен
+                                                        План на месяц: {formatCurrency(level.planned_month_threshold || level.monthly_threshold)} за {plannedShifts} смен
                                                     </p>
 
                                                     {/* Актуальный порог для закрытых смен */}
