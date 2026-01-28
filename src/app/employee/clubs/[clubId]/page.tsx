@@ -499,6 +499,7 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                             shiftsCount={kpiData.shifts_count}
                             plannedShifts={kpiData.planned_shifts}
                             daysRemaining={kpiData.days_remaining}
+                            activeShift={activeShift}
                         />
                     </div>
                 ))}

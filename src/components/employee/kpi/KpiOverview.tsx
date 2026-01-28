@@ -13,6 +13,7 @@ interface KpiOverviewProps {
     shiftsCount: number;
     plannedShifts: number;
     daysRemaining: number;
+    activeShift: any | null;
 }
 
 export function KpiOverview({
@@ -21,11 +22,14 @@ export function KpiOverview({
     remainingShifts,
     shiftsCount,
     plannedShifts,
-    daysRemaining
+    daysRemaining,
+    activeShift
 }: KpiOverviewProps) {
     const [showDetails, setShowDetails] = useState(false);
     const nextThreshold = kpi.all_thresholds?.find((t: any) => !t.is_met);
-    const currentLevel = kpi.all_thresholds?.find((t: any) => t.is_met && (kpi.all_thresholds?.find((x: any) => x.level === t.level + 1 && !x.is_met)));
+    const currentAchievedLevel = kpi.all_thresholds
+        ?.filter((t: any) => t.is_met)
+        ?.sort((a: any, b: any) => b.level - a.level)[0];
     const maxLevel = !nextThreshold; // Достигнут максимум
 
     // Карточка максимального уровня
@@ -77,7 +81,7 @@ export function KpiOverview({
                                 <Target className="h-5 w-5 text-purple-400" />
                             </div>
                             <div>
-                                <p className="text-xs text-white/50 uppercase tracking-wider font-bold">Цель на смену</p>
+                                <p className="text-xs text-white/50 uppercase tracking-wider font-bold">{kpi.name || 'KPI'}</p>
                                 <p className="text-sm text-purple-400 font-medium">{nextThreshold.label} • {nextThreshold.percent}%</p>
                             </div>
                         </div>
@@ -90,7 +94,9 @@ export function KpiOverview({
                     {/* Main Target */}
                     <div className="text-center space-y-4">
                         <div>
-                            <p className="text-white/60 text-sm mb-2">Сегодня нужно выдать минимум</p>
+                            <p className="text-white/60 text-sm mb-2">
+                                {activeShift ? 'Сегодня нужно выдать минимум' : 'На следующую смену нужно минимум'}
+                            </p>
                             <div className="flex items-baseline justify-center gap-2">
                                 <span className="text-6xl font-black bg-gradient-to-r from-purple-400 via-pink-400 to-blue-400 bg-clip-text text-transparent">
                                     {formatCurrency(nextThreshold.per_shift_to_reach).replace(' ₽', '')}
@@ -99,8 +105,8 @@ export function KpiOverview({
                             </div>
                         </div>
 
-                        {/* Current Progress Today */}
-                        {kpi.current_shift_value > 0 && (
+                        {/* Current Progress Today - only if shift is active */}
+                        {activeShift && kpi.current_shift_value > 0 && (
                             <div className="inline-flex items-center gap-3 px-4 py-2 rounded-full bg-white/10 backdrop-blur border border-white/20">
                                 <div className="flex items-center gap-2">
                                     <Zap className="h-4 w-4 text-yellow-400" />
@@ -146,6 +152,16 @@ export function KpiOverview({
                             <span className="text-white/40">{formatCurrency(nextThreshold.monthly_threshold)}</span>
                         </div>
                     </div>
+
+                    {/* Info about maintaining current level */}
+                    {currentAchievedLevel && nextThreshold && currentAchievedLevel.level < nextThreshold.level && (
+                        <div className="mt-4 p-3 rounded-lg bg-blue-500/20 border border-blue-500/30 text-blue-300 text-sm">
+                            <p className="font-medium">
+                                💡 Чтобы сохранить <span className="font-bold text-blue-200">{currentAchievedLevel.label} ({currentAchievedLevel.percent}%)</span>, нужно минимум{' '}
+                                <span className="font-bold text-white">{formatCurrency(currentAchievedLevel.per_shift_to_stay)}</span> за смену
+                            </p>
+                        </div>
+                    )}
 
                     {/* Status Indicator */}
                     <div className={cn(
