@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import pool from '@/lib/db';
-import { getUserFromToken } from '@/lib/auth';
+import { query } from '@/db';
+import { cookies } from 'next/headers';
 
 // GET /api/clubs/[clubId]/finance/transactions
 export async function GET(
@@ -8,8 +8,8 @@ export async function GET(
     { params }: { params: { clubId: string } }
 ) {
     try {
-        const user = await getUserFromToken(request);
-        if (!user) {
+        const userId = (await cookies()).get('session_user_id')?.value;
+        if (!userId) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
@@ -25,7 +25,7 @@ export async function GET(
         const limit = parseInt(searchParams.get('limit') || '100');
         const offset = parseInt(searchParams.get('offset') || '0');
 
-        let query = `
+        let queryStr = `
             SELECT 
                 ft.*,
                 fc.name as category_name,
@@ -43,45 +43,45 @@ export async function GET(
 
         if (type) {
             paramCount++;
-            query += ` AND ft.type = $${paramCount}`;
+            queryStr += ` AND ft.type = $${paramCount}`;
             values.push(type);
         }
 
         if (categoryId) {
             paramCount++;
-            query += ` AND ft.category_id = $${paramCount}`;
+            queryStr += ` AND ft.category_id = $${paramCount}`;
             values.push(categoryId);
         }
 
         if (status) {
             paramCount++;
-            query += ` AND ft.status = $${paramCount}`;
+            queryStr += ` AND ft.status = $${paramCount}`;
             values.push(status);
         }
 
         if (startDate) {
             paramCount++;
-            query += ` AND ft.transaction_date >= $${paramCount}`;
+            queryStr += ` AND ft.transaction_date >= $${paramCount}`;
             values.push(startDate);
         }
 
         if (endDate) {
             paramCount++;
-            query += ` AND ft.transaction_date <= $${paramCount}`;
+            queryStr += ` AND ft.transaction_date <= $${paramCount}`;
             values.push(endDate);
         }
 
         if (search) {
             paramCount++;
-            query += ` AND (ft.description ILIKE $${paramCount} OR ft.notes ILIKE $${paramCount})`;
+            queryStr += ` AND (ft.description ILIKE $${paramCount} OR ft.notes ILIKE $${paramCount})`;
             values.push(`%${search}%`);
         }
 
-        query += ` ORDER BY ft.transaction_date DESC, ft.created_at DESC`;
-        query += ` LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`;
+        queryStr += ` ORDER BY ft.transaction_date DESC, ft.created_at DESC`;
+        queryStr += ` LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`;
         values.push(limit, offset);
 
-        const result = await pool.query(query, values);
+        const result = await query(queryStr, values);
 
         // Get totals
         let totalsQuery = `
@@ -108,7 +108,7 @@ export async function GET(
             totalsValues.push(endDate);
         }
 
-        const totalsResult = await pool.query(totalsQuery, totalsValues);
+        const totalsResult = await query(totalsQuery, totalsValues);
         const totals = totalsResult.rows[0];
 
         return NextResponse.json({
@@ -137,8 +137,8 @@ export async function POST(
     { params }: { params: { clubId: string } }
 ) {
     try {
-        const user = await getUserFromToken(request);
-        if (!user) {
+        const userId = (await cookies()).get('session_user_id')?.value;
+        if (!userId) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
@@ -180,7 +180,7 @@ export async function POST(
         }
 
         // Verify category exists and belongs to club
-        const categoryCheck = await pool.query(
+        const categoryCheck = await query(
             `SELECT id FROM finance_categories 
              WHERE id = $1 AND (club_id = $2 OR club_id IS NULL) AND is_active = true`,
             [category_id, clubId]
@@ -193,7 +193,7 @@ export async function POST(
             );
         }
 
-        const result = await pool.query(
+        const result = await query(
             `INSERT INTO finance_transactions 
                 (club_id, category_id, amount, type, payment_method, status, 
                  transaction_date, description, notes, attachment_url, created_by)
@@ -201,12 +201,12 @@ export async function POST(
              RETURNING *`,
             [
                 clubId, category_id, amount, type, payment_method, status,
-                transaction_date, description, notes, attachment_url, user.id
+                transaction_date, description, notes, attachment_url, userId
             ]
         );
 
         // Fetch full transaction details
-        const fullTransaction = await pool.query(
+        const fullTransaction = await query(
             `SELECT 
                 ft.*,
                 fc.name as category_name,
@@ -233,8 +233,8 @@ export async function PUT(
     { params }: { params: { clubId: string } }
 ) {
     try {
-        const user = await getUserFromToken(request);
-        if (!user) {
+        const userId = (await cookies()).get('session_user_id')?.value;
+        if (!userId) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
@@ -258,7 +258,7 @@ export async function PUT(
         }
 
         // Check if transaction belongs to club
-        const checkResult = await pool.query(
+        const checkResult = await query(
             `SELECT id FROM finance_transactions WHERE id = $1 AND club_id = $2`,
             [id, clubId]
         );
@@ -267,7 +267,7 @@ export async function PUT(
             return NextResponse.json({ error: 'Transaction not found' }, { status: 404 });
         }
 
-        const result = await pool.query(
+        const result = await query(
             `UPDATE finance_transactions 
              SET category_id = COALESCE($1, category_id),
                  amount = COALESCE($2, amount),
@@ -286,7 +286,7 @@ export async function PUT(
         );
 
         // Fetch full transaction details
-        const fullTransaction = await pool.query(
+        const fullTransaction = await query(
             `SELECT 
                 ft.*,
                 fc.name as category_name,
@@ -313,8 +313,8 @@ export async function DELETE(
     { params }: { params: { clubId: string } }
 ) {
     try {
-        const user = await getUserFromToken(request);
-        if (!user) {
+        const userId = (await cookies()).get('session_user_id')?.value;
+        if (!userId) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
@@ -326,7 +326,7 @@ export async function DELETE(
             return NextResponse.json({ error: 'Transaction ID is required' }, { status: 400 });
         }
 
-        const result = await pool.query(
+        const result = await query(
             `DELETE FROM finance_transactions 
              WHERE id = $1 AND club_id = $2
              RETURNING id`,

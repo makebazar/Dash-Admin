@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import pool from '@/lib/db';
-import { getUserFromToken } from '@/lib/auth';
+import { query } from '@/db';
+import { cookies } from 'next/headers';
 
 // GET /api/clubs/[clubId]/finance/categories
 export async function GET(
@@ -8,8 +8,8 @@ export async function GET(
     { params }: { params: { clubId: string } }
 ) {
     try {
-        const user = await getUserFromToken(request);
-        if (!user) {
+        const userId = (await cookies()).get('session_user_id')?.value;
+        if (!userId) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
@@ -17,7 +17,7 @@ export async function GET(
         const { searchParams } = new URL(request.url);
         const type = searchParams.get('type'); // 'income' or 'expense'
 
-        let query = `
+        let queryStr = `
             SELECT 
                 fc.id,
                 fc.club_id,
@@ -39,16 +39,16 @@ export async function GET(
         const values: any[] = [clubId];
 
         if (type) {
-            query += ` AND fc.type = $${values.length + 1}`;
+            queryStr += ` AND fc.type = $${values.length + 1}`;
             values.push(type);
         }
 
-        query += `
+        queryStr += `
             GROUP BY fc.id
             ORDER BY fc.is_system DESC, fc.name ASC
         `;
 
-        const result = await pool.query(query, values);
+        const result = await query(queryStr, values);
 
         return NextResponse.json({
             categories: result.rows
@@ -65,8 +65,8 @@ export async function POST(
     { params }: { params: { clubId: string } }
 ) {
     try {
-        const user = await getUserFromToken(request);
-        if (!user) {
+        const userId = (await cookies()).get('session_user_id')?.value;
+        if (!userId) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
@@ -88,7 +88,7 @@ export async function POST(
             );
         }
 
-        const result = await pool.query(
+        const result = await query(
             `INSERT INTO finance_categories 
                 (club_id, name, type, icon, color, is_system, is_active)
              VALUES ($1, $2, $3, $4, $5, false, true)
@@ -119,8 +119,8 @@ export async function PUT(
     { params }: { params: { clubId: string } }
 ) {
     try {
-        const user = await getUserFromToken(request);
-        if (!user) {
+        const userId = (await cookies()).get('session_user_id')?.value;
+        if (!userId) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
@@ -133,7 +133,7 @@ export async function PUT(
         }
 
         // Check if category belongs to club and is not system
-        const checkResult = await pool.query(
+        const checkResult = await query(
             `SELECT is_system FROM finance_categories 
              WHERE id = $1 AND club_id = $2`,
             [id, clubId]
@@ -150,7 +150,7 @@ export async function PUT(
             );
         }
 
-        const result = await pool.query(
+        const result = await query(
             `UPDATE finance_categories 
              SET name = COALESCE($1, name),
                  icon = COALESCE($2, icon),
@@ -176,8 +176,8 @@ export async function DELETE(
     { params }: { params: { clubId: string } }
 ) {
     try {
-        const user = await getUserFromToken(request);
-        if (!user) {
+        const userId = (await cookies()).get('session_user_id')?.value;
+        if (!userId) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
@@ -190,7 +190,7 @@ export async function DELETE(
         }
 
         // Check if category can be deleted
-        const checkResult = await pool.query(
+        const checkResult = await query(
             `SELECT is_system FROM finance_categories 
              WHERE id = $1 AND club_id = $2`,
             [categoryId, clubId]
@@ -208,7 +208,7 @@ export async function DELETE(
         }
 
         // Soft delete by setting is_active to false
-        await pool.query(
+        await query(
             `UPDATE finance_categories 
              SET is_active = false 
              WHERE id = $1 AND club_id = $2`,

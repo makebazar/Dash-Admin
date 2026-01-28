@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import pool from '@/lib/db';
-import { getUserFromToken } from '@/lib/auth';
+import { query } from '@/db';
+import { cookies } from 'next/headers';
 
 // GET /api/clubs/[clubId]/finance/analytics
 export async function GET(
@@ -8,8 +8,8 @@ export async function GET(
     { params }: { params: { clubId: string } }
 ) {
     try {
-        const user = await getUserFromToken(request);
-        if (!user) {
+        const userId = (await cookies()).get('session_user_id')?.value;
+        if (!userId) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
@@ -37,7 +37,7 @@ export async function GET(
         }
 
         // 1. INCOME AND EXPENSES SUMMARY
-        const summaryResult = await pool.query(
+        const summaryResult = await query(
             `SELECT 
                 SUM(CASE WHEN type = 'income' AND status = 'completed' THEN amount ELSE 0 END) as total_income,
                 SUM(CASE WHEN type = 'expense' AND status = 'completed' THEN amount ELSE 0 END) as total_expense,
@@ -55,7 +55,7 @@ export async function GET(
         const profitability = totalIncome > 0 ? ((profit / totalIncome) * 100) : 0;
 
         // 2. BREAKDOWN BY CATEGORY
-        const categoryBreakdown = await pool.query(
+        const categoryBreakdown = await query(
             `SELECT 
                 fc.id,
                 fc.name,
@@ -78,7 +78,7 @@ export async function GET(
         );
 
         // 3. MONTHLY TREND (last 6 months)
-        const monthlyTrend = await pool.query(
+        const monthlyTrend = await query(
             `SELECT 
                 DATE_TRUNC('month', transaction_date) as month,
                 SUM(CASE WHEN type = 'income' AND status = 'completed' THEN amount ELSE 0 END) as income,
@@ -100,7 +100,7 @@ export async function GET(
         }));
 
         // 4. CASH FLOW FORECAST (upcoming 30/60/90 days)
-        const upcomingPayments = await pool.query(
+        const upcomingPayments = await query(
             `SELECT 
                 CASE 
                     WHEN transaction_date <= CURRENT_DATE + INTERVAL '30 days' THEN '30_days'
@@ -133,7 +133,7 @@ export async function GET(
         });
 
         // 5. TOP EXPENSES
-        const topExpenses = await pool.query(
+        const topExpenses = await query(
             `SELECT 
                 fc.name as category_name,
                 fc.icon,
@@ -152,7 +152,7 @@ export async function GET(
 
         // 6. BREAK-EVEN POINT (minimum revenue to cover expenses)
         // Calculate fixed monthly expenses
-        const fixedExpenses = await pool.query(
+        const fixedExpenses = await query(
             `SELECT COALESCE(SUM(amount), 0) as total_fixed
             FROM finance_transactions ft
             JOIN finance_categories fc ON ft.category_id = fc.id
@@ -167,7 +167,7 @@ export async function GET(
         const breakEvenPoint = parseFloat(fixedExpenses.rows[0].total_fixed || 0);
 
         // 7. UPCOMING PAYMENTS (next 7 days)
-        const upcomingResult = await pool.query(
+        const upcomingResult = await query(
             `SELECT 
                 ft.id,
                 ft.amount,
