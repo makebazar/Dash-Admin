@@ -57,6 +57,8 @@ export default function WorkplacesManager() {
 
     // Dialog states
     const [isDialogOpen, setIsDialogOpen] = useState(false)
+    const [isNewZoneDialogOpen, setIsNewZoneDialogOpen] = useState(false)
+    const [newZoneName, setNewZoneName] = useState("")
     const [editingWorkplace, setEditingWorkplace] = useState<Partial<Workstation> | null>(null)
 
     const fetchData = useCallback(async () => {
@@ -274,7 +276,7 @@ export default function WorkplacesManager() {
                                         </SelectContent>
                                     </Select>
                                 </div>
-                                <Dialog>
+                                <Dialog open={isNewZoneDialogOpen} onOpenChange={setIsNewZoneDialogOpen}>
                                     <DialogTrigger asChild>
                                         <Button type="button" variant="outline" size="icon" title="Новая зона">
                                             <FolderPlus className="h-4 w-4" />
@@ -285,14 +287,33 @@ export default function WorkplacesManager() {
                                             <DialogTitle>Добавить новую зону</DialogTitle>
                                         </DialogHeader>
                                         <div className="py-4">
-                                            <Input id="new-zone" placeholder="Название зоны (например, PS5 Zone)" onKeyDown={(e) => {
-                                                if (e.key === 'Enter') {
-                                                    const val = (e.target as HTMLInputElement).value
-                                                    if (val) setEditingWorkplace(prev => ({ ...prev, zone: val }))
-                                                    // Close this sub-dialog? Radix handles nested dialogs okay-ish
-                                                }
-                                            }} />
+                                            <Input
+                                                id="new-zone"
+                                                placeholder="Название зоны (например, PS5 Zone)"
+                                                value={newZoneName}
+                                                onChange={(e) => setNewZoneName(e.target.value)}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') {
+                                                        e.preventDefault();
+                                                        if (newZoneName) {
+                                                            setEditingWorkplace(prev => ({ ...prev, zone: newZoneName }));
+                                                            setIsNewZoneDialogOpen(false);
+                                                            setNewZoneName("");
+                                                        }
+                                                    }
+                                                }}
+                                            />
                                         </div>
+                                        <DialogFooter>
+                                            <Button type="button" variant="ghost" onClick={() => setIsNewZoneDialogOpen(false)}>Отмена</Button>
+                                            <Button type="button" className="bg-indigo-600" onClick={() => {
+                                                if (newZoneName) {
+                                                    setEditingWorkplace(prev => ({ ...prev, zone: newZoneName }));
+                                                    setIsNewZoneDialogOpen(false);
+                                                    setNewZoneName("");
+                                                }
+                                            }}>Сохранить</Button>
+                                        </DialogFooter>
                                     </DialogContent>
                                 </Dialog>
                             </div>
