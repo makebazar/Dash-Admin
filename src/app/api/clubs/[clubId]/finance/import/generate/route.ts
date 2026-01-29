@@ -70,6 +70,21 @@ export async function POST(
             console.log('No report template found for club:', clubId);
         }
 
+        // Get accounts for this club
+        const accountsResult = await query(
+            `SELECT id, account_type FROM finance_accounts 
+             WHERE club_id = $1 AND is_active = TRUE`,
+            [clubId]
+        );
+
+        // Map account types to account IDs
+        const accountMap = new Map<string, number>();
+        accountsResult.rows.forEach(row => {
+            accountMap.set(row.account_type, row.id);
+        });
+
+        console.log('Account mapping:', Object.fromEntries(accountMap));
+
         // Get shifts within date range that haven't been imported yet
         const shiftsResult = await query(
             `SELECT 
@@ -115,16 +130,17 @@ export async function POST(
             if (!preview) {
                 // Create transaction for cash income
                 if (cashIncome > 0) {
+                    const cashAccountId = accountMap.get('cash');
                     const result = await query(
                         `INSERT INTO finance_transactions 
                             (club_id, category_id, amount, type, payment_method, status, 
-                             transaction_date, description, related_shift_report_id, created_by)
-                         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                             transaction_date, description, related_shift_report_id, created_by, account_id)
+                         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
                          RETURNING id`,
                         [
                             clubId, categoryId, cashIncome, 'income', 'cash', 'completed',
                             shift.check_in, `Выручка смены (наличные)`,
-                            shift.id, userId
+                            shift.id, userId, cashAccountId
                         ]
                     );
                     transactionIds.push(result.rows[0].id);
@@ -133,16 +149,17 @@ export async function POST(
 
                 // Create transaction for card income
                 if (cardIncome > 0) {
+                    const cardAccountId = accountMap.get('card');
                     const result = await query(
                         `INSERT INTO finance_transactions 
                             (club_id, category_id, amount, type, payment_method, status, 
-                             transaction_date, description, related_shift_report_id, created_by)
-                         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                             transaction_date, description, related_shift_report_id, created_by, account_id)
+                         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
                          RETURNING id`,
                         [
                             clubId, categoryId, cardIncome, 'income', 'card', 'completed',
                             shift.check_in, `Выручка смены (безнал)`,
-                            shift.id, userId
+                            shift.id, userId, cardAccountId
                         ]
                     );
                     transactionIds.push(result.rows[0].id);
@@ -173,16 +190,19 @@ export async function POST(
                         paymentMethod = 'card';
                     }
 
+                    // Get account ID based on payment method
+                    const accountId = accountMap.get(paymentMethod === 'bank_transfer' ? 'bank' : paymentMethod);
+
                     const result = await query(
                         `INSERT INTO finance_transactions 
                             (club_id, category_id, amount, type, payment_method, status, 
-                             transaction_date, description, related_shift_report_id, created_by)
-                         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                             transaction_date, description, related_shift_report_id, created_by, account_id)
+                         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
                          RETURNING id`,
                         [
                             clubId, categoryId, amount, 'income', paymentMethod, 'completed',
                             shift.check_in, `Выручка смены (${field.label})`,
-                            shift.id, userId
+                            shift.id, userId, accountId
                         ]
                     );
                     transactionIds.push(result.rows[0].id);
