@@ -575,49 +575,28 @@ export default function RecurringPayments({ clubId }: RecurringPaymentsProps) {
             <Dialog open={isGenerateDialogOpen} onOpenChange={setIsGenerateDialogOpen}>
                 <DialogContent>
                     <DialogHeader>
-                        <DialogTitle>Выставить транзакцию на текущий месяц</DialogTitle>
+                        <DialogTitle>
+                            {generatingPayment?.type === 'expense' ? 'Запланировать расход на текущий месяц' : 'Выставить доход на текущий месяц'}
+                        </DialogTitle>
                         <DialogDescription>
                             {generatingPayment && `${generatingPayment.name} - ${generatingPayment.amount} ₽`}
                         </DialogDescription>
                     </DialogHeader>
 
                     <div className="space-y-4">
+                        <p className="text-sm text-muted-foreground">
+                            {generatingPayment?.type === 'expense'
+                                ? 'Будет создан запланированный расход. Оплату можно будет зафиксировать полностью или частями на вкладке "Расходы" или на Dashboard.'
+                                : 'Будет создана транзакция дохода на указанную сумму.'}
+                        </p>
+
                         <div>
-                            <Label>Фактически оплачено</Label>
+                            <Label>Сумма</Label>
                             <Input
                                 type="number"
                                 step="0.01"
                                 value={generateFormData.amount}
                                 onChange={(e) => setGenerateFormData({ ...generateFormData, amount: e.target.value })}
-                                required
-                            />
-                            <p className="text-xs text-muted-foreground mt-1">
-                                Можно указать частичную сумму если счет не полностью закрыт
-                            </p>
-                        </div>
-
-                        <div>
-                            <Label>Статус</Label>
-                            <Select
-                                value={generateFormData.status}
-                                onValueChange={(value: 'completed' | 'pending') => setGenerateFormData({ ...generateFormData, status: value })}
-                            >
-                                <SelectTrigger>
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="completed">✅ Оплачено</SelectItem>
-                                    <SelectItem value="pending">⏳ Ожидает оплаты</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
-
-                        <div>
-                            <Label>Дата оплаты</Label>
-                            <Input
-                                type="date"
-                                value={generateFormData.payment_date}
-                                onChange={(e) => setGenerateFormData({ ...generateFormData, payment_date: e.target.value })}
                                 required
                             />
                         </div>
@@ -628,7 +607,7 @@ export default function RecurringPayments({ clubId }: RecurringPaymentsProps) {
                             Отмена
                         </Button>
                         <Button onClick={confirmGenerateTransaction}>
-                            Создать транзакцию
+                            {generatingPayment?.type === 'expense' ? 'Запланировать' : 'Создать транзакцию'}
                         </Button>
                     </DialogFooter>
                 </DialogContent>
