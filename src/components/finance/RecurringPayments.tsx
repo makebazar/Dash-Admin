@@ -71,6 +71,13 @@ export default function RecurringPayments({ clubId }: RecurringPaymentsProps) {
     const [loading, setLoading] = useState(true)
     const [isDialogOpen, setIsDialogOpen] = useState(false)
     const [editingPayment, setEditingPayment] = useState<RecurringPayment | null>(null)
+    const [isGenerateDialogOpen, setIsGenerateDialogOpen] = useState(false)
+    const [generatingPayment, setGeneratingPayment] = useState<RecurringPayment | null>(null)
+    const [generateFormData, setGenerateFormData] = useState({
+        amount: '',
+        status: 'completed' as 'completed' | 'pending',
+        payment_date: new Date().toISOString().split('T')[0]
+    })
 
     const [formData, setFormData] = useState({
         category_id: '',
@@ -185,22 +192,41 @@ export default function RecurringPayments({ clubId }: RecurringPaymentsProps) {
         }
     }
 
-    const handleGenerateTransaction = async (payment: RecurringPayment) => {
+    const handleGenerateTransaction = (payment: RecurringPayment) => {
+        setGeneratingPayment(payment)
+        setGenerateFormData({
+            amount: payment.amount.toString(),
+            status: 'completed',
+            payment_date: new Date().toISOString().split('T')[0]
+        })
+        setIsGenerateDialogOpen(true)
+    }
+
+    const confirmGenerateTransaction = async () => {
+        if (!generatingPayment) return
+
         const now = new Date()
         const month = now.getMonth() + 1 // 1-12
         const year = now.getFullYear()
 
         try {
-            const res = await fetch(`/api/clubs/${clubId}/finance/recurring/${payment.id}/generate`, {
+            const res = await fetch(`/api/clubs/${clubId}/finance/recurring/${generatingPayment.id}/generate`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ target_month: month, target_year: year })
+                body: JSON.stringify({
+                    target_month: month,
+                    target_year: year,
+                    custom_amount: parseFloat(generateFormData.amount),
+                    status: generateFormData.status,
+                    payment_date: generateFormData.payment_date
+                })
             })
 
             const data = await res.json()
 
             if (res.ok) {
-                alert(`✅ Транзакция создана: ${payment.name} на ${data.transaction.amount} ₽`)
+                alert(`✅ Транзакция создана: ${generatingPayment.name} на ${generateFormData.amount} ₽`)
+                setIsGenerateDialogOpen(false)
                 fetchPayments()
             } else if (res.status === 409) {
                 alert('⚠️ Транзакция для этого месяца уже существует')
@@ -542,6 +568,69 @@ export default function RecurringPayments({ clubId }: RecurringPaymentsProps) {
                             </Button>
                         </DialogFooter>
                     </form>
+                </DialogContent>
+            </Dialog>
+
+            {/* Generate Transaction Dialog */}
+            <Dialog open={isGenerateDialogOpen} onOpenChange={setIsGenerateDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Выставить транзакцию на текущий месяц</DialogTitle>
+                        <DialogDescription>
+                            {generatingPayment && `${generatingPayment.name} - ${generatingPayment.amount} ₽`}
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="space-y-4">
+                        <div>
+                            <Label>Фактически оплачено</Label>
+                            <Input
+                                type="number"
+                                step="0.01"
+                                value={generateFormData.amount}
+                                onChange={(e) => setGenerateFormData({ ...generateFormData, amount: e.target.value })}
+                                required
+                            />
+                            <p className="text-xs text-muted-foreground mt-1">
+                                Можно указать частичную сумму если счет не полностью закрыт
+                            </p>
+                        </div>
+
+                        <div>
+                            <Label>Статус</Label>
+                            <Select
+                                value={generateFormData.status}
+                                onValueChange={(value: 'completed' | 'pending') => setGenerateFormData({ ...generateFormData, status: value })}
+                            >
+                                <SelectTrigger>
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="completed">✅ Оплачено</SelectItem>
+                                    <SelectItem value="pending">⏳ Ожидает оплаты</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        <div>
+                            <Label>Дата оплаты</Label>
+                            <Input
+                                type="date"
+                                value={generateFormData.payment_date}
+                                onChange={(e) => setGenerateFormData({ ...generateFormData, payment_date: e.target.value })}
+                                required
+                            />
+                        </div>
+                    </div>
+
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setIsGenerateDialogOpen(false)}>
+                            Отмена
+                        </Button>
+                        <Button onClick={confirmGenerateTransaction}>
+                            Создать транзакцию
+                        </Button>
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
         </div>

@@ -15,7 +15,7 @@ export async function POST(
 
         const { clubId, recurringId } = params;
         const body = await request.json();
-        const { target_month, target_year } = body;
+        const { target_month, target_year, custom_amount, status, payment_date } = body;
 
         // Get recurring payment template
         const templateResult = await query(
@@ -33,19 +33,27 @@ export async function POST(
             return NextResponse.json({ error: 'Recurring payment is not active' }, { status: 400 });
         }
 
-        // Calculate transaction date based on template
+        // Use custom payment date if provided, otherwise calculate based on template
         let transactionDate: Date;
-        const now = new Date();
-        const year = target_year || now.getFullYear();
-        const month = target_month !== undefined ? target_month - 1 : now.getMonth();
-
-        if (template.day_of_month) {
-            // Use specific day of month (e.g., 10th)
-            transactionDate = new Date(year, month, template.day_of_month);
+        if (payment_date) {
+            transactionDate = new Date(payment_date);
         } else {
-            // Use first day of month as fallback
-            transactionDate = new Date(year, month, 1);
+            const now = new Date();
+            const year = target_year || now.getFullYear();
+            const month = target_month !== undefined ? target_month - 1 : now.getMonth();
+
+            if (template.day_of_month) {
+                transactionDate = new Date(year, month, template.day_of_month);
+            } else {
+                transactionDate = new Date(year, month, 1);
+            }
         }
+
+        // Use custom amount if provided, otherwise use template amount
+        const amount = custom_amount !== undefined ? custom_amount : template.amount;
+
+        // Use custom status if provided, otherwise default to 'completed'
+        const transactionStatus = status || 'completed';
 
         // Check if transaction for this month already exists
         const existingCheck = await query(
@@ -55,7 +63,7 @@ export async function POST(
              AND EXTRACT(MONTH FROM transaction_date) = $3
              AND EXTRACT(YEAR FROM transaction_date) = $4
              LIMIT 1`,
-            [clubId, template.category_id, month + 1, year]
+            [clubId, template.category_id, transactionDate.getMonth() + 1, transactionDate.getFullYear()]
         );
 
         if (existingCheck.rows.length > 0) {
@@ -75,10 +83,10 @@ export async function POST(
             [
                 clubId,
                 template.category_id,
-                template.amount,
+                amount,
                 template.type,
                 template.payment_method,
-                'completed',
+                transactionStatus,
                 transactionDate,
                 `${template.name} (автоматически из шаблона)`,
                 userId,
