@@ -21,7 +21,7 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
-import { Plus, Repeat, Clock, ToggleLeft, ToggleRight, Edit, Trash2 } from "lucide-react"
+import { Plus, Repeat, Clock, ToggleLeft, ToggleRight, Edit, Trash2, Zap } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
 
@@ -163,6 +163,34 @@ export default function RecurringPayments({ clubId }: RecurringPaymentsProps) {
         }
     }
 
+    const handleGenerateTransaction = async (payment: RecurringPayment) => {
+        const now = new Date()
+        const month = now.getMonth() + 1 // 1-12
+        const year = now.getFullYear()
+
+        try {
+            const res = await fetch(`/api/clubs/${clubId}/finance/recurring/${payment.id}/generate`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ target_month: month, target_year: year })
+            })
+
+            const data = await res.json()
+
+            if (res.ok) {
+                alert(`✅ Транзакция создана: ${payment.name} на ${data.transaction.amount} ₽`)
+                fetchPayments()
+            } else if (res.status === 409) {
+                alert('⚠️ Транзакция для этого месяца уже существует')
+            } else {
+                alert(`❌ Ошибка: ${data.error}`)
+            }
+        } catch (error) {
+            console.error('Failed to generate transaction:', error)
+            alert('❌ Не удалось создать транзакцию')
+        }
+    }
+
     const resetForm = () => {
         setEditingPayment(null)
         setFormData({
@@ -283,39 +311,52 @@ export default function RecurringPayments({ clubId }: RecurringPaymentsProps) {
                                     </p>
                                 )}
 
-                                <div className="flex gap-2 pt-2">
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        className="flex-1"
-                                        onClick={() => {
-                                            setEditingPayment(payment)
-                                            setFormData({
-                                                category_id: '',
-                                                name: payment.name,
-                                                amount: payment.amount.toString(),
-                                                type: payment.type,
-                                                frequency: payment.frequency,
-                                                interval: payment.interval.toString(),
-                                                day_of_month: payment.day_of_month?.toString() || '',
-                                                payment_method: 'cash',
-                                                start_date: payment.start_date,
-                                                end_date: payment.end_date || '',
-                                                description: payment.description || ''
-                                            })
-                                            setIsDialogOpen(true)
-                                        }}
-                                    >
-                                        <Edit className="h-4 w-4 mr-1" />
-                                        Изменить
-                                    </Button>
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => handleDelete(payment.id)}
-                                    >
-                                        <Trash2 className="h-4 w-4" />
-                                    </Button>
+                                <div className="flex flex-col gap-2 pt-2">
+                                    {payment.is_active && (
+                                        <Button
+                                            variant="default"
+                                            size="sm"
+                                            className="w-full"
+                                            onClick={() => handleGenerateTransaction(payment)}
+                                        >
+                                            <Zap className="h-4 w-4 mr-2" />
+                                            Выставить на текущий месяц
+                                        </Button>
+                                    )}
+                                    <div className="flex gap-2">
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="flex-1"
+                                            onClick={() => {
+                                                setEditingPayment(payment)
+                                                setFormData({
+                                                    category_id: '',
+                                                    name: payment.name,
+                                                    amount: payment.amount.toString(),
+                                                    type: payment.type,
+                                                    frequency: payment.frequency,
+                                                    interval: payment.interval.toString(),
+                                                    day_of_month: payment.day_of_month?.toString() || '',
+                                                    payment_method: 'cash',
+                                                    start_date: payment.start_date,
+                                                    end_date: payment.end_date || '',
+                                                    description: payment.description || ''
+                                                })
+                                                setIsDialogOpen(true)
+                                            }}
+                                        >
+                                            <Edit className="h-4 w-4 mr-1" />
+                                            Изменить
+                                        </Button>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => handleDelete(payment.id)}
+                                        >
+                                            <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                    </div>
                                 </div>
                             </CardContent>
                         </Card>
