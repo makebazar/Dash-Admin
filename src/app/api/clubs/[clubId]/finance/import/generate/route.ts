@@ -266,7 +266,6 @@ export async function POST(
                 skipped_reasons: skippedReasons
             });
 
-
         } catch (error) {
             console.error('Error importing revenue:', error);
             return NextResponse.json({
