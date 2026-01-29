@@ -21,8 +21,9 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
-import { Plus, Search, Filter, TrendingUp, TrendingDown, Edit, Trash2 } from "lucide-react"
+import { Plus, Search, Filter, TrendingUp, TrendingDown, Edit, Trash2, ChevronDown } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
+import { Switch } from "@/components/ui/switch"
 
 interface Transaction {
     id: number
@@ -38,6 +39,15 @@ interface Transaction {
     created_by_name: string
     account_id?: number
     account_name?: string
+    related_shift_report_id?: number
+}
+
+interface TransactionGroup {
+    shift_report_id: number
+    shift_date: string
+    transactions: Transaction[]
+    total: number
+    is_expanded: boolean
 }
 
 interface Account {
@@ -66,12 +76,14 @@ export default function TransactionList({ clubId }: TransactionListProps) {
     const [loading, setLoading] = useState(true)
     const [isDialogOpen, setIsDialogOpen] = useState(false)
     const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
+    const [expandedGroups, setExpandedGroups] = useState<Set<number>>(new Set())
 
     // Filters
     const [searchTerm, setSearchTerm] = useState('')
     const [typeFilter, setTypeFilter] = useState<string>('all')
     const [categoryFilter, setCategoryFilter] = useState<string>('all')
     const [statusFilter, setStatusFilter] = useState<string>('all')
+    const [hideImported, setHideImported] = useState(false)
 
     // Form state
     const [formData, setFormData] = useState({
@@ -237,6 +249,58 @@ export default function TransactionList({ clubId }: TransactionListProps) {
         return labels[method] || method
     }
 
+    const toggleGroup = (shiftReportId: number) => {
+        setExpandedGroups(prev => {
+            const next = new Set(prev)
+            if (next.has(shiftReportId)) {
+                next.delete(shiftReportId)
+            } else {
+                next.add(shiftReportId)
+            }
+            return next
+        })
+    }
+
+    // Group transactions by shift_report_id
+    const groupTransactions = (): (Transaction | TransactionGroup)[] => {
+        // Filter out imported transactions if hideImported is true
+        let filteredTransactions = hideImported
+            ? transactions.filter(t => !t.related_shift_report_id)
+            : transactions
+
+        // Separate shift transactions from regular ones
+        const shiftTransactions = filteredTransactions.filter(t => t.related_shift_report_id)
+        const regularTransactions = filteredTransactions.filter(t => !t.related_shift_report_id)
+
+        // Group shift transactions by shift_report_id
+        const groupsMap = new Map<number, Transaction[]>()
+        shiftTransactions.forEach(t => {
+            if (t.related_shift_report_id) {
+                if (!groupsMap.has(t.related_shift_report_id)) {
+                    groupsMap.set(t.related_shift_report_id, [])
+                }
+                groupsMap.get(t.related_shift_report_id)!.push(t)
+            }
+        })
+
+        // Convert groups to TransactionGroup objects
+        const groups: TransactionGroup[] = Array.from(groupsMap.entries()).map(([id, trans]) => ({
+            shift_report_id: id,
+            shift_date: trans[0].transaction_date,
+            transactions: trans,
+            total: trans.reduce((sum, t) => sum + (t.type === 'income' ? t.amount : -t.amount), 0),
+            is_expanded: expandedGroups.has(id)
+        }))
+
+        // Sort groups by date (newest first)
+        groups.sort((a, b) => new Date(b.shift_date).getTime() - new Date(a.shift_date).getTime())
+
+        // Combine groups and regular transactions, maintaining chronological order
+        const result: (Transaction | TransactionGroup)[] = [...groups, ...regularTransactions]
+
+        return result
+    }
+
     return (
         <div className="space-y-4">
             {/* Filters and Actions */}
@@ -300,6 +364,17 @@ export default function TransactionList({ clubId }: TransactionListProps) {
                     </Select>
                 </div>
 
+                <div className="flex items-center gap-2 border rounded-md px-3 py-2 bg-background">
+                    <Switch
+                        checked={hideImported}
+                        onCheckedChange={setHideImported}
+                        id="hide-imported"
+                    />
+                    <Label htmlFor="hide-imported" className="cursor-pointer text-sm">
+                        Скрыть импорт смен
+                    </Label>
+                </div>
+
                 <Button onClick={() => { resetForm(); setIsDialogOpen(true); }}>
                     <Plus className="h-4 w-4 mr-2" />
                     Добавить
@@ -322,64 +397,137 @@ export default function TransactionList({ clubId }: TransactionListProps) {
                         </div>
                     ) : (
                         <div className="space-y-2">
-                            {transactions.map((transaction) => (
-                                <div
-                                    key={transaction.id}
-                                    className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
-                                >
-                                    <div className="flex items-center gap-4 flex-1">
-                                        <div
-                                            className="w-10 h-10 rounded-lg flex items-center justify-center text-2xl"
-                                            style={{ backgroundColor: transaction.category_color + '20' }}
-                                        >
-                                            {transaction.category_icon}
-                                        </div>
-                                        <div className="flex-1">
-                                            <div className="flex items-center gap-2">
-                                                <span className="font-medium">{transaction.category_name}</span>
-                                                {getStatusBadge(transaction.status)}
-                                            </div>
-                                            <div className="text-sm text-muted-foreground flex items-center gap-2 mt-1">
-                                                <span>{new Date(transaction.transaction_date).toLocaleDateString('ru-RU')}</span>
-                                                <span>•</span>
-                                                <span>{getPaymentMethodLabel(transaction.payment_method)}</span>
-                                                {transaction.description && (
-                                                    <>
-                                                        <span>•</span>
-                                                        <span>{transaction.description}</span>
-                                                    </>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </div>
+                            {groupTransactions().map((item) => {
+                                // Check if it's a group or single transaction
+                                if ('shift_report_id' in item) {
+                                    // It's a TransactionGroup
+                                    const group = item as TransactionGroup
+                                    return (
+                                        <div key={`group-${group.shift_report_id}`} className="border rounded-lg">
+                                            {/* Group Header */}
+                                            <div
+                                                className="flex items-center justify-between p-4 cursor-pointer hover:bg-muted/50 transition-colors"
+                                                onClick={() => toggleGroup(group.shift_report_id)}
+                                            >
+                                                <div className="flex items-center gap-4 flex-1">
+                                                    <div className="w-10 h-10 rounded-lg flex items-center justify-center text-2xl bg-blue-50">
+                                                        📊
+                                                    </div>
+                                                    <div className="flex-1">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="font-medium">Выручка смены</span>
+                                                            <Badge variant="outline">Импорт</Badge>
+                                                        </div>
+                                                        <div className="text-sm text-muted-foreground mt-1">
+                                                            {new Date(group.shift_date).toLocaleDateString('ru-RU')} • {group.transactions.length} транзакций
+                                                        </div>
+                                                    </div>
+                                                </div>
 
-                                    <div className="flex items-center gap-4">
+                                                <div className="flex items-center gap-4">
+                                                    <div className="text-lg font-bold text-emerald-600">
+                                                        +{formatCurrency(group.total)}
+                                                    </div>
+                                                    <ChevronDown
+                                                        className={`h-5 w-5 text-muted-foreground transition-transform ${group.is_expanded ? 'rotate-180' : ''
+                                                            }`}
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            {/* Group Details (collapsible) */}
+                                            {group.is_expanded && (
+                                                <div className="border-t bg-muted/20 p-4 space-y-2">
+                                                    {group.transactions.map((transaction) => (
+                                                        <div
+                                                            key={transaction.id}
+                                                            className="flex items-center justify-between p-3 bg-background border rounded-md"
+                                                        >
+                                                            <div className="flex items-center gap-3 flex-1">
+                                                                <div className="text-lg">
+                                                                    {transaction.account_name === 'Касса' ? '💵' : transaction.account_name === 'Тбанк' ? '💳' : '🏦'}
+                                                                </div>
+                                                                <div className="flex-1">
+                                                                    <div className="font-medium text-sm">
+                                                                        {transaction.description || transaction.payment_method}
+                                                                    </div>
+                                                                    <div className="text-xs text-muted-foreground">
+                                                                        {transaction.account_name}
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                            <div className="text-sm font-semibold text-emerald-600">
+                                                                +{formatCurrency(transaction.amount)}
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )
+                                } else {
+                                    // It's a regular Transaction
+                                    const transaction = item as Transaction
+                                    return (
                                         <div
-                                            className={`text-lg font-bold ${transaction.type === 'income' ? 'text-emerald-600' : 'text-red-600'
-                                                }`}
+                                            key={transaction.id}
+                                            className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
                                         >
-                                            {transaction.type === 'income' ? '+' : '-'}
-                                            {formatCurrency(transaction.amount)}
+                                            <div className="flex items-center gap-4 flex-1">
+                                                <div
+                                                    className="w-10 h-10 rounded-lg flex items-center justify-center text-2xl"
+                                                    style={{ backgroundColor: transaction.category_color + '20' }}
+                                                >
+                                                    {transaction.category_icon}
+                                                </div>
+                                                <div className="flex-1">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="font-medium">{transaction.category_name}</span>
+                                                        {getStatusBadge(transaction.status)}
+                                                    </div>
+                                                    <div className="text-sm text-muted-foreground flex items-center gap-2 mt-1">
+                                                        <span>{new Date(transaction.transaction_date).toLocaleDateString('ru-RU')}</span>
+                                                        <span>•</span>
+                                                        <span>{getPaymentMethodLabel(transaction.payment_method)}</span>
+                                                        {transaction.description && (
+                                                            <>
+                                                                <span>•</span>
+                                                                <span>{transaction.description}</span>
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex items-center gap-4">
+                                                <div
+                                                    className={`text-lg font-bold ${transaction.type === 'income' ? 'text-emerald-600' : 'text-red-600'
+                                                        }`}
+                                                >
+                                                    {transaction.type === 'income' ? '+' : '-'}
+                                                    {formatCurrency(transaction.amount)}
+                                                </div>
+                                                <div className="flex gap-2">
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        onClick={() => handleEdit(transaction)}
+                                                    >
+                                                        <Edit className="h-4 w-4" />
+                                                    </Button>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        onClick={() => handleDelete(transaction.id)}
+                                                    >
+                                                        <Trash2 className="h-4 w-4" />
+                                                    </Button>
+                                                </div>
+                                            </div>
                                         </div>
-                                        <div className="flex gap-2">
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                onClick={() => handleEdit(transaction)}
-                                            >
-                                                <Edit className="h-4 w-4" />
-                                            </Button>
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                onClick={() => handleDelete(transaction.id)}
-                                            >
-                                                <Trash2 className="h-4 w-4" />
-                                            </Button>
-                                        </div>
-                                    </div>
-                                </div>
-                            ))}
+                                    )
+                                }
+                            })}
                         </div>
                     )}
                 </CardContent>
