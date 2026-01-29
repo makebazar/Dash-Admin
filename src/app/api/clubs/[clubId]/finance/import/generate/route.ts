@@ -53,8 +53,13 @@ export async function POST(
         if (templateResult.rows.length > 0) {
             const schema = templateResult.rows[0].schema;
             // Extract fields where field_type is INCOME
+            // Exclude cash_income and card_income as they're handled separately
             incomeFields = schema
-                .filter((field: any) => field.field_type === 'INCOME')
+                .filter((field: any) =>
+                    field.field_type === 'INCOME' &&
+                    field.metric_key !== 'cash_income' &&
+                    field.metric_key !== 'card_income'
+                )
                 .map((field: any) => ({
                     key: field.metric_key,
                     label: field.custom_label || field.metric_key
