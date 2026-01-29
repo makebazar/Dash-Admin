@@ -14,6 +14,7 @@ import TransactionList from '@/components/finance/TransactionList'
 import RecurringPayments from '@/components/finance/RecurringPayments'
 import FinanceReports from '@/components/finance/FinanceReports'
 import RevenueImport from '@/components/finance/RevenueImport'
+import { AccountBalances } from '@/components/finance/AccountBalances'
 
 interface FinanceStats {
     total_income: number
@@ -257,6 +258,12 @@ export default function FinancePage() {
                                 </p>
                             </CardContent>
                         </Card>
+                    </div>
+
+                    {/* Account Balances */}
+                    <div>
+                        <h3 className="text-lg font-semibold mb-4">Остатки на счетах</h3>
+                        <AccountBalances clubId={clubId} />
                     </div>
 
                     {/* Upcoming Payments & Break-even */}
