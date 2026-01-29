@@ -113,6 +113,38 @@ export async function POST(
 
         await query('COMMIT');
 
+        // --- SYNCHRONIZATION LOGIC ---
+        // Update existing finance_transactions that don't have an account_id 
+        // using the new mapping from the schema
+        try {
+            const incomeFields = schema.filter((f: any) => f.field_type === 'INCOME' && f.account_id);
+
+            for (const field of incomeFields) {
+                await query(
+                    `UPDATE finance_transactions 
+                     SET account_id = $1 
+                     WHERE club_id = $2 AND payment_method = $3 AND account_id IS NULL`,
+                    [field.account_id, clubId, field.metric_key]
+                );
+            }
+
+            // Recalculate balances for all accounts of this club to ensure total accuracy
+            await query(
+                `UPDATE finance_accounts fa
+                 SET current_balance = fa.initial_balance + COALESCE((
+                    SELECT SUM(CASE WHEN ft.type = 'income' THEN ft.amount ELSE -ft.amount END)
+                    FROM finance_transactions ft
+                    WHERE ft.account_id = fa.id AND ft.status = 'completed'
+                 ), 0),
+                 updated_at = NOW()
+                 WHERE fa.club_id = $1`,
+                [clubId]
+            );
+        } catch (syncError) {
+            console.error('Error synchronizing finance on mapping change:', syncError);
+            // We don't fail the whole request if sync fails, but we log it
+        }
+
         return NextResponse.json({ success: true, template: result.rows[0] });
 
     } catch (error) {
