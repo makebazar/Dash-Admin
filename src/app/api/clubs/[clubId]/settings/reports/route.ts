@@ -126,14 +126,16 @@ export async function POST(
                 if (field.metric_key === 'cash_income') metricKeys.push('cash');
                 if (field.metric_key === 'card_income') metricKeys.push('card', 'terminal');
 
-                // Aggressive sync: match by payment_method OR description (for custom fields like "СБП")
+                // FORCE re-sync: match by payment_method OR description (for custom fields like "СБП")
+                // Remove IS NULL condition to update ALL matching transactions
                 const descriptionMatch = field.custom_label ? `%${field.custom_label}%` : null;
 
                 await query(
                     `UPDATE finance_transactions 
                      SET account_id = $1 
                      WHERE club_id = $2 
-                     AND account_id IS NULL 
+                     AND status = 'completed'
+                     AND type = 'income'
                      AND (
                         payment_method = ANY($3)
                         ${descriptionMatch ? 'OR description ILIKE $4' : ''}
