@@ -2,6 +2,10 @@
 ALTER TABLE payments 
 ADD COLUMN IF NOT EXISTS payment_type VARCHAR(20) DEFAULT 'salary';
 
+-- Drop constraint if exists to make migration idempotent
+ALTER TABLE payments 
+DROP CONSTRAINT IF EXISTS check_payment_type;
+
 -- Add check constraint
 ALTER TABLE payments 
 ADD CONSTRAINT check_payment_type 
