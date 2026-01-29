@@ -55,42 +55,37 @@ export async function POST(
         // Use custom status if provided, otherwise default to 'completed'
         const transactionStatus = status || 'completed';
 
-        // Check if transaction for this month already exists
+        // Check if transaction or scheduled expense for this month already exists
         const existingCheck = await query(
-            `SELECT id FROM finance_transactions 
+            `SELECT id FROM finance_scheduled_expenses 
              WHERE club_id = $1 
              AND category_id = $2 
-             AND EXTRACT(MONTH FROM transaction_date) = $3
-             AND EXTRACT(YEAR FROM transaction_date) = $4
+             AND EXTRACT(MONTH FROM due_date) = $3
+             AND EXTRACT(YEAR FROM due_date) = $4
              LIMIT 1`,
             [clubId, template.category_id, transactionDate.getMonth() + 1, transactionDate.getFullYear()]
         );
 
         if (existingCheck.rows.length > 0) {
             return NextResponse.json({
-                error: 'Transaction for this period already exists',
-                existing_transaction_id: existingCheck.rows[0].id
+                error: 'Scheduled expense for this period already exists',
+                existing_expense_id: existingCheck.rows[0].id
             }, { status: 409 });
         }
 
-        // Create transaction from template
+        // Create scheduled expense from template
         const result = await query(
-            `INSERT INTO finance_transactions 
-                (club_id, category_id, amount, type, payment_method, status, 
-                 transaction_date, description, created_by, account_id)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            `INSERT INTO finance_scheduled_expenses 
+                (club_id, category_id, name, amount, due_date, description, recurring_payment_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)
              RETURNING *`,
             [
                 clubId,
                 template.category_id,
                 amount,
-                template.type,
-                template.payment_method,
-                transactionStatus,
                 transactionDate,
                 `${template.name} (автоматически из шаблона)`,
-                userId,
-                template.account_id
+                template.id
             ]
         );
 
@@ -103,8 +98,8 @@ export async function POST(
         );
 
         return NextResponse.json({
-            transaction: result.rows[0],
-            message: 'Transaction generated successfully'
+            scheduled_expense: result.rows[0],
+            message: 'Scheduled expense generated successfully'
         }, { status: 201 });
 
     } catch (error) {

@@ -16,6 +16,9 @@ import RecurringPayments from '@/components/finance/RecurringPayments'
 import FinanceReports from '@/components/finance/FinanceReports'
 import RevenueImport from '@/components/finance/RevenueImport'
 import { AccountBalances } from '@/components/finance/AccountBalances'
+import PayExpenseDialog from '@/components/finance/PayExpenseDialog'
+import { Progress } from "@/components/ui/progress"
+import ScheduledExpensesList from '@/components/finance/ScheduledExpensesList'
 
 interface FinanceStats {
     total_income: number
@@ -68,6 +71,7 @@ interface AnalyticsData {
         description: string
         category_name: string
         icon: string
+        amount_paid: number
     }>
 }
 
@@ -80,6 +84,8 @@ export default function FinancePage() {
     const [loading, setLoading] = useState(true)
     const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1)
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear())
+    const [isPayDialogOpen, setIsPayDialogOpen] = useState(false)
+    const [selectedExpense, setSelectedExpense] = useState<any>(null)
 
     const monthNames = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
         'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
@@ -180,10 +186,11 @@ export default function FinancePage() {
             </div>
 
             <Tabs value={activeTab} onValueChange={setActiveTab}>
-                <TabsList className="grid w-full grid-cols-6">
+                <TabsList className="grid w-full grid-cols-7">
                     <TabsTrigger value="dashboard">📊 Dashboard</TabsTrigger>
                     <TabsTrigger value="transactions">📝 Транзакции</TabsTrigger>
-                    <TabsTrigger value="recurring">🔄 Повторяющиеся</TabsTrigger>
+                    <TabsTrigger value="recurring">🔄 Шаблоны</TabsTrigger>
+                    <TabsTrigger value="scheduled">📅 Расходы</TabsTrigger>
                     <TabsTrigger value="import">Импорт</TabsTrigger>
                     <TabsTrigger value="credits">💳 Кредиты</TabsTrigger>
                     <TabsTrigger value="reports">📈 Отчеты</TabsTrigger>
@@ -282,29 +289,69 @@ export default function FinancePage() {
                             <CardHeader>
                                 <CardTitle className="flex items-center gap-2">
                                     <Clock className="h-5 w-5 text-primary" />
-                                    Предстоящие платежи (7 дней)
+                                    Предстоящие платежи
                                 </CardTitle>
-                                <CardDescription>Запланированные транзакции</CardDescription>
+                                <CardDescription>Постоянные расходы к оплате</CardDescription>
                             </CardHeader>
                             <CardContent>
                                 {analytics?.upcoming_payments && analytics.upcoming_payments.length > 0 ? (
-                                    <div className="space-y-3">
-                                        {analytics.upcoming_payments.map((payment) => (
-                                            <div key={payment.id} className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
-                                                <div className="flex items-center gap-3">
-                                                    <span className="text-2xl">{payment.icon}</span>
-                                                    <div>
-                                                        <p className="font-medium text-sm">{payment.category_name}</p>
-                                                        <p className="text-xs text-muted-foreground">
-                                                            {new Date(payment.transaction_date).toLocaleDateString('ru-RU')}
-                                                        </p>
+                                    <div className="space-y-4">
+                                        {analytics.upcoming_payments.map((payment) => {
+                                            const paidPercentage = (payment.amount_paid / payment.amount) * 100
+                                            const remaining = payment.amount - payment.amount_paid
+
+                                            return (
+                                                <div key={payment.id} className="space-y-2 p-3 bg-muted/30 rounded-lg">
+                                                    <div className="flex items-center justify-between">
+                                                        <div className="flex items-center gap-3">
+                                                            <span className="text-2xl">{payment.icon}</span>
+                                                            <div>
+                                                                <p className="font-medium text-sm">{payment.description || payment.category_name}</p>
+                                                                <p className="text-xs text-muted-foreground">
+                                                                    Срок: {new Date(payment.transaction_date).toLocaleDateString('ru-RU')}
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                        <div className="text-right">
+                                                            <div className="font-bold text-red-600">
+                                                                {formatCurrency(payment.amount)}
+                                                            </div>
+                                                            <div className="text-[10px] text-muted-foreground">
+                                                                оплачено: {formatCurrency(payment.amount_paid)}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="space-y-1">
+                                                        <div className="flex justify-between text-[10px] text-muted-foreground px-1">
+                                                            <span>Прогресс оплаты</span>
+                                                            <span>{Math.round(paidPercentage)}%</span>
+                                                        </div>
+                                                        <Progress value={paidPercentage} className="h-1.5" />
+                                                    </div>
+
+                                                    <div className="flex justify-end pt-1">
+                                                        <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            className="h-8 text-xs"
+                                                            onClick={() => {
+                                                                setSelectedExpense({
+                                                                    id: payment.id,
+                                                                    name: payment.description || payment.category_name,
+                                                                    amount: payment.amount,
+                                                                    amount_paid: payment.amount_paid
+                                                                })
+                                                                setIsPayDialogOpen(true)
+                                                            }}
+                                                        >
+                                                            <DollarSign className="h-3 w-3 mr-1" />
+                                                            Оплатить {remaining > 0 && remaining !== payment.amount ? `остаток (${formatCurrency(remaining)})` : ''}
+                                                        </Button>
                                                     </div>
                                                 </div>
-                                                <div className={`font-bold ${payment.type === 'income' ? 'text-emerald-600' : 'text-red-600'}`}>
-                                                    {payment.type === 'income' ? '+' : '-'}{formatCurrency(payment.amount)}
-                                                </div>
-                                            </div>
-                                        ))}
+                                            )
+                                        })}
                                     </div>
                                 ) : (
                                     <p className="text-center text-muted-foreground py-8">
@@ -375,6 +422,10 @@ export default function FinancePage() {
                     <RecurringPayments clubId={clubId} />
                 </TabsContent>
 
+                <TabsContent value="scheduled">
+                    <ScheduledExpensesList clubId={clubId} />
+                </TabsContent>
+
                 <TabsContent value="import">
                     <RevenueImport clubId={clubId} />
                 </TabsContent>
@@ -399,6 +450,16 @@ export default function FinancePage() {
                     <FinanceReports clubId={clubId} />
                 </TabsContent>
             </Tabs>
+
+            <PayExpenseDialog
+                isOpen={isPayDialogOpen}
+                onOpenChange={setIsPayDialogOpen}
+                expense={selectedExpense}
+                clubId={clubId}
+                onSuccess={() => {
+                    fetchAnalytics()
+                }}
+            />
         </div>
     )
 }

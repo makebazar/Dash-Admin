@@ -151,37 +151,38 @@ export async function GET(
         );
 
         // 6. BREAK-EVEN POINT (minimum revenue to cover expenses)
-        // Calculate fixed monthly expenses
+        // Calculate total scheduled fixed expenses for the selected period
         const fixedExpenses = await query(
             `SELECT COALESCE(SUM(amount), 0) as total_fixed
-            FROM finance_transactions ft
-            JOIN finance_categories fc ON ft.category_id = fc.id
-            WHERE ft.club_id = $1 
-                AND ft.type = 'expense'
-                AND ft.status = 'completed'
-                AND fc.name IN ('Аренда помещения', 'Коммунальные услуги', 'Зарплата сотрудников')
-                ${dateCondition}`,
+            FROM finance_scheduled_expenses
+            WHERE club_id = $1 
+                AND due_date BETWEEN $2 AND $3`,
             values
         );
 
         const breakEvenPoint = parseFloat(fixedExpenses.rows[0].total_fixed || 0);
 
-        // 7. UPCOMING PAYMENTS (next 7 days)
+        // 7. UPCOMING PAYMENTS (next 30 days)
         const upcomingResult = await query(
             `SELECT 
-                ft.id,
-                ft.amount,
-                ft.type,
-                ft.transaction_date,
-                ft.description,
+                fse.id,
+                fse.amount,
+                fse.due_date as transaction_date,
+                fse.name as description,
                 fc.name as category_name,
-                fc.icon
-            FROM finance_transactions ft
-            JOIN finance_categories fc ON ft.category_id = fc.id
-            WHERE ft.club_id = $1 
-                AND ft.status IN ('planned', 'pending')
-                AND ft.transaction_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '7 days'
-            ORDER BY ft.transaction_date ASC
+                fc.type,
+                fc.icon,
+                COALESCE((
+                    SELECT SUM(amount) 
+                    FROM finance_transactions 
+                    WHERE scheduled_expense_id = fse.id AND status = 'completed'
+                ), 0) as amount_paid
+            FROM finance_scheduled_expenses fse
+            JOIN finance_categories fc ON fse.category_id = fc.id
+            WHERE fse.club_id = $1 
+                AND fse.status IN ('unpaid', 'partial')
+                AND fse.due_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '30 days'
+            ORDER BY fse.due_date ASC
             LIMIT 10`,
             [clubId]
         );
@@ -216,7 +217,8 @@ export async function GET(
             break_even_point: breakEvenPoint,
             upcoming_payments: upcomingResult.rows.map(r => ({
                 ...r,
-                amount: parseFloat(r.amount)
+                amount: parseFloat(r.amount),
+                amount_paid: parseFloat(r.amount_paid || 0)
             }))
         });
     } catch (error) {

@@ -225,11 +225,11 @@ export default function RecurringPayments({ clubId }: RecurringPaymentsProps) {
             const data = await res.json()
 
             if (res.ok) {
-                alert(`✅ Транзакция создана: ${generatingPayment.name} на ${generateFormData.amount} ₽`)
+                alert(`✅ Платёж запланирован: ${generatingPayment.name}. Оплатить его можно на вкладке "Расходы" или на Dashboard.`)
                 setIsGenerateDialogOpen(false)
                 fetchPayments()
             } else if (res.status === 409) {
-                alert('⚠️ Транзакция для этого месяца уже существует')
+                alert('⚠️ Платёж для этого месяца уже запланирован')
             } else {
                 alert(`❌ Ошибка: ${data.error}`)
             }
