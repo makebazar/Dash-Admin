@@ -160,15 +160,23 @@ export default function FinancePage() {
                         </Button>
                     </div>
                 </div>
-                <Button
-                    variant="ghost"
-                    onClick={() => {
-                        setSelectedMonth(new Date().getMonth() + 1)
-                        setSelectedYear(new Date().getFullYear())
-                    }}
-                >
-                    Сегодня
-                </Button>
+                <div className="flex items-center gap-2">
+                    <Button
+                        variant="ghost"
+                        onClick={() => {
+                            setSelectedMonth(new Date().getMonth() + 1)
+                            setSelectedYear(new Date().getFullYear())
+                        }}
+                    >
+                        Сегодня
+                    </Button>
+                    <Link href={`/clubs/${clubId}/finance/settings`}>
+                        <Button variant="outline">
+                            <Settings className="h-4 w-4 mr-2" />
+                            Настройки
+                        </Button>
+                    </Link>
+                </div>
             </div>
 
             <Tabs value={activeTab} onValueChange={setActiveTab}>
