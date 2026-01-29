@@ -3,7 +3,7 @@ set -e
 
 echo "🔄 Running database migrations..."
 
-# Run migrations using Node.js
+# Run migrations using Node.js with proper tracking
 node -e "
 const { Pool } = require('pg');
 const fs = require('fs');
@@ -15,7 +15,16 @@ async function migrate() {
   });
 
   try {
-    // 1. Run schema.sql (Baseline)
+    // Create migrations tracking table
+    await pool.query(\`
+      CREATE TABLE IF NOT EXISTS schema_migrations (
+        filename VARCHAR(255) PRIMARY KEY,
+        executed_at TIMESTAMP DEFAULT NOW()
+      )
+    \`);
+    console.log('📋 Migration tracking table ready');
+
+    // 1. Run schema.sql if needed (Baseline)
     try {
       const schemaPath = path.join(process.cwd(), 'src/db/schema.sql');
       if (fs.existsSync(schemaPath)) {
@@ -24,11 +33,11 @@ async function migrate() {
         console.log('✅ Schema applied successfully');
       }
     } catch (schemaErr) {
-      // Schema failure shouldn't stop migrations (e.g., if table exists but differs)
+      // Schema failure shouldn't stop migrations
       console.warn('⚠️  Schema application warning:', schemaErr.message);
     }
 
-    // 2. Run all migration files (Evolution)
+    // 2. Run migration files with tracking
     const migrationsDir = path.join(process.cwd(), 'migrations');
     if (fs.existsSync(migrationsDir)) {
       const files = fs.readdirSync(migrationsDir)
@@ -36,18 +45,33 @@ async function migrate() {
         .sort();
       
       for (const file of files) {
+        // Check if already executed
+        const result = await pool.query(
+          'SELECT 1 FROM schema_migrations WHERE filename = \$1',
+          [file]
+        );
+
+        if (result.rows.length > 0) {
+          console.log('⏭️  Skipped', file, '(already executed)');
+          continue;
+        }
+
+        // Execute migration
         const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf8');
         try {
           await pool.query(sql);
+          
+          // Mark as executed
+          await pool.query(
+            'INSERT INTO schema_migrations (filename) VALUES (\$1)',
+            [file]
+          );
+          
           console.log('✅ Migration applied:', file);
         } catch (err) {
-          // Ignore errors for already-applied migrations
-          if (err.message.includes('already exists') || err.message.includes('duplicate')) {
-            console.log('⏭️  Skipped (already applied):', file);
-          } else {
-            // Log but don't stop other independent migrations
-            console.error('⚠️  Warning in', file + ':', err.message);
-          }
+          console.error('❌ Error in', file + ':', err.message);
+          // Stop on error to prevent partial migrations
+          throw err;
         }
       }
     }
@@ -55,14 +79,16 @@ async function migrate() {
     console.log('✅ All migrations complete');
   } catch (err) {
     console.error('❌ Critical migration error:', err.message);
-    console.error('❌ Migration error:', err.message);
-    // Don't exit with error - allow app to start anyway
+    throw err;
   } finally {
     await pool.end();
   }
 }
 
-migrate();
+migrate().catch(err => {
+  console.error('Migration failed:', err);
+  process.exit(1);
+});
 "
 
 echo "🚀 Starting application..."
