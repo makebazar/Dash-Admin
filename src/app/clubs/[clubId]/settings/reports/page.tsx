@@ -241,6 +241,36 @@ export default function ReportBuilderPage({ params }: { params: Promise<{ clubId
                                                         </div>
                                                     </div>
 
+                                                    {field.field_type === 'INCOME' && (
+                                                        <div className="bg-green-50/20 p-3 rounded-lg border border-green-100/50 space-y-2">
+                                                            <div className="flex items-center gap-2 text-green-700">
+                                                                <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                                                                <Label className="text-[10px] uppercase font-bold tracking-wider">Счёт для зачисления</Label>
+                                                            </div>
+                                                            <Select
+                                                                value={field.account_id?.toString()}
+                                                                onValueChange={(value) => handleUpdateField(index, 'account_id', parseInt(value))}
+                                                            >
+                                                                <SelectTrigger className="w-full bg-background border-green-200/50 h-9 font-medium shadow-sm hover:border-green-300 transition-colors">
+                                                                    <SelectValue placeholder="Выберите счёт" />
+                                                                </SelectTrigger>
+                                                                <SelectContent>
+                                                                    {accounts.map(acc => (
+                                                                        <SelectItem key={acc.id} value={acc.id.toString()}>
+                                                                            <span className="flex items-center gap-2">
+                                                                                <span className="text-base">{acc.icon}</span>
+                                                                                <span>{acc.name}</span>
+                                                                            </span>
+                                                                        </SelectItem>
+                                                                    ))}
+                                                                </SelectContent>
+                                                            </Select>
+                                                            <p className="text-[9px] text-muted-foreground leading-tight italic">
+                                                                * Все доходы из этого поля будут автоматически попадать на этот счёт
+                                                            </p>
+                                                        </div>
+                                                    )}
+
                                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t pt-4 border-foreground/5">
                                                         <div className="flex items-center justify-between gap-2">
                                                             <div className="flex flex-col">
