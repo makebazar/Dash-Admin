@@ -7,9 +7,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
     TrendingUp, TrendingDown, DollarSign, Wallet,
     Calendar, AlertCircle, ArrowUpRight, ArrowDownRight,
-    Percent, Target, Clock, ChevronLeft, ChevronRight
+    Percent, Target, Clock, ChevronLeft, ChevronRight, Settings
 } from "lucide-react"
 import { useParams } from 'next/navigation'
+import Link from 'next/link'
 import TransactionList from '@/components/finance/TransactionList'
 import RecurringPayments from '@/components/finance/RecurringPayments'
 import FinanceReports from '@/components/finance/FinanceReports'

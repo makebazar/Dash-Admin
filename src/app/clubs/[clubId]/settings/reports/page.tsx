@@ -274,33 +274,6 @@ export default function ReportBuilderPage({ params }: { params: Promise<{ clubId
                                                                 onCheckedChange={(checked) => handleUpdateField(index, 'is_required', checked)}
                                                             />
                                                         </div>
-
-                                                        {/* Account selector for INCOME fields */}
-                                                        {field.field_type === 'INCOME' && (
-                                                            <div className="sm:col-span-2">
-                                                                <Label htmlFor={`account-${index}`} className="text-sm">
-                                                                    Счёт для зачисления
-                                                                </Label>
-                                                                <Select
-                                                                    value={field.account_id?.toString() || ''}
-                                                                    onValueChange={(value) => handleUpdateField(index, 'account_id', parseInt(value))}
-                                                                >
-                                                                    <SelectTrigger id={`account-${index}`} className="mt-1">
-                                                                        <SelectValue placeholder="Выберите счёт" />
-                                                                    </SelectTrigger>
-                                                                    <SelectContent>
-                                                                        {accounts.map(account => (
-                                                                            <SelectItem key={account.id} value={account.id.toString()}>
-                                                                                {account.icon} {account.name}
-                                                                            </SelectItem>
-                                                                        ))}
-                                                                    </SelectContent>
-                                                                </Select>
-                                                                <span className="text-[10px] text-muted-foreground mt-1">
-                                                                    Деньги по этому полю будут зачисляться на выбранный счёт
-                                                                </span>
-                                                            </div>
-                                                        )}
                                                     </div>
                                                 </div>
                                             </div>
