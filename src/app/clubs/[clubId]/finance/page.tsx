@@ -13,6 +13,7 @@ import { useParams } from 'next/navigation'
 import TransactionList from '@/components/finance/TransactionList'
 import RecurringPayments from '@/components/finance/RecurringPayments'
 import FinanceReports from '@/components/finance/FinanceReports'
+import RevenueImport from '@/components/finance/RevenueImport'
 
 interface FinanceStats {
     total_income: number
@@ -169,10 +170,11 @@ export default function FinancePage() {
             </div>
 
             <Tabs value={activeTab} onValueChange={setActiveTab}>
-                <TabsList className="grid w-full grid-cols-5">
+                <TabsList className="grid w-full grid-cols-6">
                     <TabsTrigger value="dashboard">📊 Dashboard</TabsTrigger>
                     <TabsTrigger value="transactions">📝 Транзакции</TabsTrigger>
                     <TabsTrigger value="recurring">🔄 Повторяющиеся</TabsTrigger>
+                    <TabsTrigger value="import">Импорт</TabsTrigger>
                     <TabsTrigger value="credits">💳 Кредиты</TabsTrigger>
                     <TabsTrigger value="reports">📈 Отчеты</TabsTrigger>
                 </TabsList>
@@ -355,6 +357,10 @@ export default function FinancePage() {
 
                 <TabsContent value="recurring">
                     <RecurringPayments clubId={clubId} />
+                </TabsContent>
+
+                <TabsContent value="import">
+                    <RevenueImport clubId={clubId} />
                 </TabsContent>
 
                 <TabsContent value="credits">
