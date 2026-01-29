@@ -235,22 +235,40 @@ export async function PATCH(
             );
 
             if (existingTransactions.rows.length > 0) {
-                return NextResponse.json(
-                    { error: 'Shift already imported to finance' },
-                    { status: 400 }
-                );
+                // Transactions already exist, just sync status
+                updates.push(`status = $${paramIndex++}`);
+                values.push('VERIFIED');
+                if (!currentShift.verified_by) {
+                    updates.push(`verified_by = $${paramIndex++}`);
+                    values.push(userId);
+                    updates.push(`verified_at = $${paramIndex++}`);
+                    values.push(new Date());
+                }
+            } else {
+                // Create finance transactions
+                await createFinanceTransactionsFromShift(shiftId, Number(clubId), userId, mergedData);
+
+                // Set verification fields
+                updates.push(`verified_by = $${paramIndex++}`);
+                values.push(userId);
+                updates.push(`verified_at = $${paramIndex++}`);
+                values.push(new Date());
+                updates.push(`status = $${paramIndex++}`);
+                values.push('VERIFIED');
             }
+        } else if (body.status === 'CLOSED' && currentShift.status === 'VERIFIED') {
+            // Unverifying - delete finance transactions
+            await query(
+                'DELETE FROM finance_transactions WHERE related_shift_report_id = $1',
+                [shiftId]
+            );
 
-            // Create finance transactions
-            await createFinanceTransactionsFromShift(shiftId, Number(clubId), userId, mergedData);
-
-            // Set verification fields
-            updates.push(`verified_by = $${paramIndex++}`);
-            values.push(userId);
-            updates.push(`verified_at = $${paramIndex++}`);
-            values.push(new Date());
             updates.push(`status = $${paramIndex++}`);
-            values.push('VERIFIED');
+            values.push('CLOSED');
+            updates.push(`verified_by = $${paramIndex++}`);
+            values.push(null);
+            updates.push(`verified_at = $${paramIndex++}`);
+            values.push(null);
         } else if (body.status !== undefined) {
             updates.push(`status = $${paramIndex++}`);
             values.push(body.status);
