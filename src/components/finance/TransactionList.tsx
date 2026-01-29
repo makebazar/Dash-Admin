@@ -177,13 +177,17 @@ export default function TransactionList({ clubId }: TransactionListProps) {
 
     const handleEdit = (transaction: Transaction) => {
         setEditingTransaction(transaction)
+
+        // Convert ISO date to YYYY-MM-DD for the date input
+        const dateOnly = transaction.transaction_date.split('T')[0]
+
         setFormData({
             category_id: '', // Will need to map from name to ID
             amount: transaction.amount.toString(),
             type: transaction.type,
             payment_method: transaction.payment_method,
             status: transaction.status,
-            transaction_date: transaction.transaction_date,
+            transaction_date: dateOnly,
             description: transaction.description || '',
             account_id: transaction.account_id?.toString() || '',
             notes: ''
