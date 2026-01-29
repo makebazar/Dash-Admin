@@ -49,9 +49,19 @@ export async function GET(
             [clubId]
         );
 
+        // 3. Get finance accounts for this club (for mapping)
+        const accountsResult = await query(
+            `SELECT id, name, icon, color, account_type 
+             FROM finance_accounts 
+             WHERE club_id = $1 AND is_active = TRUE
+             ORDER BY account_type, name`,
+            [clubId]
+        );
+
         return NextResponse.json({
             systemMetrics: systemMetrics,
-            currentTemplate: templateResult.rows[0] || null
+            currentTemplate: templateResult.rows[0] || null,
+            accounts: accountsResult.rows
         });
 
     } catch (error) {

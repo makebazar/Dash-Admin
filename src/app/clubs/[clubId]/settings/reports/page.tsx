@@ -9,6 +9,7 @@ import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Loader2, Plus, GripVertical, Save, Trash2, ArrowLeft } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import Link from "next/link"
 
 interface SystemMetric {
@@ -28,7 +29,16 @@ interface TemplateField {
     field_type: 'INCOME' | 'EXPENSE' | 'OTHER'
     show_in_stats: boolean
     show_for_employee?: boolean
+    account_id?: number // For INCOME fields - which account to credit
     id?: string // for frontend dnd
+}
+
+interface Account {
+    id: number
+    name: string
+    icon: string
+    color: string
+    account_type: string
 }
 
 export default function ReportBuilderPage({ params }: { params: Promise<{ clubId: string }> }) {
@@ -36,6 +46,7 @@ export default function ReportBuilderPage({ params }: { params: Promise<{ clubId
     const [clubId, setClubId] = useState('')
     const [systemMetrics, setSystemMetrics] = useState<SystemMetric[]>([])
     const [selectedFields, setSelectedFields] = useState<TemplateField[]>([])
+    const [accounts, setAccounts] = useState<Account[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [isSaving, setIsSaving] = useState(false)
 
@@ -53,6 +64,7 @@ export default function ReportBuilderPage({ params }: { params: Promise<{ clubId
 
             if (res.ok && Array.isArray(data.systemMetrics)) {
                 setSystemMetrics(data.systemMetrics)
+                setAccounts(data.accounts || [])
 
                 if (data.currentTemplate && Array.isArray(data.currentTemplate.schema)) {
                     setSelectedFields(data.currentTemplate.schema)
@@ -262,6 +274,33 @@ export default function ReportBuilderPage({ params }: { params: Promise<{ clubId
                                                                 onCheckedChange={(checked) => handleUpdateField(index, 'is_required', checked)}
                                                             />
                                                         </div>
+
+                                                        {/* Account selector for INCOME fields */}
+                                                        {field.field_type === 'INCOME' && (
+                                                            <div className="sm:col-span-2">
+                                                                <Label htmlFor={`account-${index}`} className="text-sm">
+                                                                    Счёт для зачисления
+                                                                </Label>
+                                                                <Select
+                                                                    value={field.account_id?.toString() || ''}
+                                                                    onValueChange={(value) => handleUpdateField(index, 'account_id', parseInt(value))}
+                                                                >
+                                                                    <SelectTrigger id={`account-${index}`} className="mt-1">
+                                                                        <SelectValue placeholder="Выберите счёт" />
+                                                                    </SelectTrigger>
+                                                                    <SelectContent>
+                                                                        {accounts.map(account => (
+                                                                            <SelectItem key={account.id} value={account.id.toString()}>
+                                                                                {account.icon} {account.name}
+                                                                            </SelectItem>
+                                                                        ))}
+                                                                    </SelectContent>
+                                                                </Select>
+                                                                <span className="text-[10px] text-muted-foreground mt-1">
+                                                                    Деньги по этому полю будут зачисляться на выбранный счёт
+                                                                </span>
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 </div>
                                             </div>

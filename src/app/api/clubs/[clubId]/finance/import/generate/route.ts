@@ -48,21 +48,19 @@ export async function POST(
             [clubId]
         );
 
-        let incomeFields: { key: string; label: string }[] = [];
+
+        let incomeFields: { key: string; metric_key: string; custom_label: string; account_id?: number }[] = [];
 
         if (templateResult.rows.length > 0) {
             const schema = templateResult.rows[0].schema;
-            // Extract fields where field_type is INCOME
-            // Exclude cash_income and card_income as they're handled separately
+            // Get ALL income fields (including cash and card)
             incomeFields = schema
-                .filter((field: any) =>
-                    field.field_type === 'INCOME' &&
-                    field.metric_key !== 'cash_income' &&
-                    field.metric_key !== 'card_income'
-                )
+                .filter((field: any) => field.field_type === 'INCOME')
                 .map((field: any) => ({
                     key: field.metric_key,
-                    label: field.custom_label || field.metric_key
+                    metric_key: field.metric_key,
+                    custom_label: field.custom_label || field.metric_key,
+                    account_id: field.account_id
                 }));
 
             console.log('Found income fields:', incomeFields);
@@ -70,32 +68,7 @@ export async function POST(
             console.log('No report template found for club:', clubId);
         }
 
-        // Get payment method mappings from database
-        const mappingsResult = await query(
-            `SELECT 
-                pm.code,
-                pm.id as payment_method_id,
-                fam.account_id
-             FROM finance_account_mappings fam
-             JOIN payment_methods pm ON pm.id = fam.payment_method_id
-             WHERE fam.club_id = $1`,
-            [clubId]
-        );
-
-        // Map payment method codes to {payment_method_id, account_id}
-        const paymentMap = new Map<string, { paymentMethodId: number, accountId: number }>();
-        mappingsResult.rows.forEach(row => {
-            paymentMap.set(row.code, {
-                paymentMethodId: row.payment_method_id,
-                accountId: row.account_id
-            });
-        });
-
-        console.log('Payment method mapping:',
-            Object.fromEntries(
-                Array.from(paymentMap.entries()).map(([k, v]) => [k, v.accountId])
-            )
-        );
+        // No need for payment mappings - account_id is in the template fields!
 
         // Get shifts within date range that haven't been imported yet
         const shiftsResult = await query(
@@ -142,18 +115,18 @@ export async function POST(
             if (!preview) {
                 // Create transaction for cash income
                 if (cashIncome > 0) {
-                    const mapping = paymentMap.get('cash');
-                    if (mapping) {
+                    const cashField = incomeFields.find(f => f.metric_key === 'cash_income');
+                    if (cashField) {
                         const result = await query(
                             `INSERT INTO finance_transactions 
-                                (club_id, category_id, amount, type, payment_method_id, status, 
+                                (club_id, category_id, amount, type, payment_method, status, 
                                  transaction_date, description, related_shift_report_id, created_by, account_id)
                              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
                              RETURNING id`,
                             [
-                                clubId, categoryId, cashIncome, 'income', mapping.paymentMethodId, 'completed',
-                                shift.check_in, `Выручка смены (наличные)`,
-                                shift.id, userId, mapping.accountId
+                                clubId, categoryId, cashIncome, 'income', 'cash_income', 'completed',
+                                shift.check_in, cashField.custom_label || 'Выручка смены (наличные)',
+                                shift.id, userId, cashField.account_id || null
                             ]
                         );
                         transactionIds.push(result.rows[0].id);
@@ -163,114 +136,100 @@ export async function POST(
 
                 // Create transaction for card income
                 if (cardIncome > 0) {
-                    const mapping = paymentMap.get('card');
-                    if (mapping) {
+                    const cardField = incomeFields.find(f => f.metric_key === 'card_income');
+                    if (cardField) {
                         const result = await query(
                             `INSERT INTO finance_transactions 
-                                (club_id, category_id, amount, type, payment_method_id, status, 
+                                (club_id, category_id, amount, type, payment_method, status, 
                                  transaction_date, description, related_shift_report_id, created_by, account_id)
                              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
                              RETURNING id`,
                             [
-                                clubId, categoryId, cardIncome, 'income', mapping.paymentMethodId, 'completed',
-                                shift.check_in, `Выручка смены (безнал)`,
-                                shift.id, userId, mapping.accountId
+                                clubId, categoryId, cardIncome, 'income', 'card_income', 'completed',
+                                shift.check_in, cardField.custom_label || 'Выручка смены (безнал)',
+                                shift.id, userId, cardField.account_id || null
                             ]
                         );
                         transactionIds.push(result.rows[0].id);
                         importedCount++;
                     }
+                }
 
-                    // Create transactions for custom income fields from report template
-                    for (const field of incomeFields) {
-                        const fieldValue = shift.report_data?.[field.key];
-                        if (!fieldValue) continue;
+                // Create transactions for custom income fields from report template
+                for (const field of incomeFields) {
+                    // Skip cash and card as they're already processed
+                    if (field.metric_key === 'cash_income' || field.metric_key === 'card_income') {
+                        continue;
+                    }
 
-                        const amount = parseFloat(fieldValue) || 0;
-                        if (amount <= 0) continue;
+                    const fieldValue = shift.report_data?.[field.key];
+                    if (!fieldValue) continue;
 
-                        // Track totals
+                    const amount = parseFloat(fieldValue) || 0;
+                    if (amount <= 0) continue;
+
+                    // Track totals
+                    if (!customTotals[field.key]) {
+                        customTotals[field.key] = 0;
+                    }
+                    customTotals[field.key] += amount;
+
+                    // Account ID is in the template field!
+                    const result = await query(
+                        `INSERT INTO finance_transactions 
+                            (club_id, category_id, amount, type, payment_method, status, 
+                             transaction_date, description, related_shift_report_id, created_by, account_id)
+                         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                         RETURNING id`,
+                        [
+                            clubId, categoryId, amount, 'income', field.metric_key, 'completed',
+                            shift.check_in, `Выручка смены (${field.custom_label})`,
+                            shift.id, userId, field.account_id || null
+                        ]
+                    );
+                    transactionIds.push(result.rows[0].id);
+                    importedCount++;
+                }
+                if (cashIncome > 0) importedCount++;
+                if (cardIncome > 0) importedCount++;
+
+                // Count custom fields
+                for (const field of incomeFields) {
+                    const fieldValue = shift.report_data?.[field.key];
+                    if (!fieldValue) continue;
+
+                    const amount = parseFloat(fieldValue) || 0;
+                    if (amount > 0) {
                         if (!customTotals[field.key]) {
                             customTotals[field.key] = 0;
                         }
                         customTotals[field.key] += amount;
-
-                        // Determine payment method from field name
-                        const keyLower = field.key.toLowerCase();
-                        let paymentMethodCode = 'card'; // default
-
-                        if (keyLower.includes('cash') || keyLower.includes('наличн')) {
-                            paymentMethodCode = 'cash';
-                        } else if (keyLower.includes('sbp') || keyLower.includes('сбп')) {
-                            paymentMethodCode = 'sbp';
-                        } else if (keyLower.includes('bank') || keyLower.includes('банк') || keyLower.includes('transfer') || keyLower.includes('перевод')) {
-                            paymentMethodCode = 'bank_transfer';
-                        } else if (keyLower.includes('card') || keyLower.includes('карт')) {
-                            paymentMethodCode = 'card';
-                        }
-
-                        // Get mapping for payment method
-                        const mapping = paymentMap.get(paymentMethodCode);
-
-                        if (mapping) {
-                            const result = await query(
-                                `INSERT INTO finance_transactions 
-                                (club_id, category_id, amount, type, payment_method_id, status, 
-                                 transaction_date, description, related_shift_report_id, created_by, account_id)
-                             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-                             RETURNING id`,
-                                [
-                                    clubId, categoryId, amount, 'income', mapping.paymentMethodId, 'completed',
-                                    shift.check_in, `Выручка смены (${field.label})`,
-                                    shift.id, userId, mapping.accountId
-                                ]
-                            );
-                            transactionIds.push(result.rows[0].id);
-                            importedCount++;
-                        }
-                    }
-                } else {
-                    // In preview mode, just count what would be imported
-                    if (cashIncome > 0) importedCount++;
-                    if (cardIncome > 0) importedCount++;
-
-                    // Count custom fields
-                    for (const field of incomeFields) {
-                        const fieldValue = shift.report_data?.[field.key];
-                        if (!fieldValue) continue;
-
-                        const amount = parseFloat(fieldValue) || 0;
-                        if (amount > 0) {
-                            if (!customTotals[field.key]) {
-                                customTotals[field.key] = 0;
-                            }
-                            customTotals[field.key] += amount;
-                            importedCount++;
-                        }
+                        importedCount++;
                     }
                 }
             }
         }
-
-        const totalRevenue = totalCash + totalCard + Object.values(customTotals).reduce((sum, val) => sum + val, 0);
-
-        return NextResponse.json({
-            preview,
-            imported_count: importedCount,
-            transaction_ids: transactionIds,
-            total_cash: totalCash,
-            total_card: totalCard,
-            custom_fields: customTotals,
-            total_revenue: totalRevenue,
-            shifts_processed: shifts.length - skippedCount,
-            skipped_count: skippedCount,
-            skipped_reasons: skippedReasons
-        });
-
-    } catch (error) {
-        console.error('Error importing revenue:', error);
-        return NextResponse.json({
-            error: 'Failed to import revenue'
-        }, { status: 500 });
     }
+
+const totalRevenue = totalCash + totalCard + Object.values(customTotals).reduce((sum, val) => sum + val, 0);
+
+    return NextResponse.json({
+        preview,
+        imported_count: importedCount,
+        transaction_ids: transactionIds,
+        total_cash: totalCash,
+        total_card: totalCard,
+        custom_fields: customTotals,
+        total_revenue: totalRevenue,
+        shifts_processed: shifts.length - skippedCount,
+        skipped_count: skippedCount,
+        skipped_reasons: skippedReasons
+    });
+
+} catch (error) {
+    console.error('Error importing revenue:', error);
+    return NextResponse.json({
+        error: 'Failed to import revenue'
+    }, { status: 500 });
+}
 }
