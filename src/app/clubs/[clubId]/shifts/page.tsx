@@ -365,6 +365,10 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
     }
 
     const handleUnverify = async (shift: Shift) => {
+        if (!confirm('Отменить подтверждение смены? Транзакции будут удалены из финансов.')) {
+            return
+        }
+
         try {
             const res = await fetch(`/api/clubs/${clubId}/shifts/${shift.id}`, {
                 method: 'PATCH',
