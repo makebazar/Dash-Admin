@@ -250,26 +250,27 @@ export async function POST(
                     }
                 }
             }
-
-            const totalRevenue = totalCash + totalCard + Object.values(customTotals).reduce((sum, val) => sum + val, 0);
-
-            return NextResponse.json({
-                preview,
-                imported_count: importedCount,
-                transaction_ids: transactionIds,
-                total_cash: totalCash,
-                total_card: totalCard,
-                custom_fields: customTotals,
-                total_revenue: totalRevenue,
-                shifts_processed: shifts.length - skippedCount,
-                skipped_count: skippedCount,
-                skipped_reasons: skippedReasons
-            });
-
-        } catch (error) {
-            console.error('Error importing revenue:', error);
-            return NextResponse.json({
-                error: 'Failed to import revenue'
-            }, { status: 500 });
         }
+
+        const totalRevenue = totalCash + totalCard + Object.values(customTotals).reduce((sum, val) => sum + val, 0);
+
+        return NextResponse.json({
+            preview,
+            imported_count: importedCount,
+            transaction_ids: transactionIds,
+            total_cash: totalCash,
+            total_card: totalCard,
+            custom_fields: customTotals,
+            total_revenue: totalRevenue,
+            shifts_processed: shifts.length - skippedCount,
+            skipped_count: skippedCount,
+            skipped_reasons: skippedReasons
+        });
+
+    } catch (error) {
+        console.error('Error importing revenue:', error);
+        return NextResponse.json({
+            error: 'Failed to import revenue'
+        }, { status: 500 });
     }
+}
