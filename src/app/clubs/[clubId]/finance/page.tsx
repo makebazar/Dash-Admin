@@ -185,15 +185,15 @@ export default function FinancePage() {
                 </div>
             </div>
 
-            <Tabs value={activeTab} onValueChange={setActiveTab}>
-                <TabsList className="grid w-full grid-cols-7">
-                    <TabsTrigger value="dashboard">📊 Dashboard</TabsTrigger>
-                    <TabsTrigger value="transactions">📝 Транзакции</TabsTrigger>
-                    <TabsTrigger value="recurring">🔄 Шаблоны</TabsTrigger>
-                    <TabsTrigger value="scheduled">📅 Расходы</TabsTrigger>
-                    <TabsTrigger value="import">Импорт</TabsTrigger>
-                    <TabsTrigger value="credits">💳 Кредиты</TabsTrigger>
-                    <TabsTrigger value="reports">📈 Отчеты</TabsTrigger>
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+                <TabsList className="flex flex-wrap w-full h-auto bg-muted p-1">
+                    <TabsTrigger value="dashboard" className="flex-1">📊 Dashboard</TabsTrigger>
+                    <TabsTrigger value="transactions" className="flex-1">📝 Транзакции</TabsTrigger>
+                    <TabsTrigger value="recurring" className="flex-1">🔄 Шаблоны</TabsTrigger>
+                    <TabsTrigger value="scheduled" className="flex-1">📅 Расходы</TabsTrigger>
+                    <TabsTrigger value="import" className="flex-1">Импорт</TabsTrigger>
+                    <TabsTrigger value="credits" className="flex-1">💳 Кредиты</TabsTrigger>
+                    <TabsTrigger value="reports" className="flex-1">📈 Отчеты</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="dashboard" className="space-y-6">
