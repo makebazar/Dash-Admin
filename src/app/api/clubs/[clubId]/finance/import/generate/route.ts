@@ -40,6 +40,27 @@ export async function POST(
 
         const categoryId = categoryResult.rows[0].id;
 
+        // Get report template to determine which fields are income
+        const templateResult = await query(
+            `SELECT schema FROM club_report_templates 
+             WHERE club_id = $1 AND is_active = true 
+             ORDER BY created_at DESC LIMIT 1`,
+            [clubId]
+        );
+
+        let incomeFields: { key: string; label: string }[] = [];
+
+        if (templateResult.rows.length > 0) {
+            const schema = templateResult.rows[0].schema;
+            // Extract fields where category is INCOME
+            incomeFields = schema
+                .filter((field: any) => field.category === 'INCOME')
+                .map((field: any) => ({
+                    key: field.metric_key,
+                    label: field.custom_label || field.metric_key
+                }));
+        }
+
         // Get shifts within date range that haven't been imported yet
         const shiftsResult = await query(
             `SELECT 
@@ -62,7 +83,7 @@ export async function POST(
         const shifts = shiftsResult.rows;
         let totalCash = 0;
         let totalCard = 0;
-        let totalSbp = 0;
+        const customTotals: Record<string, number> = {};
         let importedCount = 0;
         let skippedCount = 0;
         const skippedReasons: string[] = [];
@@ -78,11 +99,9 @@ export async function POST(
 
             const cashIncome = parseFloat(shift.cash_income) || 0;
             const cardIncome = parseFloat(shift.card_income) || 0;
-            const sbpIncome = shift.report_data?.sbp_income ? parseFloat(shift.report_data.sbp_income) : 0;
 
             totalCash += cashIncome;
             totalCard += cardIncome;
-            totalSbp += sbpIncome;
 
             if (!preview) {
                 // Create transaction for cash income
@@ -95,7 +114,7 @@ export async function POST(
                          RETURNING id`,
                         [
                             clubId, categoryId, cashIncome, 'income', 'cash', 'completed',
-                            shift.check_in, `Выручка смены #${shift.id} (наличные)`,
+                            shift.check_in, `Выручка смены (наличные)`,
                             shift.id, userId
                         ]
                     );
@@ -113,7 +132,7 @@ export async function POST(
                          RETURNING id`,
                         [
                             clubId, categoryId, cardIncome, 'income', 'card', 'completed',
-                            shift.check_in, `Выручка смены #${shift.id} (безнал)`,
+                            shift.check_in, `Выручка смены (безнал)`,
                             shift.id, userId
                         ]
                     );
@@ -121,8 +140,30 @@ export async function POST(
                     importedCount++;
                 }
 
-                // Create transaction for SBP income
-                if (sbpIncome > 0) {
+                // Create transactions for custom income fields from report template
+                for (const field of incomeFields) {
+                    const fieldValue = shift.report_data?.[field.key];
+                    if (!fieldValue) continue;
+
+                    const amount = parseFloat(fieldValue) || 0;
+                    if (amount <= 0) continue;
+
+                    // Track totals
+                    if (!customTotals[field.key]) {
+                        customTotals[field.key] = 0;
+                    }
+                    customTotals[field.key] += amount;
+
+                    // Determine payment method from field name
+                    const keyLower = field.key.toLowerCase();
+                    let paymentMethod = 'bank_transfer'; // default
+
+                    if (keyLower.includes('cash') || keyLower.includes('наличн')) {
+                        paymentMethod = 'cash';
+                    } else if (keyLower.includes('card') || keyLower.includes('карт')) {
+                        paymentMethod = 'card';
+                    }
+
                     const result = await query(
                         `INSERT INTO finance_transactions 
                             (club_id, category_id, amount, type, payment_method, status, 
@@ -130,8 +171,8 @@ export async function POST(
                          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
                          RETURNING id`,
                         [
-                            clubId, categoryId, sbpIncome, 'income', 'bank_transfer', 'completed',
-                            shift.check_in, `Выручка смены #${shift.id} (СБП)`,
+                            clubId, categoryId, amount, 'income', paymentMethod, 'completed',
+                            shift.check_in, `Выручка смены (${field.label})`,
                             shift.id, userId
                         ]
                     );
@@ -142,9 +183,25 @@ export async function POST(
                 // In preview mode, just count what would be imported
                 if (cashIncome > 0) importedCount++;
                 if (cardIncome > 0) importedCount++;
-                if (sbpIncome > 0) importedCount++;
+
+                // Count custom fields
+                for (const field of incomeFields) {
+                    const fieldValue = shift.report_data?.[field.key];
+                    if (!fieldValue) continue;
+
+                    const amount = parseFloat(fieldValue) || 0;
+                    if (amount > 0) {
+                        if (!customTotals[field.key]) {
+                            customTotals[field.key] = 0;
+                        }
+                        customTotals[field.key] += amount;
+                        importedCount++;
+                    }
+                }
             }
         }
+
+        const totalRevenue = totalCash + totalCard + Object.values(customTotals).reduce((sum, val) => sum + val, 0);
 
         return NextResponse.json({
             preview,
@@ -152,8 +209,8 @@ export async function POST(
             transaction_ids: transactionIds,
             total_cash: totalCash,
             total_card: totalCard,
-            total_sbp: totalSbp,
-            total_revenue: totalCash + totalCard + totalSbp,
+            custom_fields: customTotals,
+            total_revenue: totalRevenue,
             shifts_processed: shifts.length - skippedCount,
             skipped_count: skippedCount,
             skipped_reasons: skippedReasons

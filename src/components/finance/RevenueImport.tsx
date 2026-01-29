@@ -18,7 +18,7 @@ interface ImportResult {
     transaction_ids: number[]
     total_cash: number
     total_card: number
-    total_sbp: number
+    custom_fields: Record<string, number>
     total_revenue: number
     shifts_processed: number
     skipped_count: number
@@ -192,14 +192,15 @@ export default function RevenueImport({ clubId }: RevenueImportProps) {
                                 </div>
                             </div>
 
-                            {result.total_sbp > 0 && (
-                                <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
-                                    <div className="text-xs text-orange-700 mb-1">📱 СБП</div>
+                            {/* Dynamic custom fields from report template */}
+                            {Object.entries(result.custom_fields || {}).map(([fieldKey, amount]) => (
+                                <div key={fieldKey} className="bg-orange-50 border border-orange-200 rounded-lg p-3">
+                                    <div className="text-xs text-orange-700 mb-1">📊 {fieldKey}</div>
                                     <div className="text-lg font-bold text-orange-900">
-                                        {formatCurrency(result.total_sbp)}
+                                        {formatCurrency(amount)}
                                     </div>
                                 </div>
-                            )}
+                            ))}
                         </div>
 
                         {/* Total Revenue */}
