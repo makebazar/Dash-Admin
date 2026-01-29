@@ -288,7 +288,10 @@ export default function TransactionList({ clubId }: TransactionListProps) {
             shift_report_id: id,
             shift_date: trans[0].transaction_date,
             transactions: trans,
-            total: trans.reduce((sum, t) => sum + (t.type === 'income' ? t.amount : -t.amount), 0),
+            total: trans.reduce((sum, t) => {
+                const amount = typeof t.amount === 'string' ? parseFloat(t.amount) : t.amount
+                return sum + (t.type === 'income' ? amount : -amount)
+            }, 0),
             is_expanded: expandedGroups.has(id)
         }))
 
