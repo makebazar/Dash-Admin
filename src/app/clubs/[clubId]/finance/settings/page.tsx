@@ -29,7 +29,7 @@ interface IncomeField {
 const ACCOUNT_TYPES = [
     { value: 'cash', label: 'Наличные' },
     { value: 'bank', label: 'Банк' },
-    { value: 'terminal', label: 'Терминал' },
+    { value: 'card', label: 'Терминал' },
     { value: 'other', label: 'Другое' }
 ]
 
@@ -132,10 +132,8 @@ export default function FinanceSettingsPage({ params }: { params: Promise<{ club
 
         setIsSaving(true)
         try {
-            const res = await fetch(`/api/clubs/${clubId}/finance/accounts`, {
-                method: 'DELETE',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ account_id: accountId })
+            const res = await fetch(`/api/clubs/${clubId}/finance/accounts?id=${accountId}`, {
+                method: 'DELETE'
             })
 
             if (res.ok) {
