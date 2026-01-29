@@ -26,6 +26,8 @@ interface Shift {
     report_data: Record<string, any>
     status: string
     shift_type: 'DAY' | 'NIGHT'
+    has_owner_corrections?: boolean
+    owner_notes?: string
 }
 
 export default function ShiftsPage({ params }: { params: Promise<{ clubId: string }> }) {
@@ -44,6 +46,7 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
     const [editCheckIn, setEditCheckIn] = useState('')
     const [editCheckOut, setEditCheckOut] = useState('')
     const [editCustomFields, setEditCustomFields] = useState<Record<string, any>>({})
+    const [editOwnerNotes, setEditOwnerNotes] = useState('')
     const [clubTimezone, setClubTimezone] = useState('Europe/Moscow')
 
     // Create shift modal state
@@ -185,6 +188,7 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
         setEditCardIncome(String(shift.card_income || 0))
         setEditExpenses(String(shift.expenses || 0))
         setEditComment(shift.report_comment || '')
+        setEditOwnerNotes(shift.owner_notes || '')
         // Format datetime for input using club's timezone
         const formatForInput = (dateStr: string | null) => {
             if (!dateStr) return ''
@@ -287,6 +291,7 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                     card_income: parseFloat(editCardIncome) || 0,
                     expenses: parseFloat(editExpenses) || 0,
                     report_comment: editComment,
+                    owner_notes: editOwnerNotes,
                     check_in: convertToClubTimezone(editCheckIn),
                     check_out: convertToClubTimezone(editCheckOut),
                     total_hours: totalHours,
@@ -472,11 +477,20 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
         return num.toLocaleString('ru-RU', { maximumFractionDigits: 0 }) + ' ₽'
     }
 
-    const getStatusBadge = (status: string, hasCheckOut: boolean) => {
-        if (!hasCheckOut) {
+    const getStatusBadge = (shift: Shift) => {
+        if (!shift.check_out) {
             return <Badge className="bg-yellow-500/10 text-yellow-500 border-yellow-500/20 animate-pulse">Активна</Badge>
         }
-        if (status === 'VERIFIED') {
+        if (shift.status === 'VERIFIED') {
+            if (shift.has_owner_corrections) {
+                return (
+                    <div className="flex items-center gap-2">
+                        <Badge className="bg-orange-500/10 text-orange-500 border-orange-500/20">
+                            ⚠️ Проверена с замечаниями
+                        </Badge>
+                    </div>
+                )
+            }
             return <Badge className="bg-green-500/10 text-green-500 border-green-500/20">✓ Подтверждена</Badge>
         }
         return <Badge className="bg-blue-500/10 text-blue-500 border-blue-500/20">Закрыта</Badge>
@@ -897,7 +911,7 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                                         </TableCell>
                                     ))}
                                     <TableCell className="whitespace-nowrap">
-                                        {getStatusBadge(shift.status, !!shift.check_out)}
+                                        {getStatusBadge(shift)}
                                     </TableCell>
                                     <TableCell className="whitespace-nowrap">
                                         <div className="flex items-center justify-end gap-1">
@@ -1081,6 +1095,22 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                                 placeholder="Примечание к смене..."
                             />
                         </div>
+
+                        {editingShift?.status === 'CLOSED' && (
+                            <div className="space-y-2">
+                                <Label>Заметки владельца</Label>
+                                <Textarea
+                                    value={editOwnerNotes}
+                                    onChange={(e) => setEditOwnerNotes(e.target.value)}
+                                    placeholder="Причина корректировки (опционально)"
+                                    rows={2}
+                                    className="resize-none"
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                    Эти заметки будут видны сотруднику
+                                </p>
+                            </div>
+                        )}
 
                         {/* Custom Report Fields */}
                         {reportFields.length > 0 && (

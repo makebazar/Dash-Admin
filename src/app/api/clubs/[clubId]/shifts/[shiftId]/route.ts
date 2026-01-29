@@ -242,7 +242,7 @@ export async function PATCH(
             }
 
             // Create finance transactions
-            await createFinanceTransactionsFromShift(shiftId, clubId, userId, mergedData);
+            await createFinanceTransactionsFromShift(shiftId, Number(clubId), userId, mergedData);
 
             // Set verification fields
             updates.push(`verified_by = $${paramIndex++}`);
