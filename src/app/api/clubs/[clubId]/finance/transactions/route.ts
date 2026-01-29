@@ -31,9 +31,11 @@ export async function GET(
                 fc.name as category_name,
                 fc.icon as category_icon,
                 fc.color as category_color,
+                fa.name as account_name,
                 u.full_name as created_by_name
             FROM finance_transactions ft
             JOIN finance_categories fc ON ft.category_id = fc.id
+            LEFT JOIN finance_accounts fa ON ft.account_id = fa.id
             LEFT JOIN users u ON ft.created_by = u.id
             WHERE ft.club_id = $1
         `;
