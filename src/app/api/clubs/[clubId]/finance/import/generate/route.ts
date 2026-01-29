@@ -52,13 +52,17 @@ export async function POST(
 
         if (templateResult.rows.length > 0) {
             const schema = templateResult.rows[0].schema;
-            // Extract fields where category is INCOME
+            // Extract fields where field_type is INCOME
             incomeFields = schema
-                .filter((field: any) => field.category === 'INCOME')
+                .filter((field: any) => field.field_type === 'INCOME')
                 .map((field: any) => ({
                     key: field.metric_key,
                     label: field.custom_label || field.metric_key
                 }));
+
+            console.log('Found income fields:', incomeFields);
+        } else {
+            console.log('No report template found for club:', clubId);
         }
 
         // Get shifts within date range that haven't been imported yet
