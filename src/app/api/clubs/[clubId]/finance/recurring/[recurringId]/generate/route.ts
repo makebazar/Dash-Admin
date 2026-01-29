@@ -82,6 +82,7 @@ export async function POST(
             [
                 clubId,
                 template.category_id,
+                template.name,
                 amount,
                 transactionDate,
                 `${template.name} (автоматически из шаблона)`,
