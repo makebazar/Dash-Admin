@@ -120,12 +120,20 @@ export async function POST(
             const incomeFields = schema.filter((f: any) => f.field_type === 'INCOME' && f.account_id);
 
             for (const field of incomeFields) {
-                await query(
-                    `UPDATE finance_transactions 
-                     SET account_id = $1 
-                     WHERE club_id = $2 AND payment_method = $3 AND account_id IS NULL`,
-                    [field.account_id, clubId, field.metric_key]
-                );
+                const metricKeys = [field.metric_key];
+
+                // For standard fields, also sync legacy payment methods
+                if (field.metric_key === 'cash_income') metricKeys.push('cash');
+                if (field.metric_key === 'card_income') metricKeys.push('card', 'terminal');
+
+                for (const key of metricKeys) {
+                    await query(
+                        `UPDATE finance_transactions 
+                         SET account_id = $1 
+                         WHERE club_id = $2 AND payment_method = $3`,
+                        [field.account_id, clubId, key]
+                    );
+                }
             }
 
             // Recalculate balances for all accounts of this club to ensure total accuracy
