@@ -100,8 +100,9 @@ export async function POST(
              RETURNING *`,
             [
                 clubId, category_id, name, amount, type, frequency, interval,
-                day_of_month, day_of_week, has_split, split_config ? JSON.stringify(split_config) : null,
-                payment_method, start_date, end_date, nextGenerationDate, description, userId
+                day_of_month || null, day_of_week || null, has_split,
+                split_config ? JSON.stringify(split_config) : null,
+                payment_method, start_date, end_date || null, nextGenerationDate, description, userId
             ]
         );
 
@@ -143,7 +144,7 @@ export async function PUT(
                  description = COALESCE($5, description)
              WHERE id = $6 AND club_id = $7
              RETURNING *`,
-            [name, amount, is_active, end_date, description, id, clubId]
+            [name, amount, is_active, end_date || null, description, id, clubId]
         );
 
         if (result.rows.length === 0) {
