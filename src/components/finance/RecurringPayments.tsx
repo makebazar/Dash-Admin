@@ -41,12 +41,21 @@ interface RecurringPayment {
     start_date: string
     end_date: string | null
     description: string
+    account_id?: number
+    account_name?: string
 }
 
 interface Category {
     id: number
     name: string
     type: 'income' | 'expense'
+    icon: string
+    color: string
+}
+
+interface Account {
+    id: number
+    name: string
     icon: string
     color: string
 }
@@ -58,12 +67,14 @@ interface RecurringPaymentsProps {
 export default function RecurringPayments({ clubId }: RecurringPaymentsProps) {
     const [payments, setPayments] = useState<RecurringPayment[]>([])
     const [categories, setCategories] = useState<Category[]>([])
+    const [accounts, setAccounts] = useState<Account[]>([])
     const [loading, setLoading] = useState(true)
     const [isDialogOpen, setIsDialogOpen] = useState(false)
     const [editingPayment, setEditingPayment] = useState<RecurringPayment | null>(null)
 
     const [formData, setFormData] = useState({
         category_id: '',
+        account_id: '',
         name: '',
         amount: '',
         type: 'expense' as 'income' | 'expense',
@@ -79,7 +90,18 @@ export default function RecurringPayments({ clubId }: RecurringPaymentsProps) {
     useEffect(() => {
         fetchPayments()
         fetchCategories()
+        fetchAccounts()
     }, [clubId])
+
+    const fetchAccounts = async () => {
+        try {
+            const res = await fetch(`/api/clubs/${clubId}/finance/accounts`)
+            const data = await res.json()
+            setAccounts(data.accounts || [])
+        } catch (error) {
+            console.error('Failed to fetch accounts:', error)
+        }
+    }
 
     const fetchCategories = async () => {
         try {
@@ -195,6 +217,7 @@ export default function RecurringPayments({ clubId }: RecurringPaymentsProps) {
         setEditingPayment(null)
         setFormData({
             category_id: '',
+            account_id: '',
             name: '',
             amount: '',
             type: 'expense',
@@ -332,6 +355,7 @@ export default function RecurringPayments({ clubId }: RecurringPaymentsProps) {
                                                 setEditingPayment(payment)
                                                 setFormData({
                                                     category_id: '',
+                                                    account_id: payment.account_id?.toString() || '',
                                                     name: payment.name,
                                                     amount: payment.amount.toString(),
                                                     type: payment.type,
@@ -435,6 +459,25 @@ export default function RecurringPayments({ clubId }: RecurringPaymentsProps) {
                                 onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
                                 required
                             />
+                        </div>
+
+                        <div>
+                            <Label>Счёт</Label>
+                            <Select
+                                value={formData.account_id}
+                                onValueChange={(value) => setFormData({ ...formData, account_id: value })}
+                            >
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Выберите счёт" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {accounts.map(acc => (
+                                        <SelectItem key={acc.id} value={acc.id.toString()}>
+                                            {acc.icon} {acc.name}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
                         </div>
 
                         <div className="grid grid-cols-2 gap-4">

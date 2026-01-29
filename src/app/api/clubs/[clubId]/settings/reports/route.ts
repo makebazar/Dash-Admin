@@ -126,14 +126,22 @@ export async function POST(
                 if (field.metric_key === 'cash_income') metricKeys.push('cash');
                 if (field.metric_key === 'card_income') metricKeys.push('card', 'terminal');
 
-                for (const key of metricKeys) {
-                    await query(
-                        `UPDATE finance_transactions 
-                         SET account_id = $1 
-                         WHERE club_id = $2 AND payment_method = $3`,
-                        [field.account_id, clubId, key]
-                    );
-                }
+                // Aggressive sync: match by payment_method OR description (for custom fields like "СБП")
+                const descriptionMatch = field.custom_label ? `%${field.custom_label}%` : null;
+
+                await query(
+                    `UPDATE finance_transactions 
+                     SET account_id = $1 
+                     WHERE club_id = $2 
+                     AND account_id IS NULL 
+                     AND (
+                        payment_method = ANY($3)
+                        ${descriptionMatch ? 'OR description ILIKE $4' : ''}
+                     )`,
+                    descriptionMatch
+                        ? [field.account_id, clubId, metricKeys, descriptionMatch]
+                        : [field.account_id, clubId, metricKeys]
+                );
             }
 
             // Recalculate balances for all accounts of this club to ensure total accuracy

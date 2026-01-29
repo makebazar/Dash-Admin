@@ -154,7 +154,8 @@ export async function POST(
             transaction_date,
             description,
             notes,
-            attachment_url
+            attachment_url,
+            account_id
         } = body;
 
         // Validation
@@ -196,12 +197,12 @@ export async function POST(
         const result = await query(
             `INSERT INTO finance_transactions 
                 (club_id, category_id, amount, type, payment_method, status, 
-                 transaction_date, description, notes, attachment_url, created_by)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                 transaction_date, description, notes, attachment_url, created_by, account_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
              RETURNING *`,
             [
                 clubId, category_id, amount, type, payment_method, status,
-                transaction_date, description, notes, attachment_url, userId
+                transaction_date, description, notes, attachment_url, userId, account_id
             ]
         );
 
@@ -250,7 +251,8 @@ export async function PUT(
             transaction_date,
             description,
             notes,
-            attachment_url
+            attachment_url,
+            account_id
         } = body;
 
         if (!id) {
@@ -276,12 +278,13 @@ export async function PUT(
                  transaction_date = COALESCE($5, transaction_date),
                  description = COALESCE($6, description),
                  notes = COALESCE($7, notes),
-                 attachment_url = COALESCE($8, attachment_url)
-             WHERE id = $9 AND club_id = $10
+                 attachment_url = COALESCE($8, attachment_url),
+                 account_id = COALESCE($9, account_id)
+             WHERE id = $10 AND club_id = $11
              RETURNING *`,
             [
                 category_id, amount, payment_method, status, transaction_date,
-                description, notes, attachment_url, id, clubId
+                description, notes, attachment_url, account_id, id, clubId
             ]
         );
 

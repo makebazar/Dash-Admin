@@ -36,6 +36,15 @@ interface Transaction {
     transaction_date: string
     description: string
     created_by_name: string
+    account_id?: number
+    account_name?: string
+}
+
+interface Account {
+    id: number
+    name: string
+    icon: string
+    color: string
 }
 
 interface Category {
@@ -53,6 +62,7 @@ interface TransactionListProps {
 export default function TransactionList({ clubId }: TransactionListProps) {
     const [transactions, setTransactions] = useState<Transaction[]>([])
     const [categories, setCategories] = useState<Category[]>([])
+    const [accounts, setAccounts] = useState<Account[]>([])
     const [loading, setLoading] = useState(true)
     const [isDialogOpen, setIsDialogOpen] = useState(false)
     const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
@@ -66,6 +76,7 @@ export default function TransactionList({ clubId }: TransactionListProps) {
     // Form state
     const [formData, setFormData] = useState({
         category_id: '',
+        account_id: '',
         amount: '',
         type: 'expense' as 'income' | 'expense',
         payment_method: 'cash',
@@ -78,7 +89,18 @@ export default function TransactionList({ clubId }: TransactionListProps) {
     useEffect(() => {
         fetchTransactions()
         fetchCategories()
+        fetchAccounts()
     }, [clubId, typeFilter, categoryFilter, statusFilter, searchTerm])
+
+    const fetchAccounts = async () => {
+        try {
+            const res = await fetch(`/api/clubs/${clubId}/finance/accounts`)
+            const data = await res.json()
+            setAccounts(data.accounts || [])
+        } catch (error) {
+            console.error('Failed to fetch accounts:', error)
+        }
+    }
 
     const fetchCategories = async () => {
         try {
@@ -163,6 +185,7 @@ export default function TransactionList({ clubId }: TransactionListProps) {
             status: transaction.status,
             transaction_date: transaction.transaction_date,
             description: transaction.description || '',
+            account_id: transaction.account_id?.toString() || '',
             notes: ''
         })
         setIsDialogOpen(true)
@@ -172,6 +195,7 @@ export default function TransactionList({ clubId }: TransactionListProps) {
         setEditingTransaction(null)
         setFormData({
             category_id: '',
+            account_id: '',
             amount: '',
             type: 'expense',
             payment_method: 'cash',
@@ -431,7 +455,26 @@ export default function TransactionList({ clubId }: TransactionListProps) {
                         </div>
 
                         <div>
-                            <Label>Способ оплаты</Label>
+                            <Label>Счёт</Label>
+                            <Select
+                                value={formData.account_id}
+                                onValueChange={(value) => setFormData({ ...formData, account_id: value })}
+                            >
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Выберите счёт" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {accounts.map(acc => (
+                                        <SelectItem key={acc.id} value={acc.id.toString()}>
+                                            {acc.icon} {acc.name}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        <div>
+                            <Label>Способ оплаты (технический)</Label>
                             <Select
                                 value={formData.payment_method}
                                 onValueChange={(value) => setFormData({ ...formData, payment_method: value })}

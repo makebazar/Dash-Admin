@@ -76,7 +76,8 @@ export async function POST(
             payment_method = 'cash',
             start_date,
             end_date,
-            description
+            description,
+            account_id
         } = body;
 
         // Validation
@@ -95,14 +96,14 @@ export async function POST(
             `INSERT INTO recurring_payments 
                 (club_id, category_id, name, amount, type, frequency, interval, 
                  day_of_month, day_of_week, has_split, split_config, payment_method, 
-                 start_date, end_date, next_generation_date, description, created_by)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+                 start_date, end_date, next_generation_date, description, created_by, account_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
              RETURNING *`,
             [
                 clubId, category_id, name, amount, type, frequency, interval,
                 day_of_month || null, day_of_week || null, has_split,
                 split_config ? JSON.stringify(split_config) : null,
-                payment_method, start_date, end_date || null, nextGenerationDate, description, userId
+                payment_method, start_date, end_date || null, nextGenerationDate, description, userId, account_id
             ]
         );
 
@@ -129,7 +130,7 @@ export async function PUT(
         const { clubId } = params;
         const body = await request.json();
 
-        const { id, name, amount, is_active, end_date, description } = body;
+        const { id, name, amount, is_active, end_date, description, account_id } = body;
 
         if (!id) {
             return NextResponse.json({ error: 'Recurring payment ID is required' }, { status: 400 });
@@ -141,10 +142,11 @@ export async function PUT(
                  amount = COALESCE($2, amount),
                  is_active = COALESCE($3, is_active),
                  end_date = COALESCE($4, end_date),
-                 description = COALESCE($5, description)
-             WHERE id = $6 AND club_id = $7
+                 description = COALESCE($5, description),
+                 account_id = COALESCE($6, account_id)
+             WHERE id = $7 AND club_id = $8
              RETURNING *`,
-            [name, amount, is_active, end_date || null, description, id, clubId]
+            [name, amount, is_active, end_date || null, description, account_id, id, clubId]
         );
 
         if (result.rows.length === 0) {

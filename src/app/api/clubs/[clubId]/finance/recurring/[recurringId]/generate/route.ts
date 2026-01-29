@@ -69,8 +69,8 @@ export async function POST(
         const result = await query(
             `INSERT INTO finance_transactions 
                 (club_id, category_id, amount, type, payment_method, status, 
-                 transaction_date, description, created_by)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                 transaction_date, description, created_by, account_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
              RETURNING *`,
             [
                 clubId,
@@ -81,7 +81,8 @@ export async function POST(
                 'completed',
                 transactionDate,
                 `${template.name} (автоматически из шаблона)`,
-                userId
+                userId,
+                template.account_id
             ]
         );
 
