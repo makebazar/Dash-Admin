@@ -23,6 +23,8 @@ export async function PUT(
             description,
             consumption_value,
             unit_price,
+            is_consumption_based,
+            consumption_unit,
             status
         } = body;
 
@@ -34,11 +36,13 @@ export async function PUT(
                  description = COALESCE($4, description),
                  consumption_value = COALESCE($5, consumption_value),
                  unit_price = COALESCE($6, unit_price),
-                 status = COALESCE($7, status),
+                 is_consumption_based = COALESCE($7, is_consumption_based),
+                 consumption_unit = COALESCE($8, consumption_unit),
+                 status = COALESCE($9, status),
                  updated_at = NOW()
-             WHERE id = $8 AND club_id = $9
+             WHERE id = $10 AND club_id = $11
              RETURNING *`,
-            [name, amount, due_date, description, consumption_value, unit_price, status, expenseId, clubId]
+            [name, amount, due_date, description, consumption_value, unit_price, is_consumption_based, consumption_unit, status, expenseId, clubId]
         );
 
         if (result.rows.length === 0) {

@@ -72,6 +72,10 @@ interface AnalyticsData {
         category_name: string
         icon: string
         amount_paid: number
+        is_consumption_based?: boolean
+        consumption_unit?: string
+        consumption_value?: number
+        unit_price?: number
     }>
 }
 

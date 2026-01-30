@@ -88,7 +88,9 @@ export async function POST(
             description,
             recurring_payment_id,
             consumption_value,
-            unit_price
+            unit_price,
+            is_consumption_based,
+            consumption_unit
         } = body;
 
         if (!category_id || !name || !amount || !due_date) {
@@ -100,10 +102,10 @@ export async function POST(
 
         const result = await query(
             `INSERT INTO finance_scheduled_expenses 
-                (club_id, category_id, name, amount, due_date, description, recurring_payment_id, consumption_value, unit_price)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                (club_id, category_id, name, amount, due_date, description, recurring_payment_id, consumption_value, unit_price, is_consumption_based, consumption_unit)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
              RETURNING *`,
-            [clubId, category_id, name, amount, due_date, description, recurring_payment_id || null, consumption_value, unit_price]
+            [clubId, category_id, name, amount, due_date, description, recurring_payment_id || null, consumption_value, unit_price, is_consumption_based || false, consumption_unit || null]
         );
 
         return NextResponse.json({
