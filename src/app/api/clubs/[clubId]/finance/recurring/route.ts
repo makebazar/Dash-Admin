@@ -84,15 +84,15 @@ export async function POST(
         } = body;
 
         // Validation
-        if (!category_id || !name || (amount === undefined && !is_consumption_based) || !type || !frequency || !start_date) {
+        if (!category_id || !name || (amount === undefined && !is_consumption_based) || !type || !frequency) {
             return NextResponse.json(
-                { error: 'category_id, name, amount (if not consumption-based), type, frequency, and start_date are required' },
+                { error: 'category_id, name, amount (if not consumption-based), type, and frequency are required' },
                 { status: 400 }
             );
         }
 
         // Calculate next generation date
-        const startDateObj = new Date(start_date);
+        const startDateObj = start_date ? new Date(start_date) : new Date();
         let nextGenerationDate = startDateObj;
 
         const result = await query(
@@ -107,7 +107,7 @@ export async function POST(
                 clubId, category_id, name, amount || 0, type, frequency, interval,
                 day_of_month || null, day_of_week || null, has_split,
                 split_config ? JSON.stringify(split_config) : null,
-                payment_method, start_date, end_date || null, nextGenerationDate, description, userId, account_id,
+                payment_method, startDateObj, end_date || null, nextGenerationDate, description, userId, account_id,
                 is_consumption_based, consumption_unit, default_unit_price
             ]
         );

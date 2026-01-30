@@ -476,6 +476,7 @@ export default function RecurringPayments({ clubId }: RecurringPaymentsProps) {
                             </Select>
                         </div>
 
+                        {/* Category selection */}
                         <div>
                             <Label>Категория</Label>
                             <Select
@@ -497,6 +498,55 @@ export default function RecurringPayments({ clubId }: RecurringPaymentsProps) {
                             </Select>
                         </div>
 
+                        {/* Conditional Consumption Mode for Utility/Communal categories */}
+                        {(() => {
+                            const selectedCategory = categories.find(c => c.id.toString() === formData.category_id);
+                            const isCommunal = selectedCategory?.name.toLowerCase().includes('коммунальн') ||
+                                selectedCategory?.name.toLowerCase().includes('жкх');
+
+                            if (!isCommunal && !formData.is_consumption_based) return null;
+
+                            return (
+                                <div className="space-y-3 p-3 bg-muted/50 rounded-lg border border-dashed">
+                                    <div className="flex items-center justify-between">
+                                        <Label className="flex items-center gap-2 cursor-pointer">
+                                            <Zap className="h-4 w-4 text-amber-500" />
+                                            Режим потребления
+                                        </Label>
+                                        <Switch
+                                            checked={formData.is_consumption_based}
+                                            onCheckedChange={(checked) => setFormData({ ...formData, is_consumption_based: checked })}
+                                        />
+                                    </div>
+
+                                    {formData.is_consumption_based && (
+                                        <div className="grid grid-cols-2 gap-3 pt-1">
+                                            <div className="space-y-1">
+                                                <Label className="text-xs">Ед. изм.</Label>
+                                                <Input
+                                                    placeholder="кВт, м³, ед."
+                                                    value={formData.consumption_unit}
+                                                    onChange={(e) => setFormData({ ...formData, consumption_unit: e.target.value })}
+                                                    className="h-8 text-xs"
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <Label className="text-xs">Цена за ед.</Label>
+                                                <Input
+                                                    type="number"
+                                                    placeholder="0.00"
+                                                    value={formData.default_unit_price}
+                                                    onChange={(e) => setFormData({ ...formData, default_unit_price: e.target.value })}
+                                                    className="h-8 text-xs"
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })()}
+
+                        {/* Amount */}
                         <div>
                             <Label>Сумма</Label>
                             <Input
@@ -514,62 +564,7 @@ export default function RecurringPayments({ clubId }: RecurringPaymentsProps) {
                             )}
                         </div>
 
-                        <div className="space-y-3 p-3 bg-muted/50 rounded-lg border border-dashed">
-                            <div className="flex items-center justify-between">
-                                <Label className="flex items-center gap-2 cursor-pointer">
-                                    <Zap className="h-4 w-4 text-amber-500" />
-                                    Режим потребления
-                                </Label>
-                                <Switch
-                                    checked={formData.is_consumption_based}
-                                    onCheckedChange={(checked) => setFormData({ ...formData, is_consumption_based: checked })}
-                                />
-                            </div>
-
-                            {formData.is_consumption_based && (
-                                <div className="grid grid-cols-2 gap-3 pt-1">
-                                    <div className="space-y-1">
-                                        <Label className="text-xs">Ед. изм.</Label>
-                                        <Input
-                                            placeholder="кВт, м³, ед."
-                                            value={formData.consumption_unit}
-                                            onChange={(e) => setFormData({ ...formData, consumption_unit: e.target.value })}
-                                            className="h-8 text-xs"
-                                        />
-                                    </div>
-                                    <div className="space-y-1">
-                                        <Label className="text-xs">Цена за ед.</Label>
-                                        <Input
-                                            type="number"
-                                            placeholder="0.00"
-                                            value={formData.default_unit_price}
-                                            onChange={(e) => setFormData({ ...formData, default_unit_price: e.target.value })}
-                                            className="h-8 text-xs"
-                                        />
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-
-                        <div>
-                            <Label>Счёт</Label>
-                            <Select
-                                value={formData.account_id}
-                                onValueChange={(value) => setFormData({ ...formData, account_id: value })}
-                            >
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Выберите счёт" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {accounts.map(acc => (
-                                        <SelectItem key={acc.id} value={acc.id.toString()}>
-                                            {acc.icon} {acc.name}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-
+                        {/* Frequency details */}
                         <div className="grid grid-cols-2 gap-4">
                             <div>
                                 <Label>Частота</Label>
@@ -603,16 +598,7 @@ export default function RecurringPayments({ clubId }: RecurringPaymentsProps) {
                             )}
                         </div>
 
-                        <div>
-                            <Label>Дата начала</Label>
-                            <Input
-                                type="date"
-                                value={formData.start_date}
-                                onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
-                                required
-                            />
-                        </div>
-
+                        {/* Description */}
                         <div>
                             <Label>Описание (опционально)</Label>
                             <Textarea
@@ -676,6 +662,6 @@ export default function RecurringPayments({ clubId }: RecurringPaymentsProps) {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
-        </div>
+        </div >
     )
 }
