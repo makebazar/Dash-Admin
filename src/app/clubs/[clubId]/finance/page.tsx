@@ -149,14 +149,33 @@ export default function FinancePage() {
         }
     }
 
-    const checkIsPaid = (recurringId: number) => {
-        return monthTransactions.some(t =>
+    const getPaymentStatus = (recurringId: number, targetAmount: number) => {
+        const relevantTransactions = monthTransactions.filter(t =>
             t.notes && t.notes.includes(`[Recurring:${recurringId}]`)
         )
+
+        const paidAmount = relevantTransactions.reduce((sum, t) => {
+            const amount = typeof t.amount === 'string' ? parseFloat(t.amount) : t.amount
+            // Substract if it was an expense refund (though unlikely for bills)
+            // Assuming all transactions linked are payments (expenses)
+            return sum + (t.type === 'expense' ? amount : -amount)
+        }, 0)
+
+        return {
+            status: paidAmount >= targetAmount ? 'paid' : paidAmount > 0 ? 'partial' : 'unpaid',
+            paidAmount,
+            remainingAmount: Math.max(0, targetAmount - paidAmount)
+        }
     }
 
-    const openPaymentModal = (rp: RecurringPayment) => {
-        setSelectedPayment(rp)
+    const openPaymentModal = (rp: RecurringPayment, initialAmount?: number) => {
+        // If initialAmount is provided (partial payment remainder), override the default amount
+        // We do this by creating a copy of the payment object with the modified amount
+        const paymentToEdit = initialAmount !== undefined
+            ? { ...rp, amount: initialAmount }
+            : rp
+
+        setSelectedPayment(paymentToEdit)
         setIsPaymentModalOpen(true)
     }
 
@@ -375,43 +394,67 @@ export default function FinancePage() {
                                 ) : (
                                     <div className="space-y-4">
                                         {recurringPayments.sort((a, b) => a.day_of_month - b.day_of_month).map(rp => {
-                                            const isPaid = checkIsPaid(rp.id);
+                                            const { status, paidAmount, remainingAmount } = getPaymentStatus(rp.id, rp.amount)
+                                            const isPaid = status === 'paid'
+                                            const isPartial = status === 'partial'
+
                                             return (
-                                                <div key={rp.id} className={`flex items-center justify-between p-3 border rounded-lg ${isPaid ? 'bg-muted/50 opacity-70' : 'bg-card'}`}>
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="w-8 h-8 rounded flex items-center justify-center bg-primary/10 text-primary">
-                                                            {rp.category_icon || '📅'}
-                                                        </div>
-                                                        <div>
-                                                            <div className="font-medium flex items-center gap-2">
-                                                                {rp.name}
-                                                                {isPaid && <CheckCircle2 className="h-4 w-4 text-green-500" />}
+                                                <div key={rp.id} className={`p-3 border rounded-lg ${isPaid ? 'bg-muted/50 opacity-70' : 'bg-card'}`}>
+                                                    <div className="flex items-center justify-between mb-2">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="w-8 h-8 rounded flex items-center justify-center bg-primary/10 text-primary">
+                                                                {rp.category_icon || '📅'}
                                                             </div>
-                                                            <div className="text-xs text-muted-foreground">
-                                                                Срок: до {rp.day_of_month}-го числа
+                                                            <div>
+                                                                <div className="font-medium flex items-center gap-2">
+                                                                    {rp.name}
+                                                                    {isPaid && <CheckCircle2 className="h-4 w-4 text-green-500" />}
+                                                                </div>
+                                                                <div className="text-xs text-muted-foreground">
+                                                                    Срок: до {rp.day_of_month}-го числа
+                                                                </div>
                                                             </div>
                                                         </div>
+
+                                                        {isPaid ? (
+                                                            <div className="text-sm font-medium text-green-600">
+                                                                Оплачено
+                                                            </div>
+                                                        ) : (
+                                                            <div className="flex flex-col items-end gap-1">
+                                                                <Button
+                                                                    size="sm"
+                                                                    onClick={() => openPaymentModal(rp, isPartial ? remainingAmount : undefined)}
+                                                                    className={rp.is_consumption_based ? "bg-amber-600 hover:bg-amber-700" : ""}
+                                                                    variant={isPartial ? "secondary" : "default"}
+                                                                >
+                                                                    {rp.is_consumption_based ? (
+                                                                        <>
+                                                                            <Zap className="h-3 w-3 mr-1" />
+                                                                            Внести
+                                                                        </>
+                                                                    ) : (
+                                                                        isPartial ? `Доплатить ${formatCurrency(remainingAmount)}` : `Оплатить ${formatCurrency(rp.amount)}`
+                                                                    )}
+                                                                </Button>
+                                                            </div>
+                                                        )}
                                                     </div>
 
-                                                    {isPaid ? (
-                                                        <div className="text-sm font-medium text-green-600">
-                                                            Оплачено
+                                                    {/* Progress Bar for Partial Payments */}
+                                                    {isPartial && !rp.is_consumption_based && (
+                                                        <div className="space-y-1">
+                                                            <div className="flex justify-between text-xs text-muted-foreground">
+                                                                <span>Оплачено: {formatCurrency(paidAmount)}</span>
+                                                                <span>из {formatCurrency(rp.amount)}</span>
+                                                            </div>
+                                                            <div className="h-2 bg-secondary rounded-full overflow-hidden">
+                                                                <div
+                                                                    className="h-full bg-green-500 rounded-full transition-all duration-500"
+                                                                    style={{ width: `${Math.min(100, (paidAmount / rp.amount) * 100)}%` }}
+                                                                />
+                                                            </div>
                                                         </div>
-                                                    ) : (
-                                                        <Button
-                                                            size="sm"
-                                                            onClick={() => openPaymentModal(rp)}
-                                                            className={rp.is_consumption_based ? "bg-amber-600 hover:bg-amber-700" : ""}
-                                                        >
-                                                            {rp.is_consumption_based ? (
-                                                                <>
-                                                                    <Zap className="h-3 w-3 mr-1" />
-                                                                    Внести
-                                                                </>
-                                                            ) : (
-                                                                `Оплатить ${formatCurrency(rp.amount)}`
-                                                            )}
-                                                        </Button>
                                                     )}
                                                 </div>
                                             )
