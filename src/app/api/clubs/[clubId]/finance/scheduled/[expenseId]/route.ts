@@ -53,3 +53,34 @@ export async function PUT(
         return NextResponse.json({ error: 'Failed to update scheduled expense' }, { status: 500 });
     }
 }
+
+// DELETE /api/clubs/[clubId]/finance/scheduled/[expenseId]
+export async function DELETE(
+    request: NextRequest,
+    { params }: { params: { clubId: string; expenseId: string } }
+) {
+    try {
+        const userId = (await cookies()).get('session_user_id')?.value;
+        if (!userId) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
+        const { clubId, expenseId } = params;
+
+        const result = await query(
+            `DELETE FROM finance_scheduled_expenses 
+             WHERE id = $1 AND club_id = $2
+             RETURNING id`,
+            [expenseId, clubId]
+        );
+
+        if (result.rows.length === 0) {
+            return NextResponse.json({ error: 'Scheduled expense not found' }, { status: 404 });
+        }
+
+        return NextResponse.json({ success: true });
+    } catch (error) {
+        console.error('Error deleting scheduled expense:', error);
+        return NextResponse.json({ error: 'Failed to delete scheduled expense' }, { status: 500 });
+    }
+}
