@@ -10,6 +10,8 @@ ADD COLUMN IF NOT EXISTS default_unit_price DECIMAL(12, 2);
 
 -- 2. Update finance_scheduled_expenses table
 ALTER TABLE finance_scheduled_expenses
+ADD COLUMN IF NOT EXISTS is_consumption_based BOOLEAN DEFAULT FALSE,
+ADD COLUMN IF NOT EXISTS consumption_unit VARCHAR(20),
 ADD COLUMN IF NOT EXISTS consumption_value DECIMAL(12, 2),
 ADD COLUMN IF NOT EXISTS unit_price DECIMAL(12, 2);
 

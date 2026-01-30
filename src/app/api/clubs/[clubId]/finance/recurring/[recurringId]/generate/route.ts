@@ -85,8 +85,8 @@ export async function POST(
         // Create scheduled expense from template
         const result = await query(
             `INSERT INTO finance_scheduled_expenses 
-                (club_id, category_id, name, amount, due_date, description, recurring_payment_id, unit_price)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                (club_id, category_id, name, amount, due_date, description, recurring_payment_id, unit_price, is_consumption_based, consumption_unit)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
              RETURNING id, name, amount, due_date`,
             [
                 clubId,
@@ -96,7 +96,9 @@ export async function POST(
                 transactionDate,
                 `${template.name} (автоматически из шаблона)`,
                 template.id,
-                template.unit_price || template.default_unit_price
+                template.unit_price || template.default_unit_price,
+                template.is_consumption_based,
+                template.consumption_unit
             ]
         );
 
