@@ -173,12 +173,7 @@ export default function ScheduledExpensesList({ clubId }: ScheduledExpensesListP
             <PayExpenseDialog
                 isOpen={isPayDialogOpen}
                 onOpenChange={setIsPayDialogOpen}
-                expense={selectedExpense ? {
-                    id: selectedExpense.id,
-                    name: selectedExpense.name,
-                    amount: selectedExpense.amount,
-                    amount_paid: selectedExpense.amount_paid
-                } : null}
+                expense={selectedExpense}
                 clubId={clubId}
                 onSuccess={fetchExpenses}
             />

@@ -172,6 +172,10 @@ export async function GET(
                 fc.name as category_name,
                 fc.type,
                 fc.icon,
+                fse.is_consumption_based,
+                fse.consumption_unit,
+                fse.consumption_value,
+                fse.unit_price,
                 COALESCE((
                     SELECT SUM(amount) 
                     FROM finance_transactions 

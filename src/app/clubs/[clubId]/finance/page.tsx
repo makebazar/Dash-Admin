@@ -336,12 +336,7 @@ export default function FinancePage() {
                                                             size="sm"
                                                             className="h-8 text-xs"
                                                             onClick={() => {
-                                                                setSelectedExpense({
-                                                                    id: payment.id,
-                                                                    name: payment.description || payment.category_name,
-                                                                    amount: payment.amount,
-                                                                    amount_paid: payment.amount_paid
-                                                                })
+                                                                setSelectedExpense(payment)
                                                                 setIsPayDialogOpen(true)
                                                             }}
                                                         >
