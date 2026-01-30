@@ -161,10 +161,20 @@ export default function FinancePage() {
             return sum + (t.type === 'expense' ? amount : -amount)
         }, 0)
 
+        // If targetAmount is 0 (e.g. variable consumption), it's only paid if we have actually paid something (> 0)
+        let status = 'unpaid'
+        if (targetAmount > 0) {
+            if (paidAmount >= targetAmount) status = 'paid'
+            else if (paidAmount > 0) status = 'partial'
+        } else {
+            // For variable amount items (target = 0)
+            if (paidAmount > 0) status = 'paid'
+        }
+
         return {
-            status: paidAmount >= targetAmount ? 'paid' : paidAmount > 0 ? 'partial' : 'unpaid',
+            status,
             paidAmount,
-            remainingAmount: Math.max(0, targetAmount - paidAmount)
+            remainingAmount: targetAmount > 0 ? Math.max(0, targetAmount - paidAmount) : 0
         }
     }
 
