@@ -34,7 +34,7 @@ export async function GET(
                 created_at,
                 updated_at
            FROM finance_accounts
-            WHERE club_id = $1
+            WHERE club_id = $1 AND is_active = true
             ORDER BY 
                 CASE account_type
                     WHEN 'cash' THEN 1
