@@ -38,6 +38,20 @@ interface TrendItem {
     profit: number
 }
 
+interface RecurringPayment {
+    id: number
+    name: string
+    amount: number
+    day_of_month: number
+    category_id: number
+    category_name?: string
+    category_color?: string
+    category_icon?: string
+    is_consumption_based: boolean
+    consumption_unit?: string
+    default_unit_price?: number
+}
+
 interface AnalyticsData {
     summary: FinanceStats
     category_breakdown: {
@@ -59,6 +73,8 @@ interface AnalyticsData {
     break_even_point: number
 }
 
+import { CheckCircle2, AlertCircle, Zap } from "lucide-react"
+
 export default function FinancePage() {
     const params = useParams()
     const clubId = params?.clubId as string
@@ -68,6 +84,11 @@ export default function FinancePage() {
     const [loading, setLoading] = useState(true)
     const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1)
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear())
+
+    // Monthly Bills State
+    const [recurringPayments, setRecurringPayments] = useState<RecurringPayment[]>([])
+    const [monthTransactions, setMonthTransactions] = useState<any[]>([])
+    const [isPaying, setIsPaying] = useState<number | null>(null)
 
     const monthNames = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
         'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
@@ -84,16 +105,90 @@ export default function FinancePage() {
             // Calculate start and end dates for selected month
             const startDate = new Date(selectedYear, selectedMonth - 1, 1)
             const endDate = new Date(selectedYear, selectedMonth, 0)
+            const startDateStr = startDate.toISOString().split('T')[0]
+            const endDateStr = endDate.toISOString().split('T')[0]
 
             const res = await fetch(
-                `/api/clubs/${clubId}/finance/analytics?start_date=${startDate.toISOString().split('T')[0]}&end_date=${endDate.toISOString().split('T')[0]}`
+                `/api/clubs/${clubId}/finance/analytics?start_date=${startDateStr}&end_date=${endDateStr}`
             )
             const data = await res.json()
             setAnalytics(data)
+
+            // Fetch Recurring Templates
+            const recRes = await fetch(`/api/clubs/${clubId}/finance/recurring`)
+            if (recRes.ok) {
+                const recData = await recRes.json()
+                setRecurringPayments(recData.recurring_payments || [])
+            }
+
+            // Fetch Transactions for checks
+            const txRes = await fetch(
+                `/api/clubs/${clubId}/finance/transactions?start_date=${startDateStr}&end_date=${endDateStr}&page=1&limit=1000`
+            )
+            if (txRes.ok) {
+                const txData = await txRes.json()
+                setMonthTransactions(txData.transactions || [])
+            }
+
         } catch (error) {
             console.error('Failed to fetch analytics:', error)
         } finally {
             setLoading(false)
+        }
+    }
+
+    const checkIsPaid = (recurringId: number) => {
+        return monthTransactions.some(t =>
+            t.notes && t.notes.includes(`[Recurring:${recurringId}]`)
+        )
+    }
+
+    const handlePayBill = async (rp: RecurringPayment) => {
+        let amount = rp.amount;
+        let notes = `Авто-платеж: ${rp.name} [Recurring:${rp.id}]`;
+
+        if (rp.is_consumption_based) {
+            const val = prompt(`Введите расход за месяц (${rp.consumption_unit}):`);
+            if (val === null) return;
+            const consumption = parseFloat(val);
+            if (isNaN(consumption) || consumption < 0) {
+                alert('Некорректное значение');
+                return;
+            }
+            amount = consumption * (rp.default_unit_price || 0);
+            notes = `${rp.name}: ${consumption} ${rp.consumption_unit} x ${rp.default_unit_price}₽ [Recurring:${rp.id}]`;
+
+            if (!confirm(`К оплате: ${formatCurrency(amount)}. Создать транзакцию?`)) return;
+        } else {
+            if (!confirm(`Оплатить ${rp.name} (${formatCurrency(amount)})?`)) return;
+        }
+
+        setIsPaying(rp.id);
+        try {
+            const res = await fetch(`/api/clubs/${clubId}/finance/transactions`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    category_id: rp.category_id,
+                    amount: amount,
+                    type: 'expense',
+                    transaction_date: new Date().toISOString().split('T')[0],
+                    notes: notes,
+                    payment_method: 'cash', // Default to cash for quick pay
+                    status: 'completed'
+                })
+            });
+
+            if (res.ok) {
+                await fetchAnalytics(); // Refresh data
+            } else {
+                alert('Ошибка создания транзакции');
+            }
+        } catch (error) {
+            console.error(error);
+            alert('Ошибка выполнения');
+        } finally {
+            setIsPaying(null);
         }
     }
 
@@ -260,18 +355,88 @@ export default function FinancePage() {
                         <AccountBalances clubId={clubId} />
                     </div>
 
-                    <div className="grid gap-4 md:grid-cols-1">
+                    <div className="grid gap-4 md:grid-cols-2">
+                        {/* Monthly Bills Widget */}
+                        <Card className="md:col-span-1">
+                            <CardHeader>
+                                <CardTitle className="text-lg flex items-center gap-2">
+                                    <AlertCircle className="h-5 w-5 text-amber-500" />
+                                    Счета к оплате
+                                </CardTitle>
+                                <CardDescription>Обязательные платежи за этот месяц</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                {recurringPayments.length === 0 ? (
+                                    <div className="text-center py-8 text-muted-foreground">
+                                        Нет регулярных платежей.
+                                        <br />
+                                        <Link href={`/clubs/${clubId}/finance/settings`} className="text-primary hover:underline">
+                                            Настроить в Settings
+                                        </Link>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-4">
+                                        {recurringPayments.sort((a, b) => a.day_of_month - b.day_of_month).map(rp => {
+                                            const isPaid = checkIsPaid(rp.id);
+                                            return (
+                                                <div key={rp.id} className={`flex items-center justify-between p-3 border rounded-lg ${isPaid ? 'bg-muted/50 opacity-70' : 'bg-card'}`}>
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-8 h-8 rounded flex items-center justify-center bg-primary/10 text-primary">
+                                                            {rp.category_icon || '📅'}
+                                                        </div>
+                                                        <div>
+                                                            <div className="font-medium flex items-center gap-2">
+                                                                {rp.name}
+                                                                {isPaid && <CheckCircle2 className="h-4 w-4 text-green-500" />}
+                                                            </div>
+                                                            <div className="text-xs text-muted-foreground">
+                                                                Срок: до {rp.day_of_month}-го числа
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    {isPaid ? (
+                                                        <div className="text-sm font-medium text-green-600">
+                                                            Оплачено
+                                                        </div>
+                                                    ) : (
+                                                        <Button
+                                                            size="sm"
+                                                            onClick={() => handlePayBill(rp)}
+                                                            disabled={isPaying === rp.id}
+                                                            className={rp.is_consumption_based ? "bg-amber-600 hover:bg-amber-700" : ""}
+                                                        >
+                                                            {isPaying === rp.id ? '...' : (
+                                                                rp.is_consumption_based ? (
+                                                                    <>
+                                                                        <Zap className="h-3 w-3 mr-1" />
+                                                                        Внести
+                                                                    </>
+                                                                ) : (
+                                                                    `Оплатить ${formatCurrency(rp.amount)}`
+                                                                )
+                                                            )}
+                                                        </Button>
+                                                    )}
+                                                </div>
+                                            )
+                                        })}
+                                    </div>
+                                )}
+                            </CardContent>
+                        </Card>
+
                         {/* Top Expenses Preview */}
-                        <Card>
+                        <Card className="md:col-span-1">
                             <CardHeader>
                                 <CardTitle className="text-sm">Топ-5 расходов</CardTitle>
                             </CardHeader>
                             <CardContent>
                                 <div className="space-y-2">
-                                    {analytics?.top_expenses.slice(0, 3).map((expense, idx) => (
-                                        <div key={idx} className="flex items-center justify-between text-sm">
+                                    {analytics?.top_expenses.slice(0, 5).map((expense, idx) => (
+                                        <div key={idx} className="flex items-center justify-between text-sm p-2 hover:bg-muted/50 rounded transition-colors">
                                             <span className="flex items-center gap-2">
-                                                <span>{expense.icon}</span>
+                                                <span className="text-xl">{expense.icon}</span>
                                                 <span className="text-muted-foreground">{expense.category_name}</span>
                                             </span>
                                             <span className="font-bold">{formatCurrency(expense.total_amount)}</span>

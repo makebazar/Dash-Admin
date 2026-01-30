@@ -35,6 +35,20 @@ interface Category {
     is_system: boolean
 }
 
+interface RecurringPayment {
+    id: number
+    name: string
+    amount: number
+    day_of_month: number
+    category_id: number
+    category_name?: string
+    category_color?: string
+    category_icon?: string
+    is_consumption_based: boolean
+    consumption_unit?: string
+    default_unit_price?: number
+}
+
 const ACCOUNT_TYPES = [
     { value: 'cash', label: 'Наличные' },
     { value: 'bank', label: 'Банк' },
@@ -50,6 +64,7 @@ export default function FinanceSettingsPage({ params }: { params: Promise<{ club
     const [clubId, setClubId] = useState('')
     const [accounts, setAccounts] = useState<Account[]>([])
     const [categories, setCategories] = useState<Category[]>([])
+    const [recurringPayments, setRecurringPayments] = useState<RecurringPayment[]>([])
     const [incomeFields, setIncomeFields] = useState<IncomeField[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [isSaving, setIsSaving] = useState(false)
@@ -70,6 +85,18 @@ export default function FinanceSettingsPage({ params }: { params: Promise<{ club
         type: 'expense' as 'income' | 'expense',
         icon: '💰',
         color: 'bg-blue-500'
+    })
+
+    // New recurring form
+    const [showNewRecurringForm, setShowNewRecurringForm] = useState(false)
+    const [newRecurring, setNewRecurring] = useState({
+        name: '',
+        category_id: '',
+        amount: 0,
+        day_of_month: 1,
+        is_consumption_based: false,
+        consumption_unit: 'кВт',
+        unit_price: 0
     })
 
     useEffect(() => {
@@ -106,6 +133,13 @@ export default function FinanceSettingsPage({ params }: { params: Promise<{ club
             const catData = await catRes.json()
             if (catRes.ok) {
                 setCategories(catData.categories || [])
+            }
+
+            // Get recurring payments
+            const recRes = await fetch(`/api/clubs/${id}/finance/recurring`)
+            const recData = await recRes.json()
+            if (recRes.ok) {
+                setRecurringPayments(recData.recurring_payments || [])
             }
 
         } catch (error) {
@@ -229,6 +263,70 @@ export default function FinanceSettingsPage({ params }: { params: Promise<{ club
         }
     }
 
+    const handleCreateRecurring = async () => {
+        if (!newRecurring.name.trim()) {
+            alert('Введите название (например, Аренда)')
+            return
+        }
+        if (!newRecurring.category_id) {
+            alert('Выберите категорию')
+            return
+        }
+
+        setIsSaving(true)
+        try {
+            const res = await fetch(`/api/clubs/${clubId}/finance/recurring`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(newRecurring)
+            })
+
+            if (res.ok) {
+                await fetchData(clubId)
+                setShowNewRecurringForm(false)
+                setNewRecurring({
+                    name: '',
+                    category_id: '',
+                    amount: 0,
+                    day_of_month: 1,
+                    is_consumption_based: false,
+                    consumption_unit: 'кВт',
+                    unit_price: 0
+                })
+            } else {
+                alert('❌ Ошибка создания шаблона')
+            }
+        } catch (error) {
+            console.error('Error creating recurring:', error)
+            alert('❌ Ошибка создания шаблона')
+        } finally {
+            setIsSaving(false)
+        }
+    }
+
+    const handleDeleteRecurring = async (id: number) => {
+        if (!confirm('Удалить этот шаблон платежа?')) return
+
+        setIsSaving(true)
+        try {
+            const res = await fetch(`/api/clubs/${clubId}/finance/recurring?id=${id}`, {
+                method: 'DELETE'
+            })
+
+            if (res.ok) {
+                await fetchData(clubId)
+            } else {
+                const data = await res.json()
+                alert(data.error || '❌ Ошибка удаления')
+            }
+        } catch (error) {
+            console.error('Error deleting recurring:', error)
+            alert('❌ Ошибка удаления')
+        } finally {
+            setIsSaving(false)
+        }
+    }
+
     const handleSaveMapping = async () => {
         setIsSaving(true)
         try {
@@ -298,6 +396,7 @@ export default function FinanceSettingsPage({ params }: { params: Promise<{ club
             <Tabs defaultValue="categories" className="w-full">
                 <TabsList>
                     <TabsTrigger value="categories">Категории</TabsTrigger>
+                    <TabsTrigger value="recurring">Постоянные расходы</TabsTrigger>
                     <TabsTrigger value="accounts">Счета</TabsTrigger>
                     <TabsTrigger value="mapping">Маппинг счетов</TabsTrigger>
                 </TabsList>
@@ -476,6 +575,172 @@ export default function FinanceSettingsPage({ params }: { params: Promise<{ club
                                         ))}
                                     </div>
                                 </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+
+                {/* Recurring Payments Tab */}
+                <TabsContent value="recurring" className="space-y-6">
+                    <Card>
+                        <CardHeader>
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <CardTitle>Постоянные расходы и коммуналка</CardTitle>
+                                    <CardDescription>
+                                        Настройте регулярные платежи. Они будут появляться в дашборде как "Счета к оплате".
+                                    </CardDescription>
+                                </div>
+                                <Button onClick={() => setShowNewRecurringForm(!showNewRecurringForm)}>
+                                    <Plus className="h-4 w-4 mr-2" />
+                                    Создать правило
+                                </Button>
+                            </div>
+                        </CardHeader>
+                        <CardContent className="space-y-6">
+                            {showNewRecurringForm && (
+                                <Card className="border-2 border-primary">
+                                    <CardHeader>
+                                        <CardTitle className="text-lg">Новое правило оплаты</CardTitle>
+                                    </CardHeader>
+                                    <CardContent className="space-y-4">
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div className="space-y-2">
+                                                <Label>Название (что платим?)</Label>
+                                                <Input
+                                                    value={newRecurring.name}
+                                                    onChange={(e) => setNewRecurring({ ...newRecurring, name: e.target.value })}
+                                                    placeholder="Например: Аренда за Октябрь"
+                                                />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label>Категория</Label>
+                                                <Select
+                                                    value={newRecurring.category_id}
+                                                    onValueChange={(value) => setNewRecurring({ ...newRecurring, category_id: value })}
+                                                >
+                                                    <SelectTrigger>
+                                                        <SelectValue placeholder="Выберите категорию" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        {categories
+                                                            .filter(c => c.type === 'expense')
+                                                            .map(c => (
+                                                                <SelectItem key={c.id} value={c.id.toString()}>
+                                                                    {c.icon} {c.name}
+                                                                </SelectItem>
+                                                            ))}
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div className="space-y-2">
+                                                <Label>День оплаты (число месяца)</Label>
+                                                <Input
+                                                    type="number"
+                                                    min="1"
+                                                    max="31"
+                                                    value={newRecurring.day_of_month}
+                                                    onChange={(e) => setNewRecurring({ ...newRecurring, day_of_month: parseInt(e.target.value) || 1 })}
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div className="p-4 bg-muted/50 rounded-lg space-y-4">
+                                            <div className="flex items-center space-x-2">
+                                                <input
+                                                    type="checkbox"
+                                                    id="is_consumption"
+                                                    className="w-4 h-4 rounded border-gray-300"
+                                                    checked={newRecurring.is_consumption_based}
+                                                    onChange={(e) => setNewRecurring({ ...newRecurring, is_consumption_based: e.target.checked })}
+                                                />
+                                                <Label htmlFor="is_consumption" className="cursor-pointer font-medium">Это коммунальный платеж (по счетчикам)?</Label>
+                                            </div>
+
+                                            {newRecurring.is_consumption_based ? (
+                                                <div className="grid grid-cols-2 gap-4 pl-6">
+                                                    <div className="space-y-2">
+                                                        <Label>Единица измерения</Label>
+                                                        <Input
+                                                            value={newRecurring.consumption_unit}
+                                                            onChange={(e) => setNewRecurring({ ...newRecurring, consumption_unit: e.target.value })}
+                                                            placeholder="кВт, м3..."
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <Label>Цена за единицу</Label>
+                                                        <Input
+                                                            type="number"
+                                                            value={newRecurring.unit_price}
+                                                            onChange={(e) => setNewRecurring({ ...newRecurring, unit_price: parseFloat(e.target.value) || 0 })}
+                                                            placeholder="0.00"
+                                                        />
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <div className="pl-6 space-y-2">
+                                                    <Label>Сумма платежа (фиксированная)</Label>
+                                                    <Input
+                                                        type="number"
+                                                        value={newRecurring.amount}
+                                                        onChange={(e) => setNewRecurring({ ...newRecurring, amount: parseFloat(e.target.value) || 0 })}
+                                                        placeholder="0.00"
+                                                    />
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <div className="flex gap-2 pt-2">
+                                            <Button onClick={handleCreateRecurring} disabled={isSaving}>
+                                                {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Создать правило'}
+                                            </Button>
+                                            <Button variant="outline" onClick={() => setShowNewRecurringForm(false)}>
+                                                Отмена
+                                            </Button>
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            )}
+
+                            <div className="grid gap-4 md:grid-cols-2">
+                                {recurringPayments.map((rp) => (
+                                    <div key={rp.id} className="border p-4 rounded-lg bg-card flex items-start justify-between">
+                                        <div className="flex items-start gap-4">
+                                            <div
+                                                className="w-10 h-10 rounded-lg flex items-center justify-center text-xl mt-1"
+                                                style={{ backgroundColor: (rp.category_color || '#3b82f6') + '20' }}
+                                            >
+                                                {rp.category_icon || '📅'}
+                                            </div>
+                                            <div>
+                                                <div className="font-semibold text-lg">{rp.name}</div>
+                                                <div className="text-sm text-muted-foreground mb-2">
+                                                    Категория: {rp.category_name} • {rp.day_of_month}-го числа
+                                                </div>
+
+                                                {rp.is_consumption_based ? (
+                                                    <div className="inline-flex items-center px-2 py-1 rounded bg-blue-100 text-blue-800 text-xs font-medium">
+                                                        Счетчик: {rp.consumption_unit} (по {rp.default_unit_price} ₽)
+                                                    </div>
+                                                ) : (
+                                                    <div className="font-bold text-lg">
+                                                        {rp.amount?.toLocaleString()} ₽
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            onClick={() => handleDeleteRecurring(rp.id)}
+                                        >
+                                            <Trash2 className="h-4 w-4 text-destructive" />
+                                        </Button>
+                                    </div>
+                                ))}
                             </div>
                         </CardContent>
                     </Card>
