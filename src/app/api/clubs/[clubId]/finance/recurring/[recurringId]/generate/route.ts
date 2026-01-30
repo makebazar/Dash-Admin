@@ -50,7 +50,7 @@ export async function POST(
         }
 
         // Use custom amount if provided, otherwise use template amount
-        const amount = custom_amount !== undefined ? custom_amount : template.amount;
+        amount = custom_amount !== undefined ? custom_amount : template.amount;
 
         // Use custom status if provided, otherwise default to 'completed'
         const transactionStatus = status || 'completed';
@@ -75,7 +75,7 @@ export async function POST(
 
         // For consumption-based templates, we create a preliminary expense (amount can be 0 or template.amount as placeholder)
         const isConsumption = template.is_consumption_based;
-        const amount = isConsumption ? (template.amount || 0) : (custom_amount !== undefined ? custom_amount : template.amount);
+        amount = isConsumption ? (template.amount || 0) : (custom_amount !== undefined ? custom_amount : template.amount);
 
         // Create scheduled expense from template
         const result = await query(
