@@ -3,6 +3,7 @@
 
 -- 1. Update recurring_payments table
 ALTER TABLE recurring_payments 
+ADD COLUMN IF NOT EXISTS account_id INTEGER REFERENCES finance_accounts(id),
 ADD COLUMN IF NOT EXISTS is_consumption_based BOOLEAN DEFAULT FALSE,
 ADD COLUMN IF NOT EXISTS consumption_unit VARCHAR(20),
 ADD COLUMN IF NOT EXISTS default_unit_price DECIMAL(12, 2);
