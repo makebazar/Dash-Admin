@@ -43,6 +43,9 @@ interface RecurringPayment {
     description: string
     account_id?: number
     account_name?: string
+    is_consumption_based: boolean
+    consumption_unit: string | null
+    default_unit_price: number | null
 }
 
 interface Category {
@@ -91,7 +94,10 @@ export default function RecurringPayments({ clubId }: RecurringPaymentsProps) {
         payment_method: 'cash',
         start_date: new Date().toISOString().split('T')[0],
         end_date: '',
-        description: ''
+        description: '',
+        is_consumption_based: false,
+        consumption_unit: 'кВт',
+        default_unit_price: ''
     })
 
     useEffect(() => {
@@ -253,7 +259,10 @@ export default function RecurringPayments({ clubId }: RecurringPaymentsProps) {
             payment_method: 'cash',
             start_date: new Date().toISOString().split('T')[0],
             end_date: '',
-            description: ''
+            description: '',
+            is_consumption_based: false,
+            consumption_unit: 'кВт',
+            default_unit_price: ''
         })
     }
 
@@ -317,6 +326,11 @@ export default function RecurringPayments({ clubId }: RecurringPaymentsProps) {
                                             <CardTitle className="text-base">{payment.name}</CardTitle>
                                             <CardDescription className="text-xs">
                                                 {payment.category_name}
+                                                {payment.is_consumption_based && (
+                                                    <Badge variant="secondary" className="ml-2 text-[10px] h-4">
+                                                        Учет потребления
+                                                    </Badge>
+                                                )}
                                             </CardDescription>
                                         </div>
                                     </div>
@@ -333,7 +347,11 @@ export default function RecurringPayments({ clubId }: RecurringPaymentsProps) {
                                             }`}
                                     >
                                         {payment.type === 'income' ? '+' : '-'}
-                                        {formatCurrency(payment.amount)}
+                                        {payment.is_consumption_based ? (
+                                            <span className="text-lg">ЦЕНА: {formatCurrency(payment.default_unit_price || 0)} / {payment.consumption_unit}</span>
+                                        ) : (
+                                            formatCurrency(payment.amount)
+                                        )}
                                     </span>
                                     <Badge variant="outline">
                                         <Repeat className="h-3 w-3 mr-1" />
@@ -391,7 +409,10 @@ export default function RecurringPayments({ clubId }: RecurringPaymentsProps) {
                                                     payment_method: 'cash',
                                                     start_date: payment.start_date,
                                                     end_date: payment.end_date || '',
-                                                    description: payment.description || ''
+                                                    description: payment.description || '',
+                                                    is_consumption_based: payment.is_consumption_based,
+                                                    consumption_unit: payment.consumption_unit || 'кВт',
+                                                    default_unit_price: payment.default_unit_price?.toString() || ''
                                                 })
                                                 setIsDialogOpen(true)
                                             }}
@@ -483,8 +504,51 @@ export default function RecurringPayments({ clubId }: RecurringPaymentsProps) {
                                 placeholder="0"
                                 value={formData.amount}
                                 onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-                                required
+                                required={!formData.is_consumption_based}
+                                disabled={formData.is_consumption_based}
                             />
+                            {formData.is_consumption_based && (
+                                <p className="text-[10px] text-muted-foreground mt-1">
+                                    Сумма будет рассчитана автоматически на основе потребления
+                                </p>
+                            )}
+                        </div>
+
+                        <div className="space-y-3 p-3 bg-muted/50 rounded-lg border border-dashed">
+                            <div className="flex items-center justify-between">
+                                <Label className="flex items-center gap-2 cursor-pointer">
+                                    <Zap className="h-4 w-4 text-amber-500" />
+                                    Режим потребления
+                                </Label>
+                                <Switch
+                                    checked={formData.is_consumption_based}
+                                    onCheckedChange={(checked) => setFormData({ ...formData, is_consumption_based: checked })}
+                                />
+                            </div>
+
+                            {formData.is_consumption_based && (
+                                <div className="grid grid-cols-2 gap-3 pt-1">
+                                    <div className="space-y-1">
+                                        <Label className="text-xs">Ед. изм.</Label>
+                                        <Input
+                                            placeholder="кВт, м³, ед."
+                                            value={formData.consumption_unit}
+                                            onChange={(e) => setFormData({ ...formData, consumption_unit: e.target.value })}
+                                            className="h-8 text-xs"
+                                        />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <Label className="text-xs">Цена за ед.</Label>
+                                        <Input
+                                            type="number"
+                                            placeholder="0.00"
+                                            value={formData.default_unit_price}
+                                            onChange={(e) => setFormData({ ...formData, default_unit_price: e.target.value })}
+                                            className="h-8 text-xs"
+                                        />
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
                         <div>

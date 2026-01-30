@@ -37,6 +37,10 @@ interface PayExpenseDialogProps {
         amount: number
         amount_paid: number
         description?: string
+        is_consumption_based?: boolean
+        consumption_unit?: string
+        consumption_value?: number
+        unit_price?: number
     } | null
     clubId: string
     onSuccess: () => void
@@ -55,7 +59,9 @@ export default function PayExpenseDialog({
         amount: '',
         account_id: '',
         payment_date: new Date().toISOString().split('T')[0],
-        description: ''
+        description: '',
+        consumption_value: '',
+        unit_price: ''
     })
 
     useEffect(() => {
@@ -67,7 +73,9 @@ export default function PayExpenseDialog({
                     amount: remaining.toString(),
                     account_id: '',
                     payment_date: new Date().toISOString().split('T')[0],
-                    description: `Оплата: ${expense.name}`
+                    description: `Оплата: ${expense.name}`,
+                    consumption_value: expense.consumption_value?.toString() || '',
+                    unit_price: expense.unit_price?.toString() || ''
                 })
             }
         }
@@ -118,6 +126,71 @@ export default function PayExpenseDialog({
         }
     }
 
+    const calculateAmount = () => {
+        if (expense?.is_consumption_based) {
+            const consumption = parseFloat(formData.consumption_value) || 0
+            const price = parseFloat(formData.unit_price) || 0
+            return (consumption * price).toFixed(2)
+        }
+        return formData.amount
+    }
+
+    const handleUpdateExpense = async (updateData: any) => {
+        try {
+            await fetch(`/api/clubs/${clubId}/finance/scheduled/${expense?.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(updateData)
+            })
+        } catch (error) {
+            console.error('Failed to update expense:', error)
+        }
+    }
+
+    const handlePaySubmit = async (e: React.FormEvent) => {
+        e.preventDefault()
+        if (!expense) return
+
+        const finalAmount = calculateAmount()
+
+        // If consumption based, first update the expense consumption/price
+        if (expense.is_consumption_based) {
+            await handleUpdateExpense({
+                consumption_value: parseFloat(formData.consumption_value),
+                unit_price: parseFloat(formData.unit_price),
+                amount: parseFloat(finalAmount)
+            })
+        }
+
+        // Then proceed with payment
+        setLoading(true)
+        try {
+            const res = await fetch(`/api/clubs/${clubId}/finance/scheduled/${expense.id}/pay`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    amount: parseFloat(finalAmount),
+                    account_id: formData.account_id,
+                    payment_date: formData.payment_date,
+                    description: formData.description
+                })
+            })
+
+            if (res.ok) {
+                onOpenChange(false)
+                onSuccess()
+            } else {
+                const data = await res.json()
+                alert(`Ошибка: ${data.error}`)
+            }
+        } catch (error) {
+            console.error('Failed to record payment:', error)
+            alert('Не удалось зафиксировать оплату')
+        } finally {
+            setLoading(false)
+        }
+    }
+
     if (!expense) return null
 
     const remaining = expense.amount - expense.amount_paid
@@ -132,18 +205,52 @@ export default function PayExpenseDialog({
                     </DialogDescription>
                 </DialogHeader>
 
-                <form onSubmit={handleSubmit} className="space-y-4 py-4">
-                    <div className="space-y-2">
-                        <Label htmlFor="amount">Сумма оплаты</Label>
-                        <Input
-                            id="amount"
-                            type="number"
-                            step="0.01"
-                            value={formData.amount}
-                            onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-                            required
-                        />
-                    </div>
+                <form onSubmit={handlePaySubmit} className="space-y-4 py-4">
+                    {expense.is_consumption_based && (
+                        <div className="grid grid-cols-2 gap-4 p-3 bg-amber-50 rounded-lg border border-amber-100">
+                            <div className="space-y-2">
+                                <Label className="text-xs">Потребление ({expense.consumption_unit})</Label>
+                                <Input
+                                    type="number"
+                                    step="0.01"
+                                    value={formData.consumption_value}
+                                    onChange={(e) => setFormData({ ...formData, consumption_value: e.target.value })}
+                                    required
+                                    className="h-8"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label className="text-xs">Цена за единицу</Label>
+                                <Input
+                                    type="number"
+                                    step="0.01"
+                                    value={formData.unit_price}
+                                    onChange={(e) => setFormData({ ...formData, unit_price: e.target.value })}
+                                    required
+                                    className="h-8"
+                                />
+                            </div>
+                            <div className="col-span-2 pt-1 border-t border-amber-100">
+                                <p className="text-xs font-bold text-amber-800">
+                                    Итого к оплате: {new Intl.NumberFormat('ru-RU').format(calculateAmount() as any)} ₽
+                                </p>
+                            </div>
+                        </div>
+                    )}
+
+                    {!expense.is_consumption_based && (
+                        <div className="space-y-2">
+                            <Label htmlFor="amount">Сумма оплаты</Label>
+                            <Input
+                                id="amount"
+                                type="number"
+                                step="0.01"
+                                value={formData.amount}
+                                onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+                                required
+                            />
+                        </div>
+                    )}
 
                     <div className="space-y-2">
                         <Label htmlFor="account">Счёт списания</Label>

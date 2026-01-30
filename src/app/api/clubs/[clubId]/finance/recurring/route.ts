@@ -77,13 +77,16 @@ export async function POST(
             start_date,
             end_date,
             description,
-            account_id
+            account_id,
+            is_consumption_based = false,
+            consumption_unit,
+            default_unit_price
         } = body;
 
         // Validation
-        if (!category_id || !name || !amount || !type || !frequency || !start_date) {
+        if (!category_id || !name || (amount === undefined && !is_consumption_based) || !type || !frequency || !start_date) {
             return NextResponse.json(
-                { error: 'category_id, name, amount, type, frequency, and start_date are required' },
+                { error: 'category_id, name, amount (if not consumption-based), type, frequency, and start_date are required' },
                 { status: 400 }
             );
         }
@@ -96,14 +99,16 @@ export async function POST(
             `INSERT INTO recurring_payments 
                 (club_id, category_id, name, amount, type, frequency, interval, 
                  day_of_month, day_of_week, has_split, split_config, payment_method, 
-                 start_date, end_date, next_generation_date, description, created_by, account_id)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+                 start_date, end_date, next_generation_date, description, created_by, account_id,
+                 is_consumption_based, consumption_unit, default_unit_price)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
              RETURNING *`,
             [
-                clubId, category_id, name, amount, type, frequency, interval,
+                clubId, category_id, name, amount || 0, type, frequency, interval,
                 day_of_month || null, day_of_week || null, has_split,
                 split_config ? JSON.stringify(split_config) : null,
-                payment_method, start_date, end_date || null, nextGenerationDate, description, userId, account_id
+                payment_method, start_date, end_date || null, nextGenerationDate, description, userId, account_id,
+                is_consumption_based, consumption_unit, default_unit_price
             ]
         );
 
@@ -130,7 +135,10 @@ export async function PUT(
         const { clubId } = params;
         const body = await request.json();
 
-        const { id, name, amount, is_active, end_date, description, account_id } = body;
+        const {
+            id, name, amount, is_active, end_date, description, account_id,
+            is_consumption_based, consumption_unit, default_unit_price
+        } = body;
 
         if (!id) {
             return NextResponse.json({ error: 'Recurring payment ID is required' }, { status: 400 });
@@ -143,10 +151,13 @@ export async function PUT(
                  is_active = COALESCE($3, is_active),
                  end_date = COALESCE($4, end_date),
                  description = COALESCE($5, description),
-                 account_id = COALESCE($6, account_id)
-             WHERE id = $7 AND club_id = $8
+                 account_id = COALESCE($6, account_id),
+                 is_consumption_based = COALESCE($7, is_consumption_based),
+                 consumption_unit = COALESCE($8, consumption_unit),
+                 default_unit_price = COALESCE($9, default_unit_price)
+             WHERE id = $10 AND club_id = $11
              RETURNING *`,
-            [name, amount, is_active, end_date || null, description, account_id, id, clubId]
+            [name, amount, is_active, end_date || null, description, account_id, is_consumption_based, consumption_unit, default_unit_price, id, clubId]
         );
 
         if (result.rows.length === 0) {

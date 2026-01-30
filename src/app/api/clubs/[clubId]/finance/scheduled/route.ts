@@ -55,7 +55,9 @@ export async function GET(
             scheduled_expenses: result.rows.map(row => ({
                 ...row,
                 amount: parseFloat(row.amount),
-                amount_paid: parseFloat(row.amount_paid)
+                amount_paid: parseFloat(row.amount_paid),
+                consumption_value: row.consumption_value ? parseFloat(row.consumption_value) : null,
+                unit_price: row.unit_price ? parseFloat(row.unit_price) : null
             }))
         });
     } catch (error) {
@@ -84,7 +86,9 @@ export async function POST(
             amount,
             due_date,
             description,
-            recurring_payment_id
+            recurring_payment_id,
+            consumption_value,
+            unit_price
         } = body;
 
         if (!category_id || !name || !amount || !due_date) {
@@ -96,10 +100,10 @@ export async function POST(
 
         const result = await query(
             `INSERT INTO finance_scheduled_expenses 
-                (club_id, category_id, name, amount, due_date, description, recurring_payment_id)
-             VALUES ($1, $2, $3, $4, $5, $6, $7)
+                (club_id, category_id, name, amount, due_date, description, recurring_payment_id, consumption_value, unit_price)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
              RETURNING *`,
-            [clubId, category_id, name, amount, due_date, description, recurring_payment_id || null]
+            [clubId, category_id, name, amount, due_date, description, recurring_payment_id || null, consumption_value, unit_price]
         );
 
         return NextResponse.json({

@@ -19,6 +19,10 @@ interface ScheduledExpense {
     due_date: string
     status: 'unpaid' | 'partial' | 'paid' | 'cancelled'
     description: string
+    is_consumption_based?: boolean
+    consumption_unit?: string
+    consumption_value?: number
+    unit_price?: number
 }
 
 interface ScheduledExpensesListProps {
@@ -108,6 +112,11 @@ export default function ScheduledExpensesList({ clubId }: ScheduledExpensesListP
                                                 <CardTitle className="text-sm font-bold">{expense.name}</CardTitle>
                                                 <CardDescription className="text-xs">
                                                     {new Date(expense.due_date).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}
+                                                    {expense.is_consumption_based && (
+                                                        <span className="block text-[10px] text-amber-600 font-medium">
+                                                            Потребление: {expense.consumption_value || 0} {expense.consumption_unit}
+                                                        </span>
+                                                    )}
                                                 </CardDescription>
                                             </div>
                                         </div>
