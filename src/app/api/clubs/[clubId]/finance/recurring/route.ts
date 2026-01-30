@@ -104,11 +104,27 @@ export async function POST(
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
              RETURNING *`,
             [
-                clubId, category_id, name, amount || 0, type, frequency, interval,
-                day_of_month || null, day_of_week || null, has_split,
+                clubId,
+                category_id,
+                name,
+                amount || 0,
+                type,
+                frequency,
+                interval || 1,
+                day_of_month || null,
+                day_of_week || null,
+                has_split || false,
                 split_config ? JSON.stringify(split_config) : null,
-                payment_method, startDateObj, end_date || null, nextGenerationDate, description, userId, account_id,
-                is_consumption_based, consumption_unit, default_unit_price
+                payment_method,
+                startDateObj,
+                end_date || null,
+                nextGenerationDate,
+                description,
+                userId,
+                account_id || null,
+                is_consumption_based,
+                consumption_unit || null,
+                default_unit_price || null
             ]
         );
 
@@ -151,13 +167,25 @@ export async function PUT(
                  is_active = COALESCE($3, is_active),
                  end_date = COALESCE($4, end_date),
                  description = COALESCE($5, description),
-                 account_id = COALESCE($6, account_id),
+                 account_id = $6,
                  is_consumption_based = COALESCE($7, is_consumption_based),
                  consumption_unit = COALESCE($8, consumption_unit),
                  default_unit_price = COALESCE($9, default_unit_price)
              WHERE id = $10 AND club_id = $11
              RETURNING *`,
-            [name, amount, is_active, end_date || null, description, account_id, is_consumption_based, consumption_unit, default_unit_price, id, clubId]
+            [
+                name,
+                amount,
+                is_active,
+                end_date || null,
+                description,
+                account_id || null,
+                is_consumption_based,
+                consumption_unit,
+                default_unit_price,
+                id,
+                clubId
+            ]
         );
 
         if (result.rows.length === 0) {
