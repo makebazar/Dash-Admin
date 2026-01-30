@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Zap, Calendar, DollarSign } from "lucide-react"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 interface RecurringPayment {
     id: number
@@ -19,25 +20,38 @@ interface RecurringPayment {
     is_consumption_based: boolean
     consumption_unit?: string
     default_unit_price?: number
+    account_id?: number
+}
+
+interface Account {
+    id: number
+    name: string
+    type: string
 }
 
 interface PaymentModalProps {
     isOpen: boolean
     onClose: () => void
     payment: RecurringPayment | null
-    onConfirm: (data: { amount: number, date: string, notes: string }) => Promise<void>
+    accounts: Account[]
+    onConfirm: (data: { amount: number, date: string, notes: string, accountId: number }) => Promise<void>
 }
 
-export function PaymentModal({ isOpen, onClose, payment, onConfirm }: PaymentModalProps) {
+export function PaymentModal({ isOpen, onClose, payment, accounts, onConfirm }: PaymentModalProps) {
     const [amount, setAmount] = useState<string>("")
     const [date, setDate] = useState<string>(new Date().toISOString().split('T')[0])
     const [consumption, setConsumption] = useState<string>("")
     const [unitPrice, setUnitPrice] = useState<string>("")
+    const [selectedAccountId, setSelectedAccountId] = useState<string>("")
     const [loading, setLoading] = useState(false)
 
     useEffect(() => {
-        if (payment) {
+        if (payment && isOpen) {
             setDate(new Date().toISOString().split('T')[0])
+            // Default to payment's account if set, otherwise first available account
+            const defaultAccount = payment.account_id ? payment.account_id.toString() : (accounts.length > 0 ? accounts[0].id.toString() : "")
+            setSelectedAccountId(defaultAccount)
+
             if (payment.is_consumption_based) {
                 setConsumption("")
                 setUnitPrice(payment.default_unit_price?.toString() || "0")
@@ -48,7 +62,7 @@ export function PaymentModal({ isOpen, onClose, payment, onConfirm }: PaymentMod
                 setUnitPrice("")
             }
         }
-    }, [payment, isOpen])
+    }, [payment, isOpen, accounts])
 
     useEffect(() => {
         if (payment?.is_consumption_based && consumption && unitPrice) {
@@ -61,7 +75,7 @@ export function PaymentModal({ isOpen, onClose, payment, onConfirm }: PaymentMod
     }, [consumption, unitPrice, payment])
 
     const handleConfirm = async () => {
-        if (!payment) return
+        if (!payment || !selectedAccountId) return
 
         setLoading(true)
         try {
@@ -77,7 +91,8 @@ export function PaymentModal({ isOpen, onClose, payment, onConfirm }: PaymentMod
             await onConfirm({
                 amount: finalAmount,
                 date: date,
-                notes: notes
+                notes: notes,
+                accountId: parseInt(selectedAccountId)
             })
             onClose()
         } catch (error) {
@@ -100,11 +115,32 @@ export function PaymentModal({ isOpen, onClose, payment, onConfirm }: PaymentMod
                     <DialogDescription>
                         {payment.is_consumption_based
                             ? "Введите показания счетчика для расчета суммы."
-                            : "Подтвердите сумму и дату платежа."}
+                            : "Подтвердите сумму, дату и счет списания."}
                     </DialogDescription>
                 </DialogHeader>
 
                 <div className="grid gap-4 py-4">
+                    {/* Account Selection */}
+                    <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="account" className="text-right">
+                            Счет
+                        </Label>
+                        <div className="col-span-3">
+                            <Select value={selectedAccountId} onValueChange={setSelectedAccountId}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Выберите счет" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {accounts.map(acc => (
+                                        <SelectItem key={acc.id} value={acc.id.toString()}>
+                                            {acc.name}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </div>
+
                     {/* Date Selection */}
                     <div className="grid grid-cols-4 items-center gap-4">
                         <Label htmlFor="date" className="text-right">
@@ -176,7 +212,7 @@ export function PaymentModal({ isOpen, onClose, payment, onConfirm }: PaymentMod
                     <Button variant="outline" onClick={onClose} disabled={loading}>
                         Отмена
                     </Button>
-                    <Button onClick={handleConfirm} disabled={loading || !amount || parseFloat(amount) <= 0}>
+                    <Button onClick={handleConfirm} disabled={loading || !amount || parseFloat(amount) <= 0 || !selectedAccountId}>
                         {loading ? "Обработка..." : `Оплатить ${amount} ₽`}
                     </Button>
                 </DialogFooter>

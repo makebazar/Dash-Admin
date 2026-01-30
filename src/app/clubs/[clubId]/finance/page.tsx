@@ -89,6 +89,7 @@ export default function FinancePage() {
     // Monthly Bills State
     const [recurringPayments, setRecurringPayments] = useState<RecurringPayment[]>([])
     const [monthTransactions, setMonthTransactions] = useState<any[]>([])
+    const [accounts, setAccounts] = useState<any[]>([])
 
     // Modal State
     const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false)
@@ -125,6 +126,13 @@ export default function FinancePage() {
                 setRecurringPayments(recData.recurring_payments || [])
             }
 
+            // Fetch Accounts
+            const accRes = await fetch(`/api/clubs/${clubId}/finance/accounts`)
+            if (accRes.ok) {
+                const accData = await accRes.json()
+                setAccounts(accData.accounts || [])
+            }
+
             // Fetch Transactions for checks
             const txRes = await fetch(
                 `/api/clubs/${clubId}/finance/transactions?start_date=${startDateStr}&end_date=${endDateStr}&page=1&limit=1000`
@@ -152,7 +160,7 @@ export default function FinancePage() {
         setIsPaymentModalOpen(true)
     }
 
-    const handleConfirmPayment = async (data: { amount: number, date: string, notes: string }) => {
+    const handleConfirmPayment = async (data: { amount: number, date: string, notes: string, accountId: number }) => {
         if (!selectedPayment) return
 
         try {
@@ -165,7 +173,8 @@ export default function FinancePage() {
                     type: 'expense',
                     transaction_date: data.date,
                     notes: data.notes,
-                    payment_method: 'cash', // Default to cash
+                    payment_method: 'cash', // Keep as fallback or derive from account type
+                    account_id: data.accountId,
                     status: 'completed'
                 })
             });
@@ -416,6 +425,7 @@ export default function FinancePage() {
                             isOpen={isPaymentModalOpen}
                             onClose={() => setIsPaymentModalOpen(false)}
                             payment={selectedPayment}
+                            accounts={accounts}
                             onConfirm={handleConfirmPayment}
                         />
 
