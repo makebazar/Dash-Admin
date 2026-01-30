@@ -21,6 +21,9 @@ import {
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 
+import { Switch } from "@/components/ui/switch"
+import { Zap } from "lucide-react"
+
 interface Account {
     id: number
     name: string
@@ -61,7 +64,8 @@ export default function PayExpenseDialog({
         payment_date: new Date().toISOString().split('T')[0],
         description: '',
         consumption_value: '',
-        unit_price: ''
+        unit_price: '',
+        is_consumption_based: false
     })
 
     useEffect(() => {
@@ -75,7 +79,8 @@ export default function PayExpenseDialog({
                     payment_date: new Date().toISOString().split('T')[0],
                     description: `Оплата: ${expense.name}`,
                     consumption_value: expense.consumption_value?.toString() || '',
-                    unit_price: expense.unit_price?.toString() || ''
+                    unit_price: expense.unit_price?.toString() || '',
+                    is_consumption_based: expense.is_consumption_based || false
                 })
             }
         }
@@ -127,7 +132,7 @@ export default function PayExpenseDialog({
     }
 
     const calculateAmount = () => {
-        if (expense?.is_consumption_based) {
+        if (formData.is_consumption_based) {
             const consumption = parseFloat(formData.consumption_value) || 0
             const price = parseFloat(formData.unit_price) || 0
             return (consumption * price).toFixed(2)
@@ -151,20 +156,21 @@ export default function PayExpenseDialog({
         e.preventDefault()
         if (!expense) return
 
-        const finalAmount = expense.is_consumption_based
+        const finalAmount = formData.is_consumption_based
             ? parseFloat(calculateAmount())
             : parseFloat(formData.amount)
 
         setLoading(true)
         try {
             // 1. If consumption based, update the expense with actual data first
-            if (expense.is_consumption_based) {
+            if (formData.is_consumption_based) {
                 const updateRes = await fetch(`/api/clubs/${clubId}/finance/scheduled/${expense.id}`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         consumption_value: parseFloat(formData.consumption_value),
                         unit_price: parseFloat(formData.unit_price),
+                        is_consumption_based: true,
                         amount: finalAmount
                     })
                 })
@@ -213,10 +219,24 @@ export default function PayExpenseDialog({
                 </DialogHeader>
 
                 <form onSubmit={handlePaySubmit} className="space-y-4 py-4">
-                    {expense.is_consumption_based && (
+                    {/* Manual toggle for consumption mode if not already set */}
+                    {!expense.is_consumption_based && (
+                        <div className="flex items-center justify-between p-2 bg-muted/50 rounded-md border border-dashed">
+                            <Label className="flex items-center gap-2 cursor-pointer text-xs">
+                                <Zap className="h-3 w-3 text-amber-500" />
+                                Оплатить по показаниям?
+                            </Label>
+                            <Switch
+                                checked={formData.is_consumption_based}
+                                onCheckedChange={(checked) => setFormData({ ...formData, is_consumption_based: checked })}
+                            />
+                        </div>
+                    )}
+
+                    {formData.is_consumption_based && (
                         <div className="grid grid-cols-2 gap-4 p-3 bg-amber-50 rounded-lg border border-amber-100">
                             <div className="space-y-2">
-                                <Label className="text-xs">Потребление ({expense.consumption_unit})</Label>
+                                <Label className="text-xs">Потребление ({expense.consumption_unit || 'ед.'})</Label>
                                 <Input
                                     type="number"
                                     step="0.01"
@@ -245,7 +265,7 @@ export default function PayExpenseDialog({
                         </div>
                     )}
 
-                    {!expense.is_consumption_based && (
+                    {!formData.is_consumption_based && (
                         <div className="space-y-2">
                             <Label htmlFor="amount">Сумма оплаты</Label>
                             <Input
