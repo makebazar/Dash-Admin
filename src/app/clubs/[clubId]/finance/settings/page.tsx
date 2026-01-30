@@ -26,6 +26,15 @@ interface IncomeField {
     account_id?: number
 }
 
+interface Category {
+    id: number
+    name: string
+    type: 'income' | 'expense'
+    icon: string
+    color: string
+    is_system: boolean
+}
+
 const ACCOUNT_TYPES = [
     { value: 'cash', label: 'Наличные' },
     { value: 'bank', label: 'Банк' },
@@ -34,12 +43,13 @@ const ACCOUNT_TYPES = [
 ]
 
 const ACCOUNT_ICONS = ['💰', '🏦', '💳', '📱', '🏪', '💵', '💴', '🪙']
-const ACCOUNT_COLORS = ['bg-green-500', 'bg-blue-500', 'bg-purple-500', 'bg-orange-500', 'bg-pink-500', 'bg-cyan-500']
+const ACCOUNT_COLORS = ['bg-green-500', 'bg-blue-500', 'bg-purple-500', 'bg-orange-500', 'bg-pink-500', 'bg-cyan-500', 'bg-red-500', 'bg-yellow-500']
 
 export default function FinanceSettingsPage({ params }: { params: Promise<{ clubId: string }> }) {
     const router = useRouter()
     const [clubId, setClubId] = useState('')
     const [accounts, setAccounts] = useState<Account[]>([])
+    const [categories, setCategories] = useState<Category[]>([])
     const [incomeFields, setIncomeFields] = useState<IncomeField[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [isSaving, setIsSaving] = useState(false)
@@ -51,6 +61,15 @@ export default function FinanceSettingsPage({ params }: { params: Promise<{ club
         icon: '💰',
         color: 'bg-green-500',
         account_type: 'cash'
+    })
+
+    // New category form
+    const [showNewCategoryForm, setShowNewCategoryForm] = useState(false)
+    const [newCategory, setNewCategory] = useState({
+        name: '',
+        type: 'expense' as 'income' | 'expense',
+        icon: '💰',
+        color: 'bg-blue-500'
     })
 
     useEffect(() => {
@@ -81,6 +100,14 @@ export default function FinanceSettingsPage({ params }: { params: Promise<{ club
                     setIncomeFields(fields)
                 }
             }
+
+            // Get categories
+            const catRes = await fetch(`/api/clubs/${id}/finance/categories`)
+            const catData = await catRes.json()
+            if (catRes.ok) {
+                setCategories(catData.categories || [])
+            }
+
         } catch (error) {
             console.error('Error fetching data:', error)
         } finally {
@@ -145,6 +172,58 @@ export default function FinanceSettingsPage({ params }: { params: Promise<{ club
         } catch (error) {
             console.error('Error deleting account:', error)
             alert('❌ Ошибка удаления счёта')
+        } finally {
+            setIsSaving(false)
+        }
+    }
+
+    const handleCreateCategory = async () => {
+        if (!newCategory.name.trim()) {
+            alert('Введите название категории')
+            return
+        }
+
+        setIsSaving(true)
+        try {
+            const res = await fetch(`/api/clubs/${clubId}/finance/categories`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(newCategory)
+            })
+
+            if (res.ok) {
+                await fetchData(clubId)
+                setShowNewCategoryForm(false)
+                setNewCategory({ ...newCategory, name: '', icon: '💰' })
+            } else {
+                alert('❌ Ошибка создания категории')
+            }
+        } catch (error) {
+            console.error('Error creating category:', error)
+            alert('❌ Ошибка создания категории')
+        } finally {
+            setIsSaving(false)
+        }
+    }
+
+    const handleDeleteCategory = async (categoryId: number) => {
+        if (!confirm('Удалить эту категорию? История операций сохранится, но категорию нельзя будет выбрать для новых операций.')) return
+
+        setIsSaving(true)
+        try {
+            const res = await fetch(`/api/clubs/${clubId}/finance/categories?id=${categoryId}`, {
+                method: 'DELETE'
+            })
+
+            if (res.ok) {
+                await fetchData(clubId)
+            } else {
+                const data = await res.json()
+                alert(data.error || '❌ Ошибка удаления')
+            }
+        } catch (error) {
+            console.error('Error deleting category:', error)
+            alert('❌ Ошибка удаления категории')
         } finally {
             setIsSaving(false)
         }
@@ -216,11 +295,191 @@ export default function FinanceSettingsPage({ params }: { params: Promise<{ club
                 </div>
             </div>
 
-            <Tabs defaultValue="accounts" className="w-full">
+            <Tabs defaultValue="categories" className="w-full">
                 <TabsList>
+                    <TabsTrigger value="categories">Категории</TabsTrigger>
                     <TabsTrigger value="accounts">Счета</TabsTrigger>
                     <TabsTrigger value="mapping">Маппинг счетов</TabsTrigger>
                 </TabsList>
+
+                {/* Categories Tab */}
+                <TabsContent value="categories" className="space-y-6">
+                    <Card>
+                        <CardHeader>
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <CardTitle>Управление категориями</CardTitle>
+                                    <CardDescription>
+                                        Создавайте и настраивайте категории доходов и расходов
+                                    </CardDescription>
+                                </div>
+                                <Button onClick={() => setShowNewCategoryForm(!showNewCategoryForm)}>
+                                    <Plus className="h-4 w-4 mr-2" />
+                                    Новая категория
+                                </Button>
+                            </div>
+                        </CardHeader>
+                        <CardContent className="space-y-6">
+                            {/* New Category Form */}
+                            {showNewCategoryForm && (
+                                <Card className="border-2 border-primary">
+                                    <CardHeader>
+                                        <CardTitle className="text-lg">Создать новую категорию</CardTitle>
+                                    </CardHeader>
+                                    <CardContent className="space-y-4">
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <Label>Название</Label>
+                                                <Input
+                                                    value={newCategory.name}
+                                                    onChange={(e) => setNewCategory({ ...newCategory, name: e.target.value })}
+                                                    placeholder="Например: Аренда"
+                                                />
+                                            </div>
+                                            <div>
+                                                <Label>Тип</Label>
+                                                <Select
+                                                    value={newCategory.type}
+                                                    onValueChange={(value: 'income' | 'expense') => setNewCategory({ ...newCategory, type: value })}
+                                                >
+                                                    <SelectTrigger>
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="income">Доход</SelectItem>
+                                                        <SelectItem value="expense">Расход</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <Label>Иконка</Label>
+                                            <div className="flex flex-wrap gap-2 mt-2">
+                                                {ACCOUNT_ICONS.map(icon => (
+                                                    <button
+                                                        key={icon}
+                                                        onClick={() => setNewCategory({ ...newCategory, icon })}
+                                                        className={`text-2xl p-2 rounded border-2 ${newCategory.icon === icon ? 'border-primary' : 'border-transparent'
+                                                            }`}
+                                                    >
+                                                        {icon}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <Label>Цвет</Label>
+                                            <div className="flex flex-wrap gap-2 mt-2">
+                                                {ACCOUNT_COLORS.map(color => (
+                                                    <button
+                                                        key={color}
+                                                        onClick={() => setNewCategory({ ...newCategory, color })}
+                                                        className={`w-8 h-8 rounded border-2 ${color} ${newCategory.color === color ? 'border-foreground' : 'border-transparent'
+                                                            }`}
+                                                    />
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        <div className="flex gap-2 pt-2">
+                                            <Button onClick={handleCreateCategory} disabled={isSaving}>
+                                                {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Создать'}
+                                            </Button>
+                                            <Button variant="outline" onClick={() => setShowNewCategoryForm(false)}>
+                                                Отмена
+                                            </Button>
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            )}
+
+                            {/* Categories List */}
+                            <div className="grid md:grid-cols-2 gap-8">
+                                {/* Income Categories */}
+                                <div className="space-y-4">
+                                    <h3 className="font-semibold text-lg flex items-center gap-2">
+                                        <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                                        Доходы
+                                    </h3>
+                                    <div className="space-y-2">
+                                        {categories.filter(c => c.type === 'income').map((cat) => (
+                                            <div
+                                                key={cat.id}
+                                                className="flex items-center justify-between p-3 border rounded-lg bg-card"
+                                            >
+                                                <div className="flex items-center gap-3">
+                                                    <div
+                                                        className="w-10 h-10 rounded-lg flex items-center justify-center text-xl"
+                                                        style={{ backgroundColor: cat.color + '20' }}
+                                                    >
+                                                        {cat.icon}
+                                                    </div>
+                                                    <div>
+                                                        <div className="font-medium">{cat.name}</div>
+                                                        {cat.is_system && (
+                                                            <div className="text-xs text-muted-foreground">Системная</div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                {!cat.is_system && (
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        onClick={() => handleDeleteCategory(cat.id)}
+                                                    >
+                                                        <Trash2 className="h-4 w-4 text-destructive" />
+                                                    </Button>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Expense Categories */}
+                                <div className="space-y-4">
+                                    <h3 className="font-semibold text-lg flex items-center gap-2">
+                                        <div className="w-2 h-2 rounded-full bg-red-500" />
+                                        Расходы
+                                    </h3>
+                                    <div className="space-y-2">
+                                        {categories.filter(c => c.type === 'expense').map((cat) => (
+                                            <div
+                                                key={cat.id}
+                                                className="flex items-center justify-between p-3 border rounded-lg bg-card"
+                                            >
+                                                <div className="flex items-center gap-3">
+                                                    <div
+                                                        className="w-10 h-10 rounded-lg flex items-center justify-center text-xl"
+                                                        style={{ backgroundColor: cat.color + '20' }}
+                                                    >
+                                                        {cat.icon}
+                                                    </div>
+                                                    <div>
+                                                        <div className="font-medium">{cat.name}</div>
+                                                        {cat.is_system && (
+                                                            <div className="text-xs text-muted-foreground">Системная</div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                {!cat.is_system && (
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        onClick={() => handleDeleteCategory(cat.id)}
+                                                    >
+                                                        <Trash2 className="h-4 w-4 text-destructive" />
+                                                    </Button>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </TabsContent>
 
                 {/* Accounts Tab */}
                 <TabsContent value="accounts" className="space-y-6">
