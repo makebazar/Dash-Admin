@@ -604,7 +604,7 @@ export default function TransactionList({ clubId, startDate, endDate }: Transact
                         </div>
 
                         <div>
-                            <Label>Дата</Label>
+                            <Label>Дата платежа</Label>
                             <Input
                                 type="date"
                                 value={formData.transaction_date}
@@ -632,23 +632,7 @@ export default function TransactionList({ clubId, startDate, endDate }: Transact
                             </Select>
                         </div>
 
-                        <div>
-                            <Label>Способ оплаты (технический)</Label>
-                            <Select
-                                value={formData.payment_method}
-                                onValueChange={(value) => setFormData({ ...formData, payment_method: value })}
-                            >
-                                <SelectTrigger>
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="cash">💵 Наличные</SelectItem>
-                                    <SelectItem value="card">💳 Карта</SelectItem>
-                                    <SelectItem value="bank_transfer">🏦 Перевод</SelectItem>
-                                    <SelectItem value="other">📝 Другое</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
+
 
                         <div>
                             <Label>Описание</Label>
