@@ -150,47 +150,6 @@ export async function GET(
             values
         );
 
-        // 6. BREAK-EVEN POINT (minimum revenue to cover expenses)
-        // Calculate total scheduled fixed expenses for the selected period
-        const fixedExpenses = await query(
-            `SELECT COALESCE(SUM(amount), 0) as total_fixed
-            FROM finance_scheduled_expenses
-            WHERE club_id = $1 
-                AND due_date BETWEEN $2 AND $3`,
-            values
-        );
-
-        const breakEvenPoint = parseFloat(fixedExpenses.rows[0].total_fixed || 0);
-
-        // 7. UPCOMING PAYMENTS (next 30 days)
-        const upcomingResult = await query(
-            `SELECT 
-                fse.id,
-                fse.amount,
-                fse.due_date as transaction_date,
-                fse.name as description,
-                fc.name as category_name,
-                fc.type,
-                fc.icon,
-                fse.is_consumption_based,
-                fse.consumption_unit,
-                fse.consumption_value,
-                fse.unit_price,
-                COALESCE((
-                    SELECT SUM(amount) 
-                    FROM finance_transactions 
-                    WHERE scheduled_expense_id = fse.id AND status = 'completed'
-                ), 0) as amount_paid
-            FROM finance_scheduled_expenses fse
-            JOIN finance_categories fc ON fse.category_id = fc.id
-            WHERE fse.club_id = $1 
-                AND fse.status IN ('unpaid', 'partial')
-                AND fse.due_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '30 days'
-            ORDER BY fse.due_date ASC
-            LIMIT 10`,
-            [clubId]
-        );
-
         return NextResponse.json({
             summary: {
                 total_income: totalIncome,
@@ -218,12 +177,8 @@ export async function GET(
                 ...r,
                 total_amount: parseFloat(r.total_amount)
             })),
-            break_even_point: breakEvenPoint,
-            upcoming_payments: upcomingResult.rows.map(r => ({
-                ...r,
-                amount: parseFloat(r.amount),
-                amount_paid: parseFloat(r.amount_paid || 0)
-            }))
+            break_even_point: 0,
+            upcoming_payments: []
         });
     } catch (error) {
         console.error('Error fetching analytics:', error);
