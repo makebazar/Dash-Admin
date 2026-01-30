@@ -98,8 +98,16 @@ CREATE TABLE IF NOT EXISTS recurring_payments (
     
     payment_method VARCHAR(30) DEFAULT 'cash',
     start_date DATE NOT NULL,
+    payment_method VARCHAR(30) DEFAULT 'cash',
+    start_date DATE NOT NULL,
     end_date DATE,
-    
+
+    -- Consumption settings
+    account_id INTEGER REFERENCES finance_accounts(id),
+    is_consumption_based BOOLEAN DEFAULT FALSE,
+    consumption_unit VARCHAR(20),
+    default_unit_price DECIMAL(12, 2),
+
     is_active BOOLEAN DEFAULT TRUE,
     last_generated_date DATE,
     next_generation_date DATE,

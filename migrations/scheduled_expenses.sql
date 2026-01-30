@@ -9,6 +9,12 @@ CREATE TABLE IF NOT EXISTS finance_scheduled_expenses (
     name VARCHAR(200) NOT NULL,
     amount DECIMAL(12, 2) NOT NULL,
     due_date DATE NOT NULL,
+    
+    is_consumption_based BOOLEAN DEFAULT FALSE,
+    consumption_unit VARCHAR(20),
+    consumption_value DECIMAL(12, 2),
+    unit_price DECIMAL(12, 2),
+
     status VARCHAR(20) DEFAULT 'unpaid' CHECK (status IN ('unpaid', 'partial', 'paid', 'cancelled')),
     recurring_payment_id INTEGER REFERENCES recurring_payments(id) ON DELETE SET NULL,
     description TEXT,
