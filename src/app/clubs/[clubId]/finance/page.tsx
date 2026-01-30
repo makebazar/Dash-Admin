@@ -98,6 +98,12 @@ export default function FinancePage() {
     const monthNames = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
         'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
 
+    // Calculate dates for selected month
+    const startDate = new Date(selectedYear, selectedMonth - 1, 1)
+    const endDate = new Date(selectedYear, selectedMonth, 0)
+    const startDateStr = startDate.toISOString().split('T')[0]
+    const endDateStr = endDate.toISOString().split('T')[0]
+
     useEffect(() => {
         if (clubId) {
             fetchAnalytics()
@@ -107,12 +113,6 @@ export default function FinancePage() {
     const fetchAnalytics = async () => {
         setLoading(true)
         try {
-            // Calculate start and end dates for selected month
-            const startDate = new Date(selectedYear, selectedMonth - 1, 1)
-            const endDate = new Date(selectedYear, selectedMonth, 0)
-            const startDateStr = startDate.toISOString().split('T')[0]
-            const endDateStr = endDate.toISOString().split('T')[0]
-
             const res = await fetch(
                 `/api/clubs/${clubId}/finance/analytics?start_date=${startDateStr}&end_date=${endDateStr}`
             )
@@ -451,8 +451,12 @@ export default function FinancePage() {
                     </div>
                 </TabsContent>
 
-                <TabsContent value="transactions">
-                    <TransactionList clubId={clubId} />
+                <TabsContent value="transactions" className="space-y-4">
+                    <TransactionList
+                        clubId={clubId as string}
+                        startDate={startDateStr}
+                        endDate={endDateStr}
+                    />
                 </TabsContent>
 
                 <TabsContent value="reports">

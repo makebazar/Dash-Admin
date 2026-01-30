@@ -67,9 +67,11 @@ interface Category {
 
 interface TransactionListProps {
     clubId: string
+    startDate: string
+    endDate: string
 }
 
-export default function TransactionList({ clubId }: TransactionListProps) {
+export default function TransactionList({ clubId, startDate, endDate }: TransactionListProps) {
     const [transactions, setTransactions] = useState<Transaction[]>([])
     const [categories, setCategories] = useState<Category[]>([])
     const [accounts, setAccounts] = useState<Account[]>([])
@@ -102,7 +104,7 @@ export default function TransactionList({ clubId }: TransactionListProps) {
         fetchTransactions()
         fetchCategories()
         fetchAccounts()
-    }, [clubId, typeFilter, categoryFilter, statusFilter, searchTerm])
+    }, [clubId, typeFilter, categoryFilter, statusFilter, searchTerm, startDate, endDate])
 
     const fetchAccounts = async () => {
         try {
@@ -132,6 +134,8 @@ export default function TransactionList({ clubId }: TransactionListProps) {
             if (categoryFilter !== 'all') params.append('category_id', categoryFilter)
             if (statusFilter !== 'all') params.append('status', statusFilter)
             if (searchTerm) params.append('search', searchTerm)
+            params.append('start_date', startDate)
+            params.append('end_date', endDate)
 
             const res = await fetch(`/api/clubs/${clubId}/finance/transactions?${params}`)
             const data = await res.json()
