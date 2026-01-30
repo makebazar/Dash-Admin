@@ -220,10 +220,9 @@ export async function DELETE(
             return NextResponse.json({ error: 'Recurring payment ID is required' }, { status: 400 });
         }
 
-        // Soft delete by setting is_active to false
+        // Hard delete the recurring payment template
         const result = await query(
-            `UPDATE recurring_payments 
-             SET is_active = false 
+            `DELETE FROM recurring_payments 
              WHERE id = $1 AND club_id = $2
              RETURNING id`,
             [id, clubId]

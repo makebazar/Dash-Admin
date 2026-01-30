@@ -198,7 +198,18 @@ export default function RecurringPayments({ clubId }: RecurringPaymentsProps) {
         }
     }
 
-    const handleGenerateTransaction = (payment: RecurringPayment) => {
+    const handleGenerateTransaction = async (payment: RecurringPayment) => {
+        if (payment.is_consumption_based) {
+            // Bypass dialog for consumption-based expenses
+            setGeneratingPayment(payment)
+            // Use a small timeout to ensure state is updated before calling confirm
+            setTimeout(() => {
+                const now = new Date()
+                confirmGenerateDirectly(payment, now.getMonth() + 1, now.getFullYear())
+            }, 0)
+            return
+        }
+
         setGeneratingPayment(payment)
         setGenerateFormData({
             amount: payment.amount.toString(),
@@ -206,6 +217,34 @@ export default function RecurringPayments({ clubId }: RecurringPaymentsProps) {
             payment_date: new Date().toISOString().split('T')[0]
         })
         setIsGenerateDialogOpen(true)
+    }
+
+    const confirmGenerateDirectly = async (payment: RecurringPayment, month: number, year: number) => {
+        try {
+            const res = await fetch(`/api/clubs/${clubId}/finance/recurring/${payment.id}/generate`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    target_month: month,
+                    target_year: year,
+                    status: 'unpaid'
+                })
+            })
+
+            const data = await res.json()
+
+            if (res.ok) {
+                alert(`✅ Платёж запланирован: ${payment.name}. Оплатить его можно на вкладке "Расходы" или на Dashboard.`)
+                fetchPayments()
+            } else if (res.status === 409) {
+                alert('⚠️ Платёж для этого месяца уже запланирован')
+            } else {
+                alert(`❌ Ошибка: ${data.error}`)
+            }
+        } catch (error) {
+            console.error('Failed to generate transaction:', error)
+            alert('❌ Не удалось создать транзакцию')
+        }
     }
 
     const confirmGenerateTransaction = async () => {
