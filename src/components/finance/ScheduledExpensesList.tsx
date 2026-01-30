@@ -52,6 +52,25 @@ export default function ScheduledExpensesList({ clubId }: ScheduledExpensesListP
         }
     }
 
+    const handleDelete = async (id: number) => {
+        if (!confirm('Удалить этот запланированный расход?')) return
+
+        try {
+            const res = await fetch(`/api/clubs/${clubId}/finance/scheduled/${id}`, {
+                method: 'DELETE'
+            })
+            if (res.ok) {
+                fetchExpenses()
+            } else {
+                const data = await res.json()
+                alert(`Ошибка: ${data.error}`)
+            }
+        } catch (error) {
+            console.error('Failed to delete scheduled expense:', error)
+            alert('Не удалось удалить расход')
+        }
+    }
+
     const formatCurrency = (amount: number) => {
         return new Intl.NumberFormat('ru-RU').format(amount) + ' ₽'
     }
@@ -162,6 +181,14 @@ export default function ScheduledExpensesList({ clubId }: ScheduledExpensesListP
                                                 Полностью оплачено
                                             </Button>
                                         )}
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="text-muted-foreground hover:text-red-500"
+                                            onClick={() => handleDelete(expense.id)}
+                                        >
+                                            <Trash2 className="w-4 h-4" />
+                                        </Button>
                                     </div>
                                 </CardContent>
                             </Card>
