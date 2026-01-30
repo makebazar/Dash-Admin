@@ -314,6 +314,11 @@ export default function FinancePage() {
                                                                 <p className="text-xs text-muted-foreground">
                                                                     Срок: {new Date(payment.transaction_date).toLocaleDateString('ru-RU')}
                                                                 </p>
+                                                                {payment.is_consumption_based && (
+                                                                    <p className="text-[10px] text-amber-600 font-medium leading-none mt-0.5">
+                                                                        Потребление: {payment.consumption_value || 0} {payment.consumption_unit || 'ед.'}
+                                                                    </p>
+                                                                )}
                                                             </div>
                                                         </div>
                                                         <div className="text-right">

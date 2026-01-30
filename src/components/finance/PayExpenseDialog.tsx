@@ -44,6 +44,7 @@ interface PayExpenseDialogProps {
         consumption_unit?: string
         consumption_value?: number
         unit_price?: number
+        category_name?: string
     } | null
     clubId: string
     onSuccess: () => void
@@ -219,19 +220,29 @@ export default function PayExpenseDialog({
                 </DialogHeader>
 
                 <form onSubmit={handlePaySubmit} className="space-y-4 py-4">
-                    {/* Manual toggle for consumption mode if not already set */}
-                    {!expense.is_consumption_based && (
-                        <div className="flex items-center justify-between p-2 bg-muted/50 rounded-md border border-dashed">
-                            <Label className="flex items-center gap-2 cursor-pointer text-xs">
-                                <Zap className="h-3 w-3 text-amber-500" />
-                                Оплатить по показаниям?
-                            </Label>
-                            <Switch
-                                checked={formData.is_consumption_based}
-                                onCheckedChange={(checked) => setFormData({ ...formData, is_consumption_based: checked })}
-                            />
-                        </div>
-                    )}
+                    {/* Manual toggle for consumption mode if not already set, but only for communal categories */}
+                    {!expense.is_consumption_based && (() => {
+                        const isCommunal = expense.category_name?.toLowerCase().includes('коммунальн') ||
+                            expense.category_name?.toLowerCase().includes('жкх') ||
+                            expense.name.toLowerCase().includes('электро') ||
+                            expense.name.toLowerCase().includes('вода') ||
+                            expense.name.toLowerCase().includes('свет');
+
+                        if (!isCommunal) return null;
+
+                        return (
+                            <div className="flex items-center justify-between p-2 bg-muted/50 rounded-md border border-dashed">
+                                <Label className="flex items-center gap-2 cursor-pointer text-xs">
+                                    <Zap className="h-3 w-3 text-amber-500" />
+                                    Оплатить по показаниям?
+                                </Label>
+                                <Switch
+                                    checked={formData.is_consumption_based}
+                                    onCheckedChange={(checked) => setFormData({ ...formData, is_consumption_based: checked })}
+                                />
+                            </div>
+                        );
+                    })()}
 
                     {formData.is_consumption_based && (
                         <div className="grid grid-cols-2 gap-4 p-3 bg-amber-50 rounded-lg border border-amber-100">
