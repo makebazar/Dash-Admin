@@ -97,7 +97,6 @@ CREATE TABLE IF NOT EXISTS recurring_payments (
     split_config JSONB, -- [{amount: 25000, day: 1}, {amount: 25000, day: 15}]
     
     payment_method VARCHAR(30) DEFAULT 'cash',
-    start_date DATE NOT NULL,
     payment_method VARCHAR(30) DEFAULT 'cash',
     start_date DATE NOT NULL,
     end_date DATE,
