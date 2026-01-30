@@ -5,20 +5,14 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
-    TrendingUp, TrendingDown, DollarSign, Wallet,
-    Calendar, AlertCircle, ArrowUpRight, ArrowDownRight,
-    Percent, Target, Clock, ChevronLeft, ChevronRight, Settings
+    TrendingUp, TrendingDown, DollarSign,
+    Percent, ChevronLeft, ChevronRight, Settings
 } from "lucide-react"
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import TransactionList from '@/components/finance/TransactionList'
-import RecurringPayments from '@/components/finance/RecurringPayments'
 import FinanceReports from '@/components/finance/FinanceReports'
-import RevenueImport from '@/components/finance/RevenueImport'
 import { AccountBalances } from '@/components/finance/AccountBalances'
-import PayExpenseDialog from '@/components/finance/PayExpenseDialog'
-import { Progress } from "@/components/ui/progress"
-import ScheduledExpensesList from '@/components/finance/ScheduledExpensesList'
 
 interface FinanceStats {
     total_income: number
@@ -63,20 +57,6 @@ interface AnalyticsData {
         transaction_count: number
     }>
     break_even_point: number
-    upcoming_payments: Array<{
-        id: number
-        amount: number
-        type: string
-        transaction_date: string
-        description: string
-        category_name: string
-        icon: string
-        amount_paid: number
-        is_consumption_based?: boolean
-        consumption_unit?: string
-        consumption_value?: number
-        unit_price?: number
-    }>
 }
 
 export default function FinancePage() {
@@ -88,8 +68,6 @@ export default function FinancePage() {
     const [loading, setLoading] = useState(true)
     const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1)
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear())
-    const [isPayDialogOpen, setIsPayDialogOpen] = useState(false)
-    const [selectedExpense, setSelectedExpense] = useState<any>(null)
 
     const monthNames = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
         'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
@@ -193,10 +171,6 @@ export default function FinancePage() {
                 <TabsList className="flex flex-wrap w-full h-auto bg-muted p-1">
                     <TabsTrigger value="dashboard" className="flex-1">📊 Dashboard</TabsTrigger>
                     <TabsTrigger value="transactions" className="flex-1">📝 Транзакции</TabsTrigger>
-                    <TabsTrigger value="recurring" className="flex-1">🔄 Шаблоны</TabsTrigger>
-                    <TabsTrigger value="scheduled" className="flex-1">📅 Расходы</TabsTrigger>
-                    <TabsTrigger value="import" className="flex-1">Импорт</TabsTrigger>
-                    <TabsTrigger value="credits" className="flex-1">💳 Кредиты</TabsTrigger>
                     <TabsTrigger value="reports" className="flex-1">📈 Отчеты</TabsTrigger>
                 </TabsList>
 
@@ -286,135 +260,26 @@ export default function FinancePage() {
                         <AccountBalances clubId={clubId} />
                     </div>
 
-                    {/* Upcoming Payments & Break-even */}
-                    <div className="grid gap-4 md:grid-cols-2">
-                        {/* Upcoming Payments */}
+                    <div className="grid gap-4 md:grid-cols-1">
+                        {/* Top Expenses Preview */}
                         <Card>
                             <CardHeader>
-                                <CardTitle className="flex items-center gap-2">
-                                    <Clock className="h-5 w-5 text-primary" />
-                                    Предстоящие платежи
-                                </CardTitle>
-                                <CardDescription>Постоянные расходы к оплате</CardDescription>
+                                <CardTitle className="text-sm">Топ-5 расходов</CardTitle>
                             </CardHeader>
                             <CardContent>
-                                {analytics?.upcoming_payments && analytics.upcoming_payments.length > 0 ? (
-                                    <div className="space-y-4">
-                                        {analytics.upcoming_payments.map((payment) => {
-                                            const paidPercentage = (payment.amount_paid / payment.amount) * 100
-                                            const remaining = payment.amount - payment.amount_paid
-
-                                            return (
-                                                <div key={payment.id} className="space-y-2 p-3 bg-muted/30 rounded-lg">
-                                                    <div className="flex items-center justify-between">
-                                                        <div className="flex items-center gap-3">
-                                                            <span className="text-2xl">{payment.icon}</span>
-                                                            <div>
-                                                                <p className="font-medium text-sm">{payment.description || payment.category_name}</p>
-                                                                <p className="text-xs text-muted-foreground">
-                                                                    Срок: {new Date(payment.transaction_date).toLocaleDateString('ru-RU')}
-                                                                </p>
-                                                                {payment.is_consumption_based && (
-                                                                    <p className="text-[10px] text-amber-600 font-medium leading-none mt-0.5">
-                                                                        Потребление: {payment.consumption_value || 0} {payment.consumption_unit || 'ед.'}
-                                                                    </p>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                        <div className="text-right">
-                                                            <div className="font-bold text-red-600">
-                                                                {formatCurrency(payment.amount)}
-                                                            </div>
-                                                            <div className="text-[10px] text-muted-foreground">
-                                                                оплачено: {formatCurrency(payment.amount_paid)}
-                                                            </div>
-                                                        </div>
-                                                    </div>
-
-                                                    <div className="space-y-1">
-                                                        <div className="flex justify-between text-[10px] text-muted-foreground px-1">
-                                                            <span>Прогресс оплаты</span>
-                                                            <span>{Math.round(paidPercentage)}%</span>
-                                                        </div>
-                                                        <Progress value={paidPercentage} className="h-1.5" />
-                                                    </div>
-
-                                                    <div className="flex justify-end pt-1">
-                                                        <Button
-                                                            variant="outline"
-                                                            size="sm"
-                                                            className="h-8 text-xs"
-                                                            onClick={() => {
-                                                                setSelectedExpense(payment)
-                                                                setIsPayDialogOpen(true)
-                                                            }}
-                                                        >
-                                                            <DollarSign className="h-3 w-3 mr-1" />
-                                                            Оплатить {remaining > 0 && remaining !== payment.amount ? `остаток (${formatCurrency(remaining)})` : ''}
-                                                        </Button>
-                                                    </div>
-                                                </div>
-                                            )
-                                        })}
-                                    </div>
-                                ) : (
-                                    <p className="text-center text-muted-foreground py-8">
-                                        Нет запланированных платежей
-                                    </p>
-                                )}
+                                <div className="space-y-2">
+                                    {analytics?.top_expenses.slice(0, 3).map((expense, idx) => (
+                                        <div key={idx} className="flex items-center justify-between text-sm">
+                                            <span className="flex items-center gap-2">
+                                                <span>{expense.icon}</span>
+                                                <span className="text-muted-foreground">{expense.category_name}</span>
+                                            </span>
+                                            <span className="font-bold">{formatCurrency(expense.total_amount)}</span>
+                                        </div>
+                                    ))}
+                                </div>
                             </CardContent>
                         </Card>
-
-                        {/* Break-even & Top Expenses */}
-                        <div className="space-y-4">
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle className="flex items-center gap-2">
-                                        <Target className="h-5 w-5 text-primary" />
-                                        Точка безубыточности
-                                    </CardTitle>
-                                </CardHeader>
-                                <CardContent>
-                                    <div className="text-3xl font-bold text-primary">
-                                        {formatCurrency(analytics?.break_even_point || 0)}
-                                    </div>
-                                    <p className="text-xs text-muted-foreground mt-2">
-                                        Минимальная выручка для покрытия постоянных расходов
-                                    </p>
-                                    {summary.total_income >= (analytics?.break_even_point || 0) ? (
-                                        <div className="mt-3 p-2 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center gap-2 text-emerald-700 text-xs">
-                                            <ArrowUpRight className="h-4 w-4" />
-                                            Точка безубыточности достигнута!
-                                        </div>
-                                    ) : (
-                                        <div className="mt-3 p-2 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-2 text-amber-700 text-xs">
-                                            <AlertCircle className="h-4 w-4" />
-                                            Недостаточно для покрытия расходов
-                                        </div>
-                                    )}
-                                </CardContent>
-                            </Card>
-
-                            {/* Top Expenses Preview */}
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle className="text-sm">Топ-5 расходов</CardTitle>
-                                </CardHeader>
-                                <CardContent>
-                                    <div className="space-y-2">
-                                        {analytics?.top_expenses.slice(0, 3).map((expense, idx) => (
-                                            <div key={idx} className="flex items-center justify-between text-sm">
-                                                <span className="flex items-center gap-2">
-                                                    <span>{expense.icon}</span>
-                                                    <span className="text-muted-foreground">{expense.category_name}</span>
-                                                </span>
-                                                <span className="font-bold">{formatCurrency(expense.total_amount)}</span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </CardContent>
-                            </Card>
-                        </div>
                     </div>
                 </TabsContent>
 
@@ -422,48 +287,10 @@ export default function FinancePage() {
                     <TransactionList clubId={clubId} />
                 </TabsContent>
 
-                <TabsContent value="recurring">
-                    <RecurringPayments clubId={clubId} />
-                </TabsContent>
-
-                <TabsContent value="scheduled">
-                    <ScheduledExpensesList clubId={clubId} />
-                </TabsContent>
-
-                <TabsContent value="import">
-                    <RevenueImport clubId={clubId} />
-                </TabsContent>
-
-                <TabsContent value="credits">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Кредиты и займы</CardTitle>
-                            <CardDescription>Отслеживание долговых обязательств</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <p className="text-muted-foreground text-center py-8">
-                                Функционал управления кредитами будет добавлен в следующей версии.
-                                <br />
-                                <span className="text-xs">(Таблица finance_credits уже создана в БД)</span>
-                            </p>
-                        </CardContent>
-                    </Card>
-                </TabsContent>
-
                 <TabsContent value="reports">
                     <FinanceReports clubId={clubId} />
                 </TabsContent>
             </Tabs>
-
-            <PayExpenseDialog
-                isOpen={isPayDialogOpen}
-                onOpenChange={setIsPayDialogOpen}
-                expense={selectedExpense}
-                clubId={clubId}
-                onSuccess={() => {
-                    fetchAnalytics()
-                }}
-            />
         </div>
     )
 }
