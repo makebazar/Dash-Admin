@@ -74,6 +74,7 @@ interface AnalyticsData {
 }
 
 import { CheckCircle2, AlertCircle, Zap } from "lucide-react"
+import { PaymentModal } from "./_components/PaymentModal"
 
 export default function FinancePage() {
     const params = useParams()
@@ -88,7 +89,10 @@ export default function FinancePage() {
     // Monthly Bills State
     const [recurringPayments, setRecurringPayments] = useState<RecurringPayment[]>([])
     const [monthTransactions, setMonthTransactions] = useState<any[]>([])
-    const [isPaying, setIsPaying] = useState<number | null>(null)
+
+    // Modal State
+    const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false)
+    const [selectedPayment, setSelectedPayment] = useState<RecurringPayment | null>(null)
 
     const monthNames = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
         'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
@@ -143,38 +147,25 @@ export default function FinancePage() {
         )
     }
 
-    const handlePayBill = async (rp: RecurringPayment) => {
-        let amount = rp.amount;
-        let notes = `Авто-платеж: ${rp.name} [Recurring:${rp.id}]`;
+    const openPaymentModal = (rp: RecurringPayment) => {
+        setSelectedPayment(rp)
+        setIsPaymentModalOpen(true)
+    }
 
-        if (rp.is_consumption_based) {
-            const val = prompt(`Введите расход за месяц (${rp.consumption_unit}):`);
-            if (val === null) return;
-            const consumption = parseFloat(val);
-            if (isNaN(consumption) || consumption < 0) {
-                alert('Некорректное значение');
-                return;
-            }
-            amount = consumption * (rp.default_unit_price || 0);
-            notes = `${rp.name}: ${consumption} ${rp.consumption_unit} x ${rp.default_unit_price}₽ [Recurring:${rp.id}]`;
+    const handleConfirmPayment = async (data: { amount: number, date: string, notes: string }) => {
+        if (!selectedPayment) return
 
-            if (!confirm(`К оплате: ${formatCurrency(amount)}. Создать транзакцию?`)) return;
-        } else {
-            if (!confirm(`Оплатить ${rp.name} (${formatCurrency(amount)})?`)) return;
-        }
-
-        setIsPaying(rp.id);
         try {
             const res = await fetch(`/api/clubs/${clubId}/finance/transactions`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    category_id: rp.category_id,
-                    amount: amount,
+                    category_id: selectedPayment.category_id,
+                    amount: data.amount,
                     type: 'expense',
-                    transaction_date: new Date().toISOString().split('T')[0],
-                    notes: notes,
-                    payment_method: 'cash', // Default to cash for quick pay
+                    transaction_date: data.date,
+                    notes: data.notes,
+                    payment_method: 'cash', // Default to cash
                     status: 'completed'
                 })
             });
@@ -187,8 +178,6 @@ export default function FinancePage() {
         } catch (error) {
             console.error(error);
             alert('Ошибка выполнения');
-        } finally {
-            setIsPaying(null);
         }
     }
 
@@ -402,19 +391,16 @@ export default function FinancePage() {
                                                     ) : (
                                                         <Button
                                                             size="sm"
-                                                            onClick={() => handlePayBill(rp)}
-                                                            disabled={isPaying === rp.id}
+                                                            onClick={() => openPaymentModal(rp)}
                                                             className={rp.is_consumption_based ? "bg-amber-600 hover:bg-amber-700" : ""}
                                                         >
-                                                            {isPaying === rp.id ? '...' : (
-                                                                rp.is_consumption_based ? (
-                                                                    <>
-                                                                        <Zap className="h-3 w-3 mr-1" />
-                                                                        Внести
-                                                                    </>
-                                                                ) : (
-                                                                    `Оплатить ${formatCurrency(rp.amount)}`
-                                                                )
+                                                            {rp.is_consumption_based ? (
+                                                                <>
+                                                                    <Zap className="h-3 w-3 mr-1" />
+                                                                    Внести
+                                                                </>
+                                                            ) : (
+                                                                `Оплатить ${formatCurrency(rp.amount)}`
                                                             )}
                                                         </Button>
                                                     )}
@@ -425,6 +411,13 @@ export default function FinancePage() {
                                 )}
                             </CardContent>
                         </Card>
+
+                        <PaymentModal
+                            isOpen={isPaymentModalOpen}
+                            onClose={() => setIsPaymentModalOpen(false)}
+                            payment={selectedPayment}
+                            onConfirm={handleConfirmPayment}
+                        />
 
                         {/* Top Expenses Preview */}
                         <Card className="md:col-span-1">
