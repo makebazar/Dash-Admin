@@ -73,12 +73,16 @@ export async function POST(
             }, { status: 409 });
         }
 
+        // For consumption-based templates, we create a preliminary expense (amount can be 0 or template.amount as placeholder)
+        const isConsumption = template.is_consumption_based;
+        const amount = isConsumption ? (template.amount || 0) : (custom_amount !== undefined ? custom_amount : template.amount);
+
         // Create scheduled expense from template
         const result = await query(
             `INSERT INTO finance_scheduled_expenses 
                 (club_id, category_id, name, amount, due_date, description, recurring_payment_id, unit_price)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-             RETURNING *`,
+             RETURNING id, name, amount, due_date`,
             [
                 clubId,
                 template.category_id,
@@ -87,7 +91,7 @@ export async function POST(
                 transactionDate,
                 `${template.name} (автоматически из шаблона)`,
                 template.id,
-                template.default_unit_price
+                template.unit_price || template.default_unit_price
             ]
         );
 

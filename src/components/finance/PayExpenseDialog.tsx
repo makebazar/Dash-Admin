@@ -151,25 +151,32 @@ export default function PayExpenseDialog({
         e.preventDefault()
         if (!expense) return
 
-        const finalAmount = calculateAmount()
+        const finalAmount = expense.is_consumption_based
+            ? parseFloat(calculateAmount())
+            : parseFloat(formData.amount)
 
-        // If consumption based, first update the expense consumption/price
-        if (expense.is_consumption_based) {
-            await handleUpdateExpense({
-                consumption_value: parseFloat(formData.consumption_value),
-                unit_price: parseFloat(formData.unit_price),
-                amount: parseFloat(finalAmount)
-            })
-        }
-
-        // Then proceed with payment
         setLoading(true)
         try {
+            // 1. If consumption based, update the expense with actual data first
+            if (expense.is_consumption_based) {
+                const updateRes = await fetch(`/api/clubs/${clubId}/finance/scheduled/${expense.id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        consumption_value: parseFloat(formData.consumption_value),
+                        unit_price: parseFloat(formData.unit_price),
+                        amount: finalAmount
+                    })
+                })
+                if (!updateRes.ok) throw new Error('Failed to update consumption data')
+            }
+
+            // 2. Process the payment
             const res = await fetch(`/api/clubs/${clubId}/finance/scheduled/${expense.id}/pay`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    amount: parseFloat(finalAmount),
+                    amount: finalAmount,
                     account_id: formData.account_id,
                     payment_date: formData.payment_date,
                     description: formData.description
@@ -183,9 +190,9 @@ export default function PayExpenseDialog({
                 const data = await res.json()
                 alert(`Ошибка: ${data.error}`)
             }
-        } catch (error) {
-            console.error('Failed to record payment:', error)
-            alert('Не удалось зафиксировать оплату')
+        } catch (error: any) {
+            console.error('Failed to process payment:', error)
+            alert(error.message || 'Не удалось зафиксировать оплату')
         } finally {
             setLoading(false)
         }
