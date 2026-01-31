@@ -67,7 +67,7 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
     const [filterStartDate, setFilterStartDate] = useState('')
     const [filterEndDate, setFilterEndDate] = useState('')
     const [filterEmployee, setFilterEmployee] = useState('')
-    const [selectedMonth, setSelectedMonth] = useState<string>('')
+    const [selectedMonth, setSelectedMonth] = useState<string>('0')
     const [editShiftType, setEditShiftType] = useState<'DAY' | 'NIGHT'>('DAY')
 
     const [reportFields, setReportFields] = useState<any[]>([])
@@ -85,6 +85,13 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
             fetchEmployees(p.clubId)
         })
     }, [params])
+
+    useEffect(() => {
+        // Initialize filters to current month once clubId is known
+        if (clubId && selectedMonth === '0' && !filterStartDate && !filterEndDate) {
+            handleMonthSelect(0)
+        }
+    }, [clubId])
 
     const fetchReportTemplate = async (id: string) => {
         try {
@@ -150,16 +157,19 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
 
     const handleMonthSelect = (monthOffset: number) => {
         const now = new Date()
-        const targetDate = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1)
-        const startOfMonth = new Date(targetDate.getFullYear(), targetDate.getMonth(), 1)
-        const endOfMonth = new Date(targetDate.getFullYear(), targetDate.getMonth() + 1, 0, 23, 59, 59)
-
-        const formatDate = (d: Date) => d.toISOString().slice(0, 10)
+        // Compute target year/month safely with Date to handle wrap
+        const target = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1)
+        const year = target.getFullYear()
+        const monthIndex = target.getMonth() // 0-based
+        const pad = (n: number) => String(n).padStart(2, '0')
+        const startStr = `${year}-${pad(monthIndex + 1)}-01`
+        const lastDay = new Date(year, monthIndex + 1, 0).getDate()
+        const endStr = `${year}-${pad(monthIndex + 1)}-${pad(lastDay)}`
 
         setSelectedMonth(String(monthOffset))
-        setFilterStartDate(formatDate(startOfMonth))
-        setFilterEndDate(formatDate(endOfMonth))
-        fetchShifts(clubId, formatDate(startOfMonth), formatDate(endOfMonth))
+        setFilterStartDate(startStr)
+        setFilterEndDate(endStr)
+        fetchShifts(clubId, startStr, endStr)
     }
 
     const handleCustomDateFilter = () => {
