@@ -206,6 +206,9 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
 
     const getMonthName = (offset: number) => {
         const date = new Date()
+        // Set to 1st day of month to avoid overflow issues when today is 31st
+        // (e.g. Feb 31st rolls over to March)
+        date.setDate(1)
         date.setMonth(date.getMonth() + offset)
         return date.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })
     }
