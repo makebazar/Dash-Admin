@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
-import { Loader2, Clock, DollarSign, FileText, Eye, TrendingUp, Wallet, Edit, CheckCircle, CalendarDays, Sun, Moon, Trash2, ArrowUpDown } from "lucide-react"
+import { Loader2, Clock, DollarSign, FileText, Eye, TrendingUp, Wallet, Edit, CheckCircle, CalendarDays, Sun, Moon, Trash2, ArrowUpDown, ChevronLeft, ChevronRight } from "lucide-react"
 import { ShiftExcelImport } from "@/components/payroll/ShiftExcelImport"
 
 
@@ -169,6 +169,11 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
         setSelectedMonth(String(monthOffset))
         setFilterStartDate(startStr)
         setFilterEndDate(endStr)
+        
+        // Reset sort to date descending when changing month
+        setSortBy('check_in')
+        setSortOrder('desc')
+        
         fetchShifts(clubId, startStr, endStr)
     }
 
@@ -632,18 +637,28 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                         {/* Month buttons */}
                         <div className="flex items-center gap-2">
                             <CalendarDays className="h-4 w-4 text-muted-foreground" />
-                            <span className="text-sm text-muted-foreground mr-2">Месяц:</span>
-                            {[0, -1, -2].map(offset => (
+                            <div className="flex items-center border rounded-md bg-background">
                                 <Button
-                                    key={offset}
-                                    variant={selectedMonth === String(offset) ? 'default' : 'outline'}
-                                    size="sm"
-                                    onClick={() => handleMonthSelect(offset)}
-                                    className="capitalize"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8 rounded-none rounded-l-md"
+                                    onClick={() => handleMonthSelect((parseInt(selectedMonth || '0') || 0) - 1)}
                                 >
-                                    {getMonthName(offset)}
+                                    <ChevronLeft className="h-4 w-4" />
                                 </Button>
-                            ))}
+                                <div className="px-3 min-w-[140px] text-center text-sm font-medium border-x h-8 flex items-center justify-center capitalize">
+                                    {getMonthName(parseInt(selectedMonth || '0') || 0)}
+                                </div>
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8 rounded-none rounded-r-md"
+                                    onClick={() => handleMonthSelect((parseInt(selectedMonth || '0') || 0) + 1)}
+                                    disabled={(parseInt(selectedMonth || '0') || 0) >= 0}
+                                >
+                                    <ChevronRight className="h-4 w-4" />
+                                </Button>
+                            </div>
                         </div>
 
                         <div className="h-6 w-px bg-border hidden md:block" />
