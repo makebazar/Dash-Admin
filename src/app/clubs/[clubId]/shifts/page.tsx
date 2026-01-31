@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
-import { Loader2, Clock, DollarSign, FileText, Eye, TrendingUp, Wallet, Edit, CheckCircle, CalendarDays, Sun, Moon, Trash2, ArrowUpDown, ChevronLeft, ChevronRight } from "lucide-react"
+import { Loader2, Clock, DollarSign, FileText, Eye, TrendingUp, Wallet, Edit, CheckCircle, CalendarDays, Sun, Moon, Trash2, ArrowUpDown, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react"
 import { ShiftExcelImport } from "@/components/payroll/ShiftExcelImport"
 
 
@@ -71,8 +71,7 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
     const [editShiftType, setEditShiftType] = useState<'DAY' | 'NIGHT'>('DAY')
 
     const [reportFields, setReportFields] = useState<any[]>([])
-    const [prevMetrics, setPrevMetrics] = useState<any>(null)
-    const [isPrevLoading, setIsPrevLoading] = useState(false)
+    const [lastRevenue, setLastRevenue] = useState<number | null>(null)
 
     const calculateShiftTotalIncome = (shift: Shift) => {
         const cash = parseFloat(String(shift.cash_income)) || 0
@@ -93,7 +92,7 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
     useEffect(() => {
         params.then(p => {
             setClubId(p.clubId)
-            fetchShifts(p.clubId)
+            // No longer fetching all shifts here to avoid race conditions with handleMonthSelect
             fetchClubSettings(p.clubId)
             fetchReportTemplate(p.clubId)
             fetchEmployees(p.clubId)
@@ -102,7 +101,9 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
 
     useEffect(() => {
         // Initialize filters to current month once clubId is known
-        if (clubId && selectedMonth === '0' && !filterStartDate && !filterEndDate) {
+        // Only run once when clubId is set and we have no dates
+        if (clubId && !filterStartDate && !filterEndDate) {
+            console.log(`[Init] Initializing shifts page for club: ${clubId}`)
             handleMonthSelect(0)
         }
     }, [clubId])
@@ -151,10 +152,6 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
 
     const fetchShifts = async (id: string, startDate?: string, endDate?: string, monthOffset?: number) => {
         try {
-            // Clear comparison metrics immediately when starting a new fetch
-            // to avoid showing comparison between new current data and old previous data
-            setPrevMetrics(null)
-            
             let url = `/api/clubs/${id}/shifts`
             const params = new URLSearchParams()
             if (startDate) params.append('startDate', startDate)
@@ -164,111 +161,49 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
             const res = await fetch(url)
             const data = await res.json()
             if (res.ok) {
-                setShifts(Array.isArray(data.shifts) ? data.shifts : [])
+                const newShifts = Array.isArray(data.shifts) ? data.shifts : []
+                setShifts(newShifts)
+
+                // Logging mechanism for revenue jumps
+                const currentCash = newShifts.reduce((sum: number, s: Shift) => sum + (parseFloat(String(s.cash_income)) || 0), 0)
+                const currentCard = newShifts.reduce((sum: number, s: Shift) => sum + (parseFloat(String(s.card_income)) || 0), 0)
+                const currentCustomIncome = reportFields
+                    .filter(f => f.field_type === 'INCOME')
+                    .reduce((totalSum: number, field: any) => {
+                        return totalSum + newShifts.reduce((sum: number, s: Shift) => sum + (parseFloat(String(s.report_data?.[field.metric_key])) || 0), 0)
+                    }, 0)
                 
-                // Fetch previous period for comparison
-                if (startDate && endDate) {
-                    calculatePrevPeriodMetrics(id, startDate, endDate, monthOffset)
+                const currentTotalRevenue = currentCash + currentCard + currentCustomIncome
+
+                if (lastRevenue !== null && Math.abs(currentTotalRevenue - lastRevenue) > 100000) {
+                    console.warn(`[Metrics] Significant revenue jump detected: ${lastRevenue} -> ${currentTotalRevenue}`)
                 }
+                setLastRevenue(currentTotalRevenue)
             }
         } catch (error) {
-            console.error('Error:', error)
+            console.error('Error fetching shifts:', error)
         } finally {
             setIsLoading(false)
         }
     }
 
-    const calculatePrevPeriodMetrics = async (id: string, currentStart: string, currentEnd: string, forcedMonthOffset?: number) => {
-        try {
-            setIsPrevLoading(true)
-            // Use provided offset or fall back to state (state might be stale during month switch)
-            const mOffset = forcedMonthOffset !== undefined ? forcedMonthOffset : (selectedMonth !== '' ? parseInt(selectedMonth) : undefined)
-            
-            const start = new Date(currentStart)
-            const end = new Date(currentEnd)
-            const duration = end.getTime() - start.getTime()
-            
-            let prevStart: string, prevEnd: string
-            
-            if (mOffset !== undefined) {
-                // Exact previous month
-                const prevMonthOffset = mOffset - 1
-                const now = new Date()
-                // Set to 1st to avoid overflow
-                const target = new Date(now.getFullYear(), now.getMonth() + prevMonthOffset, 1)
-                const year = target.getFullYear()
-                const monthIndex = target.getMonth()
-                const pad = (n: number) => String(n).padStart(2, '0')
-                prevStart = `${year}-${pad(monthIndex + 1)}-01`
-                const lastDay = new Date(year, monthIndex + 1, 0).getDate()
-                prevEnd = `${year}-${pad(monthIndex + 1)}-${pad(lastDay)}`
-            } else {
-                // For custom range, shift back by duration
-                const prevStartObj = new Date(start.getTime() - duration - 86400000)
-                const prevEndObj = new Date(start.getTime() - 86400000)
-                const pad = (n: number) => String(n).padStart(2, '0')
-                prevStart = `${prevStartObj.getFullYear()}-${pad(prevStartObj.getMonth() + 1)}-${pad(prevStartObj.getDate())}`
-                prevEnd = `${prevEndObj.getFullYear()}-${pad(prevEndObj.getMonth() + 1)}-${pad(prevEndObj.getDate())}`
-            }
-
-            const res = await fetch(`/api/clubs/${id}/shifts?startDate=${prevStart}&endDate=${prevEnd}`)
-            const data = await res.json()
-            
-            if (res.ok && Array.isArray(data.shifts)) {
-                const prevShifts = data.shifts
-                const cash = prevShifts.reduce((sum: number, s: any) => sum + (parseFloat(s.cash_income) || 0), 0)
-                const card = prevShifts.reduce((sum: number, s: any) => sum + (parseFloat(s.card_income) || 0), 0)
-                const exp = prevShifts.reduce((sum: number, s: any) => sum + (parseFloat(s.expenses) || 0), 0)
-                
-                // Custom fields totals
-                const customIncome = reportFields
-                    .filter(f => f.field_type === 'INCOME')
-                    .reduce((totalSum, field) => {
-                        const fieldSum = prevShifts.reduce((sum: number, s: any) => {
-                            return sum + (parseFloat(s.report_data?.[field.metric_key]) || 0)
-                        }, 0)
-                        return totalSum + fieldSum
-                    }, 0)
-
-                const customFieldsMap: Record<string, number> = {}
-                reportFields.forEach(field => {
-                    customFieldsMap[field.metric_key] = prevShifts.reduce((sum: number, s: any) => {
-                        return sum + (parseFloat(s.report_data?.[field.metric_key]) || 0)
-                    }, 0)
-                })
-
-                setPrevMetrics({
-                    count: prevShifts.length,
-                    cash,
-                    card,
-                    expenses: exp,
-                    revenue: cash + card + customIncome,
-                    customFields: customFieldsMap
-                })
-            }
-        } catch (error) {
-            console.error('Error fetching prev metrics:', error)
-        } finally {
-            setIsPrevLoading(false)
-        }
-    }
-
     const handleMonthSelect = (monthOffset: number) => {
         const now = new Date()
-        // Compute target year/month safely with Date to handle wrap
         const target = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1)
         const year = target.getFullYear()
-        const monthIndex = target.getMonth() // 0-based
+        const monthIndex = target.getMonth()
         const pad = (n: number) => String(n).padStart(2, '0')
         const startStr = `${year}-${pad(monthIndex + 1)}-01`
         const lastDay = new Date(year, monthIndex + 1, 0).getDate()
         const endStr = `${year}-${pad(monthIndex + 1)}-${pad(lastDay)}`
 
+        // Log calendar filter use
+        console.log(`[Calendar] Selecting month offset: ${monthOffset}, Range: ${startStr} to ${endStr}`)
+
         setSelectedMonth(String(monthOffset))
         setFilterStartDate(startStr)
         setFilterEndDate(endStr)
         
-        // Reset sort to date descending when changing month
         setSortBy('check_in')
         setSortOrder('desc')
         
@@ -276,18 +211,20 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
     }
 
     const handleCustomDateFilter = () => {
-        setSelectedMonth('')
         if (filterStartDate || filterEndDate) {
+            console.log(`[Filters] Applying custom date filter: ${filterStartDate} to ${filterEndDate}`)
+            setSelectedMonth('')
             fetchShifts(clubId, filterStartDate, filterEndDate)
+        } else {
+            console.warn(`[Filters] Attempted to apply custom filter with empty dates`)
+            clearFilters()
         }
     }
 
     const clearFilters = () => {
-        setSelectedMonth('')
-        setFilterStartDate('')
-        setFilterEndDate('')
-        setFilterEmployee('')
-        fetchShifts(clubId)
+        console.log(`[Filters] Clearing filters and resetting to current month`)
+        setSelectedMonth('0')
+        handleMonthSelect(0)
     }
 
     const getMonthName = (offset: number) => {
@@ -552,11 +489,8 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
 
             if (res.ok) {
                 setIsCreateModalOpen(false)
-                // Clear filters to show new shift
-                setSelectedMonth('')
-                setFilterStartDate('')
-                setFilterEndDate('')
-                fetchShifts(clubId)
+                console.log(`[Create] Shift created, refreshing current month data`)
+                handleMonthSelect(parseInt(selectedMonth || '0'))
             } else {
                 const data = await res.json()
                 alert(data.error || 'Ошибка создания смены')
@@ -596,26 +530,6 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
         const num = typeof amount === 'string' ? parseFloat(amount) : amount
         if (isNaN(num) || num === 0) return '0 ₽'
         return num.toLocaleString('ru-RU', { maximumFractionDigits: 0 }) + ' ₽'
-    }
-
-    const TrendIndicator = ({ current, previous, invert = false }: { current: number, previous: number, invert?: boolean }) => {
-        if (isPrevLoading) return <div className="h-4 w-16 animate-pulse bg-muted rounded mt-1" />
-        if (!previous || previous === 0) return null
-        
-        const diff = current - previous
-        const percent = (diff / previous) * 100
-        const isPositive = diff > 0
-        
-        // Colors: green for up, red for down (unless inverted like expenses)
-        const colorClass = (isPositive !== invert) ? 'text-emerald-500' : 'text-red-500'
-        const Icon = isPositive ? TrendingUp : TrendingUp // Could use TrendingDown if imported
-        
-        return (
-            <div className={`flex items-center gap-1 text-xs font-medium ${colorClass} mt-1`}>
-                <span>{isPositive ? '+' : ''}{percent.toFixed(1)}%</span>
-                <span className="text-[10px] text-muted-foreground font-normal">к прошл. периоду</span>
-            </div>
-        )
     }
 
     const getStatusBadge = (shift: Shift) => {
@@ -743,12 +657,22 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                             custom_label: f.custom_label || f.label || f.metric_key
                         }))}
                         onSuccess={() => {
-                            setSelectedMonth('')
-                            setFilterStartDate('')
-                            setFilterEndDate('')
-                            fetchShifts(clubId)
+                            console.log(`[Import] Import successful, refreshing current month data`)
+                            handleMonthSelect(parseInt(selectedMonth || '0'))
                         }}
                     />
+                    <Button 
+                        variant="outline" 
+                        size="icon" 
+                        onClick={() => {
+                            console.log(`[Refresh] Manual refresh triggered`)
+                            handleMonthSelect(parseInt(selectedMonth || '0'))
+                        }}
+                        disabled={isLoading}
+                        title="Обновить данные"
+                    >
+                        <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+                    </Button>
                     <Button onClick={openCreateModal} className="gap-2">
                         <Clock className="h-4 w-4" />
                         Добавить смену
@@ -847,7 +771,7 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                     </CardHeader>
                     <CardContent className="relative">
                         <div className="text-3xl font-bold">{shifts.length}</div>
-                        {prevMetrics && <TrendIndicator current={shifts.length} previous={prevMetrics.count} />}
+                        <p className="text-xs text-muted-foreground mt-1">за выбранный период</p>
                     </CardContent>
                 </Card>
 
@@ -858,7 +782,6 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                     </CardHeader>
                     <CardContent className="relative">
                         <div className="text-3xl font-black text-green-600">{formatMoney(totalRevenue)}</div>
-                        {prevMetrics && <TrendIndicator current={totalRevenue} previous={prevMetrics.revenue} />}
                     </CardContent>
                 </Card>
 
@@ -869,7 +792,6 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                     </CardHeader>
                     <CardContent className="relative">
                         <div className="text-3xl font-bold text-emerald-600">{formatMoney(totalCash)}</div>
-                        {prevMetrics && <TrendIndicator current={totalCash} previous={prevMetrics.cash} />}
                     </CardContent>
                 </Card>
 
@@ -880,7 +802,6 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                     </CardHeader>
                     <CardContent className="relative">
                         <div className="text-3xl font-bold text-blue-600">{formatMoney(totalCard)}</div>
-                        {prevMetrics && <TrendIndicator current={totalCard} previous={prevMetrics.card} />}
                     </CardContent>
                 </Card>
 
@@ -893,12 +814,6 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                         </CardHeader>
                         <CardContent className="relative">
                             <div className="text-3xl font-bold text-cyan-600">{formatMoney(field.total)}</div>
-                            {prevMetrics?.customFields && (
-                                <TrendIndicator 
-                                    current={field.total} 
-                                    previous={prevMetrics.customFields[field.metric_key] || 0} 
-                                />
-                            )}
                         </CardContent>
                     </Card>
                 ))}
@@ -910,7 +825,6 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                     </CardHeader>
                     <CardContent className="relative">
                         <div className="text-3xl font-bold text-orange-500">{formatMoney(totalExpenses)}</div>
-                        {prevMetrics && <TrendIndicator current={totalExpenses} previous={prevMetrics.expenses} invert={true} />}
                     </CardContent>
                 </Card>
 
@@ -923,13 +837,6 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                         </CardHeader>
                         <CardContent className="relative">
                             <div className="text-3xl font-bold text-red-600">{formatMoney(field.total || 0)}</div>
-                            {prevMetrics?.customFields && (
-                                <TrendIndicator 
-                                    current={field.total} 
-                                    previous={prevMetrics.customFields[field.metric_key] || 0} 
-                                    invert={true}
-                                />
-                            )}
                         </CardContent>
                     </Card>
                 ))}
@@ -943,12 +850,6 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                     </CardHeader>
                     <CardContent className="relative">
                         <div className="text-3xl font-bold text-slate-600">{formatMoney(field.total || 0)}</div>
-                        {prevMetrics?.customFields && (
-                            <TrendIndicator 
-                                current={field.total} 
-                                previous={prevMetrics.customFields[field.metric_key] || 0} 
-                            />
-                        )}
                     </CardContent>
                 </Card>
             ))}
