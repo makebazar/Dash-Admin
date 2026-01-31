@@ -71,6 +71,7 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
     const [editShiftType, setEditShiftType] = useState<'DAY' | 'NIGHT'>('DAY')
 
     const [reportFields, setReportFields] = useState<any[]>([])
+    const [prevMetrics, setPrevMetrics] = useState<any>(null)
 
     const calculateShiftTotalIncome = (shift: Shift) => {
         const cash = parseFloat(String(shift.cash_income)) || 0
@@ -159,11 +160,86 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
             const data = await res.json()
             if (res.ok) {
                 setShifts(Array.isArray(data.shifts) ? data.shifts : [])
+                
+                // Fetch previous period for comparison
+                if (startDate && endDate) {
+                    calculatePrevPeriodMetrics(id, startDate, endDate)
+                } else {
+                    setPrevMetrics(null)
+                }
             }
         } catch (error) {
             console.error('Error:', error)
         } finally {
             setIsLoading(false)
+        }
+    }
+
+    const calculatePrevPeriodMetrics = async (id: string, currentStart: string, currentEnd: string) => {
+        try {
+            const start = new Date(currentStart)
+            const end = new Date(currentEnd)
+            const duration = end.getTime() - start.getTime()
+            
+            // For month-based selection, it's better to use exact previous month
+            let prevStart: string, prevEnd: string
+            
+            if (selectedMonth !== '') {
+                const monthOffset = parseInt(selectedMonth) - 1
+                const now = new Date()
+                const target = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1)
+                const year = target.getFullYear()
+                const monthIndex = target.getMonth()
+                const pad = (n: number) => String(n).padStart(2, '0')
+                prevStart = `${year}-${pad(monthIndex + 1)}-01`
+                const lastDay = new Date(year, monthIndex + 1, 0).getDate()
+                prevEnd = `${year}-${pad(monthIndex + 1)}-${pad(lastDay)}`
+            } else {
+                // For custom range, shift back by duration
+                const prevStartObj = new Date(start.getTime() - duration - 86400000) // -1 day to be safe
+                const prevEndObj = new Date(start.getTime() - 86400000)
+                const pad = (n: number) => String(n).padStart(2, '0')
+                prevStart = `${prevStartObj.getFullYear()}-${pad(prevStartObj.getMonth() + 1)}-${pad(prevStartObj.getDate())}`
+                prevEnd = `${prevEndObj.getFullYear()}-${pad(prevEndObj.getMonth() + 1)}-${pad(prevEndObj.getDate())}`
+            }
+
+            const res = await fetch(`/api/clubs/${id}/shifts?startDate=${prevStart}&endDate=${prevEnd}`)
+            const data = await res.json()
+            
+            if (res.ok && Array.isArray(data.shifts)) {
+                const prevShifts = data.shifts
+                const cash = prevShifts.reduce((sum: number, s: any) => sum + (parseFloat(s.cash_income) || 0), 0)
+                const card = prevShifts.reduce((sum: number, s: any) => sum + (parseFloat(s.card_income) || 0), 0)
+                const exp = prevShifts.reduce((sum: number, s: any) => sum + (parseFloat(s.expenses) || 0), 0)
+                
+                // Custom fields totals
+                const customIncome = reportFields
+                    .filter(f => f.field_type === 'INCOME')
+                    .reduce((totalSum, field) => {
+                        const fieldSum = prevShifts.reduce((sum: number, s: any) => {
+                            return sum + (parseFloat(s.report_data?.[field.metric_key]) || 0)
+                        }, 0)
+                        return totalSum + fieldSum
+                    }, 0)
+
+                const customFieldsMap: Record<string, number> = {}
+                reportFields.forEach(field => {
+                    customFieldsMap[field.metric_key] = prevShifts.reduce((sum: number, s: any) => {
+                        return sum + (parseFloat(s.report_data?.[field.metric_key]) || 0)
+                    }, 0)
+                })
+
+                setPrevMetrics({
+                    count: prevShifts.length,
+                    cash,
+                    card,
+                    expenses: exp,
+                    revenue: cash + card + customIncome,
+                    customFields: customFieldsMap
+                })
+            }
+        } catch (error) {
+            console.error('Error fetching prev metrics:', error)
         }
     }
 
@@ -512,6 +588,25 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
         return num.toLocaleString('ru-RU', { maximumFractionDigits: 0 }) + ' ₽'
     }
 
+    const TrendIndicator = ({ current, previous, invert = false }: { current: number, previous: number, invert?: boolean }) => {
+        if (!previous || previous === 0) return null
+        
+        const diff = current - previous
+        const percent = (diff / previous) * 100
+        const isPositive = diff > 0
+        
+        // Colors: green for up, red for down (unless inverted like expenses)
+        const colorClass = (isPositive !== invert) ? 'text-emerald-500' : 'text-red-500'
+        const Icon = isPositive ? TrendingUp : TrendingUp // Could use TrendingDown if imported
+        
+        return (
+            <div className={`flex items-center gap-1 text-xs font-medium ${colorClass} mt-1`}>
+                <span>{isPositive ? '+' : ''}{percent.toFixed(1)}%</span>
+                <span className="text-[10px] text-muted-foreground font-normal">к прошл. периоду</span>
+            </div>
+        )
+    }
+
     const getStatusBadge = (shift: Shift) => {
         if (!shift.check_out) {
             return <Badge className="bg-yellow-500/10 text-yellow-500 border-yellow-500/20 animate-pulse">Активна</Badge>
@@ -741,7 +836,7 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                     </CardHeader>
                     <CardContent className="relative">
                         <div className="text-3xl font-bold">{shifts.length}</div>
-                        <p className="text-xs text-muted-foreground mt-1">за выбранный период</p>
+                        {prevMetrics && <TrendIndicator current={shifts.length} previous={prevMetrics.count} />}
                     </CardContent>
                 </Card>
 
@@ -752,6 +847,7 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                     </CardHeader>
                     <CardContent className="relative">
                         <div className="text-3xl font-black text-green-600">{formatMoney(totalRevenue)}</div>
+                        {prevMetrics && <TrendIndicator current={totalRevenue} previous={prevMetrics.revenue} />}
                     </CardContent>
                 </Card>
 
@@ -762,6 +858,7 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                     </CardHeader>
                     <CardContent className="relative">
                         <div className="text-3xl font-bold text-emerald-600">{formatMoney(totalCash)}</div>
+                        {prevMetrics && <TrendIndicator current={totalCash} previous={prevMetrics.cash} />}
                     </CardContent>
                 </Card>
 
@@ -772,6 +869,7 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                     </CardHeader>
                     <CardContent className="relative">
                         <div className="text-3xl font-bold text-blue-600">{formatMoney(totalCard)}</div>
+                        {prevMetrics && <TrendIndicator current={totalCard} previous={prevMetrics.card} />}
                     </CardContent>
                 </Card>
 
@@ -784,6 +882,12 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                         </CardHeader>
                         <CardContent className="relative">
                             <div className="text-3xl font-bold text-cyan-600">{formatMoney(field.total)}</div>
+                            {prevMetrics?.customFields && (
+                                <TrendIndicator 
+                                    current={field.total} 
+                                    previous={prevMetrics.customFields[field.metric_key] || 0} 
+                                />
+                            )}
                         </CardContent>
                     </Card>
                 ))}
@@ -795,6 +899,7 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                     </CardHeader>
                     <CardContent className="relative">
                         <div className="text-3xl font-bold text-orange-500">{formatMoney(totalExpenses)}</div>
+                        {prevMetrics && <TrendIndicator current={totalExpenses} previous={prevMetrics.expenses} invert={true} />}
                     </CardContent>
                 </Card>
 
@@ -807,6 +912,13 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                         </CardHeader>
                         <CardContent className="relative">
                             <div className="text-3xl font-bold text-red-600">{formatMoney(field.total || 0)}</div>
+                            {prevMetrics?.customFields && (
+                                <TrendIndicator 
+                                    current={field.total} 
+                                    previous={prevMetrics.customFields[field.metric_key] || 0} 
+                                    invert={true}
+                                />
+                            )}
                         </CardContent>
                     </Card>
                 ))}
@@ -820,6 +932,12 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                     </CardHeader>
                     <CardContent className="relative">
                         <div className="text-3xl font-bold text-slate-600">{formatMoney(field.total || 0)}</div>
+                        {prevMetrics?.customFields && (
+                            <TrendIndicator 
+                                current={field.total} 
+                                previous={prevMetrics.customFields[field.metric_key] || 0} 
+                            />
+                        )}
                     </CardContent>
                 </Card>
             ))}
