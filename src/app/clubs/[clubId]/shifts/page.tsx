@@ -862,6 +862,15 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                                     </div>
                                 </TableHead>
                                 <TableHead
+                                    className="text-right cursor-pointer hover:bg-muted/50 select-none font-bold text-green-600"
+                                    onClick={() => handleSort('total_income')}
+                                >
+                                    <div className="flex items-center justify-end gap-1">
+                                        Итого Доход
+                                        <ArrowUpDown className="h-3 w-3" />
+                                    </div>
+                                </TableHead>
+                                <TableHead
                                     className="text-right cursor-pointer hover:bg-muted/50 select-none"
                                     onClick={() => handleSort('cash_income')}
                                 >
@@ -876,15 +885,6 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                                 >
                                     <div className="flex items-center justify-end gap-1">
                                         Безнал
-                                        <ArrowUpDown className="h-3 w-3" />
-                                    </div>
-                                </TableHead>
-                                <TableHead
-                                    className="text-right cursor-pointer hover:bg-muted/50 select-none font-bold text-green-600"
-                                    onClick={() => handleSort('total_income')}
-                                >
-                                    <div className="flex items-center justify-end gap-1">
-                                        Итого Доход
                                         <ArrowUpDown className="h-3 w-3" />
                                     </div>
                                 </TableHead>
@@ -943,9 +943,9 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                                             ? `${Number(shift.total_hours).toFixed(1)}ч`
                                             : '-'}
                                     </TableCell>
+                                    <TableCell className="text-right font-bold text-green-600 whitespace-nowrap bg-green-500/5">{formatMoney(calculateShiftTotalIncome(shift))}</TableCell>
                                     <TableCell className="text-right font-medium text-green-500 whitespace-nowrap">{formatMoney(shift.cash_income)}</TableCell>
                                     <TableCell className="text-right font-medium text-blue-500 whitespace-nowrap">{formatMoney(shift.card_income)}</TableCell>
-                                    <TableCell className="text-right font-bold text-green-600 whitespace-nowrap bg-green-500/5">{formatMoney(calculateShiftTotalIncome(shift))}</TableCell>
                                     <TableCell className="text-right font-medium text-orange-500 whitespace-nowrap">{formatMoney(shift.expenses)}</TableCell>
                                     {reportFields.map((field: any) => (
                                         <TableCell key={field.metric_key} className="text-right whitespace-nowrap">
