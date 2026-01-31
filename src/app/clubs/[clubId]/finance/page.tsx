@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
     TrendingUp, TrendingDown, DollarSign,
-    Percent, ChevronLeft, ChevronRight, Settings
+    Percent, ChevronLeft, ChevronRight, Settings, Plus
 } from "lucide-react"
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
@@ -85,6 +85,7 @@ export default function FinancePage() {
     const [loading, setLoading] = useState(true)
     const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1)
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear())
+    const [transactionDialogOpen, setTransactionDialogOpen] = useState(false)
 
     // Monthly Bills State
     const [recurringPayments, setRecurringPayments] = useState<RecurringPayment[]>([])
@@ -374,6 +375,33 @@ export default function FinancePage() {
                     </div>
 
                     <div className="grid gap-4 md:grid-cols-2">
+                        {/* Quick Add Transaction Widget */}
+                        <Card className="md:col-span-1 bg-gradient-to-br from-primary/5 to-primary/10 border-2 border-primary/20">
+                            <CardHeader>
+                                <CardTitle className="text-lg flex items-center gap-2">
+                                    <Plus className="h-5 w-5 text-primary" />
+                                    Быстрое добавление
+                                </CardTitle>
+                                <CardDescription>Создать транзакцию в один клик</CardDescription>
+                            </CardHeader>
+                            <CardContent className="flex flex-col items-center justify-center py-8">
+                                <Button
+                                    size="lg"
+                                    className="w-full max-w-xs"
+                                    onClick={() => {
+                                        setActiveTab('transactions');
+                                        setTimeout(() => setTransactionDialogOpen(true), 100);
+                                    }}
+                                >
+                                    <Plus className="h-4 w-4 mr-2" />
+                                    Создать транзакцию
+                                </Button>
+                                <p className="text-xs text-muted-foreground mt-4 text-center">
+                                    Переключит на вкладку транзакций и откроет форму создания
+                                </p>
+                            </CardContent>
+                        </Card>
+
                         {/* Monthly Bills Widget */}
                         <Card className="md:col-span-1">
                             <CardHeader>
@@ -500,6 +528,8 @@ export default function FinancePage() {
                         clubId={clubId as string}
                         startDate={startDateStr}
                         endDate={endDateStr}
+                        dialogOpen={transactionDialogOpen}
+                        onDialogOpenChange={setTransactionDialogOpen}
                     />
                 </TabsContent>
 
