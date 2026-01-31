@@ -73,7 +73,7 @@ interface AnalyticsData {
     break_even_point: number
 }
 
-import { CheckCircle2, AlertCircle, Zap, Plus } from "lucide-react"
+import { CheckCircle2, AlertCircle, Zap } from "lucide-react"
 import { PaymentModal } from "./_components/PaymentModal"
 
 export default function FinancePage() {
@@ -81,7 +81,6 @@ export default function FinancePage() {
     const clubId = params?.clubId as string
 
     const [activeTab, setActiveTab] = useState('dashboard')
-    const [quickAddOpen, setQuickAddOpen] = useState(false)
     const [analytics, setAnalytics] = useState<AnalyticsData | null>(null)
     const [loading, setLoading] = useState(true)
     const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1)
@@ -110,12 +109,6 @@ export default function FinancePage() {
             fetchAnalytics()
         }
     }, [clubId, selectedMonth, selectedYear])
-
-    useEffect(() => {
-        if (activeTab !== 'transactions' && quickAddOpen) {
-            setQuickAddOpen(false)
-        }
-    }, [activeTab, quickAddOpen])
 
     const fetchAnalytics = async () => {
         setLoading(true)
@@ -489,29 +482,6 @@ export default function FinancePage() {
                             onConfirm={handleConfirmPayment}
                         />
 
-                        <Card className="md:col-span-1">
-                            <CardHeader>
-                                <CardTitle className="text-sm">Быстрое добавление</CardTitle>
-                                <CardDescription>Создать транзакцию за пару кликов</CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="flex items-center justify-between gap-4">
-                                    <div className="text-sm text-muted-foreground">
-                                        Откроет форму создания транзакции
-                                    </div>
-                                    <Button
-                                        onClick={() => {
-                                            setActiveTab('transactions')
-                                            setQuickAddOpen(true)
-                                        }}
-                                    >
-                                        <Plus className="h-4 w-4 mr-2" />
-                                        Добавить
-                                    </Button>
-                                </div>
-                            </CardContent>
-                        </Card>
-
                         {/* Top Expenses Preview */}
                         <Card className="md:col-span-1">
                             <CardHeader>
@@ -539,8 +509,6 @@ export default function FinancePage() {
                         clubId={clubId as string}
                         startDate={startDateStr}
                         endDate={endDateStr}
-                        dialogOpen={quickAddOpen}
-                        onDialogOpenChange={setQuickAddOpen}
                     />
                 </TabsContent>
 
