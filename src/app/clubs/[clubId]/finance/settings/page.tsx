@@ -57,7 +57,22 @@ const ACCOUNT_TYPES = [
 ]
 
 const ACCOUNT_ICONS = ['💰', '🏦', '💳', '📱', '🏪', '💵', '💴', '🪙']
-const ACCOUNT_COLORS = ['bg-green-500', 'bg-blue-500', 'bg-purple-500', 'bg-orange-500', 'bg-pink-500', 'bg-cyan-500', 'bg-red-500', 'bg-yellow-500']
+const ACCOUNT_COLORS = ['#10b981', '#3b82f6', '#8b5cf6', '#f97316', '#ec4899', '#06b6d4', '#ef4444', '#eab308']
+const COLOR_CLASS_MAP: Record<string, string> = {
+    'bg-green-500': '#22c55e',
+    'bg-blue-500': '#3b82f6',
+    'bg-purple-500': '#8b5cf6',
+    'bg-orange-500': '#f97316',
+    'bg-pink-500': '#ec4899',
+    'bg-cyan-500': '#06b6d4',
+    'bg-red-500': '#ef4444',
+    'bg-yellow-500': '#eab308'
+}
+
+const resolveColor = (color?: string) => {
+    if (!color) return '#3b82f6'
+    return COLOR_CLASS_MAP[color] || color
+}
 
 export default function FinanceSettingsPage({ params }: { params: Promise<{ clubId: string }> }) {
     const router = useRouter()
@@ -74,7 +89,7 @@ export default function FinanceSettingsPage({ params }: { params: Promise<{ club
     const [newAccount, setNewAccount] = useState({
         name: '',
         icon: '💰',
-        color: 'bg-green-500',
+        color: ACCOUNT_COLORS[0],
         account_type: 'cash'
     })
 
@@ -84,7 +99,7 @@ export default function FinanceSettingsPage({ params }: { params: Promise<{ club
         name: '',
         type: 'expense' as 'income' | 'expense',
         icon: '💰',
-        color: 'bg-blue-500'
+        color: ACCOUNT_COLORS[1]
     })
 
     // New recurring form
@@ -475,8 +490,9 @@ export default function FinanceSettingsPage({ params }: { params: Promise<{ club
                                                     <button
                                                         key={color}
                                                         onClick={() => setNewCategory({ ...newCategory, color })}
-                                                        className={`w-8 h-8 rounded border-2 ${color} ${newCategory.color === color ? 'border-foreground' : 'border-transparent'
+                                                        className={`w-8 h-8 rounded border-2 ${newCategory.color === color ? 'border-foreground' : 'border-transparent'
                                                             }`}
+                                                        style={{ backgroundColor: color }}
                                                     />
                                                 ))}
                                             </div>
@@ -511,7 +527,7 @@ export default function FinanceSettingsPage({ params }: { params: Promise<{ club
                                                 <div className="flex items-center gap-3">
                                                     <div
                                                         className="w-10 h-10 rounded-lg flex items-center justify-center text-xl"
-                                                        style={{ backgroundColor: cat.color + '20' }}
+                                                        style={{ backgroundColor: resolveColor(cat.color) + '20' }}
                                                     >
                                                         {cat.icon}
                                                     </div>
@@ -551,7 +567,7 @@ export default function FinanceSettingsPage({ params }: { params: Promise<{ club
                                                 <div className="flex items-center gap-3">
                                                     <div
                                                         className="w-10 h-10 rounded-lg flex items-center justify-center text-xl"
-                                                        style={{ backgroundColor: cat.color + '20' }}
+                                                        style={{ backgroundColor: resolveColor(cat.color) + '20' }}
                                                     >
                                                         {cat.icon}
                                                     </div>
@@ -711,7 +727,7 @@ export default function FinanceSettingsPage({ params }: { params: Promise<{ club
                                         <div className="flex items-start gap-4">
                                             <div
                                                 className="w-10 h-10 rounded-lg flex items-center justify-center text-xl mt-1"
-                                                style={{ backgroundColor: (rp.category_color || '#3b82f6') + '20' }}
+                                                style={{ backgroundColor: resolveColor(rp.category_color) + '20' }}
                                             >
                                                 {rp.category_icon || '📅'}
                                             </div>
@@ -822,8 +838,9 @@ export default function FinanceSettingsPage({ params }: { params: Promise<{ club
                                                     <button
                                                         key={color}
                                                         onClick={() => setNewAccount({ ...newAccount, color })}
-                                                        className={`w-8 h-8 rounded border-2 ${color} ${newAccount.color === color ? 'border-foreground' : 'border-transparent'
+                                                        className={`w-8 h-8 rounded border-2 ${newAccount.color === color ? 'border-foreground' : 'border-transparent'
                                                             }`}
+                                                        style={{ backgroundColor: color }}
                                                     />
                                                 ))}
                                             </div>
@@ -849,7 +866,10 @@ export default function FinanceSettingsPage({ params }: { params: Promise<{ club
                                         className="flex items-center justify-between p-4 border rounded-lg"
                                     >
                                         <div className="flex items-center gap-4">
-                                            <div className={`text-3xl p-3 rounded ${account.color}`}>
+                                            <div
+                                                className="text-3xl p-3 rounded"
+                                                style={{ backgroundColor: resolveColor(account.color) + '20' }}
+                                            >
                                                 {account.icon}
                                             </div>
                                             <div>

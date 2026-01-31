@@ -69,9 +69,33 @@ interface TransactionListProps {
     clubId: string
     startDate: string
     endDate: string
+    dialogOpen?: boolean
+    onDialogOpenChange?: (open: boolean) => void
 }
 
-export default function TransactionList({ clubId, startDate, endDate }: TransactionListProps) {
+const COLOR_CLASS_MAP: Record<string, string> = {
+    'bg-green-500': '#22c55e',
+    'bg-blue-500': '#3b82f6',
+    'bg-purple-500': '#8b5cf6',
+    'bg-orange-500': '#f97316',
+    'bg-pink-500': '#ec4899',
+    'bg-cyan-500': '#06b6d4',
+    'bg-red-500': '#ef4444',
+    'bg-yellow-500': '#eab308'
+}
+
+const resolveColor = (color?: string) => {
+    if (!color) return '#3b82f6'
+    return COLOR_CLASS_MAP[color] || color
+}
+
+export default function TransactionList({
+    clubId,
+    startDate,
+    endDate,
+    dialogOpen,
+    onDialogOpenChange
+}: TransactionListProps) {
     const [transactions, setTransactions] = useState<Transaction[]>([])
     const [categories, setCategories] = useState<Category[]>([])
     const [accounts, setAccounts] = useState<Account[]>([])
@@ -147,6 +171,16 @@ export default function TransactionList({ clubId, startDate, endDate }: Transact
         }
     }
 
+    const isDialogControlled = dialogOpen !== undefined && !!onDialogOpenChange
+    const effectiveDialogOpen = isDialogControlled ? dialogOpen : isDialogOpen
+    const setDialogOpen = (open: boolean) => {
+        if (isDialogControlled) {
+            onDialogOpenChange?.(open)
+            return
+        }
+        setIsDialogOpen(open)
+    }
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
 
@@ -167,7 +201,7 @@ export default function TransactionList({ clubId, startDate, endDate }: Transact
             })
 
             if (res.ok) {
-                setIsDialogOpen(false)
+                setDialogOpen(false)
                 resetForm()
                 fetchTransactions()
             }
@@ -208,7 +242,7 @@ export default function TransactionList({ clubId, startDate, endDate }: Transact
             account_id: transaction.account_id?.toString() || '',
             notes: ''
         })
-        setIsDialogOpen(true)
+        setDialogOpen(true)
     }
 
     const resetForm = () => {
@@ -382,7 +416,7 @@ export default function TransactionList({ clubId, startDate, endDate }: Transact
                     </Label>
                 </div>
 
-                <Button onClick={() => { resetForm(); setIsDialogOpen(true); }}>
+                <Button onClick={() => { resetForm(); setDialogOpen(true); }}>
                     <Plus className="h-4 w-4 mr-2" />
                     Добавить
                 </Button>
@@ -483,7 +517,7 @@ export default function TransactionList({ clubId, startDate, endDate }: Transact
                                             <div className="flex items-center gap-4 flex-1">
                                                 <div
                                                     className="w-10 h-10 rounded-lg flex items-center justify-center text-2xl"
-                                                    style={{ backgroundColor: transaction.category_color + '20' }}
+                                                    style={{ backgroundColor: resolveColor(transaction.category_color) + '20' }}
                                                 >
                                                     {transaction.category_icon}
                                                 </div>
@@ -541,7 +575,7 @@ export default function TransactionList({ clubId, startDate, endDate }: Transact
             </Card>
 
             {/* Add/Edit Dialog */}
-            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <Dialog open={effectiveDialogOpen} onOpenChange={setDialogOpen}>
                 <DialogContent className="max-w-md">
                     <DialogHeader>
                         <DialogTitle>
