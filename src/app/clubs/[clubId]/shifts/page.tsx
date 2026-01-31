@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo, useCallback, useRef } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
@@ -73,7 +73,14 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
     const [reportFields, setReportFields] = useState<any[]>([])
     const [lastRevenue, setLastRevenue] = useState<number | null>(null)
 
-    const calculateShiftTotalIncome = (shift: Shift) => {
+    // Sort state
+    const [sortBy, setSortBy] = useState<string>('check_in')
+    const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
+
+    // Abort controller ref for fetching shifts
+    const fetchAbortController = useRef<AbortController | null>(null)
+
+    const calculateShiftTotalIncome = useCallback((shift: Shift) => {
         const cash = parseFloat(String(shift.cash_income)) || 0
         const card = parseFloat(String(shift.card_income)) || 0
         const customIncome = reportFields
@@ -83,37 +90,22 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                 return sum + val
             }, 0)
         return cash + card + customIncome
-    }
-
-    // Sort state
-    const [sortBy, setSortBy] = useState<string>('check_in')
-    const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
+    }, [reportFields])
 
     useEffect(() => {
         params.then(p => {
             setClubId(p.clubId)
-            // No longer fetching all shifts here to avoid race conditions with handleMonthSelect
             fetchClubSettings(p.clubId)
             fetchReportTemplate(p.clubId)
             fetchEmployees(p.clubId)
         })
     }, [params])
 
-    useEffect(() => {
-        // Initialize filters to current month once clubId is known
-        // Only run once when clubId is set and we have no dates
-        if (clubId && !filterStartDate && !filterEndDate) {
-            console.log(`[Init] Initializing shifts page for club: ${clubId}`)
-            handleMonthSelect(0)
-        }
-    }, [clubId])
-
     const fetchReportTemplate = async (id: string) => {
         try {
             const res = await fetch(`/api/clubs/${id}/settings/reports`)
             const data = await res.json()
             if (res.ok && data.currentTemplate) {
-                // Filter out standard fields that are already displayed
                 const standardKeys = ['cash_income', 'card_income', 'expenses_cash', 'shift_comment', 'expenses']
                 const customFields = data.currentTemplate.schema.filter((f: any) =>
                     !standardKeys.includes(f.metric_key) &&
@@ -150,7 +142,13 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
         }
     }
 
-    const fetchShifts = async (id: string, startDate?: string, endDate?: string, monthOffset?: number) => {
+    const fetchShifts = useCallback(async (id: string, startDate?: string, endDate?: string) => {
+        if (fetchAbortController.current) {
+            fetchAbortController.current.abort()
+        }
+        fetchAbortController.current = new AbortController()
+
+        setIsLoading(true)
         try {
             let url = `/api/clubs/${id}/shifts`
             const params = new URLSearchParams()
@@ -158,36 +156,38 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
             if (endDate) params.append('endDate', endDate)
             if (params.toString()) url += '?' + params.toString()
 
-            const res = await fetch(url)
+            const res = await fetch(url, { signal: fetchAbortController.current.signal })
             const data = await res.json()
             if (res.ok) {
                 const newShifts = Array.isArray(data.shifts) ? data.shifts : []
                 setShifts(newShifts)
 
                 // Logging mechanism for revenue jumps
+                // Note: using local calculation here to avoid stale closures if we used calculateShiftTotalIncome
                 const currentCash = newShifts.reduce((sum: number, s: Shift) => sum + (parseFloat(String(s.cash_income)) || 0), 0)
                 const currentCard = newShifts.reduce((sum: number, s: Shift) => sum + (parseFloat(String(s.card_income)) || 0), 0)
-                const currentCustomIncome = reportFields
-                    .filter(f => f.field_type === 'INCOME')
-                    .reduce((totalSum: number, field: any) => {
-                        return totalSum + newShifts.reduce((sum: number, s: Shift) => sum + (parseFloat(String(s.report_data?.[field.metric_key])) || 0), 0)
-                    }, 0)
+                // We can't easily access current reportFields here without dependency, so we skip the detailed custom income check for the log warning
+                // to avoid adding reportFields to useCallback dependency (which would trigger refetch on template load)
                 
-                const currentTotalRevenue = currentCash + currentCard + currentCustomIncome
-
+                const currentTotalRevenue = currentCash + currentCard
                 if (lastRevenue !== null && Math.abs(currentTotalRevenue - lastRevenue) > 100000) {
-                    console.warn(`[Metrics] Significant revenue jump detected: ${lastRevenue} -> ${currentTotalRevenue}`)
+                    console.warn(`[Metrics] Significant revenue jump detected`)
                 }
                 setLastRevenue(currentTotalRevenue)
             }
-        } catch (error) {
-            console.error('Error fetching shifts:', error)
+        } catch (error: any) {
+            if (error.name !== 'AbortError') {
+                console.error('Error fetching shifts:', error)
+            }
         } finally {
-            setIsLoading(false)
+            // Only turn off loading if this wasn't aborted
+            if (fetchAbortController.current && !fetchAbortController.current.signal.aborted) {
+                setIsLoading(false)
+            }
         }
-    }
+    }, [lastRevenue])
 
-    const handleMonthSelect = (monthOffset: number) => {
+    const handleMonthSelect = useCallback((monthOffset: number) => {
         const now = new Date()
         const target = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1)
         const year = target.getFullYear()
@@ -197,7 +197,6 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
         const lastDay = new Date(year, monthIndex + 1, 0).getDate()
         const endStr = `${year}-${pad(monthIndex + 1)}-${pad(lastDay)}`
 
-        // Log calendar filter use
         console.log(`[Calendar] Selecting month offset: ${monthOffset}, Range: ${startStr} to ${endStr}`)
 
         setSelectedMonth(String(monthOffset))
@@ -207,8 +206,17 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
         setSortBy('check_in')
         setSortOrder('desc')
         
-        fetchShifts(clubId, startStr, endStr, monthOffset)
-    }
+        if (clubId) {
+            fetchShifts(clubId, startStr, endStr)
+        }
+    }, [clubId, fetchShifts])
+
+    // Initial load
+    useEffect(() => {
+        if (clubId && !filterStartDate && !filterEndDate) {
+            handleMonthSelect(0)
+        }
+    }, [clubId, handleMonthSelect, filterStartDate, filterEndDate])
 
     const handleCustomDateFilter = () => {
         if (filterStartDate || filterEndDate) {
@@ -229,12 +237,27 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
 
     const getMonthName = (offset: number) => {
         const date = new Date()
-        // Set to 1st day of month to avoid overflow issues when today is 31st
-        // (e.g. Feb 31st rolls over to March)
         date.setDate(1)
         date.setMonth(date.getMonth() + offset)
         return date.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })
     }
+
+    const formatForInput = useCallback((dateStr: string | null) => {
+        if (!dateStr) return ''
+        const d = new Date(dateStr)
+        const formatter = new Intl.DateTimeFormat('en-CA', {
+            timeZone: clubTimezone,
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+        })
+        const parts = formatter.formatToParts(d)
+        const getPart = (type: string) => parts.find(p => p.type === type)?.value
+        return `${getPart('year')}-${getPart('month')}-${getPart('day')}T${getPart('hour')}:${getPart('minute')}`
+    }, [clubTimezone])
 
     const openEditModal = (shift: Shift) => {
         setEditingShift(shift)
@@ -243,86 +266,49 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
         setEditExpenses(String(shift.expenses || 0))
         setEditComment(shift.report_comment || '')
         setEditOwnerNotes(shift.owner_notes || '')
-        // Format datetime for input using club's timezone
-        const formatForInput = (dateStr: string | null) => {
-            if (!dateStr) return ''
-
-            // Parse the date
-            const d = new Date(dateStr)
-
-            // Use Intl.DateTimeFormat to get date/time parts in the club's timezone
-            const formatter = new Intl.DateTimeFormat('en-CA', {
-                timeZone: clubTimezone,
-                year: 'numeric',
-                month: '2-digit',
-                day: '2-digit',
-                hour: '2-digit',
-                minute: '2-digit',
-                hour12: false
-            })
-
-            const parts = formatter.formatToParts(d)
-            const year = parts.find(p => p.type === 'year')?.value
-            const month = parts.find(p => p.type === 'month')?.value
-            const day = parts.find(p => p.type === 'day')?.value
-            const hour = parts.find(p => p.type === 'hour')?.value
-            const minute = parts.find(p => p.type === 'minute')?.value
-
-            return `${year}-${month}-${day}T${hour}:${minute}`
-        }
         setEditCheckIn(formatForInput(shift.check_in))
         setEditCheckOut(formatForInput(shift.check_out))
         setEditShiftType(shift.shift_type || 'DAY')
         setEditCustomFields(shift.report_data || {})
     }
 
-    // Helper function to convert datetime-local value to ISO string in club timezone
-    const convertToClubTimezone = (datetimeLocal: string) => {
+    // Convert datetime-local value (User's Wall Clock in Club TZ) to UTC ISO string
+    const convertToClubTimezone = useCallback((datetimeLocal: string) => {
         if (!datetimeLocal) return undefined
-
-        // The datetime-local input gives us "2025-12-02T08:00"
-        // We need to interpret this as club's local time and convert to UTC
-
-        // Parse components
-        const [datePart, timePart] = datetimeLocal.split('T')
-        const [year, month, day] = datePart.split('-')
-        const [hour, minute] = timePart.split(':')
-
-        // Build a date string that we'll format in the club's timezone
-        const dateStr = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T${hour.padStart(2, '0')}:${minute.padStart(2, '0')}:00`
-
-        // Get this exact time but interpreted in the club's timezone
-        // We do this by creating a string that represents this time in club's TZ
-        // Then parsing it back to get the UTC equivalent
-        const clubTZString = new Date(dateStr).toLocaleString('en-US', {
-            timeZone: clubTimezone,
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-            hour12: false
-        })
-
-        // This gives us the datetime as it appears in club TZ
-        // But we want to create a Date that represents "user input time in club TZ"
-        // The trick: create Date treating input as UTC, then offset by timezone difference
-
-        // Simpler approach: manually calculate UTC offset and adjust
-        const localDate = new Date(dateStr) // Treated as local browser time
-        const inClubTZ = new Date(localDate.toLocaleString('en-US', { timeZone: clubTimezone }))
-        const inLocalTZ = new Date(localDate.toLocaleString('en-US'))
-        const offset = inClubTZ.getTime() - inLocalTZ.getTime()
-
-        // Apply inverse offset to get correct UTC time
+        
+        // 1. Parse input as if it's in the browser's local timezone
+        const localDate = new Date(datetimeLocal) 
+        
+        // 2. Determine what time this localDate would be if interpreted in the Club's TZ
+        //    (We use 'en-US' to ensure consistent format, but 'timeZone: clubTimezone' is the key)
+        const inClubTZString = localDate.toLocaleString('en-US', { timeZone: clubTimezone })
+        const inClubTZ = new Date(inClubTZString)
+        
+        // 3. Calculate the offset: (Club Wall Clock Time) - (Browser Local Time)
+        //    This effectively captures the difference in offsets.
+        const offset = inClubTZ.getTime() - localDate.getTime()
+        
+        // 4. Apply the inverse offset to the original localDate timestamp to get the correct UTC
         const correctUTC = new Date(localDate.getTime() - offset)
-
+        
         return correctUTC.toISOString()
+    }, [clubTimezone])
+
+    const validateTimes = (start: string, end: string) => {
+        if (start && end) {
+            if (new Date(start) > new Date(end)) {
+                alert('Время начала не может быть позже времени окончания')
+                return false
+            }
+        }
+        return true
     }
 
     const handleSaveEdit = async () => {
         if (!editingShift) return
+        
+        if (!validateTimes(editCheckIn, editCheckOut)) return
+
         setIsSaving(true)
 
         // Calculate total hours if both times are set
@@ -458,6 +444,8 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
             alert('Выберите сотрудника и укажите время начала')
             return
         }
+        
+        if (!validateTimes(newShiftCheckIn, newShiftCheckOut)) return
 
         setIsCreating(true)
 
@@ -490,7 +478,8 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
             if (res.ok) {
                 setIsCreateModalOpen(false)
                 console.log(`[Create] Shift created, refreshing current month data`)
-                handleMonthSelect(parseInt(selectedMonth || '0'))
+                // Refresh list using current filter settings
+                fetchShifts(clubId, filterStartDate, filterEndDate)
             } else {
                 const data = await res.json()
                 alert(data.error || 'Ошибка создания смены')
@@ -503,27 +492,22 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
         }
     }
 
-    const formatDate = (dateStr: string) => {
+    const formatDate = useCallback((dateStr: string) => {
         return new Date(dateStr).toLocaleDateString('ru-RU', {
             day: '2-digit',
             month: '2-digit',
             year: 'numeric',
             timeZone: clubTimezone
         })
-    }
+    }, [clubTimezone])
 
-    const formatTime = (dateStr: string) => {
+    const formatTime = useCallback((dateStr: string) => {
         return new Date(dateStr).toLocaleTimeString('ru-RU', {
             hour: '2-digit',
             minute: '2-digit',
             timeZone: clubTimezone
         })
-    }
-
-    const formatHours = (hours: number | null) => {
-        if (!hours) return '-'
-        return `${Number(hours).toFixed(1)}ч`
-    }
+    }, [clubTimezone])
 
     const formatMoney = (amount: number | string | null) => {
         if (amount === null || amount === undefined) return '0 ₽'
@@ -551,7 +535,92 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
         return <Badge className="bg-blue-500/10 text-blue-500 border-blue-500/20">Закрыта</Badge>
     }
 
-    if (isLoading) {
+    // Filter shifts based on employee
+    const filteredShifts = useMemo(() => {
+        return shifts.filter(shift => {
+            if (!filterEmployee) return true
+            return shift.user_id === filterEmployee
+        })
+    }, [shifts, filterEmployee])
+
+    // Sort filtered shifts
+    const sortedShifts = useMemo(() => {
+        return [...filteredShifts].sort((a, b) => {
+            let aVal: any = a[sortBy as keyof Shift]
+            let bVal: any = b[sortBy as keyof Shift]
+
+            // Handle null/undefined
+            if (aVal === null || aVal === undefined) return 1
+            if (bVal === null || bVal === undefined) return -1
+
+            // Convert to numbers for numeric columns
+            if (['cash_income', 'card_income', 'expenses', 'total_hours'].includes(sortBy)) {
+                aVal = parseFloat(String(aVal)) || 0
+                bVal = parseFloat(String(bVal)) || 0
+            }
+
+            if (sortBy === 'total_income') {
+                aVal = calculateShiftTotalIncome(a)
+                bVal = calculateShiftTotalIncome(b)
+            }
+
+            // Convert to dates for date columns
+            if (sortBy === 'check_in') {
+                aVal = new Date(aVal).getTime()
+                bVal = new Date(bVal).getTime()
+            }
+
+            // String comparison for employee name
+            if (sortBy === 'employee_name') {
+                aVal = String(aVal).toLowerCase()
+                bVal = String(bVal).toLowerCase()
+            }
+
+            if (aVal < bVal) return sortOrder === 'asc' ? -1 : 1
+            if (aVal > bVal) return sortOrder === 'asc' ? 1 : -1
+            return 0
+        })
+    }, [filteredShifts, sortBy, sortOrder, calculateShiftTotalIncome])
+
+    // Calculate totals based on filtered shifts
+    const totals = useMemo(() => {
+        const currentDisplayShifts = filteredShifts
+        const totalCash = currentDisplayShifts.reduce((sum, s) => sum + (parseFloat(String(s.cash_income)) || 0), 0)
+        const totalCard = currentDisplayShifts.reduce((sum, s) => sum + (parseFloat(String(s.card_income)) || 0), 0)
+        const totalExpensesCore = currentDisplayShifts.reduce((sum, s) => sum + (parseFloat(String(s.expenses)) || 0), 0)
+        
+        return { totalCash, totalCard, totalExpensesCore }
+    }, [filteredShifts])
+
+    // Calculate income and expenses from custom fields
+    const customFieldTotals = useMemo(() => {
+        return reportFields.map(field => {
+            const total = filteredShifts.reduce((sum, s) => {
+                if (s.report_data && s.report_data[field.metric_key]) {
+                    return sum + (parseFloat(String(s.report_data[field.metric_key])) || 0)
+                }
+                return sum
+            }, 0)
+            return { ...field, total }
+        })
+    }, [filteredShifts, reportFields])
+
+    const totalCustomIncome = useMemo(() => 
+        customFieldTotals
+            .filter(f => f.field_type === 'INCOME')
+            .reduce((sum, f) => sum + f.total, 0),
+    [customFieldTotals])
+
+    const totalCustomExpenses = useMemo(() => 
+        customFieldTotals
+            .filter(f => f.field_type === 'EXPENSE')
+            .reduce((sum, f) => sum + f.total, 0),
+    [customFieldTotals])
+
+    const totalRevenue = totals.totalCash + totals.totalCard + totalCustomIncome
+    const totalExpenses = totals.totalExpensesCore + totalCustomExpenses
+
+    if (isLoading && shifts.length === 0) {
         return (
             <div className="flex h-96 items-center justify-center">
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -559,13 +628,6 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
         )
     }
 
-    // Filter shifts based on employee
-    const filteredShifts = shifts.filter(shift => {
-        if (!filterEmployee) return true
-        return shift.user_id === filterEmployee
-    })
-
-    // Handle sorting
     const handleSort = (column: string) => {
         if (sortBy === column) {
             setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')
@@ -574,71 +636,6 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
             setSortOrder('desc')
         }
     }
-
-    // Sort filtered shifts
-    const sortedShifts = [...filteredShifts].sort((a, b) => {
-        let aVal: any = a[sortBy as keyof Shift]
-        let bVal: any = b[sortBy as keyof Shift]
-
-        // Handle null/undefined
-        if (aVal === null || aVal === undefined) return 1
-        if (bVal === null || bVal === undefined) return -1
-
-        // Convert to numbers for numeric columns
-        if (['cash_income', 'card_income', 'expenses', 'total_hours'].includes(sortBy)) {
-            aVal = parseFloat(String(aVal)) || 0
-            bVal = parseFloat(String(bVal)) || 0
-        }
-
-        if (sortBy === 'total_income') {
-            aVal = calculateShiftTotalIncome(a)
-            bVal = calculateShiftTotalIncome(b)
-        }
-
-        // Convert to dates for date columns
-        if (sortBy === 'check_in') {
-            aVal = new Date(aVal).getTime()
-            bVal = new Date(bVal).getTime()
-        }
-
-        // String comparison for employee name
-        if (sortBy === 'employee_name') {
-            aVal = String(aVal).toLowerCase()
-            bVal = String(bVal).toLowerCase()
-        }
-
-        if (aVal < bVal) return sortOrder === 'asc' ? -1 : 1
-        if (aVal > bVal) return sortOrder === 'asc' ? 1 : -1
-        return 0
-    })
-
-    // Calculate totals based on filtered shifts
-    const currentDisplayShifts = filteredShifts
-    const totalCash = currentDisplayShifts.reduce((sum, s) => sum + (parseFloat(String(s.cash_income)) || 0), 0)
-    const totalCard = currentDisplayShifts.reduce((sum, s) => sum + (parseFloat(String(s.card_income)) || 0), 0)
-    const totalExpensesCore = currentDisplayShifts.reduce((sum, s) => sum + (parseFloat(String(s.expenses)) || 0), 0)
-
-    // Calculate income and expenses from custom fields
-    const customFieldTotals = reportFields.map(field => {
-        const total = currentDisplayShifts.reduce((sum, s) => {
-            if (s.report_data && s.report_data[field.metric_key]) {
-                return sum + (parseFloat(String(s.report_data[field.metric_key])) || 0)
-            }
-            return sum
-        }, 0)
-        return { ...field, total }
-    })
-
-    const totalCustomIncome = customFieldTotals
-        .filter(f => f.field_type === 'INCOME')
-        .reduce((sum, f) => sum + f.total, 0)
-
-    const totalCustomExpenses = customFieldTotals
-        .filter(f => f.field_type === 'EXPENSE')
-        .reduce((sum, f) => sum + f.total, 0)
-
-    const totalRevenue = totalCash + totalCard + totalCustomIncome
-    const totalExpenses = totalExpensesCore + totalCustomExpenses
 
     return (
         <div className="p-8 space-y-8">
@@ -658,7 +655,7 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                         }))}
                         onSuccess={() => {
                             console.log(`[Import] Import successful, refreshing current month data`)
-                            handleMonthSelect(parseInt(selectedMonth || '0'))
+                            fetchShifts(clubId, filterStartDate, filterEndDate)
                         }}
                     />
                     <Button 
@@ -666,7 +663,7 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                         size="icon" 
                         onClick={() => {
                             console.log(`[Refresh] Manual refresh triggered`)
-                            handleMonthSelect(parseInt(selectedMonth || '0'))
+                            fetchShifts(clubId, filterStartDate, filterEndDate)
                         }}
                         disabled={isLoading}
                         title="Обновить данные"
@@ -791,7 +788,7 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                         <Wallet className="h-4 w-4 text-emerald-500" />
                     </CardHeader>
                     <CardContent className="relative">
-                        <div className="text-3xl font-bold text-emerald-600">{formatMoney(totalCash)}</div>
+                        <div className="text-3xl font-bold text-emerald-600">{formatMoney(totals.totalCash)}</div>
                     </CardContent>
                 </Card>
 
@@ -801,7 +798,7 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                         <DollarSign className="h-4 w-4 text-blue-500" />
                     </CardHeader>
                     <CardContent className="relative">
-                        <div className="text-3xl font-bold text-blue-600">{formatMoney(totalCard)}</div>
+                        <div className="text-3xl font-bold text-blue-600">{formatMoney(totals.totalCard)}</div>
                     </CardContent>
                 </Card>
 
