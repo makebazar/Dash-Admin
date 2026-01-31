@@ -60,7 +60,9 @@ export async function GET(
         }
 
         if (endDate) {
-            queryParams.push(endDate);
+            // If endDate is just a date (YYYY-MM-DD), make it end of day to include all shifts on that day
+            const end = (endDate.length === 10) ? `${endDate} 23:59:59` : endDate;
+            queryParams.push(end);
             sqlQuery += ` AND s.check_in <= $${queryParams.length}`;
         }
 

@@ -72,6 +72,7 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
 
     const [reportFields, setReportFields] = useState<any[]>([])
     const [prevMetrics, setPrevMetrics] = useState<any>(null)
+    const [isPrevLoading, setIsPrevLoading] = useState(false)
 
     const calculateShiftTotalIncome = (shift: Shift) => {
         const cash = parseFloat(String(shift.cash_income)) || 0
@@ -148,8 +149,12 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
         }
     }
 
-    const fetchShifts = async (id: string, startDate?: string, endDate?: string) => {
+    const fetchShifts = async (id: string, startDate?: string, endDate?: string, monthOffset?: number) => {
         try {
+            // Clear comparison metrics immediately when starting a new fetch
+            // to avoid showing comparison between new current data and old previous data
+            setPrevMetrics(null)
+            
             let url = `/api/clubs/${id}/shifts`
             const params = new URLSearchParams()
             if (startDate) params.append('startDate', startDate)
@@ -163,9 +168,7 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                 
                 // Fetch previous period for comparison
                 if (startDate && endDate) {
-                    calculatePrevPeriodMetrics(id, startDate, endDate)
-                } else {
-                    setPrevMetrics(null)
+                    calculatePrevPeriodMetrics(id, startDate, endDate, monthOffset)
                 }
             }
         } catch (error) {
@@ -175,19 +178,24 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
         }
     }
 
-    const calculatePrevPeriodMetrics = async (id: string, currentStart: string, currentEnd: string) => {
+    const calculatePrevPeriodMetrics = async (id: string, currentStart: string, currentEnd: string, forcedMonthOffset?: number) => {
         try {
+            setIsPrevLoading(true)
+            // Use provided offset or fall back to state (state might be stale during month switch)
+            const mOffset = forcedMonthOffset !== undefined ? forcedMonthOffset : (selectedMonth !== '' ? parseInt(selectedMonth) : undefined)
+            
             const start = new Date(currentStart)
             const end = new Date(currentEnd)
             const duration = end.getTime() - start.getTime()
             
-            // For month-based selection, it's better to use exact previous month
             let prevStart: string, prevEnd: string
             
-            if (selectedMonth !== '') {
-                const monthOffset = parseInt(selectedMonth) - 1
+            if (mOffset !== undefined) {
+                // Exact previous month
+                const prevMonthOffset = mOffset - 1
                 const now = new Date()
-                const target = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1)
+                // Set to 1st to avoid overflow
+                const target = new Date(now.getFullYear(), now.getMonth() + prevMonthOffset, 1)
                 const year = target.getFullYear()
                 const monthIndex = target.getMonth()
                 const pad = (n: number) => String(n).padStart(2, '0')
@@ -196,7 +204,7 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                 prevEnd = `${year}-${pad(monthIndex + 1)}-${pad(lastDay)}`
             } else {
                 // For custom range, shift back by duration
-                const prevStartObj = new Date(start.getTime() - duration - 86400000) // -1 day to be safe
+                const prevStartObj = new Date(start.getTime() - duration - 86400000)
                 const prevEndObj = new Date(start.getTime() - 86400000)
                 const pad = (n: number) => String(n).padStart(2, '0')
                 prevStart = `${prevStartObj.getFullYear()}-${pad(prevStartObj.getMonth() + 1)}-${pad(prevStartObj.getDate())}`
@@ -240,6 +248,8 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
             }
         } catch (error) {
             console.error('Error fetching prev metrics:', error)
+        } finally {
+            setIsPrevLoading(false)
         }
     }
 
@@ -262,7 +272,7 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
         setSortBy('check_in')
         setSortOrder('desc')
         
-        fetchShifts(clubId, startStr, endStr)
+        fetchShifts(clubId, startStr, endStr, monthOffset)
     }
 
     const handleCustomDateFilter = () => {
@@ -589,6 +599,7 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
     }
 
     const TrendIndicator = ({ current, previous, invert = false }: { current: number, previous: number, invert?: boolean }) => {
+        if (isPrevLoading) return <div className="h-4 w-16 animate-pulse bg-muted rounded mt-1" />
         if (!previous || previous === 0) return null
         
         const diff = current - previous
