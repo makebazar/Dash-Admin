@@ -271,15 +271,6 @@ export default function FinancePage() {
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
-                    <Button
-                        variant="ghost"
-                        onClick={() => {
-                            setSelectedMonth(new Date().getMonth() + 1)
-                            setSelectedYear(new Date().getFullYear())
-                        }}
-                    >
-                        Сегодня
-                    </Button>
                     <Link href={`/clubs/${clubId}/finance/settings`}>
                         <Button variant="outline">
                             <Settings className="h-4 w-4 mr-2" />
@@ -291,7 +282,7 @@ export default function FinancePage() {
 
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
                 <TabsList className="flex flex-wrap w-full h-auto bg-muted p-1">
-                    <TabsTrigger value="dashboard" className="flex-1">📊 Dashboard</TabsTrigger>
+                    <TabsTrigger value="dashboard" className="flex-1">📊 Обзор</TabsTrigger>
                     <TabsTrigger value="transactions" className="flex-1">📝 Транзакции</TabsTrigger>
                     <TabsTrigger value="reports" className="flex-1">📈 Отчеты</TabsTrigger>
                 </TabsList>

@@ -89,9 +89,6 @@ export function AccountBalances({ clubId }: AccountBalancesProps) {
                     <div className="text-3xl font-bold text-primary">
                         {formatCurrency(total)}
                     </div>
-                    <p className="text-xs text-muted-foreground mt-1">
-                        Across {balances.reduce((sum, b) => sum + b.account_count, 0)} accounts
-                    </p>
                 </CardContent>
             </Card>
 
