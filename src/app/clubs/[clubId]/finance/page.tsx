@@ -100,10 +100,9 @@ export default function FinancePage() {
         'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
 
     // Calculate dates for selected month
-    const startDate = new Date(selectedYear, selectedMonth - 1, 1)
-    const endDate = new Date(selectedYear, selectedMonth, 0)
-    const startDateStr = startDate.toISOString().split('T')[0]
-    const endDateStr = endDate.toISOString().split('T')[0]
+    const startDateStr = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-01`
+    const lastDay = new Date(selectedYear, selectedMonth, 0).getDate()
+    const endDateStr = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-${lastDay}`
 
     useEffect(() => {
         if (clubId) {

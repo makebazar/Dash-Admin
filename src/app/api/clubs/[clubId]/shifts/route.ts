@@ -155,16 +155,27 @@ export async function POST(
             const hourInClubTZ = new Intl.DateTimeFormat('en-US', {
                 timeZone: clubTimezone,
                 hour: 'numeric',
-                hour12: false
+                hourCycle: 'h23'
             }).format(checkInDate);
             const hour = parseInt(hourInClubTZ);
 
             // Day shift if hour is between dayStartHour and nightStartHour
             if (!isNaN(hour)) {
-                if (hour >= dayStartHour && hour < nightStartHour) {
-                    shiftType = 'DAY';
+                // Check if the shift crosses midnight or if day/night config is wrapped
+                if (dayStartHour < nightStartHour) {
+                    // Standard day: 08:00 to 20:00
+                    if (hour >= dayStartHour && hour < nightStartHour) {
+                        shiftType = 'DAY';
+                    } else {
+                        shiftType = 'NIGHT';
+                    }
                 } else {
-                    shiftType = 'NIGHT';
+                    // Wrapped day (unlikely but possible): e.g. Day starts 20:00, Night starts 08:00
+                    if (hour >= dayStartHour || hour < nightStartHour) {
+                        shiftType = 'DAY';
+                    } else {
+                        shiftType = 'NIGHT';
+                    }
                 }
             } else {
                 shiftType = 'DAY'; // Fallback

@@ -757,43 +757,20 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                 ))}
 
                 {/* Other Stats Cards (e.g. Guest Count, Bar Revenue) */}
-                {customFieldTotals.filter(f => (f.field_type === 'OTHER' || !f.field_type) && f.show_in_stats).map(field => (
-                    <Card key={field.metric_key} className="overflow-hidden relative border-none bg-slate-500/5 shadow-none">
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
-                            <CardTitle className="text-sm font-medium text-slate-600">{field.custom_label}</CardTitle>
-                            <TrendingUp className="h-4 w-4 text-slate-500" />
-                        </CardHeader>
-                        <CardContent className="relative">
-                            <div className="text-3xl font-bold text-slate-600">{formatMoney(field.total || 0)}</div>
-                        </CardContent>
-                    </Card>
-                ))}
-            </div>
+            {customFieldTotals.filter(f => (f.field_type === 'OTHER' || !f.field_type) && f.show_in_stats).map(field => (
+                <Card key={field.metric_key} className="overflow-hidden relative border-none bg-slate-500/5 shadow-none">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
+                        <CardTitle className="text-sm font-medium text-slate-600">{field.custom_label}</CardTitle>
+                        <TrendingUp className="h-4 w-4 text-slate-500" />
+                    </CardHeader>
+                    <CardContent className="relative">
+                        <div className="text-3xl font-bold text-slate-600">{formatMoney(field.total || 0)}</div>
+                    </CardContent>
+                </Card>
+            ))}
+        </div>
 
-            {/* Net Revenue */}
-            <Card className="bg-gradient-to-r from-purple-500/20 via-blue-500/20 to-green-500/20 border-none shadow-lg">
-                <CardContent className="py-8">
-                    <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-                        <div>
-                            <p className="text-base font-medium text-muted-foreground mb-1 uppercase tracking-wider">Чистая выручка</p>
-                            <p className="text-5xl font-black text-foreground drop-shadow-sm">{formatMoney(totalRevenue - totalExpenses)}</p>
-                        </div>
-                        <div className="flex items-center gap-8 text-sm md:text-base border-l pl-8 border-foreground/10">
-                            <div>
-                                <p className="text-muted-foreground mb-1">Всего доход</p>
-                                <p className="font-bold text-green-600 text-xl">{formatMoney(totalRevenue)}</p>
-                            </div>
-                            <div className="text-xl opacity-20 font-light">—</div>
-                            <div>
-                                <p className="text-muted-foreground mb-1">Всего расходы</p>
-                                <p className="font-bold text-red-600 text-xl">{formatMoney(totalExpenses)}</p>
-                            </div>
-                        </div>
-                    </div>
-                </CardContent>
-            </Card>
-
-            {/* Shifts Table */}
+        {/* Shifts Table */}
             <Card>
                 <CardHeader>
                     <CardTitle>История смен</CardTitle>
