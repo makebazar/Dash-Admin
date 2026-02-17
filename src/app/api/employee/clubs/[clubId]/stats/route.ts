@@ -78,7 +78,7 @@ export async function GET(
         // 3. Get shifts data
         const shiftsRes = await query(
             `SELECT 
-                id, cash_income, card_income, total_hours, report_data, calculated_salary, check_in
+                id, cash_revenue, card_revenue, total_hours, report_data, calculated_salary, check_in
              FROM shifts
              WHERE user_id = $1 AND club_id = $2
                AND check_in >= $3 AND check_in <= $4
@@ -114,8 +114,11 @@ export async function GET(
 
             // Metric tracking for KPI
             let shiftIncome = 0;
-            if (metricCategories['cash_income'] === 'INCOME' || !metricCategories['cash_income']) shiftIncome += parseFloat(s.cash_income || 0);
-            if (metricCategories['card_income'] === 'INCOME' || !metricCategories['card_income']) shiftIncome += parseFloat(s.card_income || 0);
+            const cash = parseFloat(s.cash_revenue || 0);
+            const card = parseFloat(s.card_revenue || 0);
+
+            if (metricCategories['cash_income'] === 'INCOME' || !metricCategories['cash_income']) shiftIncome += cash;
+            if (metricCategories['card_income'] === 'INCOME' || !metricCategories['card_income']) shiftIncome += card;
 
             if (s.report_data) {
                 const data = typeof s.report_data === 'string' ? JSON.parse(s.report_data) : s.report_data;

@@ -68,10 +68,13 @@ export async function GET(
         );
 
         if (schemeRes.rowCount === 0) {
-            return NextResponse.json({ kpi: [], message: 'No salary scheme assigned' });
+            console.log(`[KPI API] No salary scheme assigned for User ${userId} in Club ${clubId}`);
+            return NextResponse.json({ kpi: [], message: 'Схема зарплаты не назначена' });
         }
 
         const scheme = schemeRes.rows[0];
+        console.log(`[KPI API] Found scheme: ${scheme.name} (ID: ${scheme.id}) for User ${userId}`);
+        
         const period_bonuses = scheme.period_bonuses || [];
         const standard_monthly_shifts = scheme.standard_monthly_shifts || 15;
 
@@ -86,12 +89,13 @@ export async function GET(
             [clubId, userId, `${year}-${monthStr}-01`, `${year}-${monthStr}-31`]
         );
         const planned_shifts = parseInt(plannedRes.rows[0]?.count || '0');
+        console.log(`[KPI API] Planned shifts: ${planned_shifts}`);
 
         const shiftsRes = await query(
             `SELECT 
                 id,
-                cash_income,
-                card_income,
+                cash_revenue,
+                card_revenue,
                 total_hours,
                 report_data,
                 check_in,
@@ -107,6 +111,7 @@ export async function GET(
 
         const finishedShifts = shiftsRes.rows;
         const shifts_count = finishedShifts.length;
+        console.log(`[KPI API] Finished/Active shifts found: ${shifts_count}`);
 
         // Calculate totals using the same logic as salary summary
         const monthlyMetrics: Record<string, number> = { total_revenue: 0, total_hours: 0 };
@@ -117,8 +122,12 @@ export async function GET(
 
             // Calculate Shift Income
             let shiftIncome = 0;
-            if (metricCategories['cash_income'] === 'INCOME' || !metricCategories['cash_income']) shiftIncome += parseFloat(s.cash_income || 0);
-            if (metricCategories['card_income'] === 'INCOME' || !metricCategories['card_income']) shiftIncome += parseFloat(s.card_income || 0);
+            // Use revenue fields from DB
+            const cash = parseFloat(s.cash_revenue || 0);
+            const card = parseFloat(s.card_revenue || 0);
+            
+            if (metricCategories['cash_income'] === 'INCOME' || !metricCategories['cash_income']) shiftIncome += cash;
+            if (metricCategories['card_income'] === 'INCOME' || !metricCategories['card_income']) shiftIncome += card;
 
             if (s.report_data) {
                 const data = typeof s.report_data === 'string' ? JSON.parse(s.report_data) : s.report_data;

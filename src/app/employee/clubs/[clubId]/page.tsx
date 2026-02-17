@@ -528,7 +528,8 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                 </div>
 
                 {/* KPI Tracker - Simplified Experience */}
-                {kpiData && kpiData.kpi && kpiData.kpi.length > 0 && kpiData.kpi.map((kpi: any) => (
+                {kpiData && kpiData.kpi && kpiData.kpi.length > 0 ? (
+                    kpiData.kpi.map((kpi: any) => (
                     <div key={kpi.id} className="space-y-4">
                         {kpiData.kpi.length > 1 && (
                             <div className="flex items-center gap-3 px-1">
@@ -547,7 +548,15 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                             activeShift={activeShift}
                         />
                     </div>
-                ))}
+                ))) : (
+                    <Card className="border-0 shadow-lg bg-white dark:bg-slate-800/50 backdrop-blur">
+                        <CardContent className="py-8 text-center text-muted-foreground">
+                            <Target className="h-12 w-12 mx-auto mb-4 opacity-20" />
+                            <p>KPI показатели пока не назначены</p>
+                            {kpiData?.message && <p className="text-xs mt-2 opacity-50">{kpiData.message}</p>}
+                        </CardContent>
+                    </Card>
+                )}
 
                 {/* Workday Progress (if shift active) */}
                 {activeShift && kpiData && (
