@@ -81,12 +81,13 @@ export async function GET(
         // Get planned shifts from ACTUAL schedule (work_schedules)
         // We count how many shifts are assigned to this user in this month
         // Dates in work_schedules are YYYY-MM-DD strings.
+        const daysInMonth = new Date(year, month, 0).getDate();
         const monthStr = month.toString().padStart(2, '0');
         const plannedRes = await query(
             `SELECT COUNT(*) as count FROM work_schedules
              WHERE club_id = $1 AND user_id = $2 
              AND date >= $3 AND date <= $4`,
-            [clubId, userId, `${year}-${monthStr}-01`, `${year}-${monthStr}-31`]
+            [clubId, userId, `${year}-${monthStr}-01`, `${year}-${monthStr}-${daysInMonth}`]
         );
         const planned_shifts = parseInt(plannedRes.rows[0]?.count || '0');
         console.log(`[KPI API] Planned shifts: ${planned_shifts}`);
@@ -150,7 +151,7 @@ export async function GET(
         });
 
         // Days in month for projection
-        const daysInMonth = new Date(year, month, 0).getDate();
+        // const daysInMonth = new Date(year, month, 0).getDate(); // Already calculated above
         const currentDay = now.getDate();
         const remainingDays = daysInMonth - currentDay;
         const remainingShifts = planned_shifts - shifts_count;
