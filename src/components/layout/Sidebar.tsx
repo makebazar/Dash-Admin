@@ -1,5 +1,7 @@
+"use client"
+
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { Building2, LayoutDashboard, Settings, LogOut, Menu } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -9,6 +11,16 @@ interface SidebarProps {
 
 export function Sidebar({ clubs }: SidebarProps) {
     const pathname = usePathname()
+    const router = useRouter()
+
+    const handleLogout = async () => {
+        try {
+            await fetch('/api/auth/logout', { method: 'POST' })
+            router.push('/login')
+        } catch (error) {
+            console.error('Logout failed:', error)
+        }
+    }
 
     return (
         <aside className="fixed left-0 top-0 h-screen w-64 border-r border-border bg-card">
@@ -81,10 +93,7 @@ export function Sidebar({ clubs }: SidebarProps) {
                     </Link>
                     <button
                         className="mt-1 flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-                        onClick={() => {
-                            // TODO: Implement logout
-                            console.log("Logout")
-                        }}
+                        onClick={handleLogout}
                     >
                         <LogOut className="h-4 w-4" />
                         Выйти
