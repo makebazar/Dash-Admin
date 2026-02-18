@@ -105,7 +105,7 @@ export async function GET(
              WHERE user_id = $1 
                AND club_id = $2 
                AND (
-                   (check_in >= $3 AND check_in <= $4 AND status IN ('CLOSED', 'PAID', 'VERIFIED'))
+                   (check_in >= $3 AND check_in <= $4 AND status != 'ACTIVE' AND status != 'CANCELLED')
                    OR 
                    (status = 'ACTIVE')
                )`,
