@@ -276,10 +276,10 @@ export default function EmployeeShiftHistoryPage() {
             {/* Date Filters */}
             <Card className="border-dashed">
                 <CardContent className="pt-6">
-                    <div className="flex flex-wrap items-center gap-4">
-                        <div className="flex items-center gap-2">
+                    <div className="flex flex-col md:flex-row flex-wrap items-start md:items-center gap-4">
+                        <div className="flex flex-wrap items-center gap-2">
                             <CalendarDays className="h-4 w-4 text-muted-foreground" />
-                            <span className="text-sm text-muted-foreground mr-2">Месяц:</span>
+                            <span className="text-sm text-muted-foreground">Месяц:</span>
                             {[0, -1, -2].map(offset => (
                                 <Button
                                     key={offset}
@@ -293,33 +293,35 @@ export default function EmployeeShiftHistoryPage() {
                             ))}
                         </div>
 
-                        <div className="h-6 w-px bg-border hidden md:block" />
+                        <div className="hidden md:block h-6 w-px bg-border" />
 
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                             <span className="text-sm text-muted-foreground">Период:</span>
-                            <Input
-                                type="date"
-                                value={filterStartDate}
-                                onChange={e => {
-                                    setFilterStartDate(e.target.value)
-                                    handleCustomDateFilter()
-                                }}
-                                className="w-36 h-8"
-                            />
-                            <span className="text-muted-foreground">—</span>
-                            <Input
-                                type="date"
-                                value={filterEndDate}
-                                onChange={e => {
-                                    setFilterEndDate(e.target.value)
-                                    handleCustomDateFilter()
-                                }}
-                                className="w-36 h-8"
-                            />
+                            <div className="flex items-center gap-2">
+                                <Input
+                                    type="date"
+                                    value={filterStartDate}
+                                    onChange={e => {
+                                        setFilterStartDate(e.target.value)
+                                        handleCustomDateFilter()
+                                    }}
+                                    className="w-32 md:w-36 h-8"
+                                />
+                                <span className="text-muted-foreground">—</span>
+                                <Input
+                                    type="date"
+                                    value={filterEndDate}
+                                    onChange={e => {
+                                        setFilterEndDate(e.target.value)
+                                        handleCustomDateFilter()
+                                    }}
+                                    className="w-32 md:w-36 h-8"
+                                />
+                            </div>
                         </div>
 
                         {(filterStartDate || filterEndDate || selectedMonth !== '0') && (
-                            <Button size="sm" variant="ghost" onClick={clearFilters} className="text-muted-foreground">
+                            <Button size="sm" variant="ghost" onClick={clearFilters} className="text-muted-foreground ml-auto md:ml-0">
                                 Сбросить
                             </Button>
                         )}
