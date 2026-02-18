@@ -164,7 +164,7 @@ export function KpiOverview({
                             />
                         </div>
                         <div className="flex justify-between text-xs">
-                            <span className="text-white/40">0 ₽</span>
+                            <span className="text-white/40">{formatCurrency(kpi.current_value)}</span>
                             <span className="text-white/40">{formatCurrency(nextThreshold.planned_month_threshold || nextThreshold.monthly_threshold)}</span>
                         </div>
                     </div>

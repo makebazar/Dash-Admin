@@ -89,10 +89,6 @@ export default function EmployeeTasksPage() {
         <div className="min-h-screen bg-slate-50 dark:bg-slate-900/50 p-6 space-y-8">
             {/* Header */}
             <div className="flex flex-col gap-4">
-                <Link href={`/employee/clubs/${clubId}`} className="flex items-center text-sm text-muted-foreground hover:text-foreground">
-                    <ChevronLeft className="h-4 w-4 mr-1" />
-                    К дашборду
-                </Link>
                 <div className="flex items-center justify-between">
                     <div>
                         <h1 className="text-3xl font-bold tracking-tight">🧹 Задачи по обслуживанию</h1>
