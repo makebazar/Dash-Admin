@@ -1,24 +1,66 @@
-"use client"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { getProducts, getCategories, getSupplies, getInventories } from "./actions"
+import { ProductsTab } from "./_components/ProductsTab"
+import { SuppliesTab } from "./_components/SuppliesTab"
+import { InventoryTab } from "./_components/InventoryTab"
+import { cookies } from "next/headers"
 
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Package } from "lucide-react"
+export default async function InventoryPage({ params }: { params: Promise<{ clubId: string }> }) {
+    const { clubId } = await params
+    const userId = (await cookies()).get("session_user_id")?.value
 
-export default function InventoryPage() {
+    if (!userId) return <div className="p-8 text-red-500">Доступ запрещен. Пожалуйста, авторизуйтесь.</div>
+
+    const [products, categories, supplies, inventories] = await Promise.all([
+        getProducts(clubId),
+        getCategories(clubId),
+        getSupplies(clubId),
+        getInventories(clubId)
+    ])
+
     return (
-        <div className="p-6">
-            <h1 className="text-3xl font-bold mb-6">Склад</h1>
-            <Card>
-                <CardHeader>
-                    <CardTitle>Раздел в разработке</CardTitle>
-                    <CardDescription>Скоро здесь появится управление инвентарем и товарами</CardDescription>
-                </CardHeader>
-                <CardContent className="flex flex-col items-center justify-center p-12">
-                    <Package className="h-24 w-24 text-muted-foreground mb-4" />
-                    <p className="text-muted-foreground text-center max-w-sm">
-                        Мы работаем над этим разделом. Здесь можно будет вести учет товаров, проводить инвентаризации и управлять поставками.
-                    </p>
-                </CardContent>
-            </Card>
+        <div className="p-8 max-w-[1600px] mx-auto space-y-6">
+            <div className="flex flex-col gap-2">
+                <h1 className="text-3xl font-bold tracking-tight">Склад и учет</h1>
+                <p className="text-muted-foreground">Управление товарными запасами, поставками и проведение ревизий.</p>
+            </div>
+            
+            <Tabs defaultValue="stock" className="w-full">
+                <div className="border-b mb-6">
+                    <TabsList className="bg-transparent p-0 h-auto space-x-6">
+                        <TabsTrigger 
+                            value="stock" 
+                            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:shadow-none px-0 py-3 bg-transparent font-medium"
+                        >
+                            Товары и остатки
+                        </TabsTrigger>
+                        <TabsTrigger 
+                            value="supplies" 
+                            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:shadow-none px-0 py-3 bg-transparent font-medium"
+                        >
+                            Поставки
+                        </TabsTrigger>
+                        <TabsTrigger 
+                            value="inventory" 
+                            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:shadow-none px-0 py-3 bg-transparent font-medium"
+                        >
+                            Инвентаризации
+                        </TabsTrigger>
+                    </TabsList>
+                </div>
+
+                <TabsContent value="stock" className="mt-0">
+                    <ProductsTab products={products} categories={categories} />
+                </TabsContent>
+                
+                <TabsContent value="supplies" className="mt-0">
+                    <SuppliesTab supplies={supplies} products={products} currentUserId={userId} />
+                </TabsContent>
+
+                <TabsContent value="inventory" className="mt-0">
+                    <InventoryTab inventories={inventories} currentUserId={userId} />
+                </TabsContent>
+            </Tabs>
         </div>
     )
 }
