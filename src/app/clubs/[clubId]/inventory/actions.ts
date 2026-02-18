@@ -181,7 +181,7 @@ export async function getInventories(clubId: string) {
         FROM warehouse_inventories i
         LEFT JOIN users u ON i.created_by = u.id
         WHERE i.club_id = $1
-        ORDER BY i.created_at DESC
+        ORDER BY i.started_at DESC
     `, [clubId])
     return res.rows as Inventory[]
 }
