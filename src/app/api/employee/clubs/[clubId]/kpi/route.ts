@@ -166,13 +166,19 @@ export async function GET(
         });
 
         // Days in month for projection
-        // const daysInMonth = new Date(year, month, 0).getDate(); // Already calculated above
         const currentDay = now.getDate();
         const remainingDays = daysInMonth - currentDay;
         
-        // Remaining shifts to EARN money (including current active one)
-        // If planned = 15, closed = 4, active = 1. We have 15 - 4 = 11 shifts to work with (including today).
-        const shifts_to_go = Math.max(0, planned_shifts - completed_shifts_count);
+        // REVERTED LOGIC: "Remaining shifts" in UI traditionally means "Future shifts excluding current ones already counted".
+        // If we want to show "5 shifts left", and we have 8 shifts (7 closed + 1 active), and plan is 13.
+        // Then 13 - 8 = 5.
+        // So we should subtract TOTAL shifts (including active) from planned.
+        const remaining_future_shifts = Math.max(0, planned_shifts - total_shifts_count);
+        
+        // But for CALCULATION of "how much to earn per shift", we have:
+        // The current active shift (which is not finished) + all future shifts.
+        // So we divide by (remaining_future_shifts + (activeShift ? 1 : 0)).
+        const shifts_opportunities = remaining_future_shifts + (activeShift ? 1 : 0);
 
         // Calculate KPI progress with SCALED thresholds (matching salary summary)
         const kpi_progress = period_bonuses.map((bonus: any) => {
@@ -204,11 +210,7 @@ export async function GET(
                 // Scale thresholds exactly like in salaries/summary/route.ts
                 all_thresholds = sorted.map((t: any, idx: number) => {
                     const original_from = t.from || 0;
-                    // Formula from salary summary: 
-                    // mode === 'SHIFT' ? threshold_from * shifts_count : (threshold_from / standard_shifts) * shifts_count
-                    // We use TOTAL shifts count (including active) for current progress scaling?
-                    // Actually, usually progress is checked against "what should be done by now".
-                    // If we use total_shifts_count, we check if we are on track including today.
+                    
                     const scaled_threshold = mode === 'SHIFT'
                         ? original_from * total_shifts_count
                         : (original_from / standard_monthly_shifts) * total_shifts_count;
@@ -227,7 +229,7 @@ export async function GET(
                     const totalRemainingToReach = Math.max(0, endOfMonthThreshold - current_value);
 
                     // Distribute remaining target over ALL available shifts (future + current active)
-                    const perShiftToReach = shifts_to_go > 0 ? totalRemainingToReach / shifts_to_go : 0;
+                    const perShiftToReach = shifts_opportunities > 0 ? totalRemainingToReach / shifts_opportunities : 0;
                     const perShiftToStay = planned_shifts > 0 ? endOfMonthThreshold / planned_shifts : 0;
 
                     const potentialBonus = endOfMonthThreshold * (t.percent / 100);
@@ -262,8 +264,8 @@ export async function GET(
                 ? current_value * (current_reward / 100)
                 : 0;
 
-                // Projection logic (same as before but based on scaled metrics)
-            const projected_total = current_value + (avg_per_shift * shifts_to_go);
+            // Projection logic (same as before but based on scaled metrics)
+            const projected_total = current_value + (avg_per_shift * remaining_future_shifts);
             let projected_level = 0;
             let projected_bonus = 0;
 
@@ -294,7 +296,7 @@ export async function GET(
                 projected_total,
                 projected_level,
                 projected_bonus,
-                remaining_shifts: shifts_to_go,
+                remaining_shifts: remaining_future_shifts,
                 current_shift_value: activeShiftMetrics[metric_key] ||
                     (metric_key === 'total_revenue' ? activeShiftMetrics.total_revenue :
                         metric_key === 'total_hours' ? activeShiftMetrics.total_hours : 0)
@@ -308,9 +310,9 @@ export async function GET(
             kpi: kpi_progress,
             total_kpi_bonus,
             total_projected_bonus,
-            shifts_count: completed_shifts_count, // Return ONLY completed shifts count for UI display
+            shifts_count: total_shifts_count, // Revert to TOTAL (including active) for UI "Passed X shifts"
             planned_shifts,
-            remaining_shifts: shifts_to_go,
+            remaining_shifts: remaining_future_shifts,
             days_remaining: remainingDays,
             current_day: currentDay,
             days_in_month: daysInMonth

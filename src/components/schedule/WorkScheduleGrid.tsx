@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useRef } from "react"
 import { cn } from "@/lib/utils"
 import { Sun, Moon, Plus, Loader2, GripVertical } from "lucide-react"
 import { Card } from "@/components/ui/card"
@@ -140,6 +140,23 @@ export function WorkScheduleGrid({ clubId, month, year, initialData, refreshData
     const [localSchedule, setLocalSchedule] = useState(schedule || {})
     const [localEmployees, setLocalEmployees] = useState(initialEmployees || [])
     const [isUpdating, setIsUpdating] = useState<string | null>(null)
+    const scrollContainerRef = useRef<HTMLDivElement>(null)
+
+    // Enable horizontal scroll with mouse wheel
+    useEffect(() => {
+        const container = scrollContainerRef.current
+        if (!container) return
+
+        const handleWheel = (e: WheelEvent) => {
+            if (e.deltaY !== 0) {
+                e.preventDefault()
+                container.scrollLeft += e.deltaY
+            }
+        }
+
+        container.addEventListener('wheel', handleWheel, { passive: false })
+        return () => container.removeEventListener('wheel', handleWheel)
+    }, [])
 
     // Sync state when props change
     useEffect(() => {
@@ -389,7 +406,10 @@ export function WorkScheduleGrid({ clubId, month, year, initialData, refreshData
 
     return (
         <Card className="border-0 shadow-lg bg-white dark:bg-slate-900 overflow-hidden">
-            <div className="overflow-x-auto">
+            <div 
+                ref={scrollContainerRef}
+                className="overflow-x-auto"
+            >
                 <MobileScheduleList />
                 {readOnly ? content : (
                     <DndContext
