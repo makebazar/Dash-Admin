@@ -111,12 +111,20 @@ export async function GET(
         );
 
         const finishedShifts = shiftsRes.rows;
-        const shifts_count = finishedShifts.length;
-        console.log(`[KPI API] Finished/Active shifts found: ${shifts_count}`);
+        
+        // Separate active and closed shifts
+        const closedShifts = finishedShifts.filter(s => s.status !== 'ACTIVE');
+        const activeShift = finishedShifts.find(s => s.status === 'ACTIVE');
+        
+        const completed_shifts_count = closedShifts.length;
+        const total_shifts_count = finishedShifts.length; // Closed + Active
+        
+        console.log(`[KPI API] Shifts found: ${total_shifts_count} (Closed: ${completed_shifts_count}, Active: ${activeShift ? 1 : 0})`);
 
         // Calculate totals using the same logic as salary summary
         const monthlyMetrics: Record<string, number> = { total_revenue: 0, total_hours: 0 };
         const activeShiftMetrics: Record<string, number> = { total_revenue: 0, total_hours: 0 };
+        const closedShiftsMetrics: Record<string, number> = { total_revenue: 0, total_hours: 0 };
 
         finishedShifts.forEach(s => {
             const isActive = s.status === 'ACTIVE';
@@ -134,11 +142,15 @@ export async function GET(
                 const data = typeof s.report_data === 'string' ? JSON.parse(s.report_data) : s.report_data;
                 Object.keys(data).forEach(key => {
                     const val = parseFloat(data[key] || 0);
+                    // Only include INCOME metrics, excluding cash/card duplicates
                     if (metricCategories[key] === 'INCOME' && key !== 'cash_income' && key !== 'card_income') {
                         shiftIncome += val;
                     }
+                    
+                    // Add to metrics maps
                     monthlyMetrics[key] = (monthlyMetrics[key] || 0) + val;
                     if (isActive) activeShiftMetrics[key] = (activeShiftMetrics[key] || 0) + val;
+                    else closedShiftsMetrics[key] = (closedShiftsMetrics[key] || 0) + val;
                 });
             }
             monthlyMetrics.total_revenue += shiftIncome;
@@ -147,6 +159,9 @@ export async function GET(
             if (isActive) {
                 activeShiftMetrics.total_revenue += shiftIncome;
                 activeShiftMetrics.total_hours += parseFloat(s.total_hours || 0);
+            } else {
+                closedShiftsMetrics.total_revenue = (closedShiftsMetrics.total_revenue || 0) + shiftIncome;
+                closedShiftsMetrics.total_hours = (closedShiftsMetrics.total_hours || 0) + parseFloat(s.total_hours || 0);
             }
         });
 
@@ -154,16 +169,28 @@ export async function GET(
         // const daysInMonth = new Date(year, month, 0).getDate(); // Already calculated above
         const currentDay = now.getDate();
         const remainingDays = daysInMonth - currentDay;
-        const remainingShifts = planned_shifts - shifts_count;
+        
+        // Remaining shifts to EARN money (including current active one)
+        // If planned = 15, closed = 4, active = 1. We have 15 - 4 = 11 shifts to work with (including today).
+        const shifts_to_go = Math.max(0, planned_shifts - completed_shifts_count);
 
         // Calculate KPI progress with SCALED thresholds (matching salary summary)
         const kpi_progress = period_bonuses.map((bonus: any) => {
             const metric_key = bonus.metric_key || 'total_revenue';
+            
+            // Current Value (Total for month, including active)
             const current_value = monthlyMetrics[metric_key] ||
                 (metric_key === 'total_revenue' ? monthlyMetrics.total_revenue :
                     metric_key === 'total_hours' ? monthlyMetrics.total_hours : 0);
+            
+            // Value from CLOSED shifts only (for historical average)
+            const closed_value = metric_key === 'total_revenue' ? closedShiftsMetrics.total_revenue :
+                                 metric_key === 'total_hours' ? closedShiftsMetrics.total_hours :
+                                 (closedShiftsMetrics[metric_key] || 0);
 
-            const avg_per_shift = shifts_count > 0 ? current_value / shifts_count : 0;
+            // Average per shift based on COMPLETED shifts only to avoid skewing by partial active shift
+            const avg_per_shift = completed_shifts_count > 0 ? closed_value / completed_shifts_count : 0;
+            
             const mode = bonus.bonus_mode || 'MONTH';
 
             let current_level = 0;
@@ -179,11 +206,14 @@ export async function GET(
                     const original_from = t.from || 0;
                     // Formula from salary summary: 
                     // mode === 'SHIFT' ? threshold_from * shifts_count : (threshold_from / standard_shifts) * shifts_count
+                    // We use TOTAL shifts count (including active) for current progress scaling?
+                    // Actually, usually progress is checked against "what should be done by now".
+                    // If we use total_shifts_count, we check if we are on track including today.
                     const scaled_threshold = mode === 'SHIFT'
-                        ? original_from * shifts_count
-                        : (original_from / standard_monthly_shifts) * shifts_count;
+                        ? original_from * total_shifts_count
+                        : (original_from / standard_monthly_shifts) * total_shifts_count;
 
-                    const isThresholdMet = shifts_count > 0 && current_value >= scaled_threshold;
+                    const isThresholdMet = total_shifts_count > 0 && current_value >= scaled_threshold;
 
                     // Remaining to meet this SCALED threshold
                     const remainingToLevel = Math.max(0, scaled_threshold - current_value);
@@ -196,7 +226,8 @@ export async function GET(
 
                     const totalRemainingToReach = Math.max(0, endOfMonthThreshold - current_value);
 
-                    const perShiftToReach = remainingShifts > 0 ? totalRemainingToReach / remainingShifts : 0;
+                    // Distribute remaining target over ALL available shifts (future + current active)
+                    const perShiftToReach = shifts_to_go > 0 ? totalRemainingToReach / shifts_to_go : 0;
                     const perShiftToStay = planned_shifts > 0 ? endOfMonthThreshold / planned_shifts : 0;
 
                     const potentialBonus = endOfMonthThreshold * (t.percent / 100);
@@ -231,8 +262,8 @@ export async function GET(
                 ? current_value * (current_reward / 100)
                 : 0;
 
-            // Projection logic (same as before but based on scaled metrics)
-            const projected_total = current_value + (avg_per_shift * remainingShifts);
+                // Projection logic (same as before but based on scaled metrics)
+            const projected_total = current_value + (avg_per_shift * shifts_to_go);
             let projected_level = 0;
             let projected_bonus = 0;
 
@@ -263,7 +294,7 @@ export async function GET(
                 projected_total,
                 projected_level,
                 projected_bonus,
-                remaining_shifts: remainingShifts,
+                remaining_shifts: shifts_to_go,
                 current_shift_value: activeShiftMetrics[metric_key] ||
                     (metric_key === 'total_revenue' ? activeShiftMetrics.total_revenue :
                         metric_key === 'total_hours' ? activeShiftMetrics.total_hours : 0)
@@ -277,9 +308,9 @@ export async function GET(
             kpi: kpi_progress,
             total_kpi_bonus,
             total_projected_bonus,
-            shifts_count,
+            shifts_count: completed_shifts_count, // Return ONLY completed shifts count for UI display
             planned_shifts,
-            remaining_shifts: planned_shifts - shifts_count,
+            remaining_shifts: shifts_to_go,
             days_remaining: remainingDays,
             current_day: currentDay,
             days_in_month: daysInMonth

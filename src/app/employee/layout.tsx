@@ -48,7 +48,7 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
     }
 
     return (
-        <div className="flex min-h-screen bg-background relative">
+        <div className="flex min-h-screen bg-background relative overflow-x-hidden">
             {/* Mobile Header */}
             <div className="md:hidden fixed top-0 left-0 right-0 h-16 border-b bg-card flex items-center justify-between px-4 z-40">
                 <Link href="/employee/dashboard" className="flex items-center gap-2">

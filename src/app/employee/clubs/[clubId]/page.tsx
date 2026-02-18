@@ -303,7 +303,7 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
     return (
         <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:via-purple-900/20 dark:to-slate-900">
             {/* Header */}
-            <div className="border-b bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl sticky top-16 md:top-0 z-30 transition-all duration-300">
+            <div className="border-b bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl sticky top-0 z-30 transition-all duration-300">
                 <div className="max-w-7xl mx-auto px-4 py-4 md:px-6">
                     <div className="flex flex-col md:flex-row gap-4 md:items-center justify-between">
                         <div>
@@ -516,25 +516,7 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                     </Card>
                 )}
 
-                {/* Workday Progress (if shift active) */}
-                {activeShift && kpiData && (
-                    <Card className="border-0 shadow-lg bg-white dark:bg-slate-800/50 backdrop-blur">
-                        <CardContent className="py-4">
-                            <div className="flex items-center justify-between mb-2">
-                                <span className="text-sm font-medium text-muted-foreground">Прогресс рабочего дня</span>
-                                <span className="text-sm font-medium">
-                                    {(liveSeconds / 3600).toFixed(1)}ч из ~12ч
-                                </span>
-                            </div>
-                            <div className="h-3 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
-                                <div
-                                    className="h-full rounded-full bg-gradient-to-r from-purple-500 via-indigo-500 to-blue-500 transition-all duration-1000"
-                                    style={{ width: `${Math.min((liveSeconds / 3600 / 12) * 100, 100)}%` }}
-                                />
-                            </div>
-                        </CardContent>
-                    </Card>
-                )}
+                {/* Workday Progress (if shift active) - Removed */}
             </div>
 
             {/* Report Modal */}
