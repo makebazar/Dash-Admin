@@ -172,12 +172,11 @@ export function KpiOverview({
                     </div>
 
                     {/* Progress Bar */}
-                    <div className="mt-6 space-y-2">
+                    <div className="mt-8 space-y-4">
                         <div className="flex justify-between text-xs text-white/60">
                             <span>Прогресс к бонусу {nextThreshold.percent}%</span>
-                            <span className="font-bold text-purple-400">{Math.round(progressPercent)}%</span>
                         </div>
-                        <div className="h-3 w-full bg-white/10 rounded-full overflow-hidden backdrop-blur border border-white/20">
+                        <div className="relative h-3 w-full bg-white/10 rounded-full backdrop-blur border border-white/20">
                             <div
                                 className={cn(
                                     "h-full rounded-full transition-all duration-1000 shadow-[0_0_20px_currentColor]",
@@ -187,6 +186,22 @@ export function KpiOverview({
                                 )}
                                 style={{ width: `${progressPercent}%` }}
                             />
+                            {/* Floating percentage label */}
+                            <div 
+                                className="absolute -top-9 transition-all duration-1000 z-10"
+                                style={{ left: `${progressPercent}%`, transform: 'translateX(-50%)' }}
+                            >
+                                <div className={cn(
+                                    "px-2 py-0.5 rounded text-xs font-bold shadow-sm whitespace-nowrap mb-0.5",
+                                    onTrack ? "bg-emerald-500 text-white" : "bg-orange-500 text-white"
+                                )}>
+                                    {Math.round(progressPercent)}%
+                                </div>
+                                <div className={cn(
+                                    "w-0 h-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-t-[4px] mx-auto",
+                                    onTrack ? "border-t-emerald-500" : "border-t-orange-500"
+                                )} />
+                            </div>
                         </div>
                         <div className="flex justify-between text-xs pt-1">
                             <div>
