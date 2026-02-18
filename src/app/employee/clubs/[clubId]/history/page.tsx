@@ -264,12 +264,12 @@ export default function EmployeeShiftHistoryPage() {
     }
 
     return (
-        <div className="p-8 space-y-8 min-h-screen bg-background">
+        <div className="p-4 md:p-8 space-y-6 md:space-y-8 min-h-screen bg-background">
             {/* Header */}
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-3xl font-bold tracking-tight">История смен</h1>
-                    <p className="text-muted-foreground">Архив ваших смен и отчетов</p>
+                    <h1 className="text-2xl md:text-3xl font-bold tracking-tight">История смен</h1>
+                    <p className="text-sm md:text-base text-muted-foreground">Архив ваших смен и отчетов</p>
                 </div>
             </div>
 
@@ -375,8 +375,8 @@ export default function EmployeeShiftHistoryPage() {
                 ))}
             </div>
 
-            {/* Shifts Table */}
-            <Card>
+            {/* Shifts Table (Desktop) */}
+            <Card className="hidden md:block border-0 shadow-lg">
                 <CardHeader>
                     <CardTitle>История смен</CardTitle>
                     <CardDescription>Последние смены с отчетами</CardDescription>
@@ -503,6 +503,90 @@ export default function EmployeeShiftHistoryPage() {
                     </Table>
                 </CardContent>
             </Card>
+
+            {/* Shifts List (Mobile) */}
+            <div className="md:hidden space-y-4">
+                <h3 className="font-semibold text-lg px-1">История смен</h3>
+                {isLoading ? (
+                    <div className="flex justify-center py-8">
+                        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                    </div>
+                ) : sortedShifts.length === 0 ? (
+                    <Card className="border-0 shadow-sm bg-muted/30">
+                        <CardContent className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                            <Clock className="h-10 w-10 opacity-20 mb-3" />
+                            <p>Смен пока нет</p>
+                        </CardContent>
+                    </Card>
+                ) : (
+                    sortedShifts.map((shift) => (
+                        <Card key={shift.id} className="border-0 shadow-md overflow-hidden">
+                            <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between space-y-0 bg-muted/20">
+                                <div className="font-bold text-lg">
+                                    {formatDate(shift.check_in)}
+                                </div>
+                                {getStatusBadge(shift.status, !!shift.check_out)}
+                            </CardHeader>
+                            <CardContent className="p-4 space-y-4">
+                                <div className="flex justify-between items-center">
+                                    <div className="flex items-center gap-2">
+                                        {shift.shift_type === 'NIGHT' ? (
+                                            <div className="p-1.5 rounded-full bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400">
+                                                <Moon className="h-4 w-4" />
+                                            </div>
+                                        ) : (
+                                            <div className="p-1.5 rounded-full bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400">
+                                                <Sun className="h-4 w-4" />
+                                            </div>
+                                        )}
+                                        <span className="font-medium">
+                                            {formatTime(shift.check_in)} — {shift.check_out ? formatTime(shift.check_out) : '...'}
+                                        </span>
+                                    </div>
+                                    <div className="font-mono font-bold text-muted-foreground">
+                                        {shift.total_hours && !isNaN(Number(shift.total_hours))
+                                            ? `${Number(shift.total_hours).toFixed(1)}ч`
+                                            : '-'}
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-3 pt-2 border-t border-border/50">
+                                    <div>
+                                        <p className="text-xs text-muted-foreground mb-0.5">Наличные</p>
+                                        <p className="font-bold text-green-600">{formatMoney(shift.cash_income)}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-xs text-muted-foreground mb-0.5">Безнал</p>
+                                        <p className="font-bold text-blue-600">{formatMoney(shift.card_income)}</p>
+                                    </div>
+                                    {reportFields.map((field: any) => (
+                                        <div key={field.metric_key}>
+                                            <p className="text-xs text-muted-foreground mb-0.5">{field.custom_label || field.label}</p>
+                                            <p className="font-medium">
+                                                {shift.report_data && shift.report_data[field.metric_key] !== undefined
+                                                    ? formatMoney(shift.report_data[field.metric_key])
+                                                    : '-'}
+                                            </p>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                {shift.report_data && Object.keys(shift.report_data).length > 0 && (
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="w-full mt-2"
+                                        onClick={() => setSelectedShift(shift)}
+                                    >
+                                        <Eye className="h-4 w-4 mr-2" />
+                                        Посмотреть отчет
+                                    </Button>
+                                )}
+                            </CardContent>
+                        </Card>
+                    ))
+                )}
+            </div>
 
             {/* View Report Modal */}
             <Dialog open={!!selectedShift} onOpenChange={() => setSelectedShift(null)}>

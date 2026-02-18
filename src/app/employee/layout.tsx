@@ -89,9 +89,6 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
                     {/* User Info */}
                     <div className="border-b border-border px-6 py-4">
                         <div className="flex items-center gap-3">
-                            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-purple-500/10">
-                                <User className="h-5 w-5 text-purple-600" />
-                            </div>
                             <div className="flex-1">
                                 <p className="text-sm font-medium">{userName || 'Сотрудник'}</p>
                                 <p className="text-xs text-muted-foreground">Рабочий режим</p>

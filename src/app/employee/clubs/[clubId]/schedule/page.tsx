@@ -40,8 +40,8 @@ export default function EmployeeSchedulePage({ params }: { params: Promise<{ clu
     if (!clubId) return null
 
     return (
-        <div className="min-h-screen bg-slate-50 dark:bg-slate-900 p-6 space-y-6">
-            <h1 className="text-2xl font-bold">График смен</h1>
+        <div className="min-h-screen bg-slate-50 dark:bg-slate-900 p-4 md:p-6 space-y-4 md:space-y-6">
+            <h1 className="text-xl md:text-2xl font-bold">График смен</h1>
 
             <Card className="border-0 shadow-lg bg-white dark:bg-slate-900 overflow-hidden">
                 <CardHeader>

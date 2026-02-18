@@ -234,7 +234,86 @@ export function WorkScheduleGrid({ clubId, month, year, initialData, refreshData
         return dayCounts
     }, [localSchedule, days])
 
+    // Mobile View Component
+    const MobileScheduleList = () => (
+        <div className="md:hidden divide-y divide-slate-100 dark:divide-slate-800">
+            {days.map(d => {
+                const date = new Date(year, month - 1, d)
+                const isWeekend = date.getDay() === 0 || date.getDay() === 6
+                const dateStr = `${year}-${month.toString().padStart(2, '0')}-${d.toString().padStart(2, '0')}`
+                
+                // Find workers for this day
+                const dayWorkers = localEmployees.filter((e: any) => localSchedule[e.id]?.[dateStr] === 'DAY')
+                const nightWorkers = localEmployees.filter((e: any) => localSchedule[e.id]?.[dateStr] === 'NIGHT')
+                
+                // Skip days with no shifts if needed, but showing all days is better for context
+                
+                return (
+                    <div key={d} className={cn(
+                        "p-4 flex flex-col gap-3",
+                        isWeekend && "bg-slate-50/50 dark:bg-slate-900/50"
+                    )}>
+                        {/* Date Header */}
+                        <div className="flex items-center gap-2">
+                            <div className={cn(
+                                "text-lg font-bold w-8 text-center",
+                                isWeekend ? "text-red-500" : "text-slate-700 dark:text-slate-200"
+                            )}>
+                                {d}
+                            </div>
+                            <div className="text-sm font-medium text-slate-500 uppercase">
+                                {new Intl.DateTimeFormat('ru-RU', { weekday: 'long', month: 'long' }).format(date)}
+                            </div>
+                        </div>
+
+                        {/* Shifts */}
+                        <div className="grid grid-cols-2 gap-3 pl-10">
+                            {/* Day Shift */}
+                            <div className="space-y-2">
+                                <div className="flex items-center gap-1.5 text-xs font-bold text-slate-400 uppercase tracking-wider">
+                                    <Sun className="h-3 w-3 text-emerald-500" />
+                                    Дневная
+                                </div>
+                                {dayWorkers.length > 0 ? (
+                                    <div className="flex flex-wrap gap-2">
+                                        {dayWorkers.map((w: any) => (
+                                            <div key={w.id} className="text-sm font-medium text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-2 py-1 rounded-md shadow-sm">
+                                                {w.full_name.split(' ')[0]}
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="text-xs text-slate-300 italic">Нет смен</div>
+                                )}
+                            </div>
+
+                            {/* Night Shift */}
+                            <div className="space-y-2">
+                                <div className="flex items-center gap-1.5 text-xs font-bold text-slate-400 uppercase tracking-wider">
+                                    <Moon className="h-3 w-3 text-indigo-500" />
+                                    Ночная
+                                </div>
+                                {nightWorkers.length > 0 ? (
+                                    <div className="flex flex-wrap gap-2">
+                                        {nightWorkers.map((w: any) => (
+                                            <div key={w.id} className="text-sm font-medium text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-2 py-1 rounded-md shadow-sm">
+                                                {w.full_name.split(' ')[0]}
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="text-xs text-slate-300 italic">Нет смен</div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )
+            })}
+        </div>
+    )
+
     const content = (
+        <div className="hidden md:block">
         <table className="w-full border-collapse min-w-[1200px]">
             <thead>
                 <tr className="bg-slate-50 dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800">
@@ -305,11 +384,13 @@ export function WorkScheduleGrid({ clubId, month, year, initialData, refreshData
                 </tr>
             </tbody>
         </table>
+        </div>
     )
 
     return (
         <Card className="border-0 shadow-lg bg-white dark:bg-slate-900 overflow-hidden">
             <div className="overflow-x-auto">
+                <MobileScheduleList />
                 {readOnly ? content : (
                     <DndContext
                         sensors={sensors}
