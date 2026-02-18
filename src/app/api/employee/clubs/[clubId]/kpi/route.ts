@@ -113,11 +113,17 @@ export async function GET(
         const finishedShifts = shiftsRes.rows;
         
         // Separate active and closed shifts
+        // Handle edge case: multiple active shifts (should not happen, but safe to handle)
+        // We take the MOST RECENT active shift as the "current" one.
+        const allActiveShifts = finishedShifts.filter(s => s.status === 'ACTIVE');
+        const activeShift = allActiveShifts.sort((a, b) => new Date(b.check_in).getTime() - new Date(a.check_in).getTime())[0];
+        
         const closedShifts = finishedShifts.filter(s => s.status !== 'ACTIVE');
-        const activeShift = finishedShifts.find(s => s.status === 'ACTIVE');
         
         const completed_shifts_count = closedShifts.length;
-        const total_shifts_count = finishedShifts.length; // Closed + Active
+        // Total count logic: closed + (1 if there is an active shift)
+        // We ignore "zombie" active shifts if any (extra ones)
+        const total_shifts_count = completed_shifts_count + (activeShift ? 1 : 0);
         
         console.log(`[KPI API] Shifts found: ${total_shifts_count} (Closed: ${completed_shifts_count}, Active: ${activeShift ? 1 : 0})`);
 
@@ -128,6 +134,8 @@ export async function GET(
 
         finishedShifts.forEach(s => {
             const isActive = s.status === 'ACTIVE';
+            // Only process this shift if it is CLOSED or if it is the ONE valid active shift
+            if (isActive && s.id !== activeShift?.id) return; 
 
             // Calculate Shift Income
             let shiftIncome = 0;
