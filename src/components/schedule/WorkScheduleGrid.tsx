@@ -142,20 +142,64 @@ export function WorkScheduleGrid({ clubId, month, year, initialData, refreshData
     const [isUpdating, setIsUpdating] = useState<string | null>(null)
     const scrollContainerRef = useRef<HTMLDivElement>(null)
 
-    // Enable horizontal scroll with mouse wheel
+    // Enable drag-to-scroll
     useEffect(() => {
         const container = scrollContainerRef.current
         if (!container) return
 
-        const handleWheel = (e: WheelEvent) => {
-            if (e.deltaY !== 0) {
-                e.preventDefault()
-                container.scrollLeft += e.deltaY
-            }
+        let isDown = false
+        let startX: number
+        let scrollLeft: number
+
+        const onMouseDown = (e: MouseEvent) => {
+            isDown = true
+            container.style.cursor = 'grabbing'
+            startX = e.pageX - container.offsetLeft
+            scrollLeft = container.scrollLeft
         }
 
+        const onMouseLeave = () => {
+            isDown = false
+            container.style.cursor = 'grab'
+        }
+
+        const onMouseUp = () => {
+            isDown = false
+            container.style.cursor = 'grab'
+        }
+
+        const onMouseMove = (e: MouseEvent) => {
+            if (!isDown) return
+            e.preventDefault()
+            const x = e.pageX - container.offsetLeft
+            const walk = (x - startX) * 2 // Scroll-fast
+            container.scrollLeft = scrollLeft - walk
+        }
+
+        container.addEventListener('mousedown', onMouseDown)
+        container.addEventListener('mouseleave', onMouseLeave)
+        container.addEventListener('mouseup', onMouseUp)
+        container.addEventListener('mousemove', onMouseMove)
+
+        // Keep wheel scroll too
+        const handleWheel = (e: WheelEvent) => {
+            if (e.deltaY !== 0 && !e.shiftKey) {
+                // If horizontal scroll is possible, prevent default vertical scroll
+                if (container.scrollWidth > container.clientWidth) {
+                    e.preventDefault()
+                    container.scrollLeft += e.deltaY
+                }
+            }
+        }
         container.addEventListener('wheel', handleWheel, { passive: false })
-        return () => container.removeEventListener('wheel', handleWheel)
+
+        return () => {
+            container.removeEventListener('mousedown', onMouseDown)
+            container.removeEventListener('mouseleave', onMouseLeave)
+            container.removeEventListener('mouseup', onMouseUp)
+            container.removeEventListener('mousemove', onMouseMove)
+            container.removeEventListener('wheel', handleWheel)
+        }
     }, [])
 
     // Sync state when props change
