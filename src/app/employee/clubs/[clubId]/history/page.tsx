@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
-import { Loader2, Clock, DollarSign, FileText, Eye, TrendingUp, Wallet, CheckCircle, CalendarDays, Sun, Moon, ArrowUpDown } from "lucide-react"
+import { Loader2, Clock, DollarSign, FileText, Eye, TrendingUp, Wallet, CheckCircle, CalendarDays, Sun, Moon, ArrowUpDown, ChevronLeft, ChevronRight } from "lucide-react"
 
 interface Shift {
     id: string
@@ -280,48 +280,60 @@ export default function EmployeeShiftHistoryPage() {
                         <div className="flex flex-wrap items-center gap-2">
                             <CalendarDays className="h-4 w-4 text-muted-foreground" />
                             <span className="text-sm text-muted-foreground">Месяц:</span>
-                            {[0, -1, -2].map(offset => (
+                            <div className="flex items-center gap-1 bg-muted/50 rounded-lg p-1">
                                 <Button
-                                    key={offset}
-                                    variant={selectedMonth === String(offset) ? 'default' : 'outline'}
-                                    size="sm"
-                                    onClick={() => handleMonthSelect(offset)}
-                                    className="capitalize"
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => handleMonthSelect(parseInt(selectedMonth) - 1)}
+                                    className="h-8 w-8"
                                 >
-                                    {getMonthName(offset)}
+                                    <ChevronLeft className="h-4 w-4" />
                                 </Button>
-                            ))}
+                                <span className="text-sm font-medium w-32 text-center capitalize">
+                                    {selectedMonth === '0' ? 'Текущий месяц' : getMonthName(parseInt(selectedMonth))}
+                                </span>
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => handleMonthSelect(parseInt(selectedMonth) + 1)}
+                                    className="h-8 w-8"
+                                    disabled={parseInt(selectedMonth) >= 0}
+                                >
+                                    <ChevronRight className="h-4 w-4" />
+                                </Button>
+                            </div>
                         </div>
 
                         <div className="hidden md:block h-6 w-px bg-border" />
 
-                        <div className="flex flex-wrap items-center gap-2">
-                            <span className="text-sm text-muted-foreground">Период:</span>
-                            <div className="flex items-center gap-2">
-                                <Input
-                                    type="date"
-                                    value={filterStartDate}
-                                    onChange={e => {
-                                        setFilterStartDate(e.target.value)
-                                        handleCustomDateFilter()
-                                    }}
-                                    className="w-32 md:w-36 h-8"
-                                />
-                                <span className="text-muted-foreground">—</span>
-                                <Input
-                                    type="date"
-                                    value={filterEndDate}
-                                    onChange={e => {
-                                        setFilterEndDate(e.target.value)
-                                        handleCustomDateFilter()
-                                    }}
-                                    className="w-32 md:w-36 h-8"
-                                />
+                            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
+                                <span className="text-sm text-muted-foreground">Период:</span>
+                                <div className="flex items-center gap-2">
+                                    <Input
+                                        type="date"
+                                        value={filterStartDate}
+                                        onChange={e => {
+                                            setFilterStartDate(e.target.value)
+                                            handleCustomDateFilter()
+                                        }}
+                                        className="w-[140px] h-9 text-sm"
+                                    />
+                                    <span className="text-muted-foreground">—</span>
+                                    <Input
+                                        type="date"
+                                        value={filterEndDate}
+                                        onChange={e => {
+                                            setFilterEndDate(e.target.value)
+                                            handleCustomDateFilter()
+                                        }}
+                                        className="w-[140px] h-9 text-sm"
+                                    />
+                                </div>
                             </div>
                         </div>
 
                         {(filterStartDate || filterEndDate || selectedMonth !== '0') && (
-                            <Button size="sm" variant="ghost" onClick={clearFilters} className="text-muted-foreground ml-auto md:ml-0">
+                            <Button size="sm" variant="ghost" onClick={clearFilters} className="text-muted-foreground w-full md:w-auto md:ml-auto">
                                 Сбросить
                             </Button>
                         )}
