@@ -264,9 +264,15 @@ export function KpiOverview({
             {showDetails && (
                 <Card className="border-0 shadow-xl bg-white dark:bg-slate-900 overflow-hidden">
                     <CardContent className="p-6">
-                        <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
-                            <Trophy className="h-5 w-5 text-yellow-500" />
-                            Все уровни бонусов
+                        <h3 className="text-lg font-bold mb-4 flex flex-col md:flex-row md:items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                                <Trophy className="h-5 w-5 text-yellow-500" />
+                                Все уровни бонусов
+                            </div>
+                            <div className="flex items-center gap-2 text-xs font-normal text-muted-foreground bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-700">
+                                <Zap className="h-3 w-3 text-yellow-500 fill-current" />
+                                Ваша выручка: <span className="font-bold text-foreground">{formatCurrency(kpi.current_value)}</span> ({shiftsCount} смен)
+                            </div>
                         </h3>
                         <div className="space-y-3">
                             {kpi.all_thresholds?.map((level: any, idx: number) => {
