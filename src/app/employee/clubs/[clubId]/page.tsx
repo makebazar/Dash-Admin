@@ -303,9 +303,9 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
     return (
         <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:via-purple-900/20 dark:to-slate-900">
             {/* Header */}
-            <div className="border-b bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl sticky top-0 z-10">
-                <div className="max-w-7xl mx-auto px-6 py-4">
-                    <div className="flex items-center justify-between">
+            <div className="border-b bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl sticky top-16 md:top-0 z-30 transition-all duration-300">
+                <div className="max-w-7xl mx-auto px-4 py-4 md:px-6">
+                    <div className="flex flex-col md:flex-row gap-4 md:items-center justify-between">
                         <div>
                             <h1 className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-indigo-600 bg-clip-text text-transparent">
                                 {club.name}
@@ -318,10 +318,10 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                 </div>
             </div>
 
-            <div className="max-w-7xl mx-auto px-6 py-8 space-y-6">
+            <div className="max-w-7xl mx-auto px-4 py-6 md:px-6 md:py-8 space-y-6">
 
                 {/* Main Grid */}
-                <div className="grid gap-6 lg:grid-cols-3">
+                <div className="grid gap-4 lg:gap-6 lg:grid-cols-3">
 
                     {/* Shift Control - Main Card */}
                     <div className="lg:col-span-2">
@@ -348,11 +348,11 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                                             {/* Live Timer */}
                                             <div className="flex flex-col items-center justify-center py-8">
                                                 <div className="flex items-baseline gap-1 font-mono">
-                                                    <span className="text-6xl font-bold text-white">{liveTime.hours}</span>
-                                                    <span className="text-4xl text-white/50">:</span>
-                                                    <span className="text-6xl font-bold text-white">{liveTime.minutes}</span>
-                                                    <span className="text-4xl text-white/50">:</span>
-                                                    <span className="text-4xl font-medium text-purple-400">{liveTime.seconds}</span>
+                                                    <span className="text-5xl md:text-6xl font-bold text-white">{liveTime.hours}</span>
+                                                    <span className="text-3xl md:text-4xl text-white/50">:</span>
+                                                    <span className="text-5xl md:text-6xl font-bold text-white">{liveTime.minutes}</span>
+                                                    <span className="text-3xl md:text-4xl text-white/50">:</span>
+                                                    <span className="text-3xl md:text-4xl font-medium text-purple-400">{liveTime.seconds}</span>
                                                 </div>
                                                 <p className="mt-4 text-white/60">
                                                     Начало в {new Date(activeShift.check_in).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
@@ -427,7 +427,7 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                     {/* Stats Column */}
                     <div className="space-y-4">
                         {/* Maintenance Tasks */}
-                        <Link href={`/employee/clubs/${clubId}/tasks`}>
+                        <Link href={`/employee/clubs/${clubId}/tasks`} className="block">
                             <Card className={cn(
                                 "border-0 shadow-lg transition-all hover:scale-[1.02] active:scale-[0.98]",
                                 pendingTasksCount > 0

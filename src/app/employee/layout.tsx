@@ -3,8 +3,9 @@
 import { useEffect, useState } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import Link from "next/link"
-import { Building2, LogOut, User, LayoutDashboard, Calendar, Brush, Clock } from "lucide-react"
+import { Building2, LogOut, User, LayoutDashboard, Calendar, Brush, Clock, Menu, X } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/button"
 
 interface Club {
     id: number
@@ -16,10 +17,16 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
     const router = useRouter()
     const [userName, setUserName] = useState('')
     const [clubs, setClubs] = useState<Club[]>([])
+    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
 
     useEffect(() => {
         fetchUserData()
     }, [])
+
+    // Close mobile menu on route change
+    useEffect(() => {
+        setIsMobileMenuOpen(false)
+    }, [pathname])
 
     const fetchUserData = async () => {
         try {
@@ -41,9 +48,33 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
     }
 
     return (
-        <div className="flex min-h-screen bg-background">
+        <div className="flex min-h-screen bg-background relative">
+            {/* Mobile Header */}
+            <div className="md:hidden fixed top-0 left-0 right-0 h-16 border-b bg-card flex items-center justify-between px-4 z-40">
+                <Link href="/employee/dashboard" className="flex items-center gap-2">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-tr from-purple-500 to-blue-500">
+                        <Building2 className="h-5 w-5 text-white" />
+                    </div>
+                    <span className="text-lg font-semibold">DashAdmin</span>
+                </Link>
+                <Button variant="ghost" size="icon" onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}>
+                    {isMobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+                </Button>
+            </div>
+
+            {/* Mobile Overlay */}
+            {isMobileMenuOpen && (
+                <div 
+                    className="fixed inset-0 bg-black/50 z-40 md:hidden"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                />
+            )}
+
             {/* Sidebar */}
-            <aside className="fixed left-0 top-0 h-screen w-64 border-r border-border bg-card z-50">
+            <aside className={cn(
+                "fixed left-0 top-0 h-screen w-64 border-r border-border bg-card z-50 transition-transform duration-300 ease-in-out",
+                isMobileMenuOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
+            )}>
                 <div className="flex h-full flex-col">
                     {/* Logo */}
                     <div className="flex h-16 items-center border-b border-border px-6">
@@ -147,7 +178,9 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
             </aside>
 
             {/* Main Content */}
-            <main className="ml-64 flex-1">{children}</main>
+            <main className="md:ml-64 flex-1 pt-16 md:pt-0 transition-all duration-300">
+                {children}
+            </main>
         </div>
     )
 }

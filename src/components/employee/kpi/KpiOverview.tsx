@@ -39,7 +39,7 @@ export function KpiOverview({
                 <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -mr-32 -mt-32" />
                 <div className="absolute bottom-0 left-0 w-48 h-48 bg-black/10 rounded-full blur-3xl -ml-24 -mb-24" />
 
-                <CardContent className="p-8 relative z-10">
+                <CardContent className="p-6 md:p-8 relative z-10">
                     <div className="text-center space-y-4">
                         <div className="inline-flex items-center justify-center p-4 rounded-full bg-white/20 backdrop-blur">
                             <Trophy className="h-12 w-12 text-yellow-300" />
@@ -73,7 +73,7 @@ export function KpiOverview({
                 <div className="absolute top-0 right-0 w-64 h-64 bg-purple-500/20 rounded-full blur-3xl -mr-32 -mt-32 group-hover:bg-purple-500/30 transition-all duration-700" />
                 <div className="absolute bottom-0 left-0 w-48 h-48 bg-blue-500/20 rounded-full blur-3xl -ml-24 -mb-24 group-hover:bg-blue-500/30 transition-all duration-700" />
 
-                <CardContent className="p-8 relative z-10">
+                <CardContent className="p-6 md:p-8 relative z-10">
                     {/* Header */}
                     <div className="flex items-center justify-between mb-6">
                         <div className="flex items-center gap-2">
@@ -114,7 +114,7 @@ export function KpiOverview({
                                 {activeShift ? 'Сегодня нужно выдать минимум' : 'На следующую смену нужно минимум'}
                             </p>
                             <div className="flex items-baseline justify-center gap-2">
-                                <span className="text-6xl font-black bg-gradient-to-r from-purple-400 via-pink-400 to-blue-400 bg-clip-text text-transparent">
+                                <span className="text-4xl md:text-6xl font-black bg-gradient-to-r from-purple-400 via-pink-400 to-blue-400 bg-clip-text text-transparent">
                                     {formatCurrency(nextThreshold.per_shift_to_reach).replace(' ₽', '')}
                                 </span>
                                 <span className="text-2xl font-bold text-white/40">₽</span>
