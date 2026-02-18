@@ -330,8 +330,6 @@ export default function EmployeeShiftHistoryPage() {
                                     />
                                 </div>
                             </div>
-                        </div>
-
                         {(filterStartDate || filterEndDate || selectedMonth !== '0') && (
                             <Button size="sm" variant="ghost" onClick={clearFilters} className="text-muted-foreground w-full md:w-auto md:ml-auto">
                                 Сбросить
