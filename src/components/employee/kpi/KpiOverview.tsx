@@ -65,6 +65,28 @@ export function KpiOverview({
     const progressPercent = Math.min((kpi.current_value / (nextThreshold.planned_month_threshold || nextThreshold.monthly_threshold)) * 100, 100);
     const onTrack = kpi.avg_per_shift >= nextThreshold.per_shift_to_reach;
 
+    // Мотивирующие сообщения
+    const getMotivationMessage = () => {
+        if (onTrack) {
+            const messages = [
+                `Отличный темп! Вы уверенно идете к следующему уровню.`,
+                `Супер результат! Ваш средний чек (${formatCurrency(kpi.avg_per_shift)}) выше планового.`,
+                `Так держать! Бонус уже близко.`,
+                `Вы на верном пути! Продолжайте в том же духе.`
+            ];
+            return messages[Math.floor(Math.random() * messages.length)];
+        } else {
+            const diff = nextThreshold.per_shift_to_reach - kpi.avg_per_shift;
+            const percentDiff = (diff / nextThreshold.per_shift_to_reach) * 100;
+            
+            if (percentDiff < 15) {
+                return `Вы совсем близко! Нужно подтянуть средний чек всего на ${formatCurrency(diff)}. Предлагайте напитки и снеки каждому гостю!`;
+            } else {
+                return `Есть потенциал для роста. Обратите внимание на чистоту и сервис — довольные гости тратят больше. Нужно ускориться!`;
+            }
+        }
+    };
+
     return (
         <div className="space-y-4">
             {/* Main Focus Card - Что нужно сегодня */}
@@ -144,8 +166,8 @@ export function KpiOverview({
 
                         {/* Reward */}
                         <div className="pt-4 border-t border-white/10">
-                            <p className="text-xs text-white/50 mb-1">Премия за этот уровень</p>
-                            <p className="text-3xl font-black text-emerald-400">+{formatCurrency(nextThreshold.potential_bonus)}</p>
+                            <p className="text-xs text-white/50 mb-1">Ваша текущая премия</p>
+                            <p className="text-3xl font-black text-emerald-400">+{formatCurrency(kpi.bonus_amount || 0)}</p>
                         </div>
                     </div>
 
@@ -183,24 +205,30 @@ export function KpiOverview({
                         <div className="mt-4 p-3 rounded-lg bg-blue-500/20 border border-blue-500/30 text-blue-300 text-sm">
                             <p className="font-medium">
                                 💡 Чтобы сохранить <span className="font-bold text-blue-200">{currentAchievedLevel.label} ({currentAchievedLevel.percent}%)</span>, нужно минимум{' '}
-                                <span className="font-bold text-white">{formatCurrency(currentAchievedLevel.per_shift_to_stay)}</span> за смену
+                                <span className="font-bold text-white">
+                                    {remainingShifts > 0 
+                                        ? formatCurrency(Math.max(0, (currentAchievedLevel.planned_month_threshold - kpi.current_value) / remainingShifts))
+                                        : '0 ₽'
+                                    }
+                                </span> за смену в оставшиеся дни
                             </p>
                         </div>
                     )}
 
                     {/* Status Indicator */}
                     <div className={cn(
-                        "mt-4 p-3 rounded-lg flex items-center gap-2 text-sm font-medium",
+                        "mt-4 p-3 rounded-lg flex items-start gap-3 text-sm font-medium",
                         onTrack
                             ? "bg-emerald-500/20 border border-emerald-500/30 text-emerald-400"
                             : "bg-orange-500/20 border border-orange-500/30 text-orange-400"
                     )}>
-                        <div className={cn("w-2 h-2 rounded-full animate-pulse", onTrack ? "bg-emerald-400" : "bg-orange-400")} />
-                        {onTrack ? (
-                            <span>Вы на верном пути! Средняя выручка {formatCurrency(kpi.avg_per_shift)}</span>
-                        ) : (
-                            <span>Нужно ускориться. Средняя выручка {formatCurrency(kpi.avg_per_shift)}</span>
-                        )}
+                        <div className={cn("w-2 h-2 rounded-full animate-pulse mt-1.5 shrink-0", onTrack ? "bg-emerald-400" : "bg-orange-400")} />
+                        <div>
+                            {getMotivationMessage()}
+                            <p className="text-xs opacity-70 mt-1 font-normal">
+                                Средняя выручка: {formatCurrency(kpi.avg_per_shift)} / План: {formatCurrency(nextThreshold.per_shift_to_reach)}
+                            </p>
+                        </div>
                     </div>
 
                     {/* Toggle Details */}
@@ -264,9 +292,8 @@ export function KpiOverview({
 
                                                     {/* Актуальный порог для закрытых смен */}
                                                     <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
-                                                        Пройдено {shiftsCount} смен: {formatCurrency(level.scaled_threshold)}
+                                                        План на {shiftsCount} смен: {formatCurrency(level.scaled_threshold)}
                                                         {isCompleted && ' ✓'}
-                                                        {isNext && level.remaining_total > 0 && ` (еще ${formatCurrency(level.remaining_total)})`}
                                                     </p>
                                                 </div>
                                             </div>
