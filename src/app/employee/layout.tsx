@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import Link from "next/link"
-import { Building2, LogOut, User } from "lucide-react"
+import { Building2, LogOut, User, LayoutDashboard, Calendar, Brush, Clock } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface Club {
@@ -70,29 +70,13 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
 
                     {/* Navigation - Clubs */}
                     <div className="flex-1 overflow-auto p-4">
-                        <div className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                            Мои клубы
-                        </div>
                         <nav className="space-y-1">
                             {clubs.map((club) => {
                                 const isClubActive = pathname.startsWith(`/employee/clubs/${club.id}`)
                                 return (
                                     <div key={club.id} className="space-y-1 mt-2">
-                                        <Link
-                                            href={`/employee/clubs/${club.id}`}
-                                            className={cn(
-                                                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
-                                                isClubActive
-                                                    ? "bg-accent text-accent-foreground font-semibold"
-                                                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                                            )}
-                                        >
-                                            <Building2 className="h-4 w-4" />
-                                            <span className="flex-1 truncate">{club.name}</span>
-                                        </Link>
-
                                         {isClubActive && (
-                                            <div className="ml-4 space-y-1 border-l border-border/50 pl-3">
+                                            <div className="space-y-1">
                                                 <Link
                                                     href={`/employee/clubs/${club.id}`}
                                                     className={cn(
@@ -102,6 +86,7 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
                                                             : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                                                     )}
                                                 >
+                                                    <LayoutDashboard className="h-4 w-4" />
                                                     <span className="flex-1">Дашборд</span>
                                                 </Link>
                                                 <Link
@@ -113,6 +98,7 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
                                                             : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                                                     )}
                                                 >
+                                                    <Calendar className="h-4 w-4" />
                                                     <span className="flex-1">График смен</span>
                                                 </Link>
                                                 <Link
@@ -124,6 +110,7 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
                                                             : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                                                     )}
                                                 >
+                                                    <Brush className="h-4 w-4" />
                                                     <span className="flex-1">Обслуживание</span>
                                                 </Link>
                                                 <Link
@@ -135,6 +122,7 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
                                                             : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                                                     )}
                                                 >
+                                                    <Clock className="h-4 w-4" />
                                                     <span className="flex-1">История смен</span>
                                                 </Link>
                                             </div>

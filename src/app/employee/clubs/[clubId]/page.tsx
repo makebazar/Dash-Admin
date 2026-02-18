@@ -313,12 +313,6 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                             <p className="text-sm text-muted-foreground">Рабочее пространство</p>
                         </div>
                         <div className="flex items-center gap-3">
-                            <div className="px-3 py-1.5 rounded-full bg-purple-500/10 border border-purple-500/20">
-                                <span className="text-sm font-medium text-purple-600 dark:text-purple-400">{club.role}</span>
-                            </div>
-                            <div className="px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
-                                <span className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">{stats?.hourly_rate}₽/час</span>
-                            </div>
                         </div>
                     </div>
                 </div>
@@ -468,42 +462,6 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                                 </CardContent>
                             </Card>
                         </Link>
-
-                        {/* Today */}
-                        <Card className="border-0 shadow-lg bg-white dark:bg-slate-800/50 backdrop-blur">
-                            <CardContent className="pt-6">
-                                <div className="flex items-start justify-between">
-                                    <div>
-                                        <p className="text-sm font-medium text-muted-foreground">Сегодня</p>
-                                        <p className="text-3xl font-bold mt-1">{stats?.today_hours.toFixed(1)}ч</p>
-                                        <p className="text-sm text-emerald-500 font-medium mt-1">
-                                            +{formatCurrency(stats ? stats.today_hours * stats.hourly_rate : 0)}
-                                        </p>
-                                    </div>
-                                    <div className="p-3 rounded-xl bg-purple-500/10">
-                                        <Activity className="h-6 w-6 text-purple-500" />
-                                    </div>
-                                </div>
-                            </CardContent>
-                        </Card>
-
-                        {/* This Week */}
-                        <Card className="border-0 shadow-lg bg-white dark:bg-slate-800/50 backdrop-blur">
-                            <CardContent className="pt-6">
-                                <div className="flex items-start justify-between">
-                                    <div>
-                                        <p className="text-sm font-medium text-muted-foreground">Эта неделя</p>
-                                        <p className="text-3xl font-bold mt-1">{stats?.week_hours.toFixed(1)}ч</p>
-                                        <p className="text-sm text-muted-foreground mt-1">
-                                            {formatCurrency(stats?.week_earnings || 0)}
-                                        </p>
-                                    </div>
-                                    <div className="p-3 rounded-xl bg-blue-500/10">
-                                        <Calendar className="h-6 w-6 text-blue-500" />
-                                    </div>
-                                </div>
-                            </CardContent>
-                        </Card>
 
                         {/* Monthly Salary */}
                         <Card className="border-0 shadow-lg bg-gradient-to-br from-purple-500 to-indigo-600 text-white">
