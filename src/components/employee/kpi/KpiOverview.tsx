@@ -111,7 +111,10 @@ export function KpiOverview({
                     <div className="text-center space-y-4">
                         <div>
                             <p className="text-white/60 text-sm mb-2">
-                                {activeShift ? 'Сегодня нужно выдать минимум' : 'На следующую смену нужно минимум'}
+                                {activeShift 
+                                    ? <span>Чтобы достичь <span className="text-purple-300 font-bold">{nextThreshold.label} ({nextThreshold.percent}%)</span>, сегодня нужно:</span>
+                                    : <span>Чтобы достичь <span className="text-purple-300 font-bold">{nextThreshold.label} ({nextThreshold.percent}%)</span>, делайте в смену:</span>
+                                }
                             </p>
                             <div className="flex items-baseline justify-center gap-2">
                                 <span className="text-4xl md:text-6xl font-black bg-gradient-to-r from-purple-400 via-pink-400 to-blue-400 bg-clip-text text-transparent">
@@ -141,7 +144,7 @@ export function KpiOverview({
 
                         {/* Reward */}
                         <div className="pt-4 border-t border-white/10">
-                            <p className="text-xs text-white/50 mb-1">Получите бонус</p>
+                            <p className="text-xs text-white/50 mb-1">Премия за этот уровень</p>
                             <p className="text-3xl font-black text-emerald-400">+{formatCurrency(nextThreshold.potential_bonus)}</p>
                         </div>
                     </div>
@@ -163,9 +166,15 @@ export function KpiOverview({
                                 style={{ width: `${progressPercent}%` }}
                             />
                         </div>
-                        <div className="flex justify-between text-xs">
-                            <span className="text-white/40">{formatCurrency(kpi.current_value)}</span>
-                            <span className="text-white/40">{formatCurrency(nextThreshold.planned_month_threshold || nextThreshold.monthly_threshold)}</span>
+                        <div className="flex justify-between text-xs pt-1">
+                            <div>
+                                <p className="text-white/50 mb-0.5">Выручка ({shiftsCount} смен)</p>
+                                <p className="font-bold text-white text-sm">{formatCurrency(kpi.current_value)}</p>
+                            </div>
+                            <div className="text-right">
+                                <p className="text-white/50 mb-0.5">Цель</p>
+                                <p className="font-bold text-white text-sm">{formatCurrency(nextThreshold.planned_month_threshold || nextThreshold.monthly_threshold)}</p>
+                            </div>
                         </div>
                     </div>
 
