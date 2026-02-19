@@ -28,6 +28,9 @@ export function ProductsTab({ products, categories }: ProductsTabProps) {
     
     const [isDialogOpen, setIsDialogOpen] = useState(false)
     const [editingProduct, setEditingProduct] = useState<Partial<Product> | null>(null)
+    const [desiredMarkup, setDesiredMarkup] = useState<string>("")
+    const [desiredMargin, setDesiredMargin] = useState<string>("")
+    
     const [isBulkDialogOpen, setIsBulkDialogOpen] = useState(false)
     const [bulkAction, setBulkAction] = useState<{ type: 'fixed' | 'percent', value: string }>({ type: 'fixed', value: '' })
 
@@ -39,6 +42,32 @@ export function ProductsTab({ products, categories }: ProductsTabProps) {
         const matchesCategory = categoryFilter === "all" || (p.category_id?.toString() === categoryFilter)
         return matchesSearch && matchesCategory
     })
+
+    // Price Calculation Logic
+    const calculatePrices = (type: 'markup' | 'margin' | 'selling', value: number) => {
+        if (!editingProduct) return
+
+        const cost = Number(editingProduct.cost_price) || 0
+        if (cost <= 0) return
+
+        if (type === 'markup') {
+            // Selling = Cost * (1 + Markup/100)
+            const selling = cost * (1 + value / 100)
+            setEditingProduct(prev => ({ ...prev!, selling_price: Math.ceil(selling) }))
+            setDesiredMargin(((selling - cost) / selling * 100).toFixed(1))
+        } else if (type === 'margin') {
+            // Selling = Cost / (1 - Margin/100)
+            if (value >= 100) return // Avoid division by zero
+            const selling = cost / (1 - value / 100)
+            setEditingProduct(prev => ({ ...prev!, selling_price: Math.ceil(selling) }))
+            setDesiredMarkup(((selling - cost) / cost * 100).toFixed(1))
+        } else if (type === 'selling') {
+            // Calculate Markup and Margin from Selling
+            const selling = value
+            setDesiredMarkup(((selling - cost) / cost * 100).toFixed(1))
+            setDesiredMargin(((selling - cost) / selling * 100).toFixed(1))
+        }
+    }
 
     // Actions
     const handleSave = async (e: React.FormEvent) => {
@@ -67,6 +96,8 @@ export function ProductsTab({ products, categories }: ProductsTabProps) {
                 }
                 setIsDialogOpen(false)
                 setEditingProduct(null)
+                setDesiredMarkup("")
+                setDesiredMargin("")
             } catch (err) {
                 console.error(err)
                 alert("Ошибка при сохранении")
@@ -138,7 +169,9 @@ export function ProductsTab({ products, categories }: ProductsTabProps) {
                         </Button>
                     )}
                     <Button onClick={() => {
-                        setEditingProduct({ is_active: true, current_stock: 0 })
+                        setEditingProduct({ is_active: true, current_stock: 0, cost_price: 0, selling_price: 0 })
+                        setDesiredMarkup("")
+                        setDesiredMargin("")
                         setIsDialogOpen(true)
                     }}>
                         <Plus className="mr-2 h-4 w-4" />
@@ -164,7 +197,10 @@ export function ProductsTab({ products, categories }: ProductsTabProps) {
                             <TableHead>Категория</TableHead>
                             <TableHead className="text-right">Закупка</TableHead>
                             <TableHead className="text-right">Продажа</TableHead>
+                            <TableHead className="text-right">Наценка</TableHead>
+                            <TableHead className="text-right">Маржа</TableHead>
                             <TableHead className="text-right">Остаток</TableHead>
+                            <TableHead className="text-right">Сумма</TableHead>
                             <TableHead className="w-[50px]"></TableHead>
                         </TableRow>
                     </TableHeader>
@@ -188,9 +224,32 @@ export function ProductsTab({ products, categories }: ProductsTabProps) {
                                 <TableCell className="text-right">{product.cost_price} ₽</TableCell>
                                 <TableCell className="text-right font-bold">{product.selling_price} ₽</TableCell>
                                 <TableCell className="text-right">
+                                    {product.cost_price > 0 ? (
+                                        <Badge variant={product.selling_price >= product.cost_price ? "outline" : "destructive"}>
+                                            {Math.round(((product.selling_price - product.cost_price) / product.cost_price) * 100)}%
+                                        </Badge>
+                                    ) : (
+                                        <span className="text-muted-foreground">—</span>
+                                    )}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                    {product.selling_price > 0 ? (
+                                        <span className="text-sm font-medium">
+                                            {Math.round(((product.selling_price - product.cost_price) / product.selling_price) * 100)}%
+                                        </span>
+                                    ) : (
+                                        <span className="text-muted-foreground">—</span>
+                                    )}
+                                </TableCell>
+                                <TableCell className="text-right">
                                     <Badge variant={product.current_stock > 0 ? "secondary" : "destructive"}>
                                         {product.current_stock} шт
                                     </Badge>
+                                </TableCell>
+                                <TableCell className="text-right">
+                                    <span className="text-sm text-muted-foreground">
+                                        {(product.current_stock * product.cost_price).toLocaleString()} ₽
+                                    </span>
                                 </TableCell>
                                 <TableCell>
                                     <DropdownMenu>
@@ -202,6 +261,14 @@ export function ProductsTab({ products, categories }: ProductsTabProps) {
                                         <DropdownMenuContent align="end">
                                             <DropdownMenuItem onClick={() => {
                                                 setEditingProduct(product)
+                                                // Calculate initial markup/margin for display
+                                                if (product.cost_price > 0 && product.selling_price > 0) {
+                                                    setDesiredMarkup(((product.selling_price - product.cost_price) / product.cost_price * 100).toFixed(1))
+                                                    setDesiredMargin(((product.selling_price - product.cost_price) / product.selling_price * 100).toFixed(1))
+                                                } else {
+                                                    setDesiredMarkup("")
+                                                    setDesiredMargin("")
+                                                }
                                                 setIsDialogOpen(true)
                                             }}>
                                                 <Pencil className="mr-2 h-4 w-4" /> Редактировать
@@ -217,7 +284,7 @@ export function ProductsTab({ products, categories }: ProductsTabProps) {
                         ))}
                         {filteredProducts.length === 0 && (
                             <TableRow>
-                                <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                                <TableCell colSpan={10} className="h-24 text-center text-muted-foreground">
                                     Товары не найдены
                                 </TableCell>
                             </TableRow>
@@ -247,7 +314,22 @@ export function ProductsTab({ products, categories }: ProductsTabProps) {
                                 <Input 
                                     type="number" 
                                     value={editingProduct?.cost_price || ''} 
-                                    onChange={e => setEditingProduct(prev => ({ ...prev!, cost_price: Number(e.target.value) }))}
+                                    onChange={e => {
+                                        const cost = Number(e.target.value)
+                                        // Update cost price
+                                        setEditingProduct(prev => {
+                                            const newState = { ...prev!, cost_price: cost }
+                                            
+                                            // If we have a desired markup, recalculate selling price
+                                            const markup = parseFloat(desiredMarkup)
+                                            if (!isNaN(markup) && cost > 0) {
+                                                const selling = cost * (1 + markup / 100)
+                                                newState.selling_price = Math.ceil(selling)
+                                            }
+                                            
+                                            return newState
+                                        })
+                                    }}
                                 />
                             </div>
                             <div className="space-y-2">
@@ -255,11 +337,55 @@ export function ProductsTab({ products, categories }: ProductsTabProps) {
                                 <Input 
                                     type="number" 
                                     value={editingProduct?.selling_price || ''} 
-                                    onChange={e => setEditingProduct(prev => ({ ...prev!, selling_price: Number(e.target.value) }))}
+                                    onChange={e => {
+                                        const selling = Number(e.target.value)
+                                        setEditingProduct(prev => ({ ...prev!, selling_price: selling }))
+                                        
+                                        // Recalculate markup/margin based on new selling price
+                                        if (editingProduct?.cost_price && editingProduct.cost_price > 0) {
+                                            const cost = editingProduct.cost_price
+                                            const markup = ((selling - cost) / cost * 100).toFixed(1)
+                                            const margin = ((selling - cost) / selling * 100).toFixed(1)
+                                            setDesiredMarkup(markup)
+                                            setDesiredMargin(margin)
+                                        }
+                                    }}
                                     required
                                 />
                             </div>
                         </div>
+
+                        {/* Price Calculator Tools */}
+                        <div className="grid grid-cols-2 gap-4 bg-slate-50 p-4 rounded-lg border">
+                             <div className="space-y-2">
+                                <Label className="text-xs text-muted-foreground">Желаемая наценка (%)</Label>
+                                <Input 
+                                    type="number"
+                                    placeholder="Например: 150"
+                                    value={desiredMarkup}
+                                    onChange={e => {
+                                        setDesiredMarkup(e.target.value)
+                                        calculatePrices('markup', parseFloat(e.target.value))
+                                    }}
+                                    disabled={!editingProduct?.cost_price || editingProduct.cost_price <= 0}
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label className="text-xs text-muted-foreground">Желаемая маржа (%)</Label>
+                                <Input 
+                                    type="number"
+                                    placeholder="Например: 40"
+                                    value={desiredMargin}
+                                    onChange={e => {
+                                        setDesiredMargin(e.target.value)
+                                        calculatePrices('margin', parseFloat(e.target.value))
+                                    }}
+                                    disabled={!editingProduct?.cost_price || editingProduct.cost_price <= 0}
+                                />
+                            </div>
+                        </div>
+
+                        <div className="space-y-2">
                         <div className="space-y-2">
                             <Label>Текущий остаток</Label>
                             <Input 
