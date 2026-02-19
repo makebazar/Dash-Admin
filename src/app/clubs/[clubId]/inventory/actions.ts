@@ -175,10 +175,10 @@ export async function updateWarehouse(id: number, clubId: string, userId: string
 
 export async function getEmployees(clubId: string) {
     const res = await query(`
-        SELECT u.id, u.full_name, ce.role 
+        SELECT u.id, u.full_name, 'Сотрудник' as role 
         FROM club_employees ce
         JOIN users u ON ce.user_id = u.id
-        WHERE ce.club_id = $1 AND ce.is_active = TRUE
+        WHERE ce.club_id = $1 AND ce.is_active = true
         ORDER BY u.full_name
     `, [clubId])
     return res.rows as { id: string, full_name: string, role: string }[]
