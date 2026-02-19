@@ -57,6 +57,8 @@ interface RecentShift {
     earnings: number
 }
 
+import { ShiftClosingWizard } from "./_components/ShiftClosingWizard"
+
 export default function EmployeeClubPage({ params }: { params: Promise<{ clubId: string }> }) {
     const router = useRouter()
     const [clubId, setClubId] = useState<string>('')
@@ -79,7 +81,14 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
     const [reportTemplate, setReportTemplate] = useState<any>(null)
     const [reportData, setReportData] = useState<Record<string, any>>({})
 
+    const [currentUserId, setCurrentUserId] = useState<string>('')
+
     useEffect(() => {
+        // Fetch current user ID
+        fetch('/api/auth/me').then(res => res.json()).then(data => {
+            if (data.user) setCurrentUserId(data.user.id)
+        })
+        
         params.then(p => {
             setClubId(p.clubId)
             fetchData(p.clubId)
@@ -520,42 +529,17 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
             </div>
 
             {/* Report Modal */}
-            <Dialog open={isReportModalOpen} onOpenChange={setIsReportModalOpen}>
-                <DialogContent className="max-w-md bg-slate-950 border-slate-800 text-white">
-                    <DialogHeader>
-                        <DialogTitle>Отчет о смене</DialogTitle>
-                        <DialogDescription className="text-slate-400">
-                            Пожалуйста, заполните данные перед закрытием смены
-                        </DialogDescription>
-                    </DialogHeader>
-                    <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto pr-2">
-                        {reportTemplate?.schema.map((field: any, idx: number) => (
-                            <div key={idx} className="space-y-2">
-                                <Label>
-                                    {field.custom_label}
-                                    {field.is_required && <span className="text-red-500 ml-1">*</span>}
-                                </Label>
-                                <Input
-                                    required={field.is_required}
-                                    type={field.metric_key.includes('comment') ? 'text' : 'number'}
-                                    className="bg-slate-900 border-slate-700"
-                                    onChange={(e) => setReportData({ ...reportData, [field.metric_key]: e.target.value })}
-                                />
-                            </div>
-                        ))}
-                    </div>
-                    <DialogFooter>
-                        <Button
-                            onClick={() => submitEndShift(reportData)}
-                            disabled={isActionLoading}
-                            className="w-full bg-purple-600 hover:bg-purple-700 text-white"
-                        >
-                            {isActionLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                            Отправить отчет и закрыть смену
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+            {activeShift && club && (
+                <ShiftClosingWizard 
+                    isOpen={isReportModalOpen}
+                    onClose={() => setIsReportModalOpen(false)}
+                    onComplete={(data) => submitEndShift(data)}
+                    clubId={clubId}
+                    userId={currentUserId}
+                    reportTemplate={reportTemplate}
+                    activeShiftId={activeShift.id}
+                />
+            )}
 
             {/* Intermediate Indicators Modal */}
             <Dialog open={isIndicatorsModalOpen} onOpenChange={setIsIndicatorsModalOpen}>
