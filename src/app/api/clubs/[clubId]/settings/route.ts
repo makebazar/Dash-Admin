@@ -17,7 +17,7 @@ export async function GET(
 
         // Check ownership
         const result = await query(
-            `SELECT id, name, address, timezone, day_start_hour, night_start_hour FROM clubs WHERE id = $1 AND owner_id = $2`,
+            `SELECT id, name, address, timezone, day_start_hour, night_start_hour, inventory_required FROM clubs WHERE id = $1 AND owner_id = $2`,
             [clubId, userId]
         );
 
@@ -82,6 +82,10 @@ export async function PATCH(
             updates.push(`night_start_hour = $${idx++}`);
             values.push(body.night_start_hour);
         }
+        if (body.inventory_required !== undefined) {
+            updates.push(`inventory_required = $${idx++}`);
+            values.push(body.inventory_required);
+        }
 
         if (updates.length === 0) {
             return NextResponse.json({ error: 'No fields to update' }, { status: 400 });
@@ -90,7 +94,7 @@ export async function PATCH(
         values.push(clubId);
 
         const result = await query(
-            `UPDATE clubs SET ${updates.join(', ')} WHERE id = $${idx} RETURNING id, name, address, timezone, day_start_hour, night_start_hour`,
+            `UPDATE clubs SET ${updates.join(', ')} WHERE id = $${idx} RETURNING id, name, address, timezone, day_start_hour, night_start_hour, inventory_required`,
             values
         );
 

@@ -30,7 +30,7 @@ export async function GET() {
 
         // Get employee clubs with role
         const employeeClubsResult = await query(
-            `SELECT c.id, c.name, r.name as role_name, r.id as role_id
+            `SELECT c.id, c.name, c.inventory_required, r.name as role_name, r.id as role_id
        FROM clubs c
        JOIN club_employees ce ON c.id = ce.club_id
        LEFT JOIN users u ON ce.user_id = u.id
@@ -48,6 +48,7 @@ export async function GET() {
         const employeeClubs = employeeClubsResult.rows.map(row => ({
             id: row.id,
             name: row.name,
+            inventory_required: row.inventory_required,
             role: row.role_name || 'Сотрудник',
             role_id: row.role_id
         }));

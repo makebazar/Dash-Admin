@@ -17,6 +17,7 @@ interface ShiftClosingWizardProps {
     userId: string
     reportTemplate: any
     activeShiftId: number
+    skipInventory?: boolean
 }
 
 export function ShiftClosingWizard({
@@ -26,7 +27,8 @@ export function ShiftClosingWizard({
     clubId,
     userId,
     reportTemplate,
-    activeShiftId
+    activeShiftId,
+    skipInventory = false
 }: ShiftClosingWizardProps) {
     const [step, setStep] = useState<1 | 2 | 3>(1)
     const [reportData, setReportData] = useState<any>({})
@@ -54,6 +56,11 @@ export function ShiftClosingWizard({
         
         if (missing.length > 0) {
             alert(`Заполните обязательные поля`)
+            return
+        }
+
+        if (skipInventory) {
+            onComplete(reportData)
             return
         }
         
@@ -152,11 +159,13 @@ export function ShiftClosingWizard({
         <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
             <DialogContent className="max-w-4xl bg-slate-950 border-slate-800 text-white max-h-[90vh] overflow-hidden flex flex-col">
                 <DialogHeader>
-                    <DialogTitle>Закрытие смены: Шаг {step} из 3</DialogTitle>
+                    <DialogTitle>
+                        {skipInventory ? "Закрытие смены" : `Закрытие смены: Шаг ${step} из 3`}
+                    </DialogTitle>
                     <DialogDescription className="text-slate-400">
                         {step === 1 && "Заполните финансовый отчет"}
-                        {step === 2 && "Проведите инвентаризацию склада"}
-                        {step === 3 && "Сверка итогов"}
+                        {!skipInventory && step === 2 && "Проведите инвентаризацию склада"}
+                        {!skipInventory && step === 3 && "Сверка итогов"}
                     </DialogDescription>
                 </DialogHeader>
 
@@ -277,7 +286,16 @@ export function ShiftClosingWizard({
                 <DialogFooter className="mt-4 border-t border-slate-800 pt-4">
                     {step === 1 && (
                         <Button onClick={handleStep1Submit} className="w-full bg-purple-600 hover:bg-purple-700">
-                            Далее: Инвентаризация <ArrowRight className="ml-2 h-4 w-4" />
+                            {skipInventory ? (
+                                <>
+                                    <CheckCircle2 className="mr-2 h-4 w-4" />
+                                    Завершить смену
+                                </>
+                            ) : (
+                                <>
+                                    Далее: Инвентаризация <ArrowRight className="ml-2 h-4 w-4" />
+                                </>
+                            )}
                         </Button>
                     )}
                     {step === 2 && (

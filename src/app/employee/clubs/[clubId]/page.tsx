@@ -19,6 +19,7 @@ interface ClubInfo {
     id: number
     name: string
     role: string
+    inventory_required: boolean
 }
 
 interface ActiveShift {
@@ -538,6 +539,7 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                     userId={currentUserId}
                     reportTemplate={reportTemplate}
                     activeShiftId={activeShift.id}
+                    skipInventory={!club.inventory_required}
                 />
             )}
 

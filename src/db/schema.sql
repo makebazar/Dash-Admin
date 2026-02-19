@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS clubs (
     day_start_hour INTEGER DEFAULT 9,
     night_start_hour INTEGER DEFAULT 21,
     default_monthly_shifts INTEGER DEFAULT 20,
+    inventory_required BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT NOW()
 );
 

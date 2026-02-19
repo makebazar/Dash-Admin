@@ -5,7 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Loader2, Save, Globe, Building, MapPin, Sun, Moon } from "lucide-react"
+import { Switch } from "@/components/ui/switch"
+import { Loader2, Save, Globe, Building, MapPin, Sun, Moon, Package } from "lucide-react"
 
 // Common Russian timezones
 const TIMEZONES = [
@@ -32,6 +33,7 @@ interface ClubSettings {
     timezone: string
     day_start_hour: number
     night_start_hour: number
+    inventory_required: boolean
 }
 
 export default function GeneralSettingsPage({ params }: { params: Promise<{ clubId: string }> }) {
@@ -46,6 +48,7 @@ export default function GeneralSettingsPage({ params }: { params: Promise<{ club
     const [timezone, setTimezone] = useState('Europe/Moscow')
     const [dayStartHour, setDayStartHour] = useState(8)
     const [nightStartHour, setNightStartHour] = useState(20)
+    const [inventoryRequired, setInventoryRequired] = useState(false)
 
     useEffect(() => {
         params.then(p => {
@@ -65,6 +68,7 @@ export default function GeneralSettingsPage({ params }: { params: Promise<{ club
                 setTimezone(data.club.timezone || 'Europe/Moscow')
                 setDayStartHour(data.club.day_start_hour ?? 8)
                 setNightStartHour(data.club.night_start_hour ?? 20)
+                setInventoryRequired(data.club.inventory_required ?? false)
             }
         } catch (error) {
             console.error('Error:', error)
@@ -84,7 +88,8 @@ export default function GeneralSettingsPage({ params }: { params: Promise<{ club
                     address,
                     timezone,
                     day_start_hour: dayStartHour,
-                    night_start_hour: nightStartHour
+                    night_start_hour: nightStartHour,
+                    inventory_required: inventoryRequired
                 })
             })
 
@@ -256,6 +261,34 @@ export default function GeneralSettingsPage({ params }: { params: Promise<{ club
                                     Ночная смена: с {formatHour(nightStartHour)} до {formatHour(dayStartHour)}
                                 </li>
                             </ul>
+                        </div>
+                    </CardContent>
+                </Card>
+
+                {/* Inventory Settings Card */}
+                <Card className="border-blue-500/20">
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <Package className="h-5 w-5 text-blue-500" />
+                            Инвентаризация
+                        </CardTitle>
+                        <CardDescription>
+                            Настройки проведения инвентаризаций при закрытии смены
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="flex items-center justify-between space-x-2">
+                            <Label htmlFor="inventory-required" className="flex flex-col space-y-1">
+                                <span>Обязательная инвентаризация</span>
+                                <span className="font-normal text-xs text-muted-foreground">
+                                    Если включено, администратор не сможет закрыть смену без проведения инвентаризации
+                                </span>
+                            </Label>
+                            <Switch
+                                id="inventory-required"
+                                checked={inventoryRequired}
+                                onCheckedChange={setInventoryRequired}
+                            />
                         </div>
                     </CardContent>
                 </Card>
