@@ -689,6 +689,7 @@ export async function createProduct(clubId: string, userId: string, data: { name
         }
         
         await client.query('COMMIT')
+        await logOperation(clubId, userId, 'CREATE_PRODUCT', 'PRODUCT', productId, data)
     } catch (e) {
         await client.query('ROLLBACK')
         throw e
@@ -710,6 +711,7 @@ export async function updateProduct(id: number, clubId: string, userId: string, 
         `, [data.name, data.category_id, data.cost_price, data.selling_price, data.min_stock_level || 0, data.is_active, id])
         
         await client.query('COMMIT')
+        await logOperation(clubId, userId, 'UPDATE_PRODUCT', 'PRODUCT', id, data)
     } catch (e) {
         await client.query('ROLLBACK')
         throw e
