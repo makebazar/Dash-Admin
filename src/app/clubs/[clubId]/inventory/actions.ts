@@ -813,7 +813,7 @@ export async function getSupplies(clubId: string) {
     return res.rows as Supply[]
 }
 
-export async function createSupply(clubId: string, userId: string, data: { supplier_name: string, notes: string, items: { product_id: number, quantity: number, cost_price: number }[] }) {
+export async function createSupply(clubId: string, userId: string, data: { supplier_name: string, notes: string, items: { product_id: number, quantity: number, cost_price: number }[], warehouse_id?: number }) {
     const client = await import("@/db").then(m => m.getClient())
     try {
         await client.query('BEGIN')
@@ -827,9 +827,14 @@ export async function createSupply(clubId: string, userId: string, data: { suppl
         `, [clubId, data.supplier_name, data.notes, totalCost, userId])
         const supplyId = supplyRes.rows[0].id
 
-            // 2. Add Items & Update Stock (Default Warehouse)
-            const defaultWh = await client.query('SELECT id FROM warehouses WHERE club_id = $1 AND is_default = true LIMIT 1', [clubId])
-            const warehouseId = defaultWh.rows[0]?.id
+            // 2. Add Items & Update Stock
+            let warehouseId = data.warehouse_id
+            
+            // If no warehouse specified, try to find default
+            if (!warehouseId) {
+                const defaultWh = await client.query('SELECT id FROM warehouses WHERE club_id = $1 AND is_default = true LIMIT 1', [clubId])
+                warehouseId = defaultWh.rows[0]?.id
+            }
 
             for (const item of data.items) {
                 await client.query(`
@@ -838,7 +843,6 @@ export async function createSupply(clubId: string, userId: string, data: { suppl
                 `, [supplyId, item.product_id, item.quantity, item.cost_price, item.quantity * item.cost_price])
 
                 // Update product stock and cost price (last price)
-                // Supplies usually go to Main Warehouse
                 if (warehouseId) {
                     await client.query(`
                         INSERT INTO warehouse_stock (warehouse_id, product_id, quantity)
@@ -859,7 +863,7 @@ export async function createSupply(clubId: string, userId: string, data: { suppl
             }
 
         await client.query('COMMIT')
-        await logOperation(clubId, userId, 'CREATE_SUPPLY', 'SUPPLY', supplyId, { itemsCount: data.items.length, totalCost })
+        await logOperation(clubId, userId, 'CREATE_SUPPLY', 'SUPPLY', supplyId, { itemsCount: data.items.length, totalCost, warehouseId })
     } catch (e) {
         await client.query('ROLLBACK')
         throw e

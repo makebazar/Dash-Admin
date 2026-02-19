@@ -98,7 +98,7 @@ export default async function InventoryPage({ params }: { params: Promise<{ club
                 </TabsContent>
                 
                 <TabsContent value="supplies" className="mt-0">
-                    <SuppliesTab supplies={supplies} products={products} currentUserId={userId} />
+                    <SuppliesTab supplies={supplies} products={products} warehouses={warehouses} currentUserId={userId} />
                 </TabsContent>
 
                 <TabsContent value="procurement" className="mt-0">

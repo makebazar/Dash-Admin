@@ -10,17 +10,19 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { createSupply, Supply, Product } from "../actions"
-import { useParams } from "next/navigation"
+import { createSupply, Supply, Product, Warehouse } from "../actions"
+import { useParams, useRouter } from "next/navigation"
 
 interface SuppliesTabProps {
     supplies: Supply[]
     products: Product[]
+    warehouses: Warehouse[]
     currentUserId: string
 }
 
-export function SuppliesTab({ supplies, products, currentUserId }: SuppliesTabProps) {
+export function SuppliesTab({ supplies, products, warehouses, currentUserId }: SuppliesTabProps) {
     const params = useParams()
+    const router = useRouter()
     const clubId = params.clubId as string
     
     const [isDialogOpen, setIsDialogOpen] = useState(false)
@@ -29,6 +31,7 @@ export function SuppliesTab({ supplies, products, currentUserId }: SuppliesTabPr
     // Form State
     const [supplier, setSupplier] = useState("")
     const [notes, setNotes] = useState("")
+    const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>("")
     const [items, setItems] = useState<{ productId: number, quantity: number, cost: number }[]>([])
     
     // New Item State
@@ -64,15 +67,18 @@ export function SuppliesTab({ supplies, products, currentUserId }: SuppliesTabPr
             await createSupply(clubId, currentUserId, {
                 supplier_name: supplier,
                 notes,
+                warehouse_id: selectedWarehouseId ? Number(selectedWarehouseId) : undefined,
                 items: items.map(i => ({
                     product_id: i.productId,
                     quantity: i.quantity,
                     cost_price: i.cost
                 }))
             })
+            router.refresh()
             setIsDialogOpen(false)
             setSupplier("")
             setNotes("")
+            setSelectedWarehouseId("")
             setItems([])
         })
     }
@@ -148,8 +154,23 @@ export function SuppliesTab({ supplies, products, currentUserId }: SuppliesTabPr
                             />
                         </div>
                         <div className="space-y-2">
+                            <Label>Склад приема</Label>
+                            <Select value={selectedWarehouseId} onValueChange={setSelectedWarehouseId}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="По умолчанию (Основной)" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {warehouses.map(w => (
+                                        <SelectItem key={w.id} value={w.id.toString()}>
+                                            {w.name} {w.is_default ? '(Основной)' : ''}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="space-y-2 col-span-2">
                             <Label>Заметки</Label>
-                            <Input 
+                            <Textarea 
                                 placeholder="Номер накладной и т.д." 
                                 value={notes}
                                 onChange={e => setNotes(e.target.value)}
