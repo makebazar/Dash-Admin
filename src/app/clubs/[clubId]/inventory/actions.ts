@@ -26,6 +26,14 @@ export type Product = {
     abc_category?: string
     is_active: boolean
     category_name?: string
+
+    // Analytics Fields
+    sales_velocity: number
+    ideal_stock_days: number
+    last_restock_date?: string
+    
+    // Calculated Runway (Days left)
+    days_of_stock?: number
 }
 
 export type Category = {
@@ -387,15 +395,6 @@ export async function completeTask(taskId: number, userId: string, clubId: strin
         client.release()
     }
     revalidatePath(`/clubs/${clubId}`)
-}
-
-    // Analytics Fields
-    sales_velocity: number
-    ideal_stock_days: number
-    last_restock_date?: string
-    
-    // Calculated Runway (Days left)
-    days_of_stock?: number
 }
 
 // --- ANALYTICS & PROCUREMENT ---
