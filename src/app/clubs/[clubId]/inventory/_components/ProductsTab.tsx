@@ -386,7 +386,6 @@ export function ProductsTab({ products, categories }: ProductsTabProps) {
                         </div>
 
                         <div className="space-y-2">
-                        <div className="space-y-2">
                             <Label>Текущий остаток</Label>
                             <Input 
                                 type="number" 
