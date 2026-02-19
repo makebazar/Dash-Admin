@@ -221,11 +221,11 @@ export function ProductsTab({ products, categories }: ProductsTabProps) {
                                         <Badge variant="outline">{product.category_name}</Badge>
                                     ) : <span className="text-muted-foreground text-sm">—</span>}
                                 </TableCell>
-                                <TableCell className="text-right">{product.cost_price} ₽</TableCell>
-                                <TableCell className="text-right font-bold">{product.selling_price} ₽</TableCell>
+                                <TableCell className="text-right whitespace-nowrap">{product.cost_price} ₽</TableCell>
+                                <TableCell className="text-right font-bold whitespace-nowrap">{product.selling_price} ₽</TableCell>
                                 <TableCell className="text-right">
                                     {product.cost_price > 0 ? (
-                                        <Badge variant={product.selling_price >= product.cost_price ? "outline" : "destructive"}>
+                                        <Badge variant={product.selling_price >= product.cost_price ? "secondary" : "destructive"}>
                                             {Math.round(((product.selling_price - product.cost_price) / product.cost_price) * 100)}%
                                         </Badge>
                                     ) : (
@@ -246,7 +246,7 @@ export function ProductsTab({ products, categories }: ProductsTabProps) {
                                         {product.current_stock} шт
                                     </Badge>
                                 </TableCell>
-                                <TableCell className="text-right">
+                                <TableCell className="text-right whitespace-nowrap">
                                     <span className="text-sm text-muted-foreground">
                                         {(product.current_stock * product.cost_price).toLocaleString()} ₽
                                     </span>
