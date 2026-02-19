@@ -1,5 +1,5 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { getProducts, getCategories, getSupplies, getInventories, getWarehouses, getEmployees, getClubTasks, getProcurementLists } from "./actions"
+import { getProducts, getCategories, getSupplies, getInventories, getWarehouses, getEmployees, getClubTasks, getProcurementLists, getSuppliersForSelect } from "./actions"
 import { ProductsTab } from "./_components/ProductsTab"
 import { SuppliesTab } from "./_components/SuppliesTab"
 import { InventoryTab } from "./_components/InventoryTab"
@@ -15,7 +15,7 @@ export default async function InventoryPage({ params }: { params: Promise<{ club
 
     if (!userId) return <div className="p-8 text-red-500">Доступ запрещен. Пожалуйста, авторизуйтесь.</div>
 
-    const [products, categories, supplies, inventories, warehouses, employees, tasks, procurementLists] = await Promise.all([
+    const [products, categories, supplies, inventories, warehouses, employees, tasks, procurementLists, suppliers] = await Promise.all([
         getProducts(clubId),
         getCategories(clubId),
         getSupplies(clubId),
@@ -23,7 +23,8 @@ export default async function InventoryPage({ params }: { params: Promise<{ club
         getWarehouses(clubId),
         getEmployees(clubId),
         getClubTasks(clubId),
-        getProcurementLists(clubId)
+        getProcurementLists(clubId),
+        getSuppliersForSelect(clubId)
     ])
 
     return (
@@ -98,7 +99,7 @@ export default async function InventoryPage({ params }: { params: Promise<{ club
                 </TabsContent>
                 
                 <TabsContent value="supplies" className="mt-0">
-                    <SuppliesTab supplies={supplies} products={products} warehouses={warehouses} currentUserId={userId} />
+                    <SuppliesTab supplies={supplies} products={products} warehouses={warehouses} suppliers={suppliers} currentUserId={userId} />
                 </TabsContent>
 
                 <TabsContent value="procurement" className="mt-0">

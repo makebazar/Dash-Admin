@@ -799,7 +799,54 @@ export async function bulkUpdatePrices(ids: number[], clubId: string, type: 'fix
     revalidatePath(`/clubs/${clubId}/inventory`)
 }
 
+export type Supplier = {
+    id: number
+    club_id: number
+    name: string
+    contact_info?: string
+    is_active: boolean
+    created_at: string
+}
+
+// --- SUPPLIERS ---
+
+export async function getSuppliers(clubId: string) {
+    const res = await query(`
+        SELECT * FROM warehouse_suppliers 
+        WHERE club_id = $1 AND is_active = true 
+        ORDER BY name
+    `, [clubId])
+    return res.rows as Supplier[]
+}
+
+export async function createSupplier(clubId: string, name: string, contactInfo?: string) {
+    // Check if exists (case insensitive)
+    const existing = await query(`
+        SELECT id FROM warehouse_suppliers 
+        WHERE club_id = $1 AND LOWER(name) = LOWER($2)
+    `, [clubId, name])
+    
+    if (existing.rowCount && existing.rowCount > 0) {
+        return existing.rows[0].id // Return existing ID if found
+    }
+
+    const res = await query(`
+        INSERT INTO warehouse_suppliers (club_id, name, contact_info)
+        VALUES ($1, $2, $3)
+        RETURNING id
+    `, [clubId, name, contactInfo])
+    
+    revalidatePath(`/clubs/${clubId}/inventory`)
+    return res.rows[0].id
+}
+
 // --- SUPPLIES ---
+
+export async function getSuppliersForSelect(clubId: string) {
+    const res = await query(`SELECT id, name FROM warehouse_suppliers WHERE club_id = $1 AND is_active = true ORDER BY name`, [clubId])
+    return res.rows
+}
+
 
 export async function getSupplies(clubId: string) {
     const res = await query(`
@@ -818,16 +865,30 @@ export async function createSupply(clubId: string, userId: string, data: { suppl
     try {
         await client.query('BEGIN')
 
-        // 1. Create Supply
+        // 1. Get or Create Supplier
+        let supplierId: number | null = null
+        if (data.supplier_name) {
+            // Check if exists
+            const existing = await client.query(`SELECT id FROM warehouse_suppliers WHERE club_id = $1 AND LOWER(name) = LOWER($2)`, [clubId, data.supplier_name])
+            if (existing.rowCount && existing.rowCount > 0) {
+                supplierId = existing.rows[0].id
+            } else {
+                // Create new
+                const newSup = await client.query(`INSERT INTO warehouse_suppliers (club_id, name) VALUES ($1, $2) RETURNING id`, [clubId, data.supplier_name])
+                supplierId = newSup.rows[0].id
+            }
+        }
+
+        // 2. Create Supply
         const totalCost = data.items.reduce((acc, item) => acc + (item.quantity * item.cost_price), 0)
         const supplyRes = await client.query(`
-            INSERT INTO warehouse_supplies (club_id, supplier_name, notes, total_cost, created_by)
-            VALUES ($1, $2, $3, $4, $5)
+            INSERT INTO warehouse_supplies (club_id, supplier_name, supplier_id, notes, total_cost, created_by)
+            VALUES ($1, $2, $3, $4, $5, $6)
             RETURNING id
-        `, [clubId, data.supplier_name, data.notes, totalCost, userId])
+        `, [clubId, data.supplier_name, supplierId, data.notes, totalCost, userId])
         const supplyId = supplyRes.rows[0].id
 
-            // 2. Add Items & Update Stock
+            // 3. Add Items & Update Stock
             let warehouseId = data.warehouse_id
             
             // If no warehouse specified, try to find default

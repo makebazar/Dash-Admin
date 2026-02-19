@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useTransition } from "react"
-import { Plus, Search, Calendar, User, Package, Trash2 } from "lucide-react"
+import { useState, useTransition, useMemo } from "react"
+import { Plus, Search, Calendar, User, Package, Trash2, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -12,15 +12,20 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { createSupply, Supply, Product, Warehouse } from "../actions"
 import { useParams, useRouter } from "next/navigation"
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Check, ChevronsUpDown } from "lucide-react"
+import { cn } from "@/lib/utils"
 
 interface SuppliesTabProps {
     supplies: Supply[]
     products: Product[]
     warehouses: Warehouse[]
+    suppliers: { id: number, name: string }[]
     currentUserId: string
 }
 
-export function SuppliesTab({ supplies, products, warehouses, currentUserId }: SuppliesTabProps) {
+export function SuppliesTab({ supplies, products, warehouses, suppliers, currentUserId }: SuppliesTabProps) {
     const params = useParams()
     const router = useRouter()
     const clubId = params.clubId as string
@@ -29,7 +34,9 @@ export function SuppliesTab({ supplies, products, warehouses, currentUserId }: S
     const [isPending, startTransition] = useTransition()
 
     // Form State
-    const [supplier, setSupplier] = useState("")
+    const [supplierName, setSupplierName] = useState("")
+    const [isSupplierOpen, setIsSupplierOpen] = useState(false)
+    
     const [notes, setNotes] = useState("")
     const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>("")
     const [items, setItems] = useState<{ productId: number, quantity: number, cost: number }[]>([])
@@ -38,6 +45,15 @@ export function SuppliesTab({ supplies, products, warehouses, currentUserId }: S
     const [selectedProductId, setSelectedProductId] = useState<string>("")
     const [qty, setQty] = useState("")
     const [cost, setCost] = useState("")
+
+    // When product is selected, pre-fill cost with current cost_price
+    const handleProductSelect = (val: string) => {
+        setSelectedProductId(val)
+        const product = products.find(p => p.id === Number(val))
+        if (product) {
+            setCost(product.cost_price.toString())
+        }
+    }
 
     const handleAddItem = () => {
         if (!selectedProductId || !qty || !cost) return
@@ -61,11 +77,11 @@ export function SuppliesTab({ supplies, products, warehouses, currentUserId }: S
     }
 
     const handleSubmit = async () => {
-        if (!supplier || items.length === 0) return
+        if (!supplierName || items.length === 0) return
         
         startTransition(async () => {
             await createSupply(clubId, currentUserId, {
-                supplier_name: supplier,
+                supplier_name: supplierName,
                 notes,
                 warehouse_id: selectedWarehouseId ? Number(selectedWarehouseId) : undefined,
                 items: items.map(i => ({
@@ -76,7 +92,7 @@ export function SuppliesTab({ supplies, products, warehouses, currentUserId }: S
             })
             router.refresh()
             setIsDialogOpen(false)
-            setSupplier("")
+            setSupplierName("")
             setNotes("")
             setSelectedWarehouseId("")
             setItems([])
@@ -84,6 +100,8 @@ export function SuppliesTab({ supplies, products, warehouses, currentUserId }: S
     }
 
     const totalSum = items.reduce((acc, i) => acc + (i.quantity * i.cost), 0)
+
+    const selectedProduct = products.find(p => p.id.toString() === selectedProductId)
 
     return (
         <div className="space-y-4">
@@ -147,11 +165,56 @@ export function SuppliesTab({ supplies, products, warehouses, currentUserId }: S
                     <div className="grid grid-cols-2 gap-4 py-4">
                         <div className="space-y-2">
                             <Label>Поставщик</Label>
-                            <Input 
-                                placeholder="Например: Metro C&C" 
-                                value={supplier}
-                                onChange={e => setSupplier(e.target.value)}
-                            />
+                            <Popover open={isSupplierOpen} onOpenChange={setIsSupplierOpen}>
+                                <PopoverTrigger asChild>
+                                    <Button
+                                        variant="outline"
+                                        role="combobox"
+                                        aria-expanded={isSupplierOpen}
+                                        className="w-full justify-between"
+                                    >
+                                        {supplierName
+                                            ? supplierName
+                                            : "Выберите или введите..."}
+                                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-[300px] p-0">
+                                    <Command>
+                                        <CommandInput placeholder="Поиск поставщика..." onValueChange={(val) => setSupplierName(val)} />
+                                        <CommandList>
+                                            <CommandEmpty>
+                                                <div className="p-2 text-sm text-muted-foreground">
+                                                    Нет совпадений. Нажмите Enter или выберите, чтобы создать "{supplierName}".
+                                                    <Button variant="ghost" size="sm" className="w-full mt-2" onClick={() => setIsSupplierOpen(false)}>
+                                                        Использовать "{supplierName}"
+                                                    </Button>
+                                                </div>
+                                            </CommandEmpty>
+                                            <CommandGroup heading="Существующие">
+                                                {suppliers.map((sup) => (
+                                                    <CommandItem
+                                                        key={sup.id}
+                                                        value={sup.name}
+                                                        onSelect={(currentValue) => {
+                                                            setSupplierName(currentValue)
+                                                            setIsSupplierOpen(false)
+                                                        }}
+                                                    >
+                                                        <Check
+                                                            className={cn(
+                                                                "mr-2 h-4 w-4",
+                                                                supplierName === sup.name ? "opacity-100" : "opacity-0"
+                                                            )}
+                                                        />
+                                                        {sup.name}
+                                                    </CommandItem>
+                                                ))}
+                                            </CommandGroup>
+                                        </CommandList>
+                                    </Command>
+                                </PopoverContent>
+                            </Popover>
                         </div>
                         <div className="space-y-2">
                             <Label>Склад приема</Label>
@@ -186,7 +249,7 @@ export function SuppliesTab({ supplies, products, warehouses, currentUserId }: S
                         <div className="flex gap-2 items-end">
                             <div className="flex-1 space-y-1">
                                 <Label className="text-xs">Товар</Label>
-                                <Select value={selectedProductId} onValueChange={setSelectedProductId}>
+                                <Select value={selectedProductId} onValueChange={handleProductSelect}>
                                     <SelectTrigger className="bg-white">
                                         <SelectValue placeholder="Выберите товар" />
                                     </SelectTrigger>
@@ -217,6 +280,11 @@ export function SuppliesTab({ supplies, products, warehouses, currentUserId }: S
                                     value={cost}
                                     onChange={e => setCost(e.target.value)}
                                 />
+                                {selectedProduct && selectedProduct.cost_price > 0 && (
+                                    <p className="text-[10px] text-muted-foreground mt-1">
+                                        Посл. закупка: {selectedProduct.cost_price} ₽
+                                    </p>
+                                )}
                             </div>
                             <Button onClick={handleAddItem} disabled={!selectedProductId || !qty || !cost}>
                                 <Plus className="h-4 w-4" />
@@ -270,7 +338,7 @@ export function SuppliesTab({ supplies, products, warehouses, currentUserId }: S
 
                     <DialogFooter className="mt-4">
                         <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Отмена</Button>
-                        <Button onClick={handleSubmit} disabled={isPending || items.length === 0}>
+                        <Button onClick={handleSubmit} disabled={isPending || items.length === 0 || !supplierName}>
                             {isPending && <RefreshCw className="mr-2 h-4 w-4 animate-spin" />}
                             Создать поставку
                         </Button>
