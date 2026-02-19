@@ -8,16 +8,17 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
-import { createInventory, deleteInventory, Inventory, getMetrics } from "../actions"
+import { createInventory, deleteInventory, Inventory, Category, getMetrics } from "../actions"
 import { useParams } from "next/navigation"
 import { ActiveInventory } from "./ActiveInventory"
 
 interface InventoryTabProps {
     inventories: Inventory[]
+    categories: Category[]
     currentUserId: string
 }
 
-export function InventoryTab({ inventories, currentUserId }: InventoryTabProps) {
+export function InventoryTab({ inventories, categories, currentUserId }: InventoryTabProps) {
     const params = useParams()
     const clubId = params.clubId as string
     
@@ -27,6 +28,7 @@ export function InventoryTab({ inventories, currentUserId }: InventoryTabProps) 
     
     // New Inventory State
     const [selectedMetric, setSelectedMetric] = useState("")
+    const [selectedCategory, setSelectedCategory] = useState("all")
 
     // Active Inventory State
     const [activeInventoryId, setActiveInventoryId] = useState<number | null>(null)
@@ -43,7 +45,8 @@ export function InventoryTab({ inventories, currentUserId }: InventoryTabProps) 
         if (!selectedMetric) return
         startTransition(async () => {
             try {
-                const newId = await createInventory(clubId, currentUserId, selectedMetric)
+                const categoryId = selectedCategory === "all" ? null : Number(selectedCategory)
+                const newId = await createInventory(clubId, currentUserId, selectedMetric, categoryId)
                 setIsDialogOpen(false)
                 setActiveInventoryId(newId)
             } catch (e) {
@@ -204,6 +207,20 @@ export function InventoryTab({ inventories, currentUserId }: InventoryTabProps) 
                     </DialogHeader>
                     
                     <div className="space-y-4 py-4">
+                        <div className="space-y-2">
+                            <Label>Категория (что считаем?)</Label>
+                            <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Весь склад" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">Весь склад</SelectItem>
+                                    {categories.map(c => (
+                                        <SelectItem key={c.id} value={c.id.toString()}>{c.name}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
                         <div className="space-y-2">
                             <Label>Метрика выручки</Label>
                             <Select value={selectedMetric} onValueChange={setSelectedMetric}>

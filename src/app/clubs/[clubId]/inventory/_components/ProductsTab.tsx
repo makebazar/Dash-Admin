@@ -10,15 +10,18 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
-import { createProduct, updateProduct, deleteProduct, bulkUpdatePrices, Product, Category } from "../actions"
+import { createProduct, updateProduct, deleteProduct, bulkUpdatePrices, writeOffProduct, getProductHistory, Product, Category } from "../actions"
 import { useParams } from "next/navigation"
+import { format } from "date-fns"
+import { ru } from "date-fns/locale"
 
 interface ProductsTabProps {
     products: Product[]
     categories: Category[]
+    currentUserId: string
 }
 
-export function ProductsTab({ products, categories }: ProductsTabProps) {
+export function ProductsTab({ products, categories, currentUserId }: ProductsTabProps) {
     const params = useParams()
     const clubId = params.clubId as string
     
@@ -33,6 +36,14 @@ export function ProductsTab({ products, categories }: ProductsTabProps) {
     
     const [isBulkDialogOpen, setIsBulkDialogOpen] = useState(false)
     const [bulkAction, setBulkAction] = useState<{ type: 'fixed' | 'percent', value: string }>({ type: 'fixed', value: '' })
+    
+    // Write-off state
+    const [writeOffDialog, setWriteOffDialog] = useState<{ isOpen: boolean, product: Product | null }>({ isOpen: false, product: null })
+    const [writeOffAmount, setWriteOffAmount] = useState("")
+    const [writeOffReason, setWriteOffReason] = useState("")
+
+    // History state
+    const [historyDialog, setHistoryDialog] = useState<{ isOpen: boolean, product: Product | null, logs: any[] }>({ isOpen: false, product: null, logs: [] })
 
     const [isPending, startTransition] = useTransition()
 
@@ -77,21 +88,23 @@ export function ProductsTab({ products, categories }: ProductsTabProps) {
         startTransition(async () => {
             try {
                 if (editingProduct.id) {
-                    await updateProduct(editingProduct.id, clubId, {
+                    await updateProduct(editingProduct.id, clubId, currentUserId, {
                         name: editingProduct.name!,
                         category_id: editingProduct.category_id || null,
                         cost_price: Number(editingProduct.cost_price) || 0,
                         selling_price: Number(editingProduct.selling_price) || 0,
                         current_stock: Number(editingProduct.current_stock) || 0,
+                        min_stock_level: Number(editingProduct.min_stock_level) || 0,
                         is_active: editingProduct.is_active ?? true
                     })
                 } else {
-                    await createProduct(clubId, {
+                    await createProduct(clubId, currentUserId, {
                         name: editingProduct.name!,
                         category_id: editingProduct.category_id || null,
                         cost_price: Number(editingProduct.cost_price) || 0,
                         selling_price: Number(editingProduct.selling_price) || 0,
-                        current_stock: Number(editingProduct.current_stock) || 0
+                        current_stock: Number(editingProduct.current_stock) || 0,
+                        min_stock_level: Number(editingProduct.min_stock_level) || 0
                     })
                 }
                 setIsDialogOpen(false)
@@ -120,6 +133,28 @@ export function ProductsTab({ products, categories }: ProductsTabProps) {
             setSelectedIds(new Set())
             setBulkAction({ type: 'fixed', value: '' })
         })
+    }
+
+    const handleWriteOff = async (e: React.FormEvent) => {
+        e.preventDefault()
+        if (!writeOffDialog.product || !writeOffAmount) return
+
+        startTransition(async () => {
+            try {
+                await writeOffProduct(clubId, currentUserId, writeOffDialog.product!.id, Number(writeOffAmount), writeOffReason)
+                setWriteOffDialog({ isOpen: false, product: null })
+                setWriteOffAmount("")
+                setWriteOffReason("")
+            } catch (err: any) {
+                alert(err.message || "Ошибка при списании")
+            }
+        })
+    }
+
+    const openHistory = async (product: Product) => {
+        setHistoryDialog({ isOpen: true, product, logs: [] })
+        const logs = await getProductHistory(product.id)
+        setHistoryDialog(prev => ({ ...prev, logs }))
     }
 
     // Selection
@@ -205,83 +240,104 @@ export function ProductsTab({ products, categories }: ProductsTabProps) {
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {filteredProducts.map(product => (
-                            <TableRow key={product.id}>
-                                <TableCell>
-                                    <input 
-                                        type="checkbox"
-                                        className="rounded border-gray-300"
-                                        checked={selectedIds.has(product.id)}
-                                        onChange={() => toggleSelection(product.id)}
-                                    />
-                                </TableCell>
-                                <TableCell className="font-medium">{product.name}</TableCell>
-                                <TableCell>
-                                    {product.category_name ? (
-                                        <Badge variant="outline">{product.category_name}</Badge>
-                                    ) : <span className="text-muted-foreground text-sm">—</span>}
-                                </TableCell>
-                                <TableCell className="text-right whitespace-nowrap">{product.cost_price} ₽</TableCell>
-                                <TableCell className="text-right font-bold whitespace-nowrap">{product.selling_price} ₽</TableCell>
-                                <TableCell className="text-right">
-                                    {product.cost_price > 0 ? (
-                                        <Badge variant={product.selling_price >= product.cost_price ? "secondary" : "destructive"}>
-                                            {Math.round(((product.selling_price - product.cost_price) / product.cost_price) * 100)}%
-                                        </Badge>
-                                    ) : (
-                                        <span className="text-muted-foreground">—</span>
-                                    )}
-                                </TableCell>
-                                <TableCell className="text-right">
-                                    {product.selling_price > 0 ? (
-                                        <span className="text-sm font-medium">
-                                            {Math.round(((product.selling_price - product.cost_price) / product.selling_price) * 100)}%
+                        {filteredProducts.map(product => {
+                            const isLowStock = product.min_stock_level > 0 && product.current_stock <= product.min_stock_level
+                            return (
+                                <TableRow key={product.id} className={isLowStock ? "bg-red-50 hover:bg-red-100" : ""}>
+                                    <TableCell>
+                                        <input 
+                                            type="checkbox"
+                                            className="rounded border-gray-300"
+                                            checked={selectedIds.has(product.id)}
+                                            onChange={() => toggleSelection(product.id)}
+                                        />
+                                    </TableCell>
+                                    <TableCell className="font-medium">
+                                        {product.name}
+                                        {isLowStock && <span className="ml-2 text-xs text-red-600 font-bold">!</span>}
+                                    </TableCell>
+                                    <TableCell>
+                                        {product.category_name ? (
+                                            <Badge variant="outline">{product.category_name}</Badge>
+                                        ) : <span className="text-muted-foreground text-sm">—</span>}
+                                    </TableCell>
+                                    <TableCell className="text-right whitespace-nowrap">{product.cost_price} ₽</TableCell>
+                                    <TableCell className="text-right font-bold whitespace-nowrap">{product.selling_price} ₽</TableCell>
+                                    <TableCell className="text-right">
+                                        {product.cost_price > 0 ? (
+                                            <span className="text-sm font-medium">
+                                                {Math.round(((product.selling_price - product.cost_price) / product.cost_price) * 100)}%
+                                            </span>
+                                        ) : (
+                                            <span className="text-muted-foreground">—</span>
+                                        )}
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                        {product.selling_price > 0 ? (
+                                            <span className="text-sm font-medium">
+                                                {Math.round(((product.selling_price - product.cost_price) / product.selling_price) * 100)}%
+                                            </span>
+                                        ) : (
+                                            <span className="text-muted-foreground">—</span>
+                                        )}
+                                    </TableCell>
+                                    <TableCell className="text-right whitespace-nowrap">
+                                        <div className="flex flex-col items-end">
+                                            <span className={`text-sm font-medium ${isLowStock ? "text-red-600 font-bold" : ""}`}>
+                                                {product.current_stock} шт
+                                            </span>
+                                            {product.max_front_stock > 0 && (
+                                                <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                                                    <span title="Витрина" className={product.front_stock <= product.min_front_stock ? "text-red-500 font-bold" : ""}>В:{product.front_stock}</span>
+                                                    <span>/</span>
+                                                    <span title="Склад">С:{product.back_stock}</span>
+                                                </span>
+                                            )}
+                                        </div>
+                                    </TableCell>
+                                    <TableCell className="text-right whitespace-nowrap">
+                                        <span className="text-sm text-muted-foreground">
+                                            {(product.current_stock * product.cost_price).toLocaleString()} ₽
                                         </span>
-                                    ) : (
-                                        <span className="text-muted-foreground">—</span>
-                                    )}
-                                </TableCell>
-                                <TableCell className="text-right">
-                                    <Badge variant={product.current_stock > 0 ? "secondary" : "destructive"}>
-                                        {product.current_stock} шт
-                                    </Badge>
-                                </TableCell>
-                                <TableCell className="text-right whitespace-nowrap">
-                                    <span className="text-sm text-muted-foreground">
-                                        {(product.current_stock * product.cost_price).toLocaleString()} ₽
-                                    </span>
-                                </TableCell>
-                                <TableCell>
-                                    <DropdownMenu>
-                                        <DropdownMenuTrigger asChild>
-                                            <Button variant="ghost" size="icon" className="h-8 w-8">
-                                                <MoreVertical className="h-4 w-4" />
-                                            </Button>
-                                        </DropdownMenuTrigger>
-                                        <DropdownMenuContent align="end">
-                                            <DropdownMenuItem onClick={() => {
-                                                setEditingProduct(product)
-                                                // Calculate initial markup/margin for display
-                                                if (product.cost_price > 0 && product.selling_price > 0) {
-                                                    setDesiredMarkup(((product.selling_price - product.cost_price) / product.cost_price * 100).toFixed(1))
-                                                    setDesiredMargin(((product.selling_price - product.cost_price) / product.selling_price * 100).toFixed(1))
-                                                } else {
-                                                    setDesiredMarkup("")
-                                                    setDesiredMargin("")
-                                                }
-                                                setIsDialogOpen(true)
-                                            }}>
-                                                <Pencil className="mr-2 h-4 w-4" /> Редактировать
-                                            </DropdownMenuItem>
-                                            <DropdownMenuSeparator />
-                                            <DropdownMenuItem className="text-red-600" onClick={() => handleDelete(product.id)}>
-                                                <Trash2 className="mr-2 h-4 w-4" /> Удалить
-                                            </DropdownMenuItem>
-                                        </DropdownMenuContent>
-                                    </DropdownMenu>
-                                </TableCell>
-                            </TableRow>
-                        ))}
+                                    </TableCell>
+                                    <TableCell>
+                                        <DropdownMenu>
+                                            <DropdownMenuTrigger asChild>
+                                                <Button variant="ghost" size="icon" className="h-8 w-8">
+                                                    <MoreVertical className="h-4 w-4" />
+                                                </Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent align="end">
+                                                <DropdownMenuItem onClick={() => {
+                                                    setEditingProduct(product)
+                                                    // Calculate initial markup/margin for display
+                                                    if (product.cost_price > 0 && product.selling_price > 0) {
+                                                        setDesiredMarkup(((product.selling_price - product.cost_price) / product.cost_price * 100).toFixed(1))
+                                                        setDesiredMargin(((product.selling_price - product.cost_price) / product.selling_price * 100).toFixed(1))
+                                                    } else {
+                                                        setDesiredMarkup("")
+                                                        setDesiredMargin("")
+                                                    }
+                                                    setIsDialogOpen(true)
+                                                }}>
+                                                    <Pencil className="mr-2 h-4 w-4" /> Редактировать
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem onClick={() => openHistory(product)}>
+                                                    <RefreshCw className="mr-2 h-4 w-4" /> История
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem onClick={() => setWriteOffDialog({ isOpen: true, product })}>
+                                                    <Trash2 className="mr-2 h-4 w-4 text-orange-500" /> Списать
+                                                </DropdownMenuItem>
+                                                <DropdownMenuSeparator />
+                                                <DropdownMenuItem className="text-red-600" onClick={() => handleDelete(product.id)}>
+                                                    <Trash2 className="mr-2 h-4 w-4" /> Удалить
+                                                </DropdownMenuItem>
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
+                                    </TableCell>
+                                </TableRow>
+                            )
+                        })}
                         {filteredProducts.length === 0 && (
                             <TableRow>
                                 <TableCell colSpan={10} className="h-24 text-center text-muted-foreground">
@@ -385,14 +441,91 @@ export function ProductsTab({ products, categories }: ProductsTabProps) {
                             </div>
                         </div>
 
-                        <div className="space-y-2">
-                            <Label>Текущий остаток</Label>
-                            <Input 
-                                type="number" 
-                                value={editingProduct?.current_stock || ''} 
-                                onChange={e => setEditingProduct(prev => ({ ...prev!, current_stock: Number(e.target.value) }))}
-                            />
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <Label>Текущий остаток</Label>
+                                <Input 
+                                    type="number" 
+                                    value={editingProduct?.current_stock || ''} 
+                                    onChange={e => setEditingProduct(prev => ({ ...prev!, current_stock: Number(e.target.value) }))}
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label>Мин. остаток</Label>
+                                <Input 
+                                    type="number" 
+                                    value={editingProduct?.min_stock_level || ''} 
+                                    onChange={e => setEditingProduct(prev => ({ ...prev!, min_stock_level: Number(e.target.value) }))}
+                                    placeholder="0"
+                                />
+                            </div>
                         </div>
+
+                        {/* Front/Back Stock Settings */}
+                        <div className="bg-slate-50 p-4 rounded-lg border space-y-4">
+                            <h4 className="font-medium text-sm flex items-center gap-2">
+                                <Box className="h-4 w-4" /> Витрина и Склад
+                            </h4>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label className="text-xs">Вместимость витрины (шт)</Label>
+                                    <Input 
+                                        type="number" 
+                                        value={editingProduct?.max_front_stock || ''} 
+                                        onChange={e => setEditingProduct(prev => ({ ...prev!, max_front_stock: Number(e.target.value) }))}
+                                        placeholder="0 (не используется)"
+                                    />
+                                    <p className="text-[10px] text-muted-foreground">Если &gt; 0, включится режим раздельного учета</p>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label className="text-xs">Порог пополнения (шт)</Label>
+                                    <Input 
+                                        type="number" 
+                                        value={editingProduct?.min_front_stock || ''} 
+                                        onChange={e => setEditingProduct(prev => ({ ...prev!, min_front_stock: Number(e.target.value) }))}
+                                        placeholder="3"
+                                        disabled={!editingProduct?.max_front_stock}
+                                    />
+                                    <p className="text-[10px] text-muted-foreground">Создаст задачу при остатке ниже этого</p>
+                                </div>
+                            </div>
+                            
+                            {(editingProduct?.max_front_stock || 0) > 0 && (
+                                <div className="grid grid-cols-2 gap-4 pt-2 border-t mt-2">
+                                    <div className="space-y-2">
+                                        <Label className="text-xs">Сейчас на витрине</Label>
+                                        <Input 
+                                            type="number" 
+                                            value={editingProduct?.front_stock ?? ''} 
+                                            onChange={e => {
+                                                const val = Number(e.target.value)
+                                                // Ensure we don't exceed current stock
+                                                const current = editingProduct?.current_stock || 0
+                                                const safeVal = Math.min(val, current)
+                                                
+                                                setEditingProduct(prev => ({ 
+                                                    ...prev!, 
+                                                    front_stock: safeVal,
+                                                    // Auto adjust back stock to match total
+                                                    back_stock: current - safeVal
+                                                }))
+                                            }}
+                                            max={editingProduct?.current_stock}
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label className="text-xs">Сейчас на складе</Label>
+                                        <Input 
+                                            type="number" 
+                                            value={editingProduct?.back_stock ?? ''} 
+                                            disabled // Calculated automatically
+                                            className="bg-slate-100"
+                                        />
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
                         <div className="space-y-2">
                             <Label>Категория</Label>
                             <Select 
@@ -462,6 +595,105 @@ export function ProductsTab({ products, categories }: ProductsTabProps) {
                         <Button variant="outline" onClick={() => setIsBulkDialogOpen(false)}>Отмена</Button>
                         <Button onClick={handleBulkUpdate} disabled={isPending || !bulkAction.value}>Применить</Button>
                     </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Write-off Dialog */}
+            <Dialog open={writeOffDialog.isOpen} onOpenChange={(v) => setWriteOffDialog(prev => ({ ...prev, isOpen: v }))}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Списание товара</DialogTitle>
+                        <DialogDescription>
+                            {writeOffDialog.product?.name} (Текущий остаток: {writeOffDialog.product?.current_stock})
+                        </DialogDescription>
+                    </DialogHeader>
+                    <form onSubmit={handleWriteOff} className="space-y-4">
+                        <div className="space-y-2">
+                            <Label>Количество</Label>
+                            <Input 
+                                type="number" 
+                                value={writeOffAmount} 
+                                onChange={e => setWriteOffAmount(e.target.value)}
+                                max={writeOffDialog.product?.current_stock}
+                                min={1}
+                                required
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Причина списания</Label>
+                            <Input 
+                                value={writeOffReason} 
+                                onChange={e => setWriteOffReason(e.target.value)}
+                                placeholder="Например: Порча, Бой, Угощение"
+                                required
+                            />
+                        </div>
+                        <DialogFooter>
+                            <Button type="button" variant="outline" onClick={() => setWriteOffDialog({ isOpen: false, product: null })}>Отмена</Button>
+                            <Button type="submit" variant="destructive" disabled={isPending}>Списать</Button>
+                        </DialogFooter>
+                    </form>
+                </DialogContent>
+            </Dialog>
+
+            {/* History Dialog */}
+            <Dialog open={historyDialog.isOpen} onOpenChange={(v) => setHistoryDialog(prev => ({ ...prev, isOpen: v }))}>
+                <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle>История движения товара</DialogTitle>
+                        <DialogDescription>
+                            {historyDialog.product?.name}
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Дата</TableHead>
+                                    <TableHead>Тип</TableHead>
+                                    <TableHead>Изменение</TableHead>
+                                    <TableHead>Остаток</TableHead>
+                                    <TableHead>Сотрудник</TableHead>
+                                    <TableHead>Причина</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {historyDialog.logs.length > 0 ? (
+                                    historyDialog.logs.map((log: any) => (
+                                        <TableRow key={log.id}>
+                                            <TableCell className="text-xs">
+                                                {format(new Date(log.created_at), 'dd MMM yyyy HH:mm', { locale: ru })}
+                                            </TableCell>
+                                            <TableCell>
+                                                <Badge variant="outline" className="text-xs">
+                                                    {log.type === 'SUPPLY' && 'Поставка'}
+                                                    {log.type === 'SALE' && 'Продажа'}
+                                                    {log.type === 'INVENTORY_ADJUSTMENT' && 'Инвентаризация'}
+                                                    {log.type === 'WRITE_OFF' && 'Списание'}
+                                                    {log.type === 'MANUAL_EDIT' && 'Ред. вручную'}
+                                                    {!['SUPPLY', 'SALE', 'INVENTORY_ADJUSTMENT', 'WRITE_OFF', 'MANUAL_EDIT'].includes(log.type) && log.type}
+                                                </Badge>
+                                            </TableCell>
+                                            <TableCell className={log.change_amount > 0 ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
+                                                {log.change_amount > 0 ? `+${log.change_amount}` : log.change_amount}
+                                            </TableCell>
+                                            <TableCell>{log.new_stock}</TableCell>
+                                            <TableCell className="text-xs text-muted-foreground">{log.user_name || 'Система'}</TableCell>
+                                            <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate" title={log.reason}>
+                                                {log.reason || '-'}
+                                            </TableCell>
+                                        </TableRow>
+                                    ))
+                                ) : (
+                                    <TableRow>
+                                        <TableCell colSpan={6} className="text-center text-muted-foreground h-24">
+                                            История пуста
+                                        </TableCell>
+                                    </TableRow>
+                                )}
+                            </TableBody>
+                        </Table>
+                    </div>
                 </DialogContent>
             </Dialog>
         </div>

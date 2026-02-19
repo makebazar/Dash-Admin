@@ -12,6 +12,12 @@ export type Product = {
     cost_price: number
     selling_price: number
     current_stock: number
+    min_stock_level: number
+    front_stock: number
+    back_stock: number
+    max_front_stock: number
+    min_front_stock: number
+    abc_category?: string
     is_active: boolean
     category_name?: string
 }
@@ -184,6 +190,100 @@ export async function getEmployees(clubId: string) {
     return res.rows as { id: string, full_name: string, role: string }[]
 }
 
+// --- HELPER: Stock Movement Logging ---
+async function logStockMovement(
+    client: any, 
+    clubId: string, 
+    userId: string | null, 
+    productId: number, 
+    changeAmount: number, 
+    previousStock: number, 
+    newStock: number, 
+    type: string, 
+    reason: string | null = null,
+    relatedEntityType: string | null = null,
+    relatedEntityId: number | null = null
+) {
+    await client.query(`
+        INSERT INTO warehouse_stock_movements 
+        (club_id, product_id, user_id, change_amount, previous_stock, new_stock, type, reason, related_entity_type, related_entity_id)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+    `, [clubId, productId, userId, changeAmount, previousStock, newStock, type, reason, relatedEntityType, relatedEntityId])
+}
+
+// --- TASKS ---
+export async function getClubTasks(clubId: string) {
+    const res = await query(`
+        SELECT t.*, u.full_name as assignee_name, p.name as product_name
+        FROM club_tasks t
+        LEFT JOIN users u ON t.assigned_to = u.id
+        LEFT JOIN warehouse_products p ON t.related_entity_type = 'PRODUCT' AND t.related_entity_id = p.id
+        WHERE t.club_id = $1 AND t.status != 'COMPLETED'
+        ORDER BY t.priority DESC, t.created_at ASC
+    `, [clubId])
+    return res.rows
+}
+
+export async function completeTask(taskId: number, userId: string, clubId: string) {
+    const client = await import("@/db").then(m => m.getClient())
+    try {
+        await client.query('BEGIN')
+
+        // Get task info
+        const taskRes = await client.query('SELECT * FROM club_tasks WHERE id = $1', [taskId])
+        const task = taskRes.rows[0]
+        
+        if (!task) throw new Error('Задача не найдена')
+
+        if (task.type === 'RESTOCK' && task.related_entity_type === 'PRODUCT') {
+            const productId = task.related_entity_id
+            
+            // Get product info
+            const prodRes = await client.query('SELECT * FROM warehouse_products WHERE id = $1', [productId])
+            const product = prodRes.rows[0]
+            
+            if (product) {
+                // Calculate restock amount: fill up to max_front_stock
+                const amountNeeded = product.max_front_stock - product.front_stock
+                const amountAvailable = Math.min(amountNeeded, product.back_stock)
+                
+                if (amountAvailable > 0) {
+                    // Move from Back to Front
+                    const newBack = product.back_stock - amountAvailable
+                    const newFront = product.front_stock + amountAvailable
+                    
+                    await client.query(`
+                        UPDATE warehouse_products 
+                        SET back_stock = $1, front_stock = $2
+                        WHERE id = $3
+                    `, [newBack, newFront, productId])
+                    
+                    // Log movement? It's internal move, maybe specific type?
+                    // Let's log as 'INTERNAL_MOVE' or similar, but our table tracks TOTAL stock.
+                    // Total stock doesn't change here!
+                    // But we might want to track this event.
+                    // For now, let's assume stock movements track TOTAL stock changes.
+                    // If we want detailed tracking of front/back, we need to expand movements table or rely on tasks history.
+                }
+            }
+        }
+
+        await client.query(`
+            UPDATE club_tasks 
+            SET status = 'COMPLETED', completed_by = $1, completed_at = NOW()
+            WHERE id = $2
+        `, [userId, taskId])
+
+        await client.query('COMMIT')
+    } catch (e) {
+        await client.query('ROLLBACK')
+        throw e
+    } finally {
+        client.release()
+    }
+    revalidatePath(`/clubs/${clubId}`) // Revalidate dashboard where tasks might be shown
+}
+
 // --- PRODUCTS ---
 
 export async function getProducts(clubId: string) {
@@ -197,21 +297,203 @@ export async function getProducts(clubId: string) {
     return res.rows as Product[]
 }
 
-export async function createProduct(clubId: string, data: { name: string, category_id: number | null, cost_price: number, selling_price: number, current_stock: number }) {
-    await query(`
-        INSERT INTO warehouse_products (club_id, category_id, name, cost_price, selling_price, current_stock)
-        VALUES ($1, $2, $3, $4, $5, $6)
-    `, [clubId, data.category_id, data.name, data.cost_price, data.selling_price, data.current_stock])
+export async function createProduct(clubId: string, userId: string, data: { name: string, category_id: number | null, cost_price: number, selling_price: number, current_stock: number, min_stock_level?: number, front_stock?: number, back_stock?: number, max_front_stock?: number, min_front_stock?: number }) {
+    const client = await import("@/db").then(m => m.getClient())
+    try {
+        await client.query('BEGIN')
+        
+        // Calculate front/back if not provided but capacity is set
+        let front = data.front_stock || 0
+        let back = data.back_stock || 0
+        const total = data.current_stock
+        
+        if (data.max_front_stock && data.max_front_stock > 0 && !data.front_stock && !data.back_stock) {
+            // Auto distribute: fill front first
+            front = Math.min(total, data.max_front_stock)
+            back = total - front
+        } else if (!data.front_stock && !data.back_stock) {
+            // Default: all in back (or front? usually back if storage exists)
+            // Or simpler: all in front if no capacity set.
+            // Let's say if no split specified, put all in back if capacity set, else all in front (simple item)
+            // But we track TOTAL current_stock as main source of truth for value.
+            // Let's assume if no capacity, it's a simple item -> front_stock = current_stock
+            if (!data.max_front_stock) {
+                front = total
+                back = 0
+            } else {
+                back = total
+                front = 0
+            }
+        }
+
+        const res = await client.query(`
+            INSERT INTO warehouse_products (club_id, category_id, name, cost_price, selling_price, current_stock, min_stock_level, front_stock, back_stock, max_front_stock, min_front_stock)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+            RETURNING id
+        `, [clubId, data.category_id, data.name, data.cost_price, data.selling_price, total, data.min_stock_level || 0, front, back, data.max_front_stock || 0, data.min_front_stock || 0])
+        
+        const productId = res.rows[0].id
+
+        if (data.current_stock > 0) {
+            await logStockMovement(client, clubId, userId, productId, data.current_stock, 0, data.current_stock, 'SUPPLY', 'Initial Stock', 'PRODUCT', productId)
+        }
+        
+        await client.query('COMMIT')
+    } catch (e) {
+        await client.query('ROLLBACK')
+        throw e
+    } finally {
+        client.release()
+    }
     revalidatePath(`/clubs/${clubId}/inventory`)
 }
 
-export async function updateProduct(id: number, clubId: string, data: { name: string, category_id: number | null, cost_price: number, selling_price: number, current_stock: number, is_active: boolean }) {
-    await query(`
-        UPDATE warehouse_products 
-        SET name = $1, category_id = $2, cost_price = $3, selling_price = $4, current_stock = $5, is_active = $6
-        WHERE id = $7
-    `, [data.name, data.category_id, data.cost_price, data.selling_price, data.current_stock, data.is_active, id])
+export async function updateProduct(id: number, clubId: string, userId: string, data: { name: string, category_id: number | null, cost_price: number, selling_price: number, current_stock: number, min_stock_level?: number, is_active: boolean, front_stock?: number, back_stock?: number, max_front_stock?: number, min_front_stock?: number }) {
+    const client = await import("@/db").then(m => m.getClient())
+    try {
+        await client.query('BEGIN')
+        
+        // Get current stock for logging if it changes manually
+        const currentRes = await client.query('SELECT current_stock, front_stock, back_stock FROM warehouse_products WHERE id = $1', [id])
+        const oldStock = currentRes.rows[0]?.current_stock || 0
+        const oldFront = currentRes.rows[0]?.front_stock || 0
+        const oldBack = currentRes.rows[0]?.back_stock || 0
+
+        // Handle Stock Split Logic if total changed or split changed
+        let newFront = data.front_stock !== undefined ? data.front_stock : oldFront
+        let newBack = data.back_stock !== undefined ? data.back_stock : oldBack
+        
+        // If total stock changed but front/back not explicitly set, we need to adjust
+        // Strategy: Adjust Back stock by default for manual edits?
+        // Or if Front capacity exists, fill front?
+        // Let's trust the input. If user edits via UI, they should set splits.
+        // If simple edit, we might just update total.
+        // BUT we must keep consistency: front + back = current
+        
+        // If simple product (no capacity), front = current
+        if (!data.max_front_stock && !currentRes.rows[0]?.max_front_stock) {
+            newFront = data.current_stock
+            newBack = 0
+        } else {
+            // If capacity exists, and only total changed (e.g. from table edit), where to put diff?
+            // If we don't receive front/back from UI, we have a problem.
+            // Let's assume UI sends front/back if advanced mode.
+            // If simplified mode, we might need to calc.
+            
+            // Validation: newFront + newBack should equal data.current_stock
+            // If not, we force it.
+            if (newFront + newBack !== data.current_stock) {
+                 // Prioritize Front fill if capacity allows?
+                 // or just dump to back?
+                 // Let's put difference in Back
+                 newBack = data.current_stock - newFront
+            }
+        }
+
+        await client.query(`
+            UPDATE warehouse_products 
+            SET name = $1, category_id = $2, cost_price = $3, selling_price = $4, current_stock = $5, min_stock_level = $6, is_active = $7,
+                front_stock = $8, back_stock = $9, max_front_stock = $10, min_front_stock = $11
+            WHERE id = $12
+        `, [data.name, data.category_id, data.cost_price, data.selling_price, data.current_stock, data.min_stock_level || 0, data.is_active, 
+            newFront, newBack, data.max_front_stock || 0, data.min_front_stock || 0, id])
+        
+        if (oldStock !== data.current_stock) {
+            await logStockMovement(client, clubId, userId, id, data.current_stock - oldStock, oldStock, data.current_stock, 'MANUAL_EDIT', 'Product Update')
+        }
+        
+        // CHECK RESTOCK NEED
+        // If front < min_front and back > 0 -> Create Task
+        if (data.max_front_stock && data.max_front_stock > 0 && newFront <= (data.min_front_stock || 0) && newBack > 0) {
+            // Check if task already exists
+            const existingTask = await client.query(`
+                SELECT 1 FROM club_tasks 
+                WHERE club_id = $1 AND type = 'RESTOCK' AND related_entity_id = $2 AND status != 'COMPLETED'
+            `, [clubId, id])
+            
+            if (existingTask.rowCount === 0) {
+                await client.query(`
+                    INSERT INTO club_tasks (club_id, type, title, description, priority, related_entity_type, related_entity_id, created_by)
+                    VALUES ($1, 'RESTOCK', $2, $3, 'HIGH', 'PRODUCT', $4, $5)
+                `, [clubId, `Пополнить: ${data.name}`, `На витрине осталось ${newFront} шт. Пополните из запасов.`, id, userId])
+            }
+        }
+
+        await client.query('COMMIT')
+    } catch (e) {
+        await client.query('ROLLBACK')
+        throw e
+    } finally {
+        client.release()
+    }
     revalidatePath(`/clubs/${clubId}/inventory`)
+}
+
+export async function writeOffProduct(clubId: string, userId: string, productId: number, amount: number, reason: string) {
+    const client = await import("@/db").then(m => m.getClient())
+    try {
+        await client.query('BEGIN')
+        
+        // Check current stock
+        const res = await client.query('SELECT current_stock, front_stock, back_stock, max_front_stock FROM warehouse_products WHERE id = $1', [productId])
+        const product = res.rows[0]
+        const currentStock = product?.current_stock || 0
+        const front = product?.front_stock || 0
+        const back = product?.back_stock || 0
+        
+        if (currentStock < amount) {
+            throw new Error(`Недостаточно товара на складе. Текущий остаток: ${currentStock}`)
+        }
+        
+        // Strategy: Write off from Front first? Or Back?
+        // Usually damage happens in front (broken bottle) or expiration.
+        // Let's assume Front first, then Back.
+        // OR: let UI decide? UI currently only sends total.
+        // Let's implement: Front first.
+        
+        let newFront = front
+        let newBack = back
+        let remaining = amount
+        
+        if (newFront >= remaining) {
+            newFront -= remaining
+            remaining = 0
+        } else {
+            remaining -= newFront
+            newFront = 0
+            newBack -= remaining // We checked total >= amount, so this is safe
+        }
+        
+        const newStock = currentStock - amount
+        await client.query(`
+            UPDATE warehouse_products 
+            SET current_stock = $1, front_stock = $2, back_stock = $3
+            WHERE id = $4
+        `, [newStock, newFront, newBack, productId])
+        
+        // Log movement
+        await logStockMovement(client, clubId, userId, productId, -amount, currentStock, newStock, 'WRITE_OFF', reason)
+        
+        await client.query('COMMIT')
+    } catch (e) {
+        await client.query('ROLLBACK')
+        throw e
+    } finally {
+        client.release()
+    }
+    revalidatePath(`/clubs/${clubId}/inventory`)
+}
+
+export async function getProductHistory(productId: number) {
+    const res = await query(`
+        SELECT m.*, u.full_name as user_name
+        FROM warehouse_stock_movements m
+        LEFT JOIN users u ON m.user_id = u.id
+        WHERE m.product_id = $1
+        ORDER BY m.created_at DESC
+        LIMIT 50
+    `, [productId])
+    return res.rows
 }
 
 export async function deleteProduct(id: number, clubId: string) {
@@ -275,11 +557,21 @@ export async function createSupply(clubId: string, userId: string, data: { suppl
             `, [supplyId, item.product_id, item.quantity, item.cost_price, item.quantity * item.cost_price])
 
             // Update product stock and cost price (last price)
-            await client.query(`
+            // Supplies usually go to BACK stock if capacity is managed, otherwise default.
+            // Let's assume Back Stock by default if capacity is set.
+            const stockRes = await client.query(`
                 UPDATE warehouse_products
-                SET current_stock = current_stock + $1, cost_price = $2
+                SET current_stock = current_stock + $1, cost_price = $2,
+                    back_stock = CASE WHEN max_front_stock > 0 THEN back_stock + $1 ELSE back_stock END,
+                    front_stock = CASE WHEN max_front_stock > 0 THEN front_stock ELSE front_stock + $1 END
                 WHERE id = $3
+                RETURNING current_stock
             `, [item.quantity, item.cost_price, item.product_id])
+            
+            const newStock = stockRes.rows[0].current_stock
+            const oldStock = newStock - item.quantity
+
+            await logStockMovement(client, clubId, userId, item.product_id, item.quantity, oldStock, newStock, 'SUPPLY', `Supply #${supplyId}`, 'SUPPLY', supplyId)
         }
 
         await client.query('COMMIT')
@@ -332,7 +624,7 @@ export async function getMetrics() {
     return res.rows as { key: string, label: string }[]
 }
 
-export async function createInventory(clubId: string, userId: string, targetMetricKey: string) {
+export async function createInventory(clubId: string, userId: string, targetMetricKey: string, categoryId?: number | null) {
     const client = await import("@/db").then(m => m.getClient())
     try {
         await client.query('BEGIN')
@@ -346,8 +638,16 @@ export async function createInventory(clubId: string, userId: string, targetMetr
         const inventoryId = invRes.rows[0].id
 
         // 2. Snapshot current stock
-        // Get all active products
-        const productsRes = await client.query(`SELECT id, current_stock, cost_price, selling_price FROM warehouse_products WHERE club_id = $1 AND is_active = true`, [clubId])
+        // Filter by category if provided
+        let query = `SELECT id, current_stock, cost_price, selling_price FROM warehouse_products WHERE club_id = $1 AND is_active = true`
+        const params: any[] = [clubId]
+        
+        if (categoryId) {
+            query += ` AND category_id = $2`
+            params.push(categoryId)
+        }
+
+        const productsRes = await client.query(query, params)
         
         for (const p of productsRes.rows) {
             await client.query(`
@@ -357,7 +657,7 @@ export async function createInventory(clubId: string, userId: string, targetMetr
         }
 
         await client.query('COMMIT')
-        await logOperation(clubId, userId, 'CREATE_INVENTORY', 'INVENTORY', inventoryId)
+        await logOperation(clubId, userId, 'CREATE_INVENTORY', 'INVENTORY', inventoryId, { categoryId })
         return inventoryId
     } catch (e) {
         await client.query('ROLLBACK')
@@ -405,7 +705,19 @@ export async function closeInventory(inventoryId: number, clubId: string, report
         const calculatedRevenue = sumRes.rows[0].total_rev || 0
         const diff = reportedRevenue - calculatedRevenue 
         
-        // 3. Update Stock Levels to Actual
+        // 3. Update Stock Levels to Actual and Log Movements
+        // First get items with differences
+        const diffItems = await client.query(`
+            SELECT ii.product_id, ii.expected_stock, ii.actual_stock
+            FROM warehouse_inventory_items ii
+            WHERE ii.inventory_id = $1 AND ii.actual_stock IS NOT NULL AND ii.actual_stock != ii.expected_stock
+        `, [inventoryId])
+
+        for (const item of diffItems.rows) {
+            const diff = item.actual_stock - item.expected_stock
+            await logStockMovement(client, clubId, null, item.product_id, diff, item.expected_stock, item.actual_stock, 'INVENTORY_ADJUSTMENT', `Inventory #${inventoryId}`, 'INVENTORY', inventoryId)
+        }
+
         await client.query(`
             UPDATE warehouse_products p
             SET current_stock = ii.actual_stock
