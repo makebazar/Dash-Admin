@@ -367,6 +367,12 @@ export async function createInventory(clubId: string, userId: string, targetMetr
     }
 }
 
+export async function deleteInventory(inventoryId: number, clubId: string, userId: string) {
+    await query(`DELETE FROM warehouse_inventories WHERE id = $1`, [inventoryId])
+    await logOperation(clubId, userId, 'DELETE_INVENTORY', 'INVENTORY', inventoryId)
+    revalidatePath(`/clubs/${clubId}/inventory`)
+}
+
 export async function updateInventoryItem(itemId: number, actualStock: number) {
     // Just update the actual count
     await query(`

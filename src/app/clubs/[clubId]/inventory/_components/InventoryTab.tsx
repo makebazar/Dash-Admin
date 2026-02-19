@@ -1,14 +1,14 @@
 "use client"
 
 import { useState, useTransition, useEffect } from "react"
-import { Plus, Search, Calendar, User, ClipboardCheck, ArrowRight, CheckCircle2, AlertTriangle, Loader2 } from "lucide-react"
+import { Plus, Search, Calendar, User, ClipboardCheck, ArrowRight, CheckCircle2, AlertTriangle, Loader2, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
-import { createInventory, Inventory, getMetrics } from "../actions"
+import { createInventory, deleteInventory, Inventory, getMetrics } from "../actions"
 import { useParams } from "next/navigation"
 import { ActiveInventory } from "./ActiveInventory"
 
@@ -51,6 +51,18 @@ export function InventoryTab({ inventories, currentUserId }: InventoryTabProps) 
         })
     }
 
+    const handleDelete = (id: number) => {
+        if (!confirm("Вы уверены, что хотите удалить эту инвентаризацию? Это действие нельзя отменить.")) return
+        startTransition(async () => {
+            try {
+                await deleteInventory(id, clubId, currentUserId)
+            } catch (e) {
+                console.error(e)
+                alert("Ошибка при удалении")
+            }
+        })
+    }
+
     if (activeInventoryId) {
         return <ActiveInventory inventoryId={activeInventoryId} onClose={() => setActiveInventoryId(null)} />
     }
@@ -86,7 +98,7 @@ export function InventoryTab({ inventories, currentUserId }: InventoryTabProps) 
                             <TableHead className="text-right">Заявлено</TableHead>
                             <TableHead className="text-right">По факту</TableHead>
                             <TableHead className="text-right">Разница</TableHead>
-                            <TableHead></TableHead>
+                            <TableHead className="w-[100px]"></TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -138,15 +150,20 @@ export function InventoryTab({ inventories, currentUserId }: InventoryTabProps) 
                                     ) : '—'}
                                 </TableCell>
                                 <TableCell>
-                                    {inv.status === 'CLOSED' ? (
-                                        <Button variant="ghost" size="sm" onClick={() => setActiveInventoryId(inv.id)}>
-                                            <ArrowRight className="h-4 w-4" />
+                                    <div className="flex items-center justify-end gap-2">
+                                        {inv.status === 'CLOSED' ? (
+                                            <Button variant="ghost" size="icon" onClick={() => setActiveInventoryId(inv.id)}>
+                                                <ArrowRight className="h-4 w-4" />
+                                            </Button>
+                                        ) : (
+                                            <Button variant="ghost" size="sm" onClick={() => setActiveInventoryId(inv.id)} className="text-amber-600 h-8 px-2">
+                                                Продолжить
+                                            </Button>
+                                        )}
+                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50" onClick={() => handleDelete(inv.id)}>
+                                            <Trash2 className="h-4 w-4" />
                                         </Button>
-                                    ) : (
-                                        <Button variant="ghost" size="sm" onClick={() => setActiveInventoryId(inv.id)} className="text-amber-600">
-                                            Продолжить
-                                        </Button>
-                                    )}
+                                    </div>
                                 </TableCell>
                             </TableRow>
                         ))}
