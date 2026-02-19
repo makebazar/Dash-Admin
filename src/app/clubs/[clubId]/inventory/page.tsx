@@ -1,11 +1,12 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { getProducts, getCategories, getSupplies, getInventories, getWarehouses, getEmployees, getClubTasks } from "./actions"
+import { getProducts, getCategories, getSupplies, getInventories, getWarehouses, getEmployees, getClubTasks, getProcurementLists } from "./actions"
 import { ProductsTab } from "./_components/ProductsTab"
 import { SuppliesTab } from "./_components/SuppliesTab"
 import { InventoryTab } from "./_components/InventoryTab"
 import { CategoriesTab } from "./_components/CategoriesTab"
 import { WarehousesTab } from "./_components/WarehousesTab"
 import { TasksTab } from "./_components/TasksTab"
+import { ProcurementTab } from "./_components/ProcurementTab"
 import { cookies } from "next/headers"
 
 export default async function InventoryPage({ params }: { params: Promise<{ clubId: string }> }) {
@@ -14,14 +15,15 @@ export default async function InventoryPage({ params }: { params: Promise<{ club
 
     if (!userId) return <div className="p-8 text-red-500">Доступ запрещен. Пожалуйста, авторизуйтесь.</div>
 
-    const [products, categories, supplies, inventories, warehouses, employees, tasks] = await Promise.all([
+    const [products, categories, supplies, inventories, warehouses, employees, tasks, procurementLists] = await Promise.all([
         getProducts(clubId),
         getCategories(clubId),
         getSupplies(clubId),
         getInventories(clubId),
         getWarehouses(clubId),
         getEmployees(clubId),
-        getClubTasks(clubId)
+        getClubTasks(clubId),
+        getProcurementLists(clubId)
     ])
 
     return (
@@ -65,6 +67,12 @@ export default async function InventoryPage({ params }: { params: Promise<{ club
                             Поставки
                         </TabsTrigger>
                         <TabsTrigger 
+                            value="procurement" 
+                            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:shadow-none px-0 py-3 bg-transparent font-medium"
+                        >
+                            Закупки
+                        </TabsTrigger>
+                        <TabsTrigger 
                             value="inventory" 
                             className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:shadow-none px-0 py-3 bg-transparent font-medium"
                         >
@@ -74,7 +82,7 @@ export default async function InventoryPage({ params }: { params: Promise<{ club
                 </div>
 
                 <TabsContent value="stock" className="mt-0">
-                    <ProductsTab products={products} categories={categories} currentUserId={userId} />
+                    <ProductsTab products={products} categories={categories} warehouses={warehouses} currentUserId={userId} />
                 </TabsContent>
                 
                 <TabsContent value="tasks" className="mt-0">
@@ -91,6 +99,10 @@ export default async function InventoryPage({ params }: { params: Promise<{ club
                 
                 <TabsContent value="supplies" className="mt-0">
                     <SuppliesTab supplies={supplies} products={products} currentUserId={userId} />
+                </TabsContent>
+
+                <TabsContent value="procurement" className="mt-0">
+                    <ProcurementTab lists={procurementLists} currentUserId={userId} />
                 </TabsContent>
 
                 <TabsContent value="inventory" className="mt-0">

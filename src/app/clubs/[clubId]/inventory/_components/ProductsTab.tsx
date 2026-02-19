@@ -6,11 +6,11 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
-import { createProduct, updateProduct, deleteProduct, bulkUpdatePrices, writeOffProduct, getProductHistory, Product, Category } from "../actions"
+import { createProduct, updateProduct, deleteProduct, bulkUpdatePrices, writeOffProduct, getProductHistory, Product, Category, adjustWarehouseStock, getReplenishmentRulesForProduct, createReplenishmentRule, deleteReplenishmentRule, ReplenishmentRule, Warehouse } from "../actions"
 import { useParams } from "next/navigation"
 import { format } from "date-fns"
 import { ru } from "date-fns/locale"
@@ -18,10 +18,11 @@ import { ru } from "date-fns/locale"
 interface ProductsTabProps {
     products: Product[]
     categories: Category[]
+    warehouses: Warehouse[]
     currentUserId: string
 }
 
-export function ProductsTab({ products, categories, currentUserId }: ProductsTabProps) {
+export function ProductsTab({ products, categories, warehouses, currentUserId }: ProductsTabProps) {
     const params = useParams()
     const clubId = params.clubId as string
     
@@ -33,6 +34,12 @@ export function ProductsTab({ products, categories, currentUserId }: ProductsTab
     const [editingProduct, setEditingProduct] = useState<Partial<Product> | null>(null)
     const [desiredMarkup, setDesiredMarkup] = useState<string>("")
     const [desiredMargin, setDesiredMargin] = useState<string>("")
+    
+    // Warehouse Stock Management
+    const [manageStockDialog, setManageStockDialog] = useState<{ isOpen: boolean, product: Product | null }>({ isOpen: false, product: null })
+    
+    // Replenishment Rules
+    const [replenishmentDialog, setReplenishmentDialog] = useState<{ isOpen: boolean, product: Product | null, rules: ReplenishmentRule[] }>({ isOpen: false, product: null, rules: [] })
     
     const [isBulkDialogOpen, setIsBulkDialogOpen] = useState(false)
     const [bulkAction, setBulkAction] = useState<{ type: 'fixed' | 'percent', value: string }>({ type: 'fixed', value: '' })
@@ -78,6 +85,74 @@ export function ProductsTab({ products, categories, currentUserId }: ProductsTab
             setDesiredMarkup(((selling - cost) / cost * 100).toFixed(1))
             setDesiredMargin(((selling - cost) / selling * 100).toFixed(1))
         }
+    }
+
+    const handleAdjustStock = async (e: React.FormEvent<HTMLFormElement>) => {
+        e.preventDefault()
+        const formData = new FormData(e.currentTarget)
+        const warehouseId = Number(formData.get("warehouse_id"))
+        const quantity = Number(formData.get("quantity"))
+        const reason = formData.get("reason") as string
+        
+        if (!manageStockDialog.product || !warehouseId) return
+
+        startTransition(async () => {
+            try {
+                await adjustWarehouseStock(clubId, currentUserId, manageStockDialog.product!.id, warehouseId, quantity, reason)
+                setManageStockDialog({ isOpen: false, product: null })
+            } catch (err: any) {
+                alert(err.message || "Ошибка при обновлении остатка")
+            }
+        })
+    }
+
+    const handleAddReplenishmentRule = async (e: React.FormEvent<HTMLFormElement>) => {
+        e.preventDefault()
+        const formData = new FormData(e.currentTarget)
+        const sourceId = Number(formData.get("source_id"))
+        const targetId = Number(formData.get("target_id"))
+        const minStock = Number(formData.get("min_stock"))
+        const maxStock = Number(formData.get("max_stock"))
+        
+        if (!replenishmentDialog.product || !sourceId || !targetId) return
+
+        startTransition(async () => {
+            try {
+                await createReplenishmentRule(clubId, {
+                    source_warehouse_id: sourceId,
+                    target_warehouse_id: targetId,
+                    product_id: replenishmentDialog.product!.id,
+                    min_stock_level: minStock,
+                    max_stock_level: maxStock
+                })
+                
+                // Refresh rules
+                const rules = await getReplenishmentRulesForProduct(replenishmentDialog.product!.id)
+                setReplenishmentDialog(prev => ({ ...prev, rules }))
+            } catch (err: any) {
+                alert(err.message || "Ошибка при создании правила")
+            }
+        })
+    }
+
+    const handleDeleteReplenishmentRule = async (ruleId: number) => {
+        if (!confirm("Удалить правило?")) return
+        startTransition(async () => {
+            try {
+                await deleteReplenishmentRule(ruleId, clubId)
+                // Refresh rules
+                const rules = await getReplenishmentRulesForProduct(replenishmentDialog.product!.id)
+                setReplenishmentDialog(prev => ({ ...prev, rules }))
+            } catch (err: any) {
+                alert(err.message || "Ошибка при удалении")
+            }
+        })
+    }
+
+    const openReplenishment = async (product: Product) => {
+        setReplenishmentDialog({ isOpen: true, product, rules: [] })
+        const rules = await getReplenishmentRulesForProduct(product.id)
+        setReplenishmentDialog(prev => ({ ...prev, rules }))
     }
 
     // Actions
@@ -286,12 +361,14 @@ export function ProductsTab({ products, categories, currentUserId }: ProductsTab
                                             <span className={`text-sm font-medium ${isLowStock ? "text-red-600 font-bold" : ""}`}>
                                                 {product.current_stock} шт
                                             </span>
-                                            {product.max_front_stock > 0 && (
-                                                <span className="text-[10px] text-muted-foreground flex items-center gap-1">
-                                                    <span title="Витрина" className={product.front_stock <= product.min_front_stock ? "text-red-500 font-bold" : ""}>В:{product.front_stock}</span>
-                                                    <span>/</span>
-                                                    <span title="Склад">С:{product.back_stock}</span>
-                                                </span>
+                                            {product.stocks && product.stocks.length > 0 && (
+                                                <div className="flex flex-col text-[10px] text-muted-foreground mt-1">
+                                                    {product.stocks.map((s, i) => (
+                                                        <span key={i} title={s.warehouse_name} className={s.is_default ? "font-semibold" : ""}>
+                                                            {s.warehouse_name.substring(0, 8)}{s.warehouse_name.length > 8 ? '...' : ''}: {s.quantity}
+                                                        </span>
+                                                    ))}
+                                                </div>
                                             )}
                                         </div>
                                     </TableCell>
@@ -321,6 +398,12 @@ export function ProductsTab({ products, categories, currentUserId }: ProductsTab
                                                     setIsDialogOpen(true)
                                                 }}>
                                                     <Pencil className="mr-2 h-4 w-4" /> Редактировать
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem onClick={() => setManageStockDialog({ isOpen: true, product })}>
+                                                    <Box className="mr-2 h-4 w-4" /> Управление остатками
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem onClick={() => openReplenishment(product)}>
+                                                    <RefreshCw className="mr-2 h-4 w-4" /> Правила пополнения
                                                 </DropdownMenuItem>
                                                 <DropdownMenuItem onClick={() => openHistory(product)}>
                                                     <RefreshCw className="mr-2 h-4 w-4" /> История
@@ -548,6 +631,182 @@ export function ProductsTab({ products, categories, currentUserId }: ProductsTab
                             <Button type="submit" disabled={isPending}>Сохранить</Button>
                         </DialogFooter>
                     </form>
+                </DialogContent>
+            </Dialog>
+
+            {/* Replenishment Rules Dialog */}
+            <Dialog open={replenishmentDialog.isOpen} onOpenChange={(v) => setReplenishmentDialog(prev => ({ ...prev, isOpen: v }))}>
+                <DialogContent className="max-w-2xl">
+                    <DialogHeader>
+                        <DialogTitle>Правила пополнения: {replenishmentDialog.product?.name}</DialogTitle>
+                        <DialogDescription>
+                            Настройте автоматическое создание задач на пополнение складов.
+                        </DialogDescription>
+                    </DialogHeader>
+                    
+                    <div className="space-y-6">
+                        {/* List Existing Rules */}
+                        {replenishmentDialog.rules.length > 0 ? (
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Откуда</TableHead>
+                                        <TableHead>Куда</TableHead>
+                                        <TableHead>Порог (Мин)</TableHead>
+                                        <TableHead>До (Макс)</TableHead>
+                                        <TableHead></TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {replenishmentDialog.rules.map(rule => (
+                                        <TableRow key={rule.id}>
+                                            <TableCell>{rule.source_warehouse_name}</TableCell>
+                                            <TableCell>{rule.target_warehouse_name}</TableCell>
+                                            <TableCell>{rule.min_stock_level}</TableCell>
+                                            <TableCell>{rule.max_stock_level}</TableCell>
+                                            <TableCell>
+                                                <Button variant="ghost" size="icon" onClick={() => handleDeleteReplenishmentRule(rule.id)}>
+                                                    <Trash2 className="h-4 w-4 text-red-500" />
+                                                </Button>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        ) : (
+                            <div className="text-center py-4 text-muted-foreground bg-slate-50 rounded-lg">
+                                Нет активных правил пополнения
+                            </div>
+                        )}
+
+                        {/* Add New Rule Form */}
+                        <div className="border-t pt-4">
+                            <h4 className="font-medium mb-4">Добавить новое правило</h4>
+                            <form onSubmit={handleAddReplenishmentRule} className="space-y-4">
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <Label>Откуда брать (Источник)</Label>
+                                        <Select name="source_id" required>
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Выберите склад" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {warehouses.map(w => (
+                                                    <SelectItem key={w.id} value={w.id.toString()}>{w.name} {w.is_default ? '(Осн)' : ''}</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label>Куда пополнять (Цель)</Label>
+                                        <Select name="target_id" required>
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Выберите склад" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {warehouses.map(w => (
+                                                    <SelectItem key={w.id} value={w.id.toString()}>{w.name} {w.is_default ? '(Осн)' : ''}</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label>Порог срабатывания (Мин)</Label>
+                                        <Input name="min_stock" type="number" placeholder="Например: 5" required min={0} />
+                                        <p className="text-[10px] text-muted-foreground">Создать задачу, если остаток ниже этого</p>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label>Заполнять до (Макс)</Label>
+                                        <Input name="max_stock" type="number" placeholder="Например: 20" required min={1} />
+                                        <p className="text-[10px] text-muted-foreground">Сколько должно стать после пополнения</p>
+                                    </div>
+                                </div>
+                                <Button type="submit" className="w-full" disabled={isPending}>
+                                    <Plus className="mr-2 h-4 w-4" /> Добавить правило
+                                </Button>
+                            </form>
+                        </div>
+                    </div>
+                </DialogContent>
+            </Dialog>
+
+            {/* Manage Stock Dialog */}
+            <Dialog open={manageStockDialog.isOpen} onOpenChange={(v) => setManageStockDialog(prev => ({ ...prev, isOpen: v }))}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Управление остатками: {manageStockDialog.product?.name}</DialogTitle>
+                        <DialogDescription>
+                            Ручная корректировка остатков по складам.
+                        </DialogDescription>
+                    </DialogHeader>
+                    
+                    <div className="space-y-4">
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Склад</TableHead>
+                                    <TableHead>Текущий остаток</TableHead>
+                                    <TableHead className="w-[100px]">Действие</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {manageStockDialog.product?.stocks?.map(stock => (
+                                    <TableRow key={stock.warehouse_id}>
+                                        <TableCell>
+                                            {stock.warehouse_name}
+                                            {stock.is_default && <Badge variant="secondary" className="ml-2 text-[10px]">Основной</Badge>}
+                                        </TableCell>
+                                        <TableCell>{stock.quantity}</TableCell>
+                                        <TableCell>
+                                            <Dialog>
+                                                <DialogTrigger asChild>
+                                                    <Button variant="outline" size="sm">Изменить</Button>
+                                                </DialogTrigger>
+                                                <DialogContent>
+                                                    <DialogHeader>
+                                                        <DialogTitle>Изменить остаток</DialogTitle>
+                                                        <DialogDescription>
+                                                            {stock.warehouse_name} - {manageStockDialog.product?.name}
+                                                        </DialogDescription>
+                                                    </DialogHeader>
+                                                    <form onSubmit={handleAdjustStock} className="space-y-4">
+                                                        <input type="hidden" name="warehouse_id" value={stock.warehouse_id} />
+                                                        <div className="space-y-2">
+                                                            <Label>Новое количество</Label>
+                                                            <Input 
+                                                                name="quantity"
+                                                                type="number" 
+                                                                defaultValue={stock.quantity}
+                                                                required
+                                                            />
+                                                        </div>
+                                                        <div className="space-y-2">
+                                                            <Label>Причина изменения</Label>
+                                                            <Input 
+                                                                name="reason"
+                                                                placeholder="Например: Инвентаризация, Ошибка ввода"
+                                                                required
+                                                            />
+                                                        </div>
+                                                        <DialogFooter>
+                                                            <Button type="submit" disabled={isPending}>Сохранить</Button>
+                                                        </DialogFooter>
+                                                    </form>
+                                                </DialogContent>
+                                            </Dialog>
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                                {(!manageStockDialog.product?.stocks || manageStockDialog.product.stocks.length === 0) && (
+                                    <TableRow>
+                                        <TableCell colSpan={3} className="text-center text-muted-foreground">
+                                            Нет данных о складах
+                                        </TableCell>
+                                    </TableRow>
+                                )}
+                            </TableBody>
+                        </Table>
+                    </div>
                 </DialogContent>
             </Dialog>
 
