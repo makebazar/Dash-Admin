@@ -2,6 +2,7 @@
 
 import { query } from "@/db"
 import { revalidatePath } from "next/cache"
+import { logOperation } from "@/lib/logger"
 
 export type Product = {
     id: number
@@ -18,6 +19,22 @@ export type Product = {
 export type Category = {
     id: number
     name: string
+    description?: string
+    parent_id?: number | null
+    parent_name?: string
+    products_count?: number
+}
+
+export type Warehouse = {
+    id: number
+    name: string
+    address?: string
+    type: string
+    responsible_user_id?: string
+    responsible_name?: string
+    contact_info?: string
+    characteristics?: any
+    is_active: boolean
 }
 
 export type Supply = {
@@ -55,17 +72,119 @@ export type InventoryItem = {
     calculated_revenue: number | null
 }
 
-// --- PRODUCTS ---
+// --- CATEGORIES ---
 
 export async function getCategories(clubId: string) {
-    const res = await query(`SELECT * FROM warehouse_categories WHERE club_id = $1 ORDER BY name`, [clubId])
+    const res = await query(`
+        SELECT c.*, p.name as parent_name,
+        (SELECT COUNT(*) FROM warehouse_products WHERE category_id = c.id) as products_count
+        FROM warehouse_categories c
+        LEFT JOIN warehouse_categories p ON c.parent_id = p.id
+        WHERE c.club_id = $1 
+        ORDER BY c.name
+    `, [clubId])
     return res.rows as Category[]
 }
 
-export async function createCategory(clubId: string, name: string) {
-    await query(`INSERT INTO warehouse_categories (club_id, name) VALUES ($1, $2)`, [clubId, name])
+export async function createCategory(clubId: string, userId: string, data: { name: string, description?: string, parent_id?: number | null }) {
+    // Validation: Unique Name
+    const existing = await query(`SELECT 1 FROM warehouse_categories WHERE club_id = $1 AND name = $2`, [clubId, data.name])
+    if (existing.rowCount && existing.rowCount > 0) {
+        throw new Error("Категория с таким названием уже существует")
+    }
+
+    const res = await query(`
+        INSERT INTO warehouse_categories (club_id, name, description, parent_id) 
+        VALUES ($1, $2, $3, $4)
+        RETURNING id
+    `, [clubId, data.name, data.description, data.parent_id])
+    
+    await logOperation(clubId, userId, 'CREATE_CATEGORY', 'CATEGORY', res.rows[0].id, data)
     revalidatePath(`/clubs/${clubId}/inventory`)
 }
+
+export async function updateCategory(id: number, clubId: string, userId: string, data: { name: string, description?: string, parent_id?: number | null }) {
+    // Validation: Unique Name (excluding self)
+    const existing = await query(`SELECT 1 FROM warehouse_categories WHERE club_id = $1 AND name = $2 AND id != $3`, [clubId, data.name, id])
+    if (existing.rowCount && existing.rowCount > 0) {
+        throw new Error("Категория с таким названием уже существует")
+    }
+
+    // Validation: Circular Dependency
+    if (data.parent_id === id) {
+        throw new Error("Категория не может быть родительской для самой себя")
+    }
+
+    await query(`
+        UPDATE warehouse_categories 
+        SET name = $1, description = $2, parent_id = $3
+        WHERE id = $4
+    `, [data.name, data.description, data.parent_id, id])
+
+    await logOperation(clubId, userId, 'UPDATE_CATEGORY', 'CATEGORY', id, data)
+    revalidatePath(`/clubs/${clubId}/inventory`)
+}
+
+export async function deleteCategory(id: number, clubId: string, userId: string) {
+    // Check if has products
+    const products = await query(`SELECT 1 FROM warehouse_products WHERE category_id = $1`, [id])
+    if (products.rowCount && products.rowCount > 0) {
+        throw new Error("Нельзя удалить категорию, к которой привязаны товары")
+    }
+
+    await query(`DELETE FROM warehouse_categories WHERE id = $1`, [id])
+    await logOperation(clubId, userId, 'DELETE_CATEGORY', 'CATEGORY', id)
+    revalidatePath(`/clubs/${clubId}/inventory`)
+}
+
+
+// --- WAREHOUSES ---
+
+export async function getWarehouses(clubId: string) {
+    const res = await query(`
+        SELECT w.*, u.full_name as responsible_name
+        FROM warehouses w
+        LEFT JOIN users u ON w.responsible_user_id = u.id
+        WHERE w.club_id = $1
+        ORDER BY w.name
+    `, [clubId])
+    return res.rows as Warehouse[]
+}
+
+export async function createWarehouse(clubId: string, userId: string, data: { name: string, address?: string, type: string, responsible_user_id?: string, contact_info?: string, characteristics?: any }) {
+    const res = await query(`
+        INSERT INTO warehouses (club_id, name, address, type, responsible_user_id, contact_info, characteristics)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        RETURNING id
+    `, [clubId, data.name, data.address, data.type, data.responsible_user_id, data.contact_info, data.characteristics || {}])
+
+    await logOperation(clubId, userId, 'CREATE_WAREHOUSE', 'WAREHOUSE', res.rows[0].id, data)
+    revalidatePath(`/clubs/${clubId}/inventory`)
+}
+
+export async function updateWarehouse(id: number, clubId: string, userId: string, data: { name: string, address?: string, type: string, responsible_user_id?: string, contact_info?: string, characteristics?: any, is_active: boolean }) {
+    await query(`
+        UPDATE warehouses
+        SET name = $1, address = $2, type = $3, responsible_user_id = $4, contact_info = $5, characteristics = $6, is_active = $7
+        WHERE id = $8
+    `, [data.name, data.address, data.type, data.responsible_user_id, data.contact_info, data.characteristics || {}, data.is_active, id])
+
+    await logOperation(clubId, userId, 'UPDATE_WAREHOUSE', 'WAREHOUSE', id, data)
+    revalidatePath(`/clubs/${clubId}/inventory`)
+}
+
+export async function getEmployees(clubId: string) {
+    const res = await query(`
+        SELECT u.id, u.full_name, ce.role 
+        FROM club_employees ce
+        JOIN users u ON ce.user_id = u.id
+        WHERE ce.club_id = $1 AND ce.is_active = TRUE
+        ORDER BY u.full_name
+    `, [clubId])
+    return res.rows as { id: string, full_name: string, role: string }[]
+}
+
+// --- PRODUCTS ---
 
 export async function getProducts(clubId: string) {
     const res = await query(`
@@ -164,6 +283,7 @@ export async function createSupply(clubId: string, userId: string, data: { suppl
         }
 
         await client.query('COMMIT')
+        await logOperation(clubId, userId, 'CREATE_SUPPLY', 'SUPPLY', supplyId, { itemsCount: data.items.length, totalCost })
     } catch (e) {
         await client.query('ROLLBACK')
         throw e
@@ -237,6 +357,7 @@ export async function createInventory(clubId: string, userId: string, targetMetr
         }
 
         await client.query('COMMIT')
+        await logOperation(clubId, userId, 'CREATE_INVENTORY', 'INVENTORY', inventoryId)
         return inventoryId
     } catch (e) {
         await client.query('ROLLBACK')
@@ -261,15 +382,6 @@ export async function closeInventory(inventoryId: number, clubId: string, report
         await client.query('BEGIN')
 
         // 1. Calculate stats for all items
-        // difference = expected - actual (Wait, if expected 10, actual 8. Difference is 2 missing/sold. So expected - actual)
-        // calculated_revenue = (expected - actual) * selling_price
-        
-        // Let's verify "Blind Inventory" logic.
-        // User said: "Expected - Actual = Sold".
-        // If Expected 10, Actual 8 => Sold 2.
-        // If Expected 10, Actual 12 => Sold -2 (Surplus/Found).
-        
-        // Update items calculations
         await client.query(`
             UPDATE warehouse_inventory_items
             SET difference = expected_stock - actual_stock,
@@ -285,14 +397,9 @@ export async function closeInventory(inventoryId: number, clubId: string, report
         `, [inventoryId])
         
         const calculatedRevenue = sumRes.rows[0].total_rev || 0
-        const diff = reportedRevenue - calculatedRevenue // If reported 5000, calculated 4000. Diff +1000 (Surplus money). Or maybe Calculated - Reported?
-        // User: "у него должны сойтись цифры продаж и ивентаризация"
-        // Usually Variance = Reported - Calculated.
-        // If Reported 5000 (Cash), Calculated 5000 (Sold goods). Variance 0.
+        const diff = reportedRevenue - calculatedRevenue 
         
         // 3. Update Stock Levels to Actual
-        // Since inventory is authoritative, we update current_stock to actual_stock
-        // But only if actual_stock is not null
         await client.query(`
             UPDATE warehouse_products p
             SET current_stock = ii.actual_stock
