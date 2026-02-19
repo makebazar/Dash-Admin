@@ -31,6 +31,8 @@ export function InventoryTab({ inventories, currentUserId }: InventoryTabProps) 
     // Active Inventory State
     const [activeInventoryId, setActiveInventoryId] = useState<number | null>(null)
 
+    const [deleteId, setDeleteId] = useState<number | null>(null)
+
     useEffect(() => {
         if (isDialogOpen && metrics.length === 0) {
             getMetrics().then(setMetrics)
@@ -51,11 +53,12 @@ export function InventoryTab({ inventories, currentUserId }: InventoryTabProps) 
         })
     }
 
-    const handleDelete = (id: number) => {
-        if (!confirm("Вы уверены, что хотите удалить эту инвентаризацию? Это действие нельзя отменить.")) return
+    const handleDelete = async () => {
+        if (!deleteId) return
         startTransition(async () => {
             try {
-                await deleteInventory(id, clubId, currentUserId)
+                await deleteInventory(deleteId, clubId, currentUserId)
+                setDeleteId(null)
             } catch (e) {
                 console.error(e)
                 alert("Ошибка при удалении")
@@ -160,7 +163,7 @@ export function InventoryTab({ inventories, currentUserId }: InventoryTabProps) 
                                                 Продолжить
                                             </Button>
                                         )}
-                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50" onClick={() => handleDelete(inv.id)}>
+                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50" onClick={() => setDeleteId(inv.id)}>
                                             <Trash2 className="h-4 w-4" />
                                         </Button>
                                     </div>
@@ -170,6 +173,25 @@ export function InventoryTab({ inventories, currentUserId }: InventoryTabProps) 
                     </TableBody>
                 </Table>
             </div>
+
+            {/* Delete Confirmation Dialog */}
+            <Dialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(null)}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Удаление инвентаризации</DialogTitle>
+                        <DialogDescription>
+                            Вы уверены, что хотите удалить эту запись? Это действие нельзя отменить.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setDeleteId(null)}>Отмена</Button>
+                        <Button variant="destructive" onClick={handleDelete} disabled={isPending}>
+                            {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            Удалить
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
 
             {/* New Inventory Dialog */}
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
