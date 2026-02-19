@@ -564,65 +564,7 @@ export async function getClubTasks(clubId: string) {
     return res.rows
 }
 
-export async function completeTask(taskId: number, userId: string, clubId: string) {
-    const client = await import("@/db").then(m => m.getClient())
-    try {
-        await client.query('BEGIN')
 
-        // Get task info
-        const taskRes = await client.query('SELECT * FROM club_tasks WHERE id = $1', [taskId])
-        const task = taskRes.rows[0]
-        
-        if (!task) throw new Error('Задача не найдена')
-
-        if (task.type === 'RESTOCK' && task.related_entity_type === 'PRODUCT') {
-            const productId = task.related_entity_id
-            
-            // Get product info
-            const prodRes = await client.query('SELECT * FROM warehouse_products WHERE id = $1', [productId])
-            const product = prodRes.rows[0]
-            
-            if (product) {
-                // Calculate restock amount: fill up to max_front_stock
-                const amountNeeded = product.max_front_stock - product.front_stock
-                const amountAvailable = Math.min(amountNeeded, product.back_stock)
-                
-                if (amountAvailable > 0) {
-                    // Move from Back to Front
-                    const newBack = product.back_stock - amountAvailable
-                    const newFront = product.front_stock + amountAvailable
-                    
-                    await client.query(`
-                        UPDATE warehouse_products 
-                        SET back_stock = $1, front_stock = $2
-                        WHERE id = $3
-                    `, [newBack, newFront, productId])
-                    
-                    // Log movement? It's internal move, maybe specific type?
-                    // Let's log as 'INTERNAL_MOVE' or similar, but our table tracks TOTAL stock.
-                    // Total stock doesn't change here!
-                    // But we might want to track this event.
-                    // For now, let's assume stock movements track TOTAL stock changes.
-                    // If we want detailed tracking of front/back, we need to expand movements table or rely on tasks history.
-                }
-            }
-        }
-
-        await client.query(`
-            UPDATE club_tasks 
-            SET status = 'COMPLETED', completed_by = $1, completed_at = NOW()
-            WHERE id = $2
-        `, [userId, taskId])
-
-        await client.query('COMMIT')
-    } catch (e) {
-        await client.query('ROLLBACK')
-        throw e
-    } finally {
-        client.release()
-    }
-    revalidatePath(`/clubs/${clubId}`) // Revalidate dashboard where tasks might be shown
-}
 
 // --- PRODUCTS ---
 
