@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Switch } from "@/components/ui/switch"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Loader2, Plus, GripVertical, Save, Trash2, ArrowLeft, ClipboardCheck } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
@@ -23,6 +25,8 @@ interface ChecklistTemplate {
     name: string
     description: string
     items: ChecklistItem[]
+    type?: 'shift_handover' | 'manager_audit'
+    settings?: any
     created_at: string
 }
 
@@ -34,7 +38,9 @@ export default function ChecklistSettingsPage({ params }: { params: Promise<{ cl
     const [currentTemplate, setCurrentTemplate] = useState<Partial<ChecklistTemplate>>({
         name: '',
         description: '',
-        items: []
+        items: [],
+        type: 'manager_audit',
+        settings: {}
     })
     const [isLoading, setIsLoading] = useState(true)
     const [isSaving, setIsSaving] = useState(false)
@@ -81,6 +87,25 @@ export default function ChecklistSettingsPage({ params }: { params: Promise<{ cl
         const newItems = [...(currentTemplate.items || [])]
         newItems.splice(index, 1)
         setCurrentTemplate({ ...currentTemplate, items: newItems })
+    }
+
+    const handleDeleteTemplate = async (templateId: number) => {
+        if (!confirm('Вы уверены, что хотите удалить этот чеклист?')) return
+
+        try {
+            const res = await fetch(`/api/clubs/${clubId}/evaluations/templates/${templateId}`, {
+                method: 'DELETE'
+            })
+
+            if (res.ok) {
+                fetchTemplates(clubId)
+            } else {
+                alert('Ошибка удаления')
+            }
+        } catch (error) {
+            console.error(error)
+            alert('Ошибка сервера')
+        }
     }
 
     const handleSave = async () => {
@@ -148,6 +173,79 @@ export default function ChecklistSettingsPage({ params }: { params: Promise<{ cl
                                     onChange={e => setCurrentTemplate({ ...currentTemplate, description: e.target.value })}
                                 />
                             </div>
+
+                            <div className="grid gap-2">
+                                <Label>Тип чеклиста</Label>
+                                <Select 
+                                    value={currentTemplate.type || 'manager_audit'} 
+                                    onValueChange={(val: any) => setCurrentTemplate({...currentTemplate, type: val})}
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Выберите тип" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="manager_audit">Аудит (Управляющий)</SelectItem>
+                                        <SelectItem value="shift_handover">Приемка смены (Сотрудник)</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+
+                            {currentTemplate.type === 'shift_handover' && (
+                                <div className="space-y-4 pt-2 border-t mt-4">
+                                    <h3 className="font-medium text-sm text-muted-foreground">Настройки приемки</h3>
+                                    <div className="flex items-center justify-between rounded-lg border p-4">
+                                        <div className="space-y-0.5">
+                                            <Label>Блокировать открытие смены</Label>
+                                            <p className="text-sm text-muted-foreground">
+                                                Сотрудник не сможет начать смену без прохождения этого чеклиста
+                                            </p>
+                                        </div>
+                                        <Switch 
+                                            checked={currentTemplate.settings?.block_shift_open}
+                                            onCheckedChange={checked => setCurrentTemplate({
+                                                ...currentTemplate, 
+                                                settings: { ...currentTemplate.settings, block_shift_open: checked }
+                                            })}
+                                        />
+                                    </div>
+                                    <div className="flex items-center justify-between rounded-lg border p-4">
+                                        <div className="space-y-0.5">
+                                            <Label>Требовать фото</Label>
+                                            <p className="text-sm text-muted-foreground">
+                                                Обязательное фото-подтверждение для проблемных пунктов
+                                            </p>
+                                        </div>
+                                        <Switch 
+                                            checked={currentTemplate.settings?.require_photo_on_fail}
+                                            onCheckedChange={checked => setCurrentTemplate({
+                                                ...currentTemplate, 
+                                                settings: { ...currentTemplate.settings, require_photo_on_fail: checked }
+                                            })}
+                                        />
+                                    </div>
+                                </div>
+                            )}
+
+                            {(!currentTemplate.type || currentTemplate.type === 'manager_audit') && (
+                                <div className="space-y-4 pt-2 border-t mt-4">
+                                    <h3 className="font-medium text-sm text-muted-foreground">Настройки аудита</h3>
+                                    <div className="flex items-center justify-between rounded-lg border p-4">
+                                        <div className="space-y-0.5">
+                                            <Label>Влияет на KPI</Label>
+                                            <p className="text-sm text-muted-foreground">
+                                                Учитывать результаты проверки в расчете премии
+                                            </p>
+                                        </div>
+                                        <Switch 
+                                            checked={currentTemplate.settings?.affects_kpi}
+                                            onCheckedChange={checked => setCurrentTemplate({
+                                                ...currentTemplate, 
+                                                settings: { ...currentTemplate.settings, affects_kpi: checked }
+                                            })}
+                                        />
+                                    </div>
+                                </div>
+                            )}
                         </CardContent>
                     </Card>
 
@@ -234,7 +332,7 @@ export default function ChecklistSettingsPage({ params }: { params: Promise<{ cl
                         <p className="text-muted-foreground">Создавайте шаблоны для живой оценки сотрудников</p>
                     </div>
                     <Button onClick={() => {
-                        setCurrentTemplate({ name: '', description: '', items: [] })
+                        setCurrentTemplate({ name: '', description: '', items: [], type: 'manager_audit', settings: {} })
                         setIsEditing(true)
                     }} className="bg-purple-600 hover:bg-purple-700">
                         <Plus className="mr-2 h-4 w-4" /> Новый чеклист
@@ -245,8 +343,13 @@ export default function ChecklistSettingsPage({ params }: { params: Promise<{ cl
                     {templates.map(template => (
                         <Card key={template.id} className="hover:border-purple-500/50 transition-colors">
                             <CardHeader>
-                                <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-lg bg-purple-100 text-purple-600">
-                                    <ClipboardCheck className="h-6 w-6" />
+                                <div className="flex items-start justify-between">
+                                    <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-lg bg-purple-100 text-purple-600">
+                                        <ClipboardCheck className="h-6 w-6" />
+                                    </div>
+                                    <Badge variant="outline">
+                                        {template.type === 'shift_handover' ? 'Приемка смены' : 'Аудит'}
+                                    </Badge>
                                 </div>
                                 <CardTitle>{template.name}</CardTitle>
                                 <CardDescription>{template.description || 'Нет описания'}</CardDescription>
@@ -259,6 +362,15 @@ export default function ChecklistSettingsPage({ params }: { params: Promise<{ cl
                                     </span>
                                 </div>
                                 <div className="mt-4 flex gap-2">
+                                    <Button 
+                                        variant="outline" 
+                                        size="icon" 
+                                        className="shrink-0 text-red-500 hover:text-red-600 hover:bg-red-50" 
+                                        onClick={() => handleDeleteTemplate(template.id)}
+                                        title="Удалить чеклист"
+                                    >
+                                        <Trash2 className="h-4 w-4" />
+                                    </Button>
                                     <Button variant="outline" className="flex-1" onClick={() => {
                                         setCurrentTemplate(template)
                                         setIsEditing(true)

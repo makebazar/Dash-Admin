@@ -68,7 +68,7 @@ export async function POST(
     try {
         const userId = (await cookies()).get('session_user_id')?.value;
         const { clubId } = await params;
-        const { name, description, items } = await request.json();
+        const { name, description, items, type, settings } = await request.json();
 
         if (!userId) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -88,10 +88,10 @@ export async function POST(
 
         // Insert template
         const templateResult = await query(
-            `INSERT INTO evaluation_templates (club_id, name, description)
-             VALUES ($1, $2, $3)
+            `INSERT INTO evaluation_templates (club_id, name, description, type, settings)
+             VALUES ($1, $2, $3, $4, $5)
              RETURNING id`,
-            [clubId, name, description]
+            [clubId, name, description, type || 'manager_audit', settings || {}]
         );
         const templateId = templateResult.rows[0].id;
 

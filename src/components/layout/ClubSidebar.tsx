@@ -61,13 +61,13 @@ export function ClubSidebar({ clubId }: ClubSidebarProps) {
         { href: `/clubs/${clubId}/finance`, label: 'Финансы', icon: <DollarSign className="h-4 w-4" /> },
         { href: `/clubs/${clubId}/inventory`, label: 'Склад', icon: <Package className="h-4 w-4" /> },
         { href: `/clubs/${clubId}/equipment`, label: 'Оборудование', icon: <Monitor className="h-4 w-4" /> },
+        { href: `/clubs/${clubId}/settings/checklists`, label: 'Чеклисты', icon: <ClipboardCheck className="h-4 w-4" /> },
     ]
 
     const settingsLinks = [
         { href: `/clubs/${clubId}/settings/general`, label: 'Общие', icon: <Settings className="h-4 w-4" /> },
         { href: `/clubs/${clubId}/settings/salary`, label: 'Зарплаты', icon: <Wallet className="h-4 w-4" /> },
         { href: `/clubs/${clubId}/settings/reports`, label: 'Отчеты', icon: <FileText className="h-4 w-4" /> },
-        { href: `/clubs/${clubId}/settings/checklists`, label: 'Чеклисты', icon: <ClipboardCheck className="h-4 w-4" /> },
         { href: `/clubs/${clubId}/settings/equipment`, label: 'Оборудование (KPI)', icon: <Wrench className="h-4 w-4" /> },
     ]
 
