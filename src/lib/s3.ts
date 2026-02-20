@@ -28,7 +28,9 @@ export async function uploadFileToS3(
   folder: string = 'uploads'
 ): Promise<string> {
   try {
-    const key = `${folder}/${Date.now()}-${fileName}`;
+    // Sanitize filename to avoid S3 issues with cyrillic or special chars
+    const sanitizedFileName = fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
+    const key = `${folder}/${Date.now()}-${sanitizedFileName}`;
 
     const params: PutObjectCommandInput = {
       Bucket: bucketName,
