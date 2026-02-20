@@ -179,11 +179,22 @@ export default function ChecklistSettingsPage({ params }: { params: Promise<{ cl
 
         setIsSaving(true)
         try {
-            const res = await fetch(`/api/clubs/${clubId}/evaluations/templates`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(currentTemplate),
-            })
+            let res
+            if (currentTemplate.id) {
+                // Update existing
+                res = await fetch(`/api/clubs/${clubId}/evaluations/templates/${currentTemplate.id}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(currentTemplate),
+                })
+            } else {
+                // Create new
+                res = await fetch(`/api/clubs/${clubId}/evaluations/templates`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(currentTemplate),
+                })
+            }
 
             if (res.ok) {
                 setIsEditing(false)

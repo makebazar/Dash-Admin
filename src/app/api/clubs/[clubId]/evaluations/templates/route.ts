@@ -42,11 +42,11 @@ export async function GET(
                                'sort_order', i.sort_order,
                                'is_photo_required', i.is_photo_required
                            ) ORDER BY i.sort_order
-                       ) FILTER (WHERE i.id IS NOT NULL), 
+                       ) FILTER (WHERE i.id IS NOT NULL AND i.is_active = TRUE), 
                        '[]'::json
                    ) as items
             FROM evaluation_templates t
-            LEFT JOIN evaluation_template_items i ON t.id = i.template_id
+            LEFT JOIN evaluation_template_items i ON t.id = i.template_id AND i.is_active = TRUE
             WHERE t.club_id = $1
             GROUP BY t.id
             ORDER BY t.created_at DESC
