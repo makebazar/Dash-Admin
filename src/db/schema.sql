@@ -409,3 +409,10 @@ CREATE TABLE IF NOT EXISTS operation_logs (
     created_at TIMESTAMP DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_operation_logs_club ON operation_logs(club_id);
+
+-- 5. Add Inventory Settings & Warehouse ID to Inventories (Migration)
+ALTER TABLE clubs 
+ADD COLUMN IF NOT EXISTS inventory_settings JSONB DEFAULT '{}';
+
+ALTER TABLE warehouse_inventories 
+ADD COLUMN IF NOT EXISTS warehouse_id INTEGER REFERENCES warehouses(id);
