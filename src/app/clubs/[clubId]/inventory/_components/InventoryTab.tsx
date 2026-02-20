@@ -33,7 +33,7 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
     const [metrics, setMetrics] = useState<{ key: string, label: string }[]>([])
     
     // New Inventory State
-    const [selectedMetric, setSelectedMetric] = useState("")
+    const [selectedMetric, setSelectedMetric] = useState("none")
     const [selectedCategory, setSelectedCategory] = useState("all")
     const [selectedWarehouse, setSelectedWarehouse] = useState<string>("")
 
@@ -53,7 +53,7 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
             if (isOwner) {
                 // Owner: Default to first warehouse, metric empty
                 if (warehouses.length > 0) setSelectedWarehouse(warehouses[0].id.toString())
-                setSelectedMetric("") 
+                setSelectedMetric("none") 
                 setSelectedCategory("all")
             } else {
                 // Employee: Apply restrictions
@@ -78,7 +78,7 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
     const handleStartInventory = () => {
         // Validation
         if (!isOwner) {
-            if (!selectedMetric && !inventorySettings?.employee_default_metric_key) {
+            if ((!selectedMetric || selectedMetric === "none") && !inventorySettings?.employee_default_metric_key) {
                 alert("Не настроена метрика выручки для сотрудников. Обратитесь к администратору.")
                 return
             }
@@ -93,7 +93,7 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
             try {
                 const categoryId = selectedCategory === "all" ? null : Number(selectedCategory)
                 const warehouseId = selectedWarehouse ? Number(selectedWarehouse) : null
-                const metricKey = selectedMetric || null 
+                const metricKey = (selectedMetric === "none" || !selectedMetric) ? null : selectedMetric
 
                 const newId = await createInventory(clubId, currentUserId, metricKey, categoryId, warehouseId)
                 setIsDialogOpen(false)
@@ -325,7 +325,7 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
                                         <SelectValue placeholder={isOwner ? "Не привязывать к выручке" : "Выберите метрику"} />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        {isOwner && <SelectItem value="">Не привязывать</SelectItem>}
+                                        {isOwner && <SelectItem value="none">Не привязывать</SelectItem>}
                                         {metrics.map(m => (
                                             <SelectItem key={m.key} value={m.key}>{m.label}</SelectItem>
                                         ))}
@@ -342,7 +342,7 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
 
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Отмена</Button>
-                        <Button onClick={handleStartInventory} disabled={!selectedWarehouse || (!isOwner && !selectedMetric) || isPending}>
+                        <Button onClick={handleStartInventory} disabled={!selectedWarehouse || (!isOwner && (!selectedMetric || selectedMetric === "none")) || isPending}>
                             {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                             Начать подсчет
                         </Button>
