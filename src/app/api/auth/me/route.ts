@@ -35,7 +35,7 @@ export async function GET() {
        JOIN club_employees ce ON c.id = ce.club_id
        LEFT JOIN users u ON ce.user_id = u.id
        LEFT JOIN roles r ON u.role_id = r.id
-       WHERE ce.user_id = $1
+       WHERE ce.user_id = $1 AND ce.is_active = true
        ORDER BY ce.hired_at DESC`,
             [userId]
         );
