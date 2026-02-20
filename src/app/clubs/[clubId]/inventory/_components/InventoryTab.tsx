@@ -119,11 +119,11 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
     }
 
     if (activeInventoryId) {
-        return <ActiveInventory inventoryId={activeInventoryId} onClose={() => setActiveInventoryId(null)} />
+        return <ActiveInventory inventoryId={activeInventoryId} onClose={() => setActiveInventoryId(null)} isOwner={isOwner} />
     }
 
-    // Check if there is already an OPEN inventory in the list
-    const openInventory = inventories.find(i => i.status === 'OPEN')
+    // Check if there is already an OPEN inventory in the list that belongs to the current user
+    const openInventory = inventories.find(i => i.status === 'OPEN' && i.created_by === currentUserId)
 
     // Filter warehouses for dropdown
     const availableWarehouses = isOwner 
@@ -234,9 +234,13 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
                                                     <ArrowRight className="h-4 w-4" />
                                                 </Button>
                                             ) : (
-                                                <Button variant="ghost" size="sm" onClick={() => setActiveInventoryId(inv.id)} className="text-amber-600 h-8 px-2">
-                                                    Продолжить
-                                                </Button>
+                                                inv.created_by === currentUserId ? (
+                                                    <Button variant="ghost" size="sm" onClick={() => setActiveInventoryId(inv.id)} className="text-amber-600 h-8 px-2">
+                                                        Продолжить
+                                                    </Button>
+                                                ) : (
+                                                    <span className="text-xs text-muted-foreground italic px-2">В процессе...</span>
+                                                )
                                             )}
                                             <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50" onClick={() => setDeleteId(inv.id)}>
                                                 <Trash2 className="h-4 w-4" />

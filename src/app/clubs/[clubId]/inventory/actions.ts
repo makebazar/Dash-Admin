@@ -1,8 +1,11 @@
 "use server"
 
-import { query } from "@/db"
+import { query, getClient } from "@/db"
 import { revalidatePath } from "next/cache"
 import { logOperation } from "@/lib/logger"
+import { LogAction } from "@/lib/logger"
+
+// ... existing code ...
 
 export type Product = {
     id: number
@@ -78,6 +81,7 @@ export type Inventory = {
     reported_revenue: number
     calculated_revenue: number
     revenue_difference: number
+    created_by: string // Added field
     created_by_name?: string
     notes?: string
 }
@@ -946,7 +950,10 @@ export async function getInventories(clubId: string) {
         WHERE i.club_id = $1
         ORDER BY i.started_at DESC
     `, [clubId])
-    return res.rows as Inventory[]
+    return res.rows.map(row => ({
+        ...row,
+        created_by: row.created_by?.toString() // Ensure string
+    })) as Inventory[]
 }
 
 export async function getInventory(id: number) {
@@ -1067,13 +1074,15 @@ export async function deleteInventory(inventoryId: number, clubId: string, userI
     revalidatePath(`/clubs/${clubId}/inventory`)
 }
 
-export async function updateInventoryItem(itemId: number, actualStock: number) {
+export async function updateInventoryItem(itemId: number, actualStock: number | null, clubId: string) {
     // Just update the actual count
     await query(`
         UPDATE warehouse_inventory_items
         SET actual_stock = $1
         WHERE id = $2
     `, [actualStock, itemId])
+
+    revalidatePath(`/clubs/${clubId}/inventory`)
 }
 
 export async function closeInventory(inventoryId: number, clubId: string, reportedRevenue: number) {

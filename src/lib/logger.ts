@@ -7,17 +7,20 @@ export type LogAction =
     | 'CREATE_WAREHOUSE'
     | 'UPDATE_WAREHOUSE'
     | 'DELETE_WAREHOUSE'
+    | 'CREATE_PRODUCT'
+    | 'UPDATE_PRODUCT'
     | 'UPDATE_STOCK'
     | 'CREATE_SUPPLY'
     | 'CREATE_INVENTORY'
+    | 'DELETE_INVENTORY'
 
 export type LogEntityType = 'CATEGORY' | 'WAREHOUSE' | 'PRODUCT' | 'SUPPLY' | 'INVENTORY'
 
 export async function logOperation(
     clubId: string | number,
     userId: string,
-    action: LogAction,
-    entityType: LogEntityType,
+    action: string, // Changed from LogAction to string to allow flexibility
+    entityType: string, // Changed from LogEntityType to string
     entityId: string | number,
     details?: any
 ) {
