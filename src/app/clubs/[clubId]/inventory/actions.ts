@@ -90,6 +90,7 @@ export type InventoryItem = {
     id: number
     product_id: number
     product_name: string
+    category_name?: string
     expected_stock: number
     actual_stock: number | null
     difference: number | null
@@ -968,11 +969,12 @@ export async function getInventory(id: number) {
 
 export async function getInventoryItems(inventoryId: number) {
     const res = await query(`
-        SELECT ii.*, p.name as product_name
+        SELECT ii.*, p.name as product_name, c.name as category_name
         FROM warehouse_inventory_items ii
         JOIN warehouse_products p ON ii.product_id = p.id
+        LEFT JOIN warehouse_categories c ON p.category_id = c.id
         WHERE ii.inventory_id = $1
-        ORDER BY p.name
+        ORDER BY c.name NULLS LAST, p.name
     `, [inventoryId])
     return res.rows as InventoryItem[]
 }

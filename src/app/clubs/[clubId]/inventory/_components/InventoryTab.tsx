@@ -93,7 +93,14 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
             try {
                 const categoryId = selectedCategory === "all" ? null : Number(selectedCategory)
                 const warehouseId = selectedWarehouse ? Number(selectedWarehouse) : null
-                const metricKey = (selectedMetric === "none" || !selectedMetric) ? null : selectedMetric
+                
+                // For Owner, metric is always null (removed from UI)
+                // For Employee, use selected OR default
+                let metricKey: string | null = null
+                
+                if (!isOwner) {
+                    metricKey = inventorySettings?.employee_default_metric_key || (selectedMetric === "none" ? null : selectedMetric)
+                }
 
                 const newId = await createInventory(clubId, currentUserId, metricKey, categoryId, warehouseId)
                 setIsDialogOpen(false)
@@ -321,24 +328,22 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
                         </div>
 
                         {/* Metric Selection */}
-                        {(isOwner || !inventorySettings?.employee_default_metric_key) && (
+                        {/* Owner never sees metric selection (always null). Employees see it only if no default is set. */}
+                        {!isOwner && !inventorySettings?.employee_default_metric_key && (
                             <div className="space-y-2">
-                                <Label>Метрика выручки {isOwner && <span className="text-muted-foreground font-normal">(необязательно)</span>}</Label>
+                                <Label>Метрика выручки</Label>
                                 <Select value={selectedMetric} onValueChange={setSelectedMetric}>
                                     <SelectTrigger>
-                                        <SelectValue placeholder={isOwner ? "Не привязывать к выручке" : "Выберите метрику"} />
+                                        <SelectValue placeholder="Выберите метрику" />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        {isOwner && <SelectItem value="none">Не привязывать</SelectItem>}
                                         {metrics.map(m => (
                                             <SelectItem key={m.key} value={m.key}>{m.label}</SelectItem>
                                         ))}
                                     </SelectContent>
                                 </Select>
                                 <p className="text-xs text-muted-foreground">
-                                    {selectedMetric 
-                                        ? "Система сравнит расчетную выручку с суммой, указанной в отчете." 
-                                        : "Инвентаризация будет проведена только по количеству, без сверки с деньгами."}
+                                    Система сравнит расчетную выручку с суммой, указанной в отчете.
                                 </p>
                             </div>
                         )}
