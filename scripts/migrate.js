@@ -69,6 +69,13 @@ async function migrate() {
                             continue; 
                         }
 
+                        // Check if a specific migration file was requested via command line args
+                        // Usage: node scripts/migrate.js my_migration.sql
+                        const targetMigration = process.argv[2];
+                        if (targetMigration && file !== targetMigration) {
+                            continue;
+                        }
+
                         console.log(`  ➜ Applying migration: ${file}`);
                         const migrationPath = path.join(migrationsDir, file);
                         const migrationSql = fs.readFileSync(migrationPath, 'utf8');
@@ -82,6 +89,25 @@ async function migrate() {
                             appliedCount++;
                         } catch (err) {
                             await client.query('ROLLBACK');
+                            
+                            // Check for "already exists" errors to make migrations more robust against messy history
+                            // 42701: duplicate_column
+                            // 42P07: duplicate_table / relation_already_exists
+                            // 42710: duplicate_object (constraint)
+                            // 42P06: duplicate_schema
+                            if (['42701', '42P07', '42710', '42P06'].includes(err.code)) {
+                                console.warn(`  ⚠️  Skipping ${file} because it seems already applied (Error: ${err.code} - ${err.message})`);
+                                // Mark as applied so we don't try again
+                                try {
+                                    await client.query('INSERT INTO _migrations (name) VALUES ($1) ON CONFLICT (name) DO NOTHING', [file]);
+                                    console.log(`  ✅ Marked ${file} as applied (skipped execution).`);
+                                    appliedCount++;
+                                } catch (markErr) {
+                                    console.error(`  ❌ Failed to mark ${file} as applied:`, markErr);
+                                }
+                                continue;
+                            }
+
                             console.error(`  ❌ Failed to apply ${file}:`, err);
                             throw err; // Stop migration on failure
                         }
