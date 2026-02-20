@@ -945,9 +945,10 @@ export async function createSupply(clubId: string, userId: string, data: { suppl
 
 export async function getInventories(clubId: string) {
     const res = await query(`
-        SELECT i.*, u.full_name as created_by_name
+        SELECT i.*, u.full_name as created_by_name, w.name as warehouse_name
         FROM warehouse_inventories i
         LEFT JOIN users u ON i.created_by = u.id
+        LEFT JOIN warehouses w ON i.warehouse_id = w.id
         WHERE i.club_id = $1
         ORDER BY i.started_at DESC
     `, [clubId])

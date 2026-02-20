@@ -198,7 +198,7 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
                                     <TableCell>
                                         <div className="flex items-center gap-2">
                                             <WarehouseIcon className="h-3 w-3 text-muted-foreground" />
-                                            {inv.warehouse_name || "Все склады"}
+                                            {inv.warehouse_name || "Не указан"}
                                         </div>
                                     </TableCell>
                                     <TableCell>
@@ -319,7 +319,7 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
                                     <SelectValue placeholder="Весь склад" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="all">Весь склад (все товары)</SelectItem>
+                                    <SelectItem value="all">Все товары (весь склад)</SelectItem>
                                     {categories.map(c => (
                                         <SelectItem key={c.id} value={c.id.toString()}>{c.name}</SelectItem>
                                     ))}
