@@ -12,8 +12,6 @@ const s3Client = new S3Client({
   forcePathStyle: true, // Crucial for MinIO
 });
 
-// For S3Client with MinIO, we sometimes need to handle bucket name in path differently
-// or ensure region matches perfectly.
 const bucketName = process.env.S3_BUCKET_NAME || 'uploads';
 
 /**
@@ -35,38 +33,29 @@ export async function uploadFileToS3(
     const fileExtension = fileName.split('.').pop() || 'bin';
     const uniqueFileName = `${uuidv4()}.${fileExtension}`;
     
-    // Construct Key
-    let key: string;
-    if (folder === 'uploads' && bucketName === 'uploads') {
-       const datePrefix = new Date().toISOString().split('T')[0];
-       key = `${datePrefix}/${uniqueFileName}`;
-    } else {
-       key = `${folder}/${uniqueFileName}`;
-    }
+    // In "делаем базар" implementation, key is just `${folder}/${filename}`
+    // If bucket name is 'uploads' and folder is 'uploads', key becomes 'uploads/file.png'
+    // The previous logic to avoid duplication might be over-engineering if MinIO handles it correctly
+    // Let's stick to the proven pattern from the reference project.
+    
+    const key = `${folder}/${uniqueFileName}`;
 
     const params: PutObjectCommandInput = {
       Bucket: bucketName,
       Key: key,
       Body: fileBuffer,
       ContentType: mimeType,
-      // Disable ACL for now as it often causes issues with MinIO if not configured
-      // ACL: 'public-read', 
+      // Re-enable ACL as per reference implementation, but comment out if it fails
+      // In the reference, it is 'public-read'
+      ACL: 'public-read', 
     };
 
-    // Note: SignatureDoesNotMatch with MinIO often happens if the client thinks it's AWS
-    // and signs with virtual-host style, but sends path-style.
-    // We forced pathStyle: true, which is correct.
-    // The other cause is time skew or wrong region.
-    
     const command = new PutObjectCommand(params);
     await s3Client.send(command);
 
     // Construct the public URL
     // For MinIO, it's typically: http://endpoint/bucket/key
     const endpoint = process.env.S3_ENDPOINT?.replace(/\/$/, '') || '';
-    
-    // Check if endpoint is localhost, if so, we might need to be careful about how clients access it
-    // but usually for internal tools, the configured endpoint is fine.
     
     const url = `${endpoint}/${bucketName}/${key}`;
     return url;
