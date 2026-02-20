@@ -130,9 +130,22 @@ function EvaluationForm({ params }: { params: { clubId: string } }) {
                 // Try to find employee by name match since we don't have direct ID link easily available on frontend without more data
                 // Ideally we should link by user_id. 
                 // Let's assume for now user manually selects or we try to match name.
+                // UPD: The recent shifts API now returns user_id (UUID). The employees list returns id (integer) and user_id (UUID) is implicit.
+                // We need to fetch employees with user_id to match correctly.
+                
+                // Since we don't have user_id in employees list (it's id, full_name, role...), we can only match by name for now.
+                // OR we update employees API to return user_id.
+                
                 const foundEmp = employees.find(e => e.full_name === shift.employee_name)
                 if (foundEmp) {
                     setSelectedEmployee(foundEmp.id.toString())
+                } else {
+                    // Fallback: Try to match by user_id if available in employee object (it might be added later)
+                    // @ts-ignore
+                    const foundEmpById = employees.find(e => e.user_id === shift.user_id)
+                    if (foundEmpById) {
+                        setSelectedEmployee(foundEmpById.id.toString())
+                    }
                 }
             }
         }

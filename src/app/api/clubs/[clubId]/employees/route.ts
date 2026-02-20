@@ -29,6 +29,7 @@ export async function GET(
         const result = await query(
             `SELECT 
         u.id,
+        ce.user_id,
         u.full_name,
         u.phone_number,
         r.name as role_name,
