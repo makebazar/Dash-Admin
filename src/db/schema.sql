@@ -356,7 +356,8 @@ CREATE TABLE IF NOT EXISTS warehouse_inventory_items (
     actual_stock INTEGER, -- Filled by admin
     difference INTEGER, -- actual - expected (negative means loss/sold)
     cost_price_snapshot DECIMAL(10, 2),
-    selling_price_snapshot DECIMAL(10, 2)
+    selling_price_snapshot DECIMAL(10, 2),
+    calculated_revenue DECIMAL(10, 2)
 );
 CREATE INDEX IF NOT EXISTS idx_warehouse_inventory_items_inventory ON warehouse_inventory_items(inventory_id);
 -- WAREHOUSE EXPANSION
@@ -416,3 +417,7 @@ ADD COLUMN IF NOT EXISTS inventory_settings JSONB DEFAULT '{}';
 
 ALTER TABLE warehouse_inventories 
 ADD COLUMN IF NOT EXISTS warehouse_id INTEGER REFERENCES warehouses(id);
+
+-- Add calculated_revenue to inventory_items
+ALTER TABLE warehouse_inventory_items 
+ADD COLUMN IF NOT EXISTS calculated_revenue DECIMAL(10, 2);
