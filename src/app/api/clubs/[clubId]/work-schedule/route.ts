@@ -100,7 +100,7 @@ export async function GET(
                  LEFT JOIN roles r ON u.role_id = r.id
                  WHERE ce.club_id = $1 
                  AND (
-                    ce.is_active = TRUE 
+                    (ce.dismissed_at IS NULL AND ce.is_active = TRUE)
                     OR 
                     (ce.dismissed_at IS NOT NULL AND ce.dismissed_at >= $2::date)
                  )
