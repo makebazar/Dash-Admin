@@ -135,18 +135,27 @@ export async function POST(
             console.log('[API] New user created, ID:', employeeId);
         }
 
-        // Add to club_employees
-        console.log('[API] Adding to club_employees. Club:', clubId, 'User:', employeeId);
+        // Get role name for club_employees table
+        let roleName = 'Сотрудник';
+        if (role_id) {
+            const roleRes = await query('SELECT name FROM roles WHERE id = $1', [role_id]);
+            if (roleRes.rows.length > 0) {
+                roleName = roleRes.rows[0].name;
+            }
+        }
+
+        // Add to club_employees with role
+        console.log('[API] Adding to club_employees. Club:', clubId, 'User:', employeeId, 'Role:', roleName);
         const linkResult = await query(
-            `INSERT INTO club_employees (club_id, user_id)
-       VALUES ($1, $2)
-       ON CONFLICT (club_id, user_id) DO NOTHING
+            `INSERT INTO club_employees (club_id, user_id, role)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (club_id, user_id) DO UPDATE SET role = EXCLUDED.role
        RETURNING id`,
-            [clubId, employeeId]
+            [clubId, employeeId, roleName]
         );
         
         if (linkResult.rowCount === 0) {
-            console.log('[API] User was already linked to this club');
+            console.log('[API] User was already linked to this club (updated role)');
         } else {
             console.log('[API] Link created successfully');
         }
