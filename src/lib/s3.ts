@@ -12,6 +12,8 @@ const s3Client = new S3Client({
   forcePathStyle: true, // Crucial for MinIO
 });
 
+// For S3Client with MinIO, we sometimes need to handle bucket name in path differently
+// or ensure region matches perfectly.
 const bucketName = process.env.S3_BUCKET_NAME || 'uploads';
 
 /**
@@ -33,14 +35,9 @@ export async function uploadFileToS3(
     const fileExtension = fileName.split('.').pop() || 'bin';
     const uniqueFileName = `${uuidv4()}.${fileExtension}`;
     
-    // IMPORTANT: If bucket name matches folder, MinIO can get confused with path style access.
-    // Let's remove the 'uploads' folder prefix if the bucket is also named 'uploads' 
-    // or just put files in the root if folder is 'uploads'.
-    // Or better, use a different folder name like 'files'.
-    
+    // Construct Key
     let key: string;
     if (folder === 'uploads' && bucketName === 'uploads') {
-       // If both are 'uploads', put in root or use a date-based prefix
        const datePrefix = new Date().toISOString().split('T')[0];
        key = `${datePrefix}/${uniqueFileName}`;
     } else {
@@ -52,9 +49,15 @@ export async function uploadFileToS3(
       Key: key,
       Body: fileBuffer,
       ContentType: mimeType,
-      // ACL: 'public-read', // Uncomment if your MinIO bucket requires ACLs for public access
+      // Disable ACL for now as it often causes issues with MinIO if not configured
+      // ACL: 'public-read', 
     };
 
+    // Note: SignatureDoesNotMatch with MinIO often happens if the client thinks it's AWS
+    // and signs with virtual-host style, but sends path-style.
+    // We forced pathStyle: true, which is correct.
+    // The other cause is time skew or wrong region.
+    
     const command = new PutObjectCommand(params);
     await s3Client.send(command);
 
