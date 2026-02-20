@@ -93,8 +93,9 @@ export async function GET(
         // Get employees
         let employees = [];
         try {
+            console.log(`Fetching schedule employees for club ${clubId}, date >= ${startOfMonth}`);
             const employeesRes = await query(
-                `SELECT u.id, u.full_name, r.name as role, ce.dismissed_at, ce.display_order
+                `SELECT u.id, u.full_name, r.name as role, ce.dismissed_at, ce.display_order, ce.is_active
                  FROM club_employees ce
                  JOIN users u ON u.id = ce.user_id
                  LEFT JOIN roles r ON u.role_id = r.id
@@ -108,6 +109,7 @@ export async function GET(
                 [clubId, startOfMonth]
             );
             employees = employeesRes.rows;
+            console.log(`Found ${employees.length} employees. Dismissed included if date >= ${startOfMonth}`);
         } catch (err: any) {
             console.error('Failed to fetch employees:', err);
             throw new Error(`Employee query failed: ${err.message}`);
