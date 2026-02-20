@@ -72,7 +72,9 @@ export type Inventory = {
     status: 'OPEN' | 'CLOSED'
     started_at: string
     closed_at: string | null
-    target_metric_key: string
+    target_metric_key: string | null
+    warehouse_id: number | null
+    warehouse_name?: string
     reported_revenue: number
     calculated_revenue: number
     revenue_difference: number
@@ -973,28 +975,70 @@ export async function getMetrics() {
     return res.rows as { key: string, label: string }[]
 }
 
-export async function createInventory(clubId: string, userId: string, targetMetricKey: string, categoryId?: number | null) {
+export async function getClubSettings(clubId: string) {
+    const res = await query(`
+        SELECT id, owner_id, inventory_settings 
+        FROM clubs 
+        WHERE id = $1
+    `, [clubId])
+    return res.rows[0] as { 
+        id: number, 
+        owner_id: string, 
+        inventory_settings: { 
+            employee_allowed_warehouse_ids?: number[], 
+            employee_default_metric_key?: string 
+        } 
+    }
+}
+
+export async function createInventory(clubId: string, userId: string, targetMetricKey: string | null, categoryId?: number | null, warehouseId?: number | null) {
     const client = await import("@/db").then(m => m.getClient())
     try {
         await client.query('BEGIN')
 
         // 1. Create Inventory Header
         const invRes = await client.query(`
-            INSERT INTO warehouse_inventories (club_id, created_by, status, target_metric_key)
-            VALUES ($1, $2, 'OPEN', $3)
+            INSERT INTO warehouse_inventories (club_id, created_by, status, target_metric_key, warehouse_id)
+            VALUES ($1, $2, 'OPEN', $3, $4)
             RETURNING id
-        `, [clubId, userId, targetMetricKey])
+        `, [clubId, userId, targetMetricKey, warehouseId])
         const inventoryId = invRes.rows[0].id
 
-        // 2. Snapshot current stock (Sum of all warehouses for now)
-        // TODO: Support Per-Warehouse Inventory
-        // Filter by category if provided
-        let query = `SELECT id, current_stock, cost_price, selling_price FROM warehouse_products WHERE club_id = $1 AND is_active = true`
+        // 2. Snapshot current stock
+        let query = ''
         const params: any[] = [clubId]
         
-        if (categoryId) {
-            query += ` AND category_id = $2`
-            params.push(categoryId)
+        if (warehouseId) {
+            // Specific Warehouse Snapshot
+            // Get all active products and their stock in this warehouse (0 if missing)
+            query = `
+                SELECT p.id, 
+                       COALESCE(ws.quantity, 0) as current_stock, 
+                       p.cost_price, 
+                       p.selling_price 
+                FROM warehouse_products p
+                LEFT JOIN warehouse_stock ws ON p.id = ws.product_id AND ws.warehouse_id = $2
+                WHERE p.club_id = $1 AND p.is_active = true
+            `
+            params.push(warehouseId)
+            
+            if (categoryId) {
+                query += ` AND p.category_id = $3`
+                params.push(categoryId)
+            }
+        } else {
+            // Legacy: Aggregate Snapshot (Sum of all warehouses)
+            // Ideally we should deprecate this or force warehouse selection
+            query = `
+                SELECT id, current_stock, cost_price, selling_price 
+                FROM warehouse_products 
+                WHERE club_id = $1 AND is_active = true
+            `
+            
+            if (categoryId) {
+                query += ` AND category_id = $2`
+                params.push(categoryId)
+            }
         }
 
         const productsRes = await client.query(query, params)
@@ -1007,7 +1051,7 @@ export async function createInventory(clubId: string, userId: string, targetMetr
         }
 
         await client.query('COMMIT')
-        await logOperation(clubId, userId, 'CREATE_INVENTORY', 'INVENTORY', inventoryId, { categoryId })
+        await logOperation(clubId, userId, 'CREATE_INVENTORY', 'INVENTORY', inventoryId, { categoryId, warehouseId })
         return inventoryId
     } catch (e) {
         await client.query('ROLLBACK')
@@ -1056,14 +1100,19 @@ export async function closeInventory(inventoryId: number, clubId: string, report
         const diff = reportedRevenue - calculatedRevenue 
         
         // 3. Update Stock Levels to Actual and Log Movements
-        // For Multi-Warehouse: Update Default Warehouse
-        // Strategy: Adjust stock in the Default Warehouse to match the new total.
-        // This is a simplification. Ideally, inventory should be per-warehouse.
+        // Strategy: Adjust stock in the Inventoried Warehouse (or Default if legacy)
         
-        const defaultWh = await client.query('SELECT id FROM warehouses WHERE club_id = $1 AND is_default = true LIMIT 1', [clubId])
-        const warehouseId = defaultWh.rows[0]?.id
+        // Get inventory warehouse
+        const invHeader = await client.query('SELECT warehouse_id FROM warehouse_inventories WHERE id = $1', [inventoryId])
+        let warehouseId = invHeader.rows[0]?.warehouse_id
 
-        if (!warehouseId) throw new Error("Не найден основной склад для корректировки остатков")
+        if (!warehouseId) {
+             // Fallback to default warehouse (Legacy)
+             const defaultWh = await client.query('SELECT id FROM warehouses WHERE club_id = $1 AND is_default = true LIMIT 1', [clubId])
+             warehouseId = defaultWh.rows[0]?.id
+        }
+
+        if (!warehouseId) throw new Error("Не найден склад для корректировки остатков")
 
         const diffItems = await client.query(`
             SELECT ii.product_id, ii.expected_stock, ii.actual_stock

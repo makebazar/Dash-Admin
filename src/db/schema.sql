@@ -48,6 +48,7 @@ CREATE TABLE IF NOT EXISTS clubs (
     night_start_hour INTEGER DEFAULT 21,
     default_monthly_shifts INTEGER DEFAULT 20,
     inventory_required BOOLEAN DEFAULT FALSE,
+    inventory_settings JSONB DEFAULT '{}',
     created_at TIMESTAMP DEFAULT NOW()
 );
 
@@ -342,7 +343,8 @@ CREATE TABLE IF NOT EXISTS warehouse_inventories (
     reported_revenue DECIMAL(10, 2), -- The value of that metric entered by admin
     calculated_revenue DECIMAL(10, 2), -- Calculated from stock difference
     revenue_difference DECIMAL(10, 2), -- reported - calculated
-    notes TEXT
+    notes TEXT,
+    warehouse_id INTEGER REFERENCES warehouses(id)
 );
 CREATE INDEX IF NOT EXISTS idx_warehouse_inventories_club ON warehouse_inventories(club_id);
 

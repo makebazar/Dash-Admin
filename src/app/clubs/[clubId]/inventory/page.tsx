@@ -1,5 +1,5 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { getProducts, getCategories, getSupplies, getInventories, getWarehouses, getEmployees, getClubTasks, getProcurementLists, getSuppliersForSelect } from "./actions"
+import { getProducts, getCategories, getSupplies, getInventories, getWarehouses, getEmployees, getClubTasks, getProcurementLists, getSuppliersForSelect, getClubSettings } from "./actions"
 import { ProductsTab } from "./_components/ProductsTab"
 import { SuppliesTab } from "./_components/SuppliesTab"
 import { InventoryTab } from "./_components/InventoryTab"
@@ -15,7 +15,7 @@ export default async function InventoryPage({ params }: { params: Promise<{ club
 
     if (!userId) return <div className="p-8 text-red-500">Доступ запрещен. Пожалуйста, авторизуйтесь.</div>
 
-    const [products, categories, supplies, inventories, warehouses, employees, tasks, procurementLists, suppliers] = await Promise.all([
+    const [products, categories, supplies, inventories, warehouses, employees, tasks, procurementLists, suppliers, clubSettings] = await Promise.all([
         getProducts(clubId),
         getCategories(clubId),
         getSupplies(clubId),
@@ -24,7 +24,8 @@ export default async function InventoryPage({ params }: { params: Promise<{ club
         getEmployees(clubId),
         getClubTasks(clubId),
         getProcurementLists(clubId),
-        getSuppliersForSelect(clubId)
+        getSuppliersForSelect(clubId),
+        getClubSettings(clubId)
     ])
 
     return (
@@ -107,7 +108,14 @@ export default async function InventoryPage({ params }: { params: Promise<{ club
                 </TabsContent>
 
                 <TabsContent value="inventory" className="mt-0">
-                    <InventoryTab inventories={inventories} categories={categories} currentUserId={userId} />
+                    <InventoryTab 
+                        inventories={inventories} 
+                        categories={categories} 
+                        warehouses={warehouses}
+                        currentUserId={userId} 
+                        isOwner={clubSettings.owner_id === userId}
+                        inventorySettings={clubSettings.inventory_settings}
+                    />
                 </TabsContent>
             </Tabs>
         </div>
