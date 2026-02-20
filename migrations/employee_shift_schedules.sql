@@ -12,8 +12,8 @@ CREATE TABLE IF NOT EXISTS employee_shift_schedules (
 );
 
 -- Индексы для быстрого поиска
-CREATE INDEX idx_shift_schedules_user ON employee_shift_schedules(user_id, club_id);
-CREATE INDEX idx_shift_schedules_period ON employee_shift_schedules(club_id, month, year);
+CREATE INDEX IF NOT EXISTS idx_shift_schedules_user ON employee_shift_schedules(user_id, club_id);
+CREATE INDEX IF NOT EXISTS idx_shift_schedules_period ON employee_shift_schedules(club_id, month, year);
 
 -- Стандартное количество смен в месяце (если график не заполнен)
 ALTER TABLE clubs 

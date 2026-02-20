@@ -1,6 +1,6 @@
 -- Migration: Create tables for PC maintenance tracking
 
-CREATE TABLE club_workstations (
+CREATE TABLE IF NOT EXISTS club_workstations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     club_id INTEGER REFERENCES clubs(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
@@ -9,7 +9,7 @@ CREATE TABLE club_workstations (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE pc_maintenance_tasks (
+CREATE TABLE IF NOT EXISTS pc_maintenance_tasks (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     workstation_id UUID REFERENCES club_workstations(id) ON DELETE CASCADE,
     assigned_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
@@ -22,6 +22,6 @@ CREATE TABLE pc_maintenance_tasks (
 );
 
 -- Index for performance
-CREATE INDEX idx_workstations_club_id ON club_workstations(club_id);
-CREATE INDEX idx_maintenance_tasks_date ON pc_maintenance_tasks(year, month);
-CREATE INDEX idx_maintenance_tasks_user ON pc_maintenance_tasks(assigned_user_id);
+CREATE INDEX IF NOT EXISTS idx_workstations_club_id ON club_workstations(club_id);
+CREATE INDEX IF NOT EXISTS idx_maintenance_tasks_date ON pc_maintenance_tasks(year, month);
+CREATE INDEX IF NOT EXISTS idx_maintenance_tasks_user ON pc_maintenance_tasks(assigned_user_id);

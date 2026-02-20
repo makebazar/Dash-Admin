@@ -1,5 +1,5 @@
 -- Create table for report templates
-CREATE TABLE club_report_templates (
+CREATE TABLE IF NOT EXISTS club_report_templates (
     id SERIAL PRIMARY KEY,
     club_id INTEGER NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
     name VARCHAR(100) DEFAULT 'Основной отчет',
@@ -10,8 +10,8 @@ CREATE TABLE club_report_templates (
 
 -- Update shifts table to store dynamic report data
 ALTER TABLE shifts 
-ADD COLUMN report_data JSONB DEFAULT '{}',
-ADD COLUMN template_id INTEGER REFERENCES club_report_templates(id);
+ADD COLUMN IF NOT EXISTS report_data JSONB DEFAULT '{}',
+ADD COLUMN IF NOT EXISTS template_id INTEGER REFERENCES club_report_templates(id);
 
 -- Create index for faster analytics on report data keys
-CREATE INDEX idx_shifts_report_data ON shifts USING gin (report_data);
+CREATE INDEX IF NOT EXISTS idx_shifts_report_data ON shifts USING gin (report_data);
