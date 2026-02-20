@@ -115,7 +115,7 @@ export async function POST(
             `INSERT INTO evaluations (club_id, template_id, employee_id, evaluator_id, total_score, max_score, comments)
              VALUES ($1, $2, $3, $4, $5, $6, $7)
              RETURNING id`,
-            [clubId, template_id, employee_id, userId, totalScore, 100, comments]
+            [clubId, template_id, employee_id, userId, totalScore, 100, comments || '']
         );
         const evaluationId = evalResult.rows[0].id;
 
