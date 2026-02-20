@@ -44,6 +44,6 @@ CREATE TABLE IF NOT EXISTS evaluation_responses (
 );
 
 -- Indexing for faster lookups
-CREATE INDEX IF NOT EXISTS idx_eval_templates_club ON evaluation_templates(club_id);
-CREATE INDEX IF NOT EXISTS idx_evaluations_club_employee ON evaluations(club_id, employee_id);
-CREATE INDEX IF NOT EXISTS idx_evaluations_date ON evaluations(evaluation_date);
+CREATE INDEX idx_eval_templates_club ON evaluation_templates(club_id);
+CREATE INDEX idx_evaluations_club_employee ON evaluations(club_id, employee_id);
+CREATE INDEX idx_evaluations_date ON evaluations(evaluation_date);
