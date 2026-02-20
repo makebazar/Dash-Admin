@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import {
     Clock, Loader2, LogIn, LogOut, Wallet, Activity, Calendar,
-    TrendingUp, Target, Zap, ChevronRight, Trophy, Brush
+    TrendingUp, Target, Zap, ChevronRight, Trophy, Brush, ClipboardCheck
 } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -469,6 +469,24 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                                             )} />
                                         </div>
                                     </div>
+                                </CardContent>
+                            </Card>
+                        </Link>
+
+                        {/* Evaluations */}
+                        <Link href={`/employee/clubs/${clubId}/evaluations`} className="block">
+                            <Card className="hover:shadow-md transition-all active:scale-[0.99] border-l-4 border-l-orange-500">
+                                <CardContent className="p-4 flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-orange-100 text-orange-600">
+                                            <ClipboardCheck className="h-5 w-5" />
+                                        </div>
+                                        <div>
+                                            <p className="font-medium">Мои проверки</p>
+                                            <p className="text-xs text-muted-foreground">Результаты аудитов</p>
+                                        </div>
+                                    </div>
+                                    <ChevronRight className="h-5 w-5 text-muted-foreground" />
                                 </CardContent>
                             </Card>
                         </Link>

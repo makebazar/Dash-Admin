@@ -99,7 +99,11 @@ export async function GET(
                  JOIN users u ON u.id = ce.user_id
                  LEFT JOIN roles r ON u.role_id = r.id
                  WHERE ce.club_id = $1 
-                 AND (ce.dismissed_at IS NULL OR ce.dismissed_at >= $2::date)
+                 AND (
+                    ce.is_active = TRUE 
+                    OR 
+                    (ce.dismissed_at IS NOT NULL AND ce.dismissed_at >= $2::date)
+                 )
                  ORDER BY ce.dismissed_at ASC NULLS FIRST, ce.display_order ASC, u.full_name ASC`,
                 [clubId, startOfMonth]
             );
