@@ -29,16 +29,19 @@ export async function GET() {
         );
 
         // Get employee clubs with role
+        // We use IS NOT FALSE to handle potential NULLs in is_active
         const employeeClubsResult = await query(
-            `SELECT c.id, c.name, c.inventory_required, r.name as role_name, r.id as role_id
+            `SELECT c.id, c.name, r.name as role_name, r.id as role_id, c.inventory_required
        FROM clubs c
        JOIN club_employees ce ON c.id = ce.club_id
        LEFT JOIN users u ON ce.user_id = u.id
        LEFT JOIN roles r ON u.role_id = r.id
-       WHERE ce.user_id = $1 AND ce.is_active = true
+       WHERE ce.user_id = $1 AND ce.is_active IS NOT FALSE
        ORDER BY ce.hired_at DESC`,
             [userId]
         );
+
+        console.log(`[API/ME] User ${userId} has ${employeeClubsResult.rowCount} active employee clubs`)
 
         const ownedClubs = ownedClubsResult.rows.map(row => ({
             id: row.id,
@@ -48,7 +51,7 @@ export async function GET() {
         const employeeClubs = employeeClubsResult.rows.map(row => ({
             id: row.id,
             name: row.name,
-            inventory_required: row.inventory_required,
+            inventory_required: row.inventory_required || false, // Default to false if missing
             role: row.role_name || 'Сотрудник',
             role_id: row.role_id
         }));
