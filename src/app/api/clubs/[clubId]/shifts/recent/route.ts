@@ -39,9 +39,10 @@ export async function GET(
                 s.status,
                 s.user_id,
                 u.full_name as employee_name,
-                u.role
+                r.name as role
             FROM shifts s
             JOIN users u ON s.user_id = u.id
+            LEFT JOIN roles r ON u.role_id = r.id
             WHERE s.club_id = $1
             ORDER BY s.check_in DESC
             LIMIT 5
