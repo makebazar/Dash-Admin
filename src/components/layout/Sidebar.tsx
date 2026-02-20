@@ -2,8 +2,9 @@
 
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { Building2, LayoutDashboard, Settings, LogOut, Menu } from "lucide-react"
+import { Building2, LayoutDashboard, Settings, LogOut, Menu, User } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useEffect, useState } from "react"
 
 interface SidebarProps {
     clubs: Array<{ id: string; name: string }>
@@ -12,6 +13,23 @@ interface SidebarProps {
 export function Sidebar({ clubs }: SidebarProps) {
     const pathname = usePathname()
     const router = useRouter()
+    const [hasEmployeeClubs, setHasEmployeeClubs] = useState(false)
+
+    useEffect(() => {
+        checkEmployeeStatus()
+    }, [])
+
+    const checkEmployeeStatus = async () => {
+        try {
+            const res = await fetch('/api/auth/me')
+            const data = await res.json()
+            if (res.ok && data.employeeClubs && data.employeeClubs.length > 0) {
+                setHasEmployeeClubs(true)
+            }
+        } catch (error) {
+            console.error('Error checking employee status:', error)
+        }
+    }
 
     const handleLogout = async () => {
         try {
@@ -83,7 +101,17 @@ export function Sidebar({ clubs }: SidebarProps) {
                 </nav>
 
                 {/* Footer */}
-                <div className="border-t border-border p-4">
+                <div className="border-t border-border p-4 space-y-1">
+                    {hasEmployeeClubs && (
+                        <Link
+                            href="/employee/dashboard"
+                            className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-purple-600 bg-purple-50 hover:bg-purple-100 dark:bg-purple-900/20 dark:text-purple-400 dark:hover:bg-purple-900/30 transition-colors mb-2"
+                        >
+                            <User className="h-4 w-4" />
+                            Кабинет сотрудника
+                        </Link>
+                    )}
+                    
                     <Link
                         href="/settings"
                         className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
@@ -92,7 +120,7 @@ export function Sidebar({ clubs }: SidebarProps) {
                         Настройки
                     </Link>
                     <button
-                        className="mt-1 flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+                        className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
                         onClick={handleLogout}
                     >
                         <LogOut className="h-4 w-4" />

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import Link from "next/link"
-import { Building2, LogOut, User, LayoutDashboard, Calendar, Brush, Clock, Menu, X } from "lucide-react"
+import { Building2, LogOut, User, LayoutDashboard, Calendar, Brush, Clock, Menu, X, Crown } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 
@@ -18,6 +18,7 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
     const [userName, setUserName] = useState('')
     const [clubs, setClubs] = useState<Club[]>([])
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+    const [hasOwnedClubs, setHasOwnedClubs] = useState(false)
 
     useEffect(() => {
         fetchUserData()
@@ -36,6 +37,9 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
             if (res.ok) {
                 setUserName(data.user.full_name)
                 setClubs(data.employeeClubs)
+                if (data.ownedClubs && data.ownedClubs.length > 0) {
+                    setHasOwnedClubs(true)
+                }
             }
         } catch (error) {
             console.error('Error fetching user data:', error)
@@ -162,7 +166,16 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
                     </div>
 
                     {/* Footer - Logout */}
-                    <div className="border-t border-border p-4">
+                    <div className="border-t border-border p-4 space-y-1">
+                        {hasOwnedClubs && (
+                            <Link
+                                href="/dashboard"
+                                className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-amber-600 bg-amber-50 hover:bg-amber-100 dark:bg-amber-900/20 dark:text-amber-400 dark:hover:bg-amber-900/30 transition-colors mb-2"
+                            >
+                                <Crown className="h-4 w-4" />
+                                Кабинет владельца
+                            </Link>
+                        )}
                         <button
                             onClick={handleLogout}
                             className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
