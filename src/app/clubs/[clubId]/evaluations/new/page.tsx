@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Loader2, ArrowLeft, CheckCircle2, XCircle, AlertCircle, UserCircle } from "lucide-react"
+import { Loader2, ArrowLeft, CheckCircle2, XCircle, AlertCircle, UserCircle, Camera, Upload, Trash2, ExternalLink } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import Link from "next/link"
@@ -16,6 +16,7 @@ interface ChecklistItem {
     content: string
     description: string
     weight: number
+    is_photo_required?: boolean
 }
 
 interface ChecklistTemplate {
@@ -39,8 +40,9 @@ function EvaluationForm({ params }: { params: { clubId: string } }) {
     const [template, setTemplate] = useState<ChecklistTemplate | null>(null)
     const [employees, setEmployees] = useState<Employee[]>([])
     const [selectedEmployee, setSelectedEmployee] = useState<string>('')
-    const [responses, setResponses] = useState<Record<number, { score: number, comment: string }>>({})
+    const [responses, setResponses] = useState<Record<number, { score: number, comment: string, photo_url?: string }>>({})
     const [generalComment, setGeneralComment] = useState('')
+    const [uploadingState, setUploadingState] = useState<Record<number, boolean>>({})
 
     const [isLoading, setIsLoading] = useState(true)
     const [isSubmitting, setIsSubmitting] = useState(false)
@@ -64,9 +66,9 @@ function EvaluationForm({ params }: { params: { clubId: string } }) {
                 if (foundTemplate) {
                     setTemplate(foundTemplate)
                     // Initialize responses
-                    const initial: Record<number, { score: number, comment: string }> = {}
+                    const initial: Record<number, { score: number, comment: string, photo_url?: string }> = {}
                     foundTemplate.items.forEach((item: ChecklistItem) => {
-                        initial[item.id] = { score: 1, comment: '' } // Default to Yes (1)
+                        initial[item.id] = { score: 1, comment: '', photo_url: '' } // Default to Yes (1)
                     })
                     setResponses(initial)
                 }
@@ -93,15 +95,62 @@ function EvaluationForm({ params }: { params: { clubId: string } }) {
         }))
     }
 
+    const handlePhotoUpload = async (itemId: number, e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]
+        if (!file) return
+
+        setUploadingState(prev => ({ ...prev, [itemId]: true }))
+        const formData = new FormData()
+        formData.append('file', file)
+
+        try {
+            const res = await fetch('/api/upload', {
+                method: 'POST',
+                body: formData
+            })
+            
+            if (!res.ok) throw new Error('Upload failed')
+            
+            const data = await res.json()
+            setResponses(prev => ({
+                ...prev,
+                [itemId]: { ...prev[itemId], photo_url: data.url }
+            }))
+        } catch (error) {
+            console.error('Failed to upload file:', error)
+            alert('Не удалось загрузить фото')
+        } finally {
+            setUploadingState(prev => ({ ...prev, [itemId]: false }))
+        }
+    }
+
+    const removePhoto = (itemId: number) => {
+        setResponses(prev => ({
+            ...prev,
+            [itemId]: { ...prev[itemId], photo_url: '' }
+        }))
+    }
+
     const handleSubmit = async () => {
         if (!selectedEmployee) return alert('Выберите сотрудника')
+
+        // Validate required photos
+        const missingPhotos = template?.items.filter(item => 
+            item.is_photo_required && !responses[item.id]?.photo_url
+        )
+
+        if (missingPhotos && missingPhotos.length > 0) {
+            alert(`Необходимо прикрепить фото для следующих пунктов:\n${missingPhotos.map(i => `- ${i.content}`).join('\n')}`)
+            return
+        }
 
         setIsSubmitting(true)
         try {
             const formattedResponses = Object.entries(responses).map(([itemId, data]) => ({
                 item_id: Number(itemId),
                 score: data.score,
-                comment: data.comment
+                comment: data.comment,
+                photo_url: data.photo_url
             }))
 
             const res = await fetch(`/api/clubs/${clubId}/evaluations`, {
@@ -202,6 +251,92 @@ function EvaluationForm({ params }: { params: { clubId: string } }) {
                                         <XCircle className="h-5 w-5" />
                                         <span className="font-bold">НЕТ</span>
                                     </button>
+                                    {/* Photo Upload Section */}
+                                    {(item.is_photo_required || responses[item.id]?.photo_url) && (
+                                        <div className="mt-4 pt-3 border-t">
+                                            {responses[item.id]?.photo_url ? (
+                                                <div className="flex items-center gap-3 p-2 bg-slate-50 rounded-lg border">
+                                                    <div className="h-10 w-10 bg-slate-200 rounded overflow-hidden relative">
+                                                        <img 
+                                                            src={responses[item.id].photo_url} 
+                                                            alt="Attached" 
+                                                            className="h-full w-full object-cover"
+                                                        />
+                                                    </div>
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="text-xs text-muted-foreground truncate">Фото прикреплено</p>
+                                                        <a 
+                                                            href={responses[item.id].photo_url} 
+                                                            target="_blank" 
+                                                            rel="noopener noreferrer"
+                                                            className="text-xs text-blue-600 hover:underline flex items-center gap-1"
+                                                        >
+                                                            Открыть <ExternalLink className="h-3 w-3" />
+                                                        </a>
+                                                    </div>
+                                                    <button 
+                                                        onClick={() => removePhoto(item.id)}
+                                                        className="p-2 hover:bg-red-50 text-slate-400 hover:text-red-500 rounded-full transition-colors"
+                                                    >
+                                                        <Trash2 className="h-4 w-4" />
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <div>
+                                                    <div className="flex items-center justify-between mb-2">
+                                                        <Label className="text-xs font-medium flex items-center gap-1 text-slate-600">
+                                                            <Camera className="h-3 w-3" />
+                                                            {item.is_photo_required ? 'Фото обязательно' : 'Прикрепить фото'}
+                                                        </Label>
+                                                    </div>
+                                                    <label className={`
+                                                        flex items-center justify-center gap-2 p-3 rounded-lg border-2 border-dashed cursor-pointer transition-colors
+                                                        ${item.is_photo_required ? 'border-purple-200 bg-purple-50 hover:bg-purple-100' : 'border-slate-200 hover:bg-slate-50'}
+                                                    `}>
+                                                        {uploadingState[item.id] ? (
+                                                            <Loader2 className="h-4 w-4 animate-spin text-purple-600" />
+                                                        ) : (
+                                                            <Upload className={`h-4 w-4 ${item.is_photo_required ? 'text-purple-600' : 'text-slate-400'}`} />
+                                                        )}
+                                                        <span className={`text-xs font-medium ${item.is_photo_required ? 'text-purple-700' : 'text-slate-500'}`}>
+                                                            {uploadingState[item.id] ? 'Загрузка...' : 'Загрузить фото'}
+                                                        </span>
+                                                        <input 
+                                                            type="file" 
+                                                            accept="image/*" 
+                                                            className="hidden" 
+                                                            onChange={(e) => handlePhotoUpload(item.id, e)}
+                                                            disabled={uploadingState[item.id]}
+                                                        />
+                                                    </label>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* Optional photo upload button if not required and no photo yet */}
+                                    {!item.is_photo_required && !responses[item.id]?.photo_url && (
+                                        <div className="mt-2 text-center">
+                                            <button 
+                                                onClick={() => {
+                                                    // Trigger hidden file input
+                                                    document.getElementById(`optional-photo-${item.id}`)?.click()
+                                                }}
+                                                className="text-xs text-slate-400 hover:text-purple-600 flex items-center justify-center gap-1 mx-auto py-1"
+                                            >
+                                                <Camera className="h-3 w-3" />
+                                                Добавить фото
+                                            </button>
+                                            <input 
+                                                id={`optional-photo-${item.id}`}
+                                                type="file" 
+                                                accept="image/*" 
+                                                className="hidden" 
+                                                onChange={(e) => handlePhotoUpload(item.id, e)}
+                                                disabled={uploadingState[item.id]}
+                                            />
+                                        </div>
+                                    )}
                                 </div>
                             </CardContent>
                         </Card>

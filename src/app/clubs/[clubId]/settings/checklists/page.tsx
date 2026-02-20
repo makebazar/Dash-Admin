@@ -8,9 +8,10 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Loader2, Plus, GripVertical, Save, Trash2, ArrowLeft, ClipboardCheck } from "lucide-react"
+import { Loader2, Plus, GripVertical, Save, Trash2, ArrowLeft, ClipboardCheck, History, Camera, ExternalLink } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 interface ChecklistItem {
     id?: number
@@ -18,6 +19,7 @@ interface ChecklistItem {
     description: string
     weight: number
     sort_order: number
+    is_photo_required?: boolean
 }
 
 interface ChecklistTemplate {
@@ -30,10 +32,38 @@ interface ChecklistTemplate {
     created_at: string
 }
 
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
+
+interface Evaluation {
+    id: number
+    template_name: string
+    employee_name: string
+    evaluator_name: string
+    total_score: number
+    max_score: number
+    evaluation_date: string
+    created_at: string
+}
+
+interface EvaluationDetail extends Evaluation {
+    comments?: string
+    responses: {
+        id: number
+        item_content: string
+        score: number
+        comment?: string
+        photo_url?: string
+    }[]
+}
+
 export default function ChecklistSettingsPage({ params }: { params: Promise<{ clubId: string }> }) {
     const router = useRouter()
     const [clubId, setClubId] = useState('')
     const [templates, setTemplates] = useState<ChecklistTemplate[]>([])
+    const [history, setHistory] = useState<Evaluation[]>([])
+    const [selectedEvaluation, setSelectedEvaluation] = useState<EvaluationDetail | null>(null)
+    const [isDetailLoading, setIsDetailLoading] = useState(false)
     const [isEditing, setIsEditing] = useState(false)
     const [currentTemplate, setCurrentTemplate] = useState<Partial<ChecklistTemplate>>({
         name: '',
@@ -49,6 +79,7 @@ export default function ChecklistSettingsPage({ params }: { params: Promise<{ cl
         params.then(p => {
             setClubId(p.clubId)
             fetchTemplates(p.clubId)
+            fetchHistory(p.clubId)
         })
     }, [params])
 
@@ -64,12 +95,47 @@ export default function ChecklistSettingsPage({ params }: { params: Promise<{ cl
         }
     }
 
+    const fetchHistory = async (id: string) => {
+        try {
+            const res = await fetch(`/api/clubs/${id}/evaluations`)
+            const data = await res.json()
+            if (res.ok && Array.isArray(data)) setHistory(data)
+        } catch (error) {
+            console.error(error)
+        }
+    }
+
+    const handleViewEvaluation = async (evaluationId: number) => {
+        // Find basic info from history first to show immediately
+        const basicInfo = history.find(h => h.id === evaluationId)
+        if (basicInfo) {
+            // @ts-ignore - responses missing initially
+            setSelectedEvaluation({ ...basicInfo, responses: [] })
+        }
+        
+        setIsDetailLoading(true)
+        try {
+            const res = await fetch(`/api/clubs/${clubId}/evaluations/${evaluationId}`)
+            const data = await res.json()
+            if (res.ok) {
+                setSelectedEvaluation(data)
+            } else {
+                alert('Не удалось загрузить детали')
+            }
+        } catch (error) {
+            console.error(error)
+        } finally {
+            setIsDetailLoading(false)
+        }
+    }
+
     const handleAddItem = () => {
         const newItem: ChecklistItem = {
             content: '',
             description: '',
             weight: 1.0,
-            sort_order: (currentTemplate.items?.length || 0)
+            sort_order: (currentTemplate.items?.length || 0),
+            is_photo_required: false
         }
         setCurrentTemplate({
             ...currentTemplate,
@@ -310,6 +376,17 @@ export default function ChecklistSettingsPage({ params }: { params: Promise<{ cl
                                                 />
                                             </div>
                                         </div>
+                                        <div className="flex items-center gap-2 pt-2">
+                                            <Switch 
+                                                id={`photo-required-${index}`}
+                                                checked={item.is_photo_required}
+                                                onCheckedChange={checked => handleUpdateItem(index, 'is_photo_required', checked)}
+                                            />
+                                            <Label htmlFor={`photo-required-${index}`} className="flex items-center gap-1 text-sm cursor-pointer">
+                                                <Camera className="h-3 w-3" />
+                                                Требовать фото
+                                            </Label>
+                                        </div>
                                     </div>
                                 </div>
                             </Card>
@@ -325,9 +402,6 @@ export default function ChecklistSettingsPage({ params }: { params: Promise<{ cl
             <div className="mx-auto max-w-5xl">
                 <div className="mb-8 flex items-center justify-between">
                     <div>
-                        <Link href={`/dashboard`} className="mb-2 flex items-center text-sm text-muted-foreground hover:text-foreground">
-                            <ArrowLeft className="mr-1 h-4 w-4" /> Назад
-                        </Link>
                         <h1 className="text-3xl font-bold">Система чеклистов</h1>
                         <p className="text-muted-foreground">Создавайте шаблоны для живой оценки сотрудников</p>
                     </div>
@@ -339,63 +413,202 @@ export default function ChecklistSettingsPage({ params }: { params: Promise<{ cl
                     </Button>
                 </div>
 
-                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                    {templates.map(template => (
-                        <Card key={template.id} className="hover:border-purple-500/50 transition-colors">
-                            <CardHeader>
-                                <div className="flex items-start justify-between">
-                                    <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-lg bg-purple-100 text-purple-600">
-                                        <ClipboardCheck className="h-6 w-6" />
-                                    </div>
-                                    <Badge variant="outline">
-                                        {template.type === 'shift_handover' ? 'Приемка смены' : 'Аудит'}
-                                    </Badge>
+                <Tabs defaultValue="templates" className="w-full">
+                    <TabsList className="mb-6">
+                        <TabsTrigger value="templates" className="flex items-center gap-2">
+                            <ClipboardCheck className="h-4 w-4" />
+                            Шаблоны
+                        </TabsTrigger>
+                        <TabsTrigger value="history" className="flex items-center gap-2">
+                            <History className="h-4 w-4" />
+                            История проверок
+                        </TabsTrigger>
+                    </TabsList>
+
+                    <TabsContent value="templates">
+                        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                            {templates.map(template => (
+                                <Card key={template.id} className="hover:border-purple-500/50 transition-colors">
+                                    <CardHeader>
+                                        <div className="flex items-start justify-between">
+                                            <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-lg bg-purple-100 text-purple-600">
+                                                <ClipboardCheck className="h-6 w-6" />
+                                            </div>
+                                            <Badge variant="outline">
+                                                {template.type === 'shift_handover' ? 'Приемка смены' : 'Аудит'}
+                                            </Badge>
+                                        </div>
+                                        <CardTitle>{template.name}</CardTitle>
+                                        <CardDescription>{template.description || 'Нет описания'}</CardDescription>
+                                    </CardHeader>
+                                    <CardContent>
+                                        <div className="flex items-center justify-between text-sm">
+                                            <span className="text-muted-foreground">{template.items?.length || 0} пунктов</span>
+                                            <span className="text-xs text-muted-foreground">
+                                                {new Date(template.created_at).toLocaleDateString()}
+                                            </span>
+                                        </div>
+                                        <div className="mt-4 flex gap-2">
+                                            <Button 
+                                                variant="outline" 
+                                                size="icon" 
+                                                className="shrink-0 text-red-500 hover:text-red-600 hover:bg-red-50" 
+                                                onClick={() => handleDeleteTemplate(template.id)}
+                                                title="Удалить чеклист"
+                                            >
+                                                <Trash2 className="h-4 w-4" />
+                                            </Button>
+                                            <Button variant="outline" className="flex-1" onClick={() => {
+                                                setCurrentTemplate(template)
+                                                setIsEditing(true)
+                                            }}>
+                                                Изменить
+                                            </Button>
+                                            <Link href={`/clubs/${clubId}/evaluations/new?templateId=${template.id}`} className="flex-1">
+                                                <Button className="w-full bg-green-600 hover:bg-green-700">
+                                                    Проверить
+                                                </Button>
+                                            </Link>
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            ))}
+
+                            {templates.length === 0 && (
+                                <div className="col-span-full border-2 border-dashed rounded-xl p-12 text-center">
+                                    <ClipboardCheck className="mx-auto h-12 w-12 text-muted-foreground mb-4 opacity-20" />
+                                    <h3 className="text-lg font-medium">У вас еще нет чеклистов</h3>
+                                    <p className="text-muted-foreground mb-6">Создайте свой первый шаблон для оценки персонала</p>
+                                    <Button onClick={() => setIsEditing(true)}>Начать</Button>
                                 </div>
-                                <CardTitle>{template.name}</CardTitle>
-                                <CardDescription>{template.description || 'Нет описания'}</CardDescription>
+                            )}
+                        </div>
+                    </TabsContent>
+
+                    <TabsContent value="history">
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>История проверок</CardTitle>
+                                <CardDescription>Список всех проведенных оценок и чеклистов</CardDescription>
                             </CardHeader>
                             <CardContent>
-                                <div className="flex items-center justify-between text-sm">
-                                    <span className="text-muted-foreground">{template.items?.length || 0} пунктов</span>
-                                    <span className="text-xs text-muted-foreground">
-                                        {new Date(template.created_at).toLocaleDateString()}
-                                    </span>
-                                </div>
-                                <div className="mt-4 flex gap-2">
-                                    <Button 
-                                        variant="outline" 
-                                        size="icon" 
-                                        className="shrink-0 text-red-500 hover:text-red-600 hover:bg-red-50" 
-                                        onClick={() => handleDeleteTemplate(template.id)}
-                                        title="Удалить чеклист"
-                                    >
-                                        <Trash2 className="h-4 w-4" />
-                                    </Button>
-                                    <Button variant="outline" className="flex-1" onClick={() => {
-                                        setCurrentTemplate(template)
-                                        setIsEditing(true)
-                                    }}>
-                                        Изменить
-                                    </Button>
-                                    <Link href={`/clubs/${clubId}/evaluations/new?templateId=${template.id}`} className="flex-1">
-                                        <Button className="w-full bg-green-600 hover:bg-green-700">
-                                            Проверить
-                                        </Button>
-                                    </Link>
-                                </div>
+                                {history.length === 0 ? (
+                                    <div className="text-center py-12 text-muted-foreground">
+                                        <History className="mx-auto h-12 w-12 opacity-20 mb-4" />
+                                        <p>Проверок еще не проводилось</p>
+                                    </div>
+                                ) : (
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow>
+                                                <TableHead>Дата</TableHead>
+                                                <TableHead>Шаблон</TableHead>
+                                                <TableHead>Сотрудник</TableHead>
+                                                <TableHead>Проверяющий</TableHead>
+                                                <TableHead className="text-right">Результат</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {history.map(evaluation => (
+                                                <TableRow key={evaluation.id} className="cursor-pointer hover:bg-muted/50" onClick={() => handleViewEvaluation(evaluation.id)}>
+                                                    <TableCell>{new Date(evaluation.evaluation_date || evaluation.created_at).toLocaleDateString()}</TableCell>
+                                                    <TableCell>{evaluation.template_name}</TableCell>
+                                                    <TableCell>{evaluation.employee_name}</TableCell>
+                                                    <TableCell>{evaluation.evaluator_name || '—'}</TableCell>
+                                                    <TableCell className="text-right">
+                                                        <Badge variant={evaluation.total_score >= 80 ? 'default' : evaluation.total_score >= 50 ? 'secondary' : 'destructive'}>
+                                                            {Math.round(evaluation.total_score)}%
+                                                        </Badge>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                )}
                             </CardContent>
                         </Card>
-                    ))}
+                    </TabsContent>
+                </Tabs>
 
-                    {templates.length === 0 && (
-                        <div className="col-span-full border-2 border-dashed rounded-xl p-12 text-center">
-                            <ClipboardCheck className="mx-auto h-12 w-12 text-muted-foreground mb-4 opacity-20" />
-                            <h3 className="text-lg font-medium">У вас еще нет чеклистов</h3>
-                            <p className="text-muted-foreground mb-6">Создайте свой первый шаблон для оценки персонала</p>
-                            <Button onClick={() => setIsEditing(true)}>Начать</Button>
-                        </div>
-                    )}
-                </div>
+                <Dialog open={!!selectedEvaluation} onOpenChange={() => setSelectedEvaluation(null)}>
+                    <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+                        <DialogHeader>
+                            <DialogTitle>Результаты проверки</DialogTitle>
+                            <DialogDescription>
+                                {selectedEvaluation?.template_name} • {selectedEvaluation && new Date(selectedEvaluation.evaluation_date || selectedEvaluation.created_at).toLocaleDateString()}
+                            </DialogDescription>
+                        </DialogHeader>
+                        
+                        {isDetailLoading ? (
+                            <div className="flex justify-center py-8">
+                                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                            </div>
+                        ) : selectedEvaluation ? (
+                            <div className="space-y-6">
+                                <div className="grid grid-cols-2 gap-4 text-sm">
+                                    <div>
+                                        <p className="text-muted-foreground">Сотрудник</p>
+                                        <p className="font-medium">{selectedEvaluation.employee_name}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-muted-foreground">Проверяющий</p>
+                                        <p className="font-medium">{selectedEvaluation.evaluator_name || '—'}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-muted-foreground">Результат</p>
+                                        <Badge variant={selectedEvaluation.total_score >= 80 ? 'default' : selectedEvaluation.total_score >= 50 ? 'secondary' : 'destructive'}>
+                                            {Math.round(selectedEvaluation.total_score)}%
+                                        </Badge>
+                                    </div>
+                                </div>
+
+                                {selectedEvaluation.comments && (
+                                    <div className="bg-muted p-4 rounded-lg">
+                                        <p className="text-xs text-muted-foreground mb-1">Комментарий проверяющего</p>
+                                        <p className="text-sm">{selectedEvaluation.comments}</p>
+                                    </div>
+                                )}
+
+                                <div>
+                                    <h3 className="font-semibold mb-3">Детализация</h3>
+                                    <div className="space-y-3">
+                                        {selectedEvaluation.responses?.map((response, index) => (
+                                            <div key={index} className="border rounded-lg p-3">
+                                                <div className="flex justify-between items-start mb-2">
+                                                    <p className="text-sm font-medium">{response.item_content}</p>
+                                                    {response.score > 0 ? (
+                                                        <Badge variant="outline" className="text-green-600 border-green-200 bg-green-50">Да</Badge>
+                                                    ) : (
+                                                        <Badge variant="outline" className="text-red-600 border-red-200 bg-red-50">Нет</Badge>
+                                                    )}
+                                                </div>
+                                                {response.comment && (
+                                                    <p className="text-xs text-muted-foreground bg-muted/50 p-2 rounded">
+                                                        {response.comment}
+                                                    </p>
+                                                )}
+                                                {response.photo_url && (
+                                                    <div className="mt-2">
+                                                        <a 
+                                                            href={response.photo_url} 
+                                                            target="_blank" 
+                                                            rel="noopener noreferrer"
+                                                            className="inline-flex items-center gap-2 text-xs text-blue-600 hover:underline bg-blue-50 px-2 py-1 rounded-md border border-blue-100"
+                                                        >
+                                                            <Camera className="h-3 w-3" />
+                                                            Посмотреть фото
+                                                            <ExternalLink className="h-3 w-3" />
+                                                        </a>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        ) : null}
+                    </DialogContent>
+                </Dialog>
             </div>
         </div>
     )

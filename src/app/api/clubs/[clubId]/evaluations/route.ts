@@ -31,7 +31,7 @@ export async function GET(
         }
 
         let queryStr = `
-            SELECT e.*, t.name as template_name, u.name as employee_name, ev.name as evaluator_name
+            SELECT e.*, t.name as template_name, u.full_name as employee_name, ev.full_name as evaluator_name
             FROM evaluations e
             JOIN evaluation_templates t ON e.template_id = t.id
             JOIN users u ON e.employee_id = u.id
@@ -121,9 +121,9 @@ export async function POST(
 
         for (const resp of responses) {
             await query(
-                `INSERT INTO evaluation_responses (evaluation_id, item_id, score, comment)
-                 VALUES ($1, $2, $3, $4)`,
-                [evaluationId, resp.item_id, resp.score, resp.comment]
+                `INSERT INTO evaluation_responses (evaluation_id, item_id, score, comment, photo_url)
+                 VALUES ($1, $2, $3, $4, $5)`,
+                [evaluationId, resp.item_id, resp.score, resp.comment, resp.photo_url || null]
             );
         }
 

@@ -21,7 +21,7 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
-import { Plus, Search, Filter, TrendingUp, TrendingDown, Edit, Trash2, ChevronDown, Upload, FileText, Loader2 } from "lucide-react"
+import { Plus, Search, Filter, TrendingUp, TrendingDown, Edit, Trash2, ChevronDown } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
 
@@ -40,7 +40,6 @@ interface Transaction {
     account_id?: number
     account_name?: string
     related_shift_report_id?: number
-    attachment_url?: string
 }
 
 interface TransactionGroup {
@@ -111,7 +110,6 @@ export default function TransactionList({
     const [categoryFilter, setCategoryFilter] = useState<string>('all')
     const [statusFilter, setStatusFilter] = useState<string>('all')
     const [hideImported, setHideImported] = useState(false)
-    const [uploading, setUploading] = useState(false)
 
     // Form state
     const [formData, setFormData] = useState({
@@ -123,8 +121,7 @@ export default function TransactionList({
         status: 'completed',
         transaction_date: new Date().toISOString().split('T')[0],
         description: '',
-        notes: '',
-        attachment_url: ''
+        notes: ''
     })
 
     useEffect(() => {
@@ -182,32 +179,6 @@ export default function TransactionList({
             return
         }
         setIsDialogOpen(open)
-    }
-
-    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0]
-        if (!file) return
-
-        setUploading(true)
-        const formDataUpload = new FormData()
-        formDataUpload.append('file', file)
-
-        try {
-            const res = await fetch('/api/upload', {
-                method: 'POST',
-                body: formDataUpload
-            })
-            
-            if (!res.ok) throw new Error('Upload failed')
-            
-            const data = await res.json()
-            setFormData(prev => ({ ...prev, attachment_url: data.url }))
-        } catch (error) {
-            console.error('Failed to upload file:', error)
-            alert('Не удалось загрузить файл')
-        } finally {
-            setUploading(false)
-        }
     }
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -269,8 +240,7 @@ export default function TransactionList({
             transaction_date: dateOnly,
             description: transaction.description || '',
             account_id: transaction.account_id?.toString() || '',
-            notes: '',
-            attachment_url: transaction.attachment_url || ''
+            notes: ''
         })
         setDialogOpen(true)
     }
@@ -286,8 +256,7 @@ export default function TransactionList({
             status: 'completed',
             transaction_date: new Date().toISOString().split('T')[0],
             description: '',
-            notes: '',
-            attachment_url: ''
+            notes: ''
         })
     }
 
@@ -698,59 +667,6 @@ export default function TransactionList({
                         </div>
 
 
-
-                        <div>
-                            <Label>Чек / Фото</Label>
-                            <div className="flex items-center gap-4 mt-1">
-                                {formData.attachment_url ? (
-                                    <div className="flex items-center gap-2 border p-2 rounded-md bg-muted/50 w-full">
-                                        <FileText className="h-4 w-4 text-blue-500" />
-                                        <a 
-                                            href={formData.attachment_url} 
-                                            target="_blank" 
-                                            rel="noopener noreferrer"
-                                            className="text-sm text-blue-500 hover:underline truncate flex-1"
-                                        >
-                                            Просмотреть файл
-                                        </a>
-                                        <Button
-                                            type="button"
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={() => setFormData({ ...formData, attachment_url: '' })}
-                                            className="h-8 w-8 p-0"
-                                        >
-                                            <Trash2 className="h-4 w-4 text-destructive" />
-                                        </Button>
-                                    </div>
-                                ) : (
-                                    <div className="w-full">
-                                        <Label 
-                                            htmlFor="file-upload" 
-                                            className="flex items-center justify-center w-full h-24 border-2 border-dashed rounded-md cursor-pointer hover:bg-muted/50 transition-colors"
-                                        >
-                                            <div className="flex flex-col items-center gap-1 text-muted-foreground">
-                                                {uploading ? (
-                                                    <Loader2 className="h-6 w-6 animate-spin" />
-                                                ) : (
-                                                    <Upload className="h-6 w-6" />
-                                                )}
-                                                <span className="text-xs">
-                                                    {uploading ? 'Загрузка...' : 'Нажмите для загрузки'}
-                                                </span>
-                                            </div>
-                                            <Input
-                                                id="file-upload"
-                                                type="file"
-                                                className="hidden"
-                                                onChange={handleFileUpload}
-                                                disabled={uploading}
-                                            />
-                                        </Label>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
 
                         <div>
                             <Label>Описание</Label>

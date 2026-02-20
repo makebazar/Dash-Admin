@@ -39,7 +39,8 @@ export async function GET(
                                'content', i.content,
                                'description', i.description,
                                'weight', i.weight,
-                               'sort_order', i.sort_order
+                               'sort_order', i.sort_order,
+                               'is_photo_required', i.is_photo_required
                            ) ORDER BY i.sort_order
                        ) FILTER (WHERE i.id IS NOT NULL), 
                        '[]'::json
@@ -100,9 +101,9 @@ export async function POST(
             for (let i = 0; i < items.length; i++) {
                 const item = items[i];
                 await query(
-                    `INSERT INTO evaluation_template_items (template_id, content, description, weight, sort_order)
-                     VALUES ($1, $2, $3, $4, $5)`,
-                    [templateId, item.content, item.description, item.weight || 1.0, i]
+                    `INSERT INTO evaluation_template_items (template_id, content, description, weight, sort_order, is_photo_required)
+                     VALUES ($1, $2, $3, $4, $5, $6)`,
+                    [templateId, item.content, item.description, item.weight || 1.0, i, item.is_photo_required || false]
                 );
             }
         }
