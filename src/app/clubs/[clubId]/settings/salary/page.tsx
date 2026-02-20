@@ -117,12 +117,14 @@ export default function SalarySettingsPage({ params }: { params: Promise<{ clubI
     const [formula, setFormula] = useState<Formula>(defaultFormula)
     const [periodBonuses, setPeriodBonuses] = useState<PeriodBonus[]>([])
     const [standardMonthlyShifts, setStandardMonthlyShifts] = useState(15)
+    const [checklistTemplates, setChecklistTemplates] = useState<any[]>([])
 
     useEffect(() => {
         params.then(p => {
             setClubId(p.clubId)
             fetchSchemes(p.clubId)
             fetchReportMetrics(p.clubId)
+            fetchChecklistTemplates(p.clubId)
         })
     }, [params])
 
@@ -307,6 +309,16 @@ export default function SalarySettingsPage({ params }: { params: Promise<{ clubI
                 break
             case 'penalty':
                 newBonus = { type: 'penalty', name: 'Штраф', amount: 500, penalty_reason: 'Опоздание' }
+                break
+            case 'checklist':
+                newBonus = {
+                    type: 'checklist',
+                    name: 'Бонус за чек-лист',
+                    amount: 500,
+                    min_score: 100,
+                    checklist_template_id: checklistTemplates.length > 0 ? checklistTemplates[0].id : undefined,
+                    mode: 'SHIFT'
+                }
                 break
             default:
                 newBonus = { type: 'fixed', name: 'Бонус', amount: 500 }
@@ -761,6 +773,9 @@ export default function SalarySettingsPage({ params }: { params: Promise<{ clubI
                                     </Button>
                                     <Button type="button" variant="outline" size="sm" onClick={() => addPeriodBonus('PROGRESSIVE')}>
                                         + KPI (Прогрессия)
+                                    </Button>
+                                    <Button type="button" variant="outline" size="sm" onClick={() => addBonus('checklist')}>
+                                        + Чек-лист
                                     </Button>
                                     <Button type="button" variant="outline" size="sm" className="text-red-500 hover:text-red-600" onClick={() => addBonus('penalty')}>
                                         + Штраф
