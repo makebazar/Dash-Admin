@@ -75,6 +75,8 @@ export async function POST(
         const userId = (await cookies()).get('session_user_id')?.value;
         const { clubId } = await params;
 
+        console.log('[API] Adding employee to club:', clubId, 'by user:', userId);
+
         if (!userId) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
@@ -86,16 +88,19 @@ export async function POST(
         );
 
         if (ownerCheck.rowCount === 0) {
+            console.log('[API] Permission denied for user:', userId, 'to add employee to club:', clubId);
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
         const { phone_number, full_name, role_id } = await request.json();
+        console.log('[API] Employee data:', { phone_number, full_name, role_id });
 
         if (!phone_number || !full_name) {
             return NextResponse.json({ error: 'Phone and name are required' }, { status: 400 });
         }
 
         const normalizedPhone = normalizePhone(phone_number);
+        console.log('[API] Normalized phone:', normalizedPhone);
 
         // Check if user exists
         let employeeId;
@@ -107,9 +112,11 @@ export async function POST(
         if ((userCheck.rowCount ?? 0) > 0) {
             // User exists
             employeeId = userCheck.rows[0].id;
+            console.log('[API] User exists, ID:', employeeId);
 
             // Update role if provided
             if (role_id) {
+                console.log('[API] Updating role to:', role_id);
                 await query(
                     `UPDATE users SET role_id = $1 WHERE id = $2`,
                     [role_id, employeeId]
@@ -117,6 +124,7 @@ export async function POST(
             }
         } else {
             // Create new user
+            console.log('[API] Creating new user');
             const newUser = await query(
                 `INSERT INTO users (full_name, phone_number, role_id, is_active)
          VALUES ($1, $2, $3, TRUE)
@@ -124,15 +132,24 @@ export async function POST(
                 [full_name, normalizedPhone, role_id]
             );
             employeeId = newUser.rows[0].id;
+            console.log('[API] New user created, ID:', employeeId);
         }
 
         // Add to club_employees
-        await query(
+        console.log('[API] Adding to club_employees. Club:', clubId, 'User:', employeeId);
+        const linkResult = await query(
             `INSERT INTO club_employees (club_id, user_id)
        VALUES ($1, $2)
-       ON CONFLICT (club_id, user_id) DO NOTHING`,
+       ON CONFLICT (club_id, user_id) DO NOTHING
+       RETURNING id`,
             [clubId, employeeId]
         );
+        
+        if (linkResult.rowCount === 0) {
+            console.log('[API] User was already linked to this club');
+        } else {
+            console.log('[API] Link created successfully');
+        }
 
         return NextResponse.json({ success: true, employeeId });
 
