@@ -31,7 +31,7 @@ export async function GET() {
         // Get employee clubs with role
         // We use IS NOT FALSE to handle potential NULLs in is_active
         const employeeClubsResult = await query(
-            `SELECT c.id, c.name, r.name as role_name, r.id as role_id, c.inventory_required
+            `SELECT c.id, c.name, r.name as role_name, r.id as role_id
        FROM clubs c
        JOIN club_employees ce ON c.id = ce.club_id
        LEFT JOIN users u ON ce.user_id = u.id
@@ -51,7 +51,7 @@ export async function GET() {
         const employeeClubs = employeeClubsResult.rows.map(row => ({
             id: row.id,
             name: row.name,
-            inventory_required: row.inventory_required || false, // Default to false if missing
+            inventory_required: false, // Default to false until migration is applied
             role: row.role_name || 'Сотрудник',
             role_id: row.role_id
         }));
