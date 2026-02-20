@@ -32,7 +32,20 @@ export async function uploadFileToS3(
     // Use UUID for filename to ensure S3 compatibility and uniqueness
     const fileExtension = fileName.split('.').pop() || 'bin';
     const uniqueFileName = `${uuidv4()}.${fileExtension}`;
-    const key = `${folder}/${uniqueFileName}`;
+    
+    // IMPORTANT: If bucket name matches folder, MinIO can get confused with path style access.
+    // Let's remove the 'uploads' folder prefix if the bucket is also named 'uploads' 
+    // or just put files in the root if folder is 'uploads'.
+    // Or better, use a different folder name like 'files'.
+    
+    let key: string;
+    if (folder === 'uploads' && bucketName === 'uploads') {
+       // If both are 'uploads', put in root or use a date-based prefix
+       const datePrefix = new Date().toISOString().split('T')[0];
+       key = `${datePrefix}/${uniqueFileName}`;
+    } else {
+       key = `${folder}/${uniqueFileName}`;
+    }
 
     const params: PutObjectCommandInput = {
       Bucket: bucketName,
