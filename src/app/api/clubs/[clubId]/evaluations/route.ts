@@ -63,7 +63,7 @@ export async function POST(
     try {
         const userId = (await cookies()).get('session_user_id')?.value;
         const { clubId } = await params;
-        const { template_id, employee_id, responses, comments } = await request.json();
+        const { template_id, employee_id, responses, comments, shift_id } = await request.json();
 
         if (!userId) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -112,10 +112,10 @@ export async function POST(
         await query('BEGIN');
 
         const evalResult = await query(
-            `INSERT INTO evaluations (club_id, template_id, employee_id, evaluator_id, total_score, max_score, comments)
-             VALUES ($1, $2, $3, $4, $5, $6, $7)
+            `INSERT INTO evaluations (club_id, template_id, employee_id, evaluator_id, total_score, max_score, comments, shift_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
              RETURNING id`,
-            [clubId, template_id, employee_id, userId, totalScore, 100, comments || '']
+            [clubId, template_id, employee_id, userId, totalScore, 100, comments || '', shift_id || null]
         );
         const evaluationId = evalResult.rows[0].id;
 

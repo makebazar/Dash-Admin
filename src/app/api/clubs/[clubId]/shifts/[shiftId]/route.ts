@@ -186,12 +186,20 @@ export async function PATCH(
             [currentShift.user_id, clubId]
         );
 
+        // Fetch evaluations for this shift (for checklist bonuses)
+        const evaluationsRes = await query(
+            `SELECT template_id, score_percent FROM evaluations WHERE shift_id = $1`,
+            [shiftId]
+        );
+        const evaluations = evaluationsRes.rows;
+
         if ((schemeRes.rowCount || 0) > 0) {
             const scheme = schemeRes.rows[0];
             const calculation = await calculateSalary({
                 id: shiftId,
                 total_hours: Number(mergedData.total_hours) || 0,
-                report_data: mergedData.report_data || {}
+                report_data: mergedData.report_data || {},
+                evaluations: evaluations
             }, scheme.formula, {
                 total_revenue: (Number(mergedData.cash_income) || 0) + (Number(mergedData.card_income) || 0),
                 revenue_cash: Number(mergedData.cash_income) || 0,

@@ -18,15 +18,17 @@ interface SalaryScheme {
 
     bonuses?: any[];
     period_bonuses?: any[]; // Added period_bonuses
-    penalty_amount?: number;
-    penalty_reason?: string;
-    version?: number;
+    // For checklist bonus
+    checklist_template_id?: number;
+    min_score?: number;
+    mode?: 'SHIFT' | 'MONTH';
 }
 
 interface ShiftData {
     id: string;
     total_hours: number;
     report_data?: any;
+    evaluations?: any[]; // Added to support checklist bonuses
 }
 
 export async function calculateSalary(
@@ -101,16 +103,45 @@ export async function calculateSalary(
                 }
             } else if (bonus.type === 'penalty') {
                 bonusAmount = -(Number(bonus.amount) || 0);
+            } else if (bonus.type === 'checklist') {
+                // Handle checklist bonus (Per Shift mode)
+                if (bonus.mode !== 'MONTH' && shift.evaluations && Array.isArray(shift.evaluations)) {
+                    // Find matching evaluation
+                    const evaluation = shift.evaluations.find(e => Number(e.template_id) === Number(bonus.checklist_template_id));
+                    
+                    if (evaluation) {
+                        const score = Number(evaluation.score_percent) || 0;
+                        const minScore = Number(bonus.min_score) || 0;
+                        
+                        if (score >= minScore) {
+                            bonusAmount = Number(bonus.amount) || 0;
+                            
+                            // Add metadata to breakdown for UI to show which checklist triggered this
+                            breakdown.bonuses.push({
+                                name: bonus.name || 'Бонус за чек-лист',
+                                type: 'CHECKLIST_BONUS',
+                                amount: parseFloat(bonusAmount.toFixed(2)),
+                                source_key: 'checklist_score',
+                                source_value: score,
+                                template_id: bonus.checklist_template_id
+                            });
+                            total += bonusAmount;
+                            continue; // Skip the default push below
+                        }
+                    }
+                }
             }
 
-            breakdown.bonuses.push({
-                name: bonus.name || bonus.type,
-                type: 'SHIFT_BONUS',
-                amount: parseFloat(bonusAmount.toFixed(2)),
-                source_key: sourceKey,
-                source_value: metricValue
-            });
-            total += bonusAmount;
+            if (bonus.type !== 'checklist') {
+                breakdown.bonuses.push({
+                    name: bonus.name || bonus.type,
+                    type: 'SHIFT_BONUS',
+                    amount: parseFloat(bonusAmount.toFixed(2)),
+                    source_key: sourceKey,
+                    source_value: metricValue
+                });
+                total += bonusAmount;
+            }
         }
     }
 

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Loader2, ArrowLeft, CheckCircle2, XCircle, AlertCircle, UserCircle, Camera, Upload, Trash2, ExternalLink } from "lucide-react"
+import { Loader2, ArrowLeft, CheckCircle2, XCircle, AlertCircle, UserCircle, Camera, Upload, Trash2, ExternalLink, CalendarClock } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import Link from "next/link"
@@ -26,9 +26,14 @@ interface ChecklistTemplate {
     items: ChecklistItem[]
 }
 
-interface Employee {
-    id: number
-    full_name: string
+interface Shift {
+    id: string
+    check_in: string
+    check_out?: string
+    status: string
+    user_id: string
+    employee_name: string
+    role: string
 }
 
 function EvaluationForm({ params }: { params: { clubId: string } }) {
@@ -39,6 +44,8 @@ function EvaluationForm({ params }: { params: { clubId: string } }) {
     const [clubId, setClubId] = useState(params.clubId)
     const [template, setTemplate] = useState<ChecklistTemplate | null>(null)
     const [employees, setEmployees] = useState<Employee[]>([])
+    const [recentShifts, setRecentShifts] = useState<Shift[]>([])
+    const [selectedShiftId, setSelectedShiftId] = useState<string>('none')
     const [selectedEmployee, setSelectedEmployee] = useState<string>('')
     const [responses, setResponses] = useState<Record<number, { score: number, comment: string, photo_url?: string }>>({})
     const [generalComment, setGeneralComment] = useState('')
@@ -81,12 +88,55 @@ function EvaluationForm({ params }: { params: { clubId: string } }) {
                 setEmployees(eData.employees)
             }
 
+            // Fetch recent shifts
+            const sRes = await fetch(`/api/clubs/${clubId}/shifts/recent`)
+            const sData = await sRes.json()
+            if (sRes.ok && sData.shifts && Array.isArray(sData.shifts)) {
+                setRecentShifts(sData.shifts)
+                
+                // Smart default selection
+                // If it's a "Handover" (implied logic: check for 'приемка' or similar in name, or just default behavior)
+                // Let's assume we want to select the last closed shift if available, or current active one.
+                
+                // For now, let's select the first one (most recent) if available
+                if (sData.shifts.length > 0) {
+                    const mostRecent = sData.shifts[0]
+                    setSelectedShiftId(mostRecent.id)
+                    // Auto-select the employee of that shift
+                    // We need to match user_id from shift to employee id in employees list.
+                    // Note: shifts.user_id is UUID (users table), employees.id is SERIAL (employees table usually linked to user)
+                    // Wait, in this project employees table is just a list? Let's check api/employees.
+                    
+                    // Actually, the employee selection logic relies on `employees` array which has `id` (number).
+                    // But `shifts` returns `user_id` (uuid) and `employee_name`.
+                    // We might need to map them. For now let's just pre-fill employee name if possible or let user choose.
+                    
+                    // If we can't map easily, we just filter the dropdown or show shift info.
+                }
+            }
+
         } catch (error) {
             console.error(error)
         } finally {
             setIsLoading(false)
         }
     }
+    
+    // Effect to auto-select employee when shift changes
+    useEffect(() => {
+        if (selectedShiftId && selectedShiftId !== 'none') {
+            const shift = recentShifts.find(s => s.id === selectedShiftId)
+            if (shift) {
+                // Try to find employee by name match since we don't have direct ID link easily available on frontend without more data
+                // Ideally we should link by user_id. 
+                // Let's assume for now user manually selects or we try to match name.
+                const foundEmp = employees.find(e => e.full_name === shift.employee_name)
+                if (foundEmp) {
+                    setSelectedEmployee(foundEmp.id.toString())
+                }
+            }
+        }
+    }, [selectedShiftId, recentShifts, employees])
 
     const handleScoreChange = (itemId: number, score: number) => {
         setResponses(prev => ({
@@ -160,7 +210,8 @@ function EvaluationForm({ params }: { params: { clubId: string } }) {
                     template_id: Number(templateId),
                     employee_id: Number(selectedEmployee),
                     responses: formattedResponses,
-                    comments: generalComment
+                    comments: generalComment,
+                    shift_id: selectedShiftId !== 'none' ? selectedShiftId : null
                 }),
             })
 
@@ -192,6 +243,44 @@ function EvaluationForm({ params }: { params: { clubId: string } }) {
                     <h1 className="text-2xl font-bold">{template.name}</h1>
                     <p className="text-muted-foreground text-sm">{template.description}</p>
                 </div>
+
+                <Card className="mb-6 border-none shadow-sm">
+                    <CardHeader className="pb-4">
+                        <CardTitle className="text-sm font-medium flex items-center gap-2">
+                            <CalendarClock className="h-4 w-4 text-purple-600" />
+                            Выберите смену (Опционально)
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <Select value={selectedShiftId} onValueChange={setSelectedShiftId}>
+                            <SelectTrigger className="w-full">
+                                <SelectValue placeholder="Без привязки к смене" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="none">Без привязки к смене</SelectItem>
+                                {recentShifts.map(shift => (
+                                    <SelectItem key={shift.id} value={shift.id}>
+                                        <div className="flex flex-col text-left">
+                                            <span className="font-medium">{shift.employee_name} ({shift.role})</span>
+                                            <span className="text-xs text-muted-foreground">
+                                                {new Date(shift.check_in).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} 
+                                                {' - '}
+                                                {shift.check_out 
+                                                    ? new Date(shift.check_out).toLocaleString('ru-RU', { hour: '2-digit', minute: '2-digit' }) 
+                                                    : 'Активна'}
+                                            </span>
+                                        </div>
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        {selectedShiftId !== 'none' && (
+                            <p className="text-xs text-muted-foreground mt-2">
+                                * Сотрудник будет выбран автоматически на основе смены
+                            </p>
+                        )}
+                    </CardContent>
+                </Card>
 
                 <Card className="mb-6 border-none shadow-sm">
                     <CardHeader className="pb-4">

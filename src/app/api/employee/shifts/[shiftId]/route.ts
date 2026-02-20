@@ -61,6 +61,13 @@ export async function PATCH(
             [shiftUserId, clubId]
         );
 
+        // Fetch evaluations for this shift
+        const evaluationsRes = await query(
+            `SELECT template_id, score_percent FROM evaluations WHERE shift_id = $1`,
+            [shiftId]
+        );
+        const evaluations = evaluationsRes.rows;
+
         if ((schemeRes.rowCount || 0) > 0) {
             const scheme = schemeRes.rows[0];
             const formula = scheme.formula || {};
@@ -81,7 +88,7 @@ export async function PATCH(
 
             // Pass formula directly - calculator now handles normalization
             const calculation = await calculateSalary(
-                { id: shiftId, total_hours: totalHours },
+                { id: shiftId, total_hours: totalHours, evaluations },
                 formula,
                 metrics
             );
