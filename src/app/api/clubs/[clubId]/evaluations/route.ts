@@ -69,9 +69,28 @@ export async function POST(
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
+        // Validate employee_id
+        if (!employee_id) {
+            return NextResponse.json({ error: 'Employee ID is required' }, { status: 400 });
+        }
+
+        // Fetch user_id for the employee_id (since evaluations links to users table via employee_id)
+        // Note: employee_id passed from frontend is `club_employees.id` (integer)
+        // But `evaluations.employee_id` is a UUID (referencing `users.id`)
+        // We need to resolve this.
+        
+        const employeeUserRes = await query(
+            `SELECT user_id FROM club_employees WHERE id = $1 AND club_id = $2`,
+            [employee_id, clubId]
+        );
+
+        if (employeeUserRes.rowCount === 0) {
+            return NextResponse.json({ error: 'Invalid Employee ID' }, { status: 400 });
+        }
+
+        const targetUserId = employeeUserRes.rows[0].user_id;
+
         // Check access (Manager check - typically owners or managers can evaluate)
-        // For now, let's assume any club member with access can evaluate, or just owners.
-        // Usually, managers evaluate. Let's stick to club member check for now.
         const accessCheck = await query(
             `
             SELECT 1 FROM clubs WHERE id = $1 AND owner_id = $2
@@ -115,7 +134,7 @@ export async function POST(
             `INSERT INTO evaluations (club_id, template_id, employee_id, evaluator_id, total_score, max_score, comments, shift_id)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
              RETURNING id`,
-            [clubId, template_id, employee_id, userId, totalScore, 100, comments || '', shift_id || null]
+            [clubId, template_id, targetUserId, userId, totalScore, 100, comments || '', shift_id || null]
         );
         const evaluationId = evalResult.rows[0].id;
 
