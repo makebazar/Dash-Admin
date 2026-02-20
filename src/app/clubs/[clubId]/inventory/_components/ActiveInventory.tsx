@@ -9,8 +9,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
-import { getInventory, getInventoryItems, updateInventoryItem, closeInventory, Inventory, InventoryItem } from "../actions"
+import { getInventory, getInventoryItems, updateInventoryItem, closeInventory, Inventory, InventoryItem, addProductToInventory, getProducts } from "../actions"
 import { useParams } from "next/navigation"
+import { Plus } from "lucide-react"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 interface ActiveInventoryProps {
     inventoryId: number
@@ -32,6 +34,11 @@ export function ActiveInventory({ inventoryId, onClose, isOwner }: ActiveInvento
     const [isCloseDialogOpen, setIsCloseDialogOpen] = useState(false)
     const [reportedRevenue, setReportedRevenue] = useState("")
     
+    // Add Item State
+    const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
+    const [allProducts, setAllProducts] = useState<{ id: number, name: string }[]>([])
+    const [selectedProductToAdd, setSelectedProductToAdd] = useState("")
+
     // Search & Filter
     const [searchQuery, setSearchQuery] = useState("")
 
@@ -83,6 +90,32 @@ export function ActiveInventory({ inventoryId, onClose, isOwner }: ActiveInvento
                 alert("Ошибка при закрытии инвентаризации")
             }
         })
+    }
+
+    const handleAddProduct = async () => {
+        if (!selectedProductToAdd) return
+        startTransition(async () => {
+            try {
+                await addProductToInventory(inventoryId, Number(selectedProductToAdd))
+                
+                // Refresh list
+                const invItems = await getInventoryItems(inventoryId)
+                setItems(invItems)
+                
+                setIsAddDialogOpen(false)
+                setSelectedProductToAdd("")
+            } catch (e: any) {
+                alert(e.message)
+            }
+        })
+    }
+
+    const openAddDialog = async () => {
+        setIsAddDialogOpen(true)
+        if (allProducts.length === 0) {
+            const products = await getProducts(clubId)
+            setAllProducts(products.map(p => ({ id: p.id, name: p.name })))
+        }
     }
 
     // Filter and Group Items
@@ -153,10 +186,16 @@ export function ActiveInventory({ inventoryId, onClose, isOwner }: ActiveInvento
                         />
                     </div>
                     {!isClosed && (
-                        <Button onClick={() => setIsCloseDialogOpen(true)} variant="default" className="bg-green-600 hover:bg-green-700 whitespace-nowrap">
-                            <CheckCircle2 className="mr-2 h-4 w-4" />
-                            {inventory.target_metric_key ? "Завершить и сверить" : "Завершить подсчет"}
-                        </Button>
+                        <>
+                            <Button variant="outline" onClick={openAddDialog}>
+                                <Plus className="h-4 w-4 md:mr-2" />
+                                <span className="hidden md:inline">Добавить товар</span>
+                            </Button>
+                            <Button onClick={() => setIsCloseDialogOpen(true)} variant="default" className="bg-green-600 hover:bg-green-700 whitespace-nowrap">
+                                <CheckCircle2 className="mr-2 h-4 w-4" />
+                                {inventory.target_metric_key ? "Завершить и сверить" : "Завершить подсчет"}
+                            </Button>
+                        </>
                     )}
                 </div>
             </div>
@@ -257,6 +296,42 @@ export function ActiveInventory({ inventoryId, onClose, isOwner }: ActiveInvento
                     </Table>
                 </CardContent>
             </Card>
+
+            {/* Add Product Dialog */}
+            <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Добавить товар в инвентаризацию</DialogTitle>
+                        <DialogDescription>
+                            Выберите товар, который был найден на складе, но отсутствует в списке.
+                        </DialogDescription>
+                    </DialogHeader>
+                    
+                    <div className="py-4 space-y-4">
+                        <div className="space-y-2">
+                            <Label>Товар</Label>
+                            <Select value={selectedProductToAdd} onValueChange={setSelectedProductToAdd}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Выберите товар" />
+                                </SelectTrigger>
+                                <SelectContent className="max-h-[300px]">
+                                    {allProducts.map(p => (
+                                        <SelectItem key={p.id} value={p.id.toString()}>{p.name}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </div>
+
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>Отмена</Button>
+                        <Button onClick={handleAddProduct} disabled={!selectedProductToAdd || isPending}>
+                            {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            Добавить
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
 
             {/* Close Dialog */}
             <Dialog open={isCloseDialogOpen} onOpenChange={setIsCloseDialogOpen}>

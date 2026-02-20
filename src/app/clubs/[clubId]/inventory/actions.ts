@@ -1019,15 +1019,15 @@ export async function createInventory(clubId: string, userId: string, targetMetr
         
         if (warehouseId) {
             // Specific Warehouse Snapshot
-            // Get all active products and their stock in this warehouse (0 if missing)
+            // ONLY include items that have stock > 0 in this warehouse
             query = `
                 SELECT p.id, 
-                       COALESCE(ws.quantity, 0) as current_stock, 
+                       ws.quantity as current_stock, 
                        p.cost_price, 
                        p.selling_price 
                 FROM warehouse_products p
-                LEFT JOIN warehouse_stock ws ON p.id = ws.product_id AND ws.warehouse_id = $2
-                WHERE p.club_id = $1 AND p.is_active = true
+                JOIN warehouse_stock ws ON p.id = ws.product_id AND ws.warehouse_id = $2
+                WHERE p.club_id = $1 AND p.is_active = true AND ws.quantity > 0
             `
             params.push(warehouseId)
             
@@ -1062,6 +1062,51 @@ export async function createInventory(clubId: string, userId: string, targetMetr
         await client.query('COMMIT')
         await logOperation(clubId, userId, 'CREATE_INVENTORY', 'INVENTORY', inventoryId, { categoryId, warehouseId })
         return inventoryId
+    } catch (e) {
+        await client.query('ROLLBACK')
+        throw e
+    } finally {
+        client.release()
+    }
+}
+
+export async function addProductToInventory(inventoryId: number, productId: number) {
+    const client = await import("@/db").then(m => m.getClient())
+    try {
+        await client.query('BEGIN')
+
+        // Check if already exists
+        const existing = await client.query(`SELECT 1 FROM warehouse_inventory_items WHERE inventory_id = $1 AND product_id = $2`, [inventoryId, productId])
+        if (existing.rowCount && existing.rowCount > 0) {
+            throw new Error("Этот товар уже есть в списке")
+        }
+
+        // Get product details and current stock in that warehouse (even if 0)
+        // We need to know which warehouse this inventory is for
+        const inv = await client.query(`SELECT warehouse_id FROM warehouse_inventories WHERE id = $1`, [inventoryId])
+        const warehouseId = inv.rows[0]?.warehouse_id
+
+        if (!warehouseId) throw new Error("Инвентаризация не привязана к складу")
+
+        const productRes = await client.query(`
+            SELECT p.cost_price, p.selling_price, COALESCE(ws.quantity, 0) as current_stock
+            FROM warehouse_products p
+            LEFT JOIN warehouse_stock ws ON p.id = ws.product_id AND ws.warehouse_id = $2
+            WHERE p.id = $1
+        `, [productId, warehouseId])
+        
+        const product = productRes.rows[0]
+        if (!product) throw new Error("Товар не найден")
+
+        // Add item
+        await client.query(`
+            INSERT INTO warehouse_inventory_items (inventory_id, product_id, expected_stock, actual_stock, cost_price_snapshot, selling_price_snapshot)
+            VALUES ($1, $2, $3, 0, $4, $5) 
+        `, [inventoryId, productId, product.current_stock, product.cost_price, product.selling_price])
+        // Default actual_stock to 0 so it's immediately counted as "found 0" (user can change)
+
+        await client.query('COMMIT')
+        revalidatePath(`/clubs/${inv.rows[0].club_id}/inventory`)
     } catch (e) {
         await client.query('ROLLBACK')
         throw e
