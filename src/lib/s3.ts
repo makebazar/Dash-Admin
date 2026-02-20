@@ -1,4 +1,5 @@
 import { S3Client, PutObjectCommand, PutObjectCommandInput } from '@aws-sdk/client-s3';
+import { v4 as uuidv4 } from 'uuid';
 
 // Initialize S3 Client
 const s3Client = new S3Client({
@@ -28,9 +29,10 @@ export async function uploadFileToS3(
   folder: string = 'uploads'
 ): Promise<string> {
   try {
-    // Sanitize filename to avoid S3 issues with cyrillic or special chars
-    const sanitizedFileName = fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
-    const key = `${folder}/${Date.now()}-${sanitizedFileName}`;
+    // Use UUID for filename to ensure S3 compatibility and uniqueness
+    const fileExtension = fileName.split('.').pop() || 'bin';
+    const uniqueFileName = `${uuidv4()}.${fileExtension}`;
+    const key = `${folder}/${uniqueFileName}`;
 
     const params: PutObjectCommandInput = {
       Bucket: bucketName,
