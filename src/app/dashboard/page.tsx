@@ -6,9 +6,9 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Sidebar } from "@/components/layout/Sidebar"
-import { Building2, Plus, TrendingUp, TrendingDown, Loader2 } from "lucide-react"
+import { Building2, Plus, TrendingUp, TrendingDown, Loader2, Trash2, AlertTriangle } from "lucide-react"
 
 interface Club {
     id: string
@@ -23,6 +23,9 @@ export default function DashboardPage() {
     const [isLoading, setIsLoading] = useState(true)
     const [isModalOpen, setIsModalOpen] = useState(false)
     const [isCreating, setIsCreating] = useState(false)
+    const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
+    const [clubToDelete, setClubToDelete] = useState<Club | null>(null)
+    const [isDeleting, setIsDeleting] = useState(false)
 
     // Form state
     const [clubName, setClubName] = useState('')
@@ -64,9 +67,17 @@ export default function DashboardPage() {
             })
             const data = await res.json()
 
-            if (data.success) {
-                setIsModalOpen(false)
-                router.push(`/clubs/${data.clubId}`)
+            if (data.success || res.ok) {
+                // Если success не возвращается явно, но res.ok=true, берем данные из club
+                const newClubId = data.clubId || data.club?.id
+                if (newClubId) {
+                    setIsModalOpen(false)
+                    router.push(`/clubs/${newClubId}`)
+                } else {
+                    // Fallback если id не пришел, просто обновим список
+                     setIsModalOpen(false)
+                     fetchClubs()
+                }
             } else {
                 alert(data.error || 'Не удалось создать клуб')
             }
@@ -75,6 +86,37 @@ export default function DashboardPage() {
             alert('Ошибка создания клуба')
         } finally {
             setIsCreating(false)
+        }
+    }
+
+    const confirmDeleteClub = (e: React.MouseEvent, club: Club) => {
+        e.stopPropagation() // Prevent navigation
+        setClubToDelete(club)
+        setIsDeleteModalOpen(true)
+    }
+
+    const handleDeleteClub = async () => {
+        if (!clubToDelete) return
+
+        setIsDeleting(true)
+        try {
+            const res = await fetch(`/api/clubs?id=${clubToDelete.id}`, {
+                method: 'DELETE',
+            })
+            
+            if (res.ok) {
+                setIsDeleteModalOpen(false)
+                setClubToDelete(null)
+                fetchClubs() // Refresh list
+            } else {
+                const data = await res.json()
+                alert(data.error || 'Не удалось удалить клуб')
+            }
+        } catch (error) {
+            console.error('Error deleting club:', error)
+            alert('Ошибка при удалении клуба')
+        } finally {
+            setIsDeleting(false)
         }
     }
 
@@ -179,7 +221,7 @@ export default function DashboardPage() {
                                         <div
                                             key={club.id}
                                             onClick={() => router.push(`/clubs/${club.id}`)}
-                                            className="flex cursor-pointer items-center justify-between rounded-lg border border-border p-4 transition-colors hover:bg-accent"
+                                            className="flex cursor-pointer items-center justify-between rounded-lg border border-border p-4 transition-colors hover:bg-accent group"
                                         >
                                             <div className="flex items-center gap-4">
                                                 <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-to-tr from-purple-500 to-blue-500">
@@ -194,10 +236,21 @@ export default function DashboardPage() {
                                                     )}
                                                 </div>
                                             </div>
-                                            <div className="text-right">
-                                                <p className="text-sm text-muted-foreground">
-                                                    Создан {new Date(club.created_at).toLocaleDateString('ru-RU')}
-                                                </p>
+                                            <div className="flex items-center gap-4">
+                                                <div className="text-right">
+                                                    <p className="text-sm text-muted-foreground">
+                                                        Создан {new Date(club.created_at).toLocaleDateString('ru-RU')}
+                                                    </p>
+                                                </div>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20"
+                                                    onClick={(e) => confirmDeleteClub(e, club)}
+                                                    title="Удалить клуб"
+                                                >
+                                                    <Trash2 className="h-4 w-4" />
+                                                </Button>
                                             </div>
                                         </div>
                                     ))}
@@ -269,6 +322,46 @@ export default function DashboardPage() {
                             </Button>
                         </div>
                     </form>
+                </DialogContent>
+            </Dialog>
+
+            {/* Delete Confirmation Modal */}
+            <Dialog open={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2 text-red-600">
+                            <AlertTriangle className="h-5 w-5" />
+                            Удаление клуба
+                        </DialogTitle>
+                        <DialogDescription>
+                            Вы уверены, что хотите удалить клуб <strong>{clubToDelete?.name}</strong>?
+                            <br /><br />
+                            Это действие необратимо. Все данные, связанные с этим клубом (сотрудники, смены, товары, отчеты), будут удалены.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter className="gap-2 sm:gap-0">
+                        <Button
+                            variant="outline"
+                            onClick={() => setIsDeleteModalOpen(false)}
+                            disabled={isDeleting}
+                        >
+                            Отмена
+                        </Button>
+                        <Button
+                            variant="destructive"
+                            onClick={handleDeleteClub}
+                            disabled={isDeleting}
+                        >
+                            {isDeleting ? (
+                                <>
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    Удаление...
+                                </>
+                            ) : (
+                                'Удалить навсегда'
+                            )}
+                        </Button>
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
         </div>
