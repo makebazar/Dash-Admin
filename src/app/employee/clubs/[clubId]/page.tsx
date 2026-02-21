@@ -672,6 +672,7 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                     reportTemplate={reportTemplate}
                     activeShiftId={activeShift.id}
                     skipInventory={!club.inventory_required}
+                    checklistTemplates={checklistTemplates}
                 />
             )}
 
