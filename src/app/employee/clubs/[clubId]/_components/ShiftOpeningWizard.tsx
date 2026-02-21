@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
+import { useParams } from "next/navigation"
 
 interface ShiftOpeningWizardProps {
     isOpen: boolean
@@ -20,28 +21,90 @@ export function ShiftOpeningWizard({
     onComplete,
     checklistTemplate
 }: ShiftOpeningWizardProps) {
-    const [checklistResponses, setChecklistResponses] = useState<Record<number, { score: number, comment: string, photo_url?: string }>>({})
+    const params = useParams()
+    const clubId = params.clubId as string
+    
+    const [checklistResponses, setChecklistResponses] = useState<Record<number, { score: number, comment: string, photo_url?: string, selected_workstations?: string[] }>>({})
     const [uploadingState, setUploadingState] = useState<Record<number, boolean>>({})
+    
+    // Workstations state
+    const [workstations, setWorkstations] = useState<any[]>([])
+    const [isLoadingWorkstations, setIsLoadingWorkstations] = useState(false)
 
     useEffect(() => {
+        // Fetch workstations if any item needs them
+        const needsWorkstations = checklistTemplate?.items?.some((item: any) => item.related_entity_type === 'workstations')
+        if (needsWorkstations) {
+            fetchWorkstations()
+        }
+
         if (checklistTemplate?.items) {
-            const initial: Record<number, { score: number, comment: string, photo_url?: string }> = {}
+            const initial: Record<number, { score: number, comment: string, photo_url?: string, selected_workstations?: string[] }> = {}
             checklistTemplate.items.forEach((item: any) => {
                 // No pre-selection of score
-                // score is undefined initially
-                // But types say score: number. Let's make it nullable or handle -1 as unset.
-                // Better yet, update type or just use -1 as "not set"
-                initial[item.id] = { score: -1, comment: '', photo_url: '' }
+                initial[item.id] = { score: -1, comment: '', photo_url: '', selected_workstations: [] }
             })
             setChecklistResponses(initial)
         }
     }, [checklistTemplate])
+
+    const fetchWorkstations = async () => {
+        setIsLoadingWorkstations(true)
+        try {
+            const res = await fetch(`/api/clubs/${clubId}/workstations`)
+            if (res.ok) {
+                const data = await res.json()
+                setWorkstations(data)
+            }
+        } catch (error) {
+            console.error('Failed to fetch workstations', error)
+        } finally {
+            setIsLoadingWorkstations(false)
+        }
+    }
 
     const handleChecklistChange = (itemId: number, score: number) => {
         setChecklistResponses(prev => ({
             ...prev,
             [itemId]: { ...prev[itemId], score }
         }))
+    }
+
+    const toggleWorkstationSelection = (itemId: number, workstationName: string) => {
+        setChecklistResponses(prev => {
+            const currentSelected = prev[itemId]?.selected_workstations || []
+            const isSelected = currentSelected.includes(workstationName)
+            
+            let newSelected
+            if (isSelected) {
+                newSelected = currentSelected.filter(name => name !== workstationName)
+            } else {
+                newSelected = [...currentSelected, workstationName]
+            }
+            
+            // Auto-set score to 0 (No/Issues) if workstations are selected, or reset if cleared
+            // If user manually set score, we might want to respect it, but generally:
+            // Workstations selected -> There are issues -> Score 0
+            // No workstations selected -> Maybe clean? -> Let user decide or keep current
+            
+            // Logic: If user selects workstations, they are reporting issues.
+            const newScore = newSelected.length > 0 ? 0 : prev[itemId].score
+
+            // Auto-generate comment
+            const newComment = newSelected.length > 0 
+                ? `Проблемы: ${newSelected.join(', ')}` 
+                : (prev[itemId].score === 0 ? '' : prev[itemId].comment) // Clear comment if we reset score, else keep
+
+            return {
+                ...prev,
+                [itemId]: { 
+                    ...prev[itemId], 
+                    selected_workstations: newSelected,
+                    score: newScore,
+                    comment: newComment
+                }
+            }
+        })
     }
 
     const handlePhotoUpload = async (itemId: number, e: React.ChangeEvent<HTMLInputElement>) => {
@@ -148,6 +211,36 @@ export function ShiftOpeningWizard({
                                 )}
                             </div>
                             
+                            {/* Workstation Selection Grid */}
+                            {item.related_entity_type === 'workstations' && (
+                                <div className="mt-2 p-3 bg-slate-900 rounded-lg border border-slate-800">
+                                    <p className="text-xs text-slate-400 mb-2">Отметьте проблемные места:</p>
+                                    
+                                    {isLoadingWorkstations ? (
+                                        <div className="flex justify-center py-4">
+                                            <Loader2 className="h-5 w-5 animate-spin text-slate-500"/>
+                                        </div>
+                                    ) : (
+                                        <div className="grid grid-cols-4 sm:grid-cols-5 gap-2">
+                                            {workstations.map(ws => (
+                                                <button
+                                                    key={ws.id}
+                                                    onClick={() => toggleWorkstationSelection(item.id, ws.name)}
+                                                    className={`
+                                                        py-2 px-1 text-[10px] sm:text-xs font-medium rounded border transition-all truncate
+                                                        ${checklistResponses[item.id]?.selected_workstations?.includes(ws.name)
+                                                            ? 'bg-red-500/20 border-red-500 text-red-400'
+                                                            : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700'}
+                                                    `}
+                                                >
+                                                    {ws.name}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
                             {/* Photo Upload Section - Only show if required */}
                             {(item.is_photo_required || checklistResponses[item.id]?.photo_url) && (
                                 <div className="mt-2">
