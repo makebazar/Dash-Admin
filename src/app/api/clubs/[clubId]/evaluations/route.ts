@@ -143,9 +143,16 @@ export async function POST(
 
         for (const resp of responses) {
             await query(
-                `INSERT INTO evaluation_responses (evaluation_id, item_id, score, comment, photo_url)
-                 VALUES ($1, $2, $3, $4, $5)`,
-                [evaluationId, resp.item_id, resp.score, resp.comment, resp.photo_url || null]
+                `INSERT INTO evaluation_responses (evaluation_id, item_id, score, comment, photo_url, photo_urls)
+                 VALUES ($1, $2, $3, $4, $5, $6)`,
+                [
+                    evaluationId, 
+                    resp.item_id, 
+                    resp.score, 
+                    resp.comment, 
+                    (resp.photo_urls && resp.photo_urls.length > 0) ? resp.photo_urls[0] : (resp.photo_url || null),
+                    resp.photo_urls || (resp.photo_url ? [resp.photo_url] : [])
+                ]
             );
         }
 

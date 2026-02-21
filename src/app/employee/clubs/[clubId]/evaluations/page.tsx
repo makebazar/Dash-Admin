@@ -27,6 +27,7 @@ interface EvaluationDetail extends Evaluation {
         score: number
         comment?: string
         photo_url?: string
+        photo_urls?: string[]
     }[]
 }
 
@@ -211,7 +212,26 @@ export default function EmployeeEvaluationsPage() {
                                                     {response.comment}
                                                 </p>
                                             )}
-                                            {response.photo_url && (
+                                            {/* Photo Gallery */}
+                                            {(response.photo_urls && response.photo_urls.length > 0) ? (
+                                                <div className="mt-3 grid grid-cols-3 gap-2">
+                                                    {response.photo_urls.map((url, idx) => (
+                                                        <a 
+                                                            key={idx}
+                                                            href={url} 
+                                                            target="_blank" 
+                                                            rel="noopener noreferrer"
+                                                            className="relative aspect-square rounded-md overflow-hidden border border-slate-200 hover:opacity-90 transition-opacity"
+                                                        >
+                                                            <img 
+                                                                src={url} 
+                                                                alt={`Evidence ${idx + 1}`} 
+                                                                className="h-full w-full object-cover"
+                                                            />
+                                                        </a>
+                                                    ))}
+                                                </div>
+                                            ) : response.photo_url && (
                                                 <div className="mt-2">
                                                     <a 
                                                         href={response.photo_url} 

@@ -580,12 +580,25 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                 <ShiftOpeningWizard
                     isOpen={isHandoverOpen}
                     onClose={() => setIsHandoverOpen(false)}
-                    onComplete={async (checklistResponses: Record<number, { score: number, comment: string, photo_url?: string }>) => {
+                    onComplete={async (checklistResponses: Record<number, { score: number, comment: string, photo_urls?: string[] }>, targetShiftId?: string) => {
                         try {
-                            // Find recent closed shift (previous shift)
-                            const recentRes = await fetch(`/api/clubs/${clubId}/shifts/recent`)
-                            const recentShifts = await recentRes.json()
-                            const lastShift = recentShifts.find((s: any) => s.status === 'CLOSED')
+                            // Find recent closed shift (previous shift) or use selected
+                            let targetUserId = null
+                            
+                            if (targetShiftId) {
+                                // If user selected a shift, fetch its details to get user_id
+                                const shiftRes = await fetch(`/api/clubs/${clubId}/shifts/${targetShiftId}`)
+                                if (shiftRes.ok) {
+                                    const shiftData = await shiftRes.json()
+                                    targetUserId = shiftData.user_id
+                                }
+                            } else {
+                                // Fallback to auto-detection (should be covered by wizard now but safe to keep)
+                                const recentRes = await fetch(`/api/clubs/${clubId}/shifts/recent`)
+                                const recentShifts = await recentRes.json()
+                                const lastShift = recentShifts.find((s: any) => s.status === 'CLOSED')
+                                if (lastShift) targetUserId = lastShift.user_id
+                            }
                             
                             // Submit evaluation for previous employee
                             await fetch(`/api/clubs/${clubId}/evaluations`, {
@@ -593,13 +606,14 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({
                                     template_id: handoverTemplate.id,
-                                    employee_id: lastShift ? lastShift.user_id : null,
-                                    target_user_id: lastShift ? lastShift.user_id : null, // New field to bypass lookup
+                                    employee_id: targetUserId, // Using targetUserId derived from shift
+                                    target_user_id: targetUserId, 
+                                    shift_id: targetShiftId, // Linking evaluation to specific shift
                                     responses: Object.entries(checklistResponses).map(([k, v]: any) => ({
                                         item_id: parseInt(k),
                                         score: v.score,
                                         comment: v.comment,
-                                        photo_url: v.photo_url
+                                        photo_urls: v.photo_urls // Send array of photos
                                     }))
                                 })
                             })

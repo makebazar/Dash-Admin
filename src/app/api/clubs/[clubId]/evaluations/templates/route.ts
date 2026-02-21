@@ -40,10 +40,11 @@ export async function GET(
                                'description', i.description,
                                'weight', i.weight,
                                'sort_order', i.sort_order,
-                               'is_photo_required', i.is_photo_required,
-                               'related_entity_type', i.related_entity_type
-                           ) ORDER BY i.sort_order
-                       ) FILTER (WHERE i.id IS NOT NULL AND i.is_active = TRUE), 
+                                'is_photo_required', i.is_photo_required,
+                                'min_photos', i.min_photos,
+                                'related_entity_type', i.related_entity_type
+                            ) ORDER BY i.sort_order
+                        ) FILTER (WHERE i.id IS NOT NULL AND i.is_active = TRUE), 
                        '[]'::json
                    ) as items
             FROM evaluation_templates t
@@ -102,9 +103,9 @@ export async function POST(
             for (let i = 0; i < items.length; i++) {
                 const item = items[i];
                 await query(
-                    `INSERT INTO evaluation_template_items (template_id, content, description, weight, sort_order, is_photo_required, related_entity_type)
-                     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-                    [templateId, item.content, item.description, item.weight || 1.0, i, item.is_photo_required || false, item.related_entity_type || null]
+                    `INSERT INTO evaluation_template_items (template_id, content, description, weight, sort_order, is_photo_required, related_entity_type, min_photos)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+                    [templateId, item.content, item.description, item.weight || 1.0, i, item.is_photo_required || false, item.related_entity_type || null, item.min_photos || 0]
                 );
             }
         }

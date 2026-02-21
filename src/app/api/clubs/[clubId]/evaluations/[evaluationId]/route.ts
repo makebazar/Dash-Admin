@@ -50,11 +50,19 @@ export async function GET(
         // Get Responses with Item Details
         const responsesResult = await query(
             `
-            SELECT r.*, i.content as item_content, i.description as item_description, i.weight
+            SELECT 
+                r.id,
+                r.score,
+                r.comment,
+                r.photo_url,
+                r.photo_urls,
+                i.content as item_content,
+                i.description,
+                i.weight
             FROM evaluation_responses r
             JOIN evaluation_template_items i ON r.item_id = i.id
             WHERE r.evaluation_id = $1
-            ORDER BY i.sort_order
+            ORDER BY i.sort_order ASC
             `,
             [evaluationId]
         );

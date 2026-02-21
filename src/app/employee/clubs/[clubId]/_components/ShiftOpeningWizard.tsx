@@ -11,7 +11,7 @@ import { useParams } from "next/navigation"
 interface ShiftOpeningWizardProps {
     isOpen: boolean
     onClose: () => void
-    onComplete: (responses: Record<number, { score: number, comment: string, photo_url?: string }>) => void
+    onComplete: (responses: Record<number, { score: number, comment: string, photo_urls?: string[], selected_workstations?: string[] }>, targetShiftId?: string) => void
     checklistTemplate: any
 }
 
@@ -24,14 +24,53 @@ export function ShiftOpeningWizard({
     const params = useParams()
     const clubId = params.clubId as string
     
-    const [checklistResponses, setChecklistResponses] = useState<Record<number, { score: number, comment: string, photo_url?: string, selected_workstations?: string[] }>>({})
+    const [checklistResponses, setChecklistResponses] = useState<Record<number, { score: number, comment: string, photo_urls: string[], selected_workstations?: string[] }>>({})
     const [uploadingState, setUploadingState] = useState<Record<number, boolean>>({})
     
     // Workstations state
     const [workstations, setWorkstations] = useState<any[]>([])
     const [isLoadingWorkstations, setIsLoadingWorkstations] = useState(false)
 
+    // Wizard step state
+    const [currentStep, setCurrentStep] = useState(-1) // Start at -1 for Shift Selection Step
+    const totalSteps = checklistTemplate?.items?.length || 0
+
+    // Shift Selection State
+    const [shifts, setShifts] = useState<any[]>([])
+    const [selectedShiftId, setSelectedShiftId] = useState<string | null>(null)
+    const [isLoadingShifts, setIsLoadingShifts] = useState(true)
+
     useEffect(() => {
+        // Fetch recent shifts for selection
+        const fetchShifts = async () => {
+            try {
+                const res = await fetch(`/api/clubs/${clubId}/shifts/recent`)
+                if (res.ok) {
+                    const data = await res.json()
+                    setShifts(data.shifts || [])
+                    
+                    // Auto-select logic:
+                    // 1. Priority: Active shift (if employee arrived early and wants to check current shift)
+                    // 2. Fallback: Last CLOSED shift (handover from previous employee)
+                    
+                    const activeShift = data.shifts.find((s: any) => s.status === 'ACTIVE')
+                    const lastClosedShift = data.shifts.find((s: any) => s.status === 'CLOSED')
+                    
+                    if (activeShift) {
+                        setSelectedShiftId(activeShift.id)
+                    } else if (lastClosedShift) {
+                        setSelectedShiftId(lastClosedShift.id)
+                    }
+                }
+            } catch (e) {
+                console.error("Failed to fetch shifts", e)
+            } finally {
+                setIsLoadingShifts(false)
+            }
+        }
+        
+        fetchShifts()
+
         // Fetch workstations if any item needs them
         const needsWorkstations = checklistTemplate?.items?.some((item: any) => item.related_entity_type === 'workstations')
         if (needsWorkstations) {
@@ -39,14 +78,13 @@ export function ShiftOpeningWizard({
         }
 
         if (checklistTemplate?.items) {
-            const initial: Record<number, { score: number, comment: string, photo_url?: string, selected_workstations?: string[] }> = {}
+            const initial: Record<number, { score: number, comment: string, photo_urls: string[], selected_workstations?: string[] }> = {}
             checklistTemplate.items.forEach((item: any) => {
-                // No pre-selection of score
-                initial[item.id] = { score: -1, comment: '', photo_url: '', selected_workstations: [] }
+                initial[item.id] = { score: -1, comment: '', photo_urls: [], selected_workstations: [] }
             })
             setChecklistResponses(initial)
         }
-    }, [checklistTemplate])
+    }, [checklistTemplate, clubId])
 
     const fetchWorkstations = async () => {
         setIsLoadingWorkstations(true)
@@ -107,27 +145,97 @@ export function ShiftOpeningWizard({
         })
     }
 
+    const compressImage = async (file: File): Promise<Blob> => {
+        return new Promise((resolve, reject) => {
+            const img = new Image()
+            const reader = new FileReader()
+
+            reader.onload = (e) => {
+                img.src = e.target?.result as string
+            }
+
+            img.onload = () => {
+                const canvas = document.createElement('canvas')
+                const ctx = canvas.getContext('2d')
+                
+                // Max dimensions
+                const MAX_WIDTH = 1200
+                const MAX_HEIGHT = 1200
+                
+                let width = img.width
+                let height = img.height
+
+                // Calculate new dimensions
+                if (width > height) {
+                    if (width > MAX_WIDTH) {
+                        height *= MAX_WIDTH / width
+                        width = MAX_WIDTH
+                    }
+                } else {
+                    if (height > MAX_HEIGHT) {
+                        width *= MAX_HEIGHT / height
+                        height = MAX_HEIGHT
+                    }
+                }
+
+                canvas.width = width
+                canvas.height = height
+
+                ctx?.drawImage(img, 0, 0, width, height)
+
+                // Compress to JPEG with 0.7 quality
+                canvas.toBlob((blob) => {
+                    if (blob) {
+                        resolve(blob)
+                    } else {
+                        reject(new Error('Canvas to Blob failed'))
+                    }
+                }, 'image/jpeg', 0.7)
+            }
+
+            reader.onerror = (err) => reject(err)
+            reader.readAsDataURL(file)
+        })
+    }
+
     const handlePhotoUpload = async (itemId: number, e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0]
-        if (!file) return
+        const files = e.target.files
+        if (!files || files.length === 0) return
 
         setUploadingState(prev => ({ ...prev, [itemId]: true }))
-        const formData = new FormData()
-        formData.append('file', file)
-
+        
         try {
-            const res = await fetch('/api/upload', {
-                method: 'POST',
-                body: formData
+            // Process all selected files
+            const uploadPromises = Array.from(files).map(async (file) => {
+                // Compress image
+                const compressedBlob = await compressImage(file)
+                const compressedFile = new File([compressedBlob], file.name.replace(/\.[^/.]+$/, "") + ".jpg", {
+                    type: 'image/jpeg'
+                })
+
+                const formData = new FormData()
+                formData.append('file', compressedFile)
+
+                const res = await fetch('/api/upload', {
+                    method: 'POST',
+                    body: formData
+                })
+                
+                if (!res.ok) throw new Error('Upload failed')
+                const data = await res.json()
+                return data.url
             })
-            
-            if (!res.ok) throw new Error('Upload failed')
-            
-            const data = await res.json()
+
+            const urls = await Promise.all(uploadPromises)
+
             setChecklistResponses(prev => ({
                 ...prev,
-                [itemId]: { ...prev[itemId], photo_url: data.url }
+                [itemId]: { 
+                    ...prev[itemId], 
+                    photo_urls: [...(prev[itemId]?.photo_urls || []), ...urls]
+                }
             }))
+
         } catch (error) {
             console.error('Failed to upload file:', error)
             alert('Не удалось загрузить фото')
@@ -136,100 +244,210 @@ export function ShiftOpeningWizard({
         }
     }
 
-    const removePhoto = (itemId: number) => {
+    const removePhoto = (itemId: number, urlToRemove: string) => {
         setChecklistResponses(prev => ({
             ...prev,
-            [itemId]: { ...prev[itemId], photo_url: '' }
+            [itemId]: { 
+                ...prev[itemId], 
+                photo_urls: prev[itemId].photo_urls.filter(url => url !== urlToRemove)
+            }
         }))
     }
 
-    const handleComplete = () => {
-        // Validate
-        const missing = checklistTemplate.items?.filter((item: any) => checklistResponses[item.id] === undefined)
-        if (missing && missing.length > 0) {
-            alert('Заполните все пункты чеклиста!')
-            return
-        }
-        
-        // Also check if score 0 has comment
-        const missingComment = Object.entries(checklistResponses).find(([_, val]) => val.score === 0 && !val.comment)
-        if (missingComment) {
-            alert('При выборе "Нет" обязательно укажите комментарий!')
+    const handleNext = () => {
+        // Shift Selection Step Validation
+        if (currentStep === -1) {
+            if (!selectedShiftId) {
+                alert('Пожалуйста, выберите смену для приемки')
+                return
+            }
+            setCurrentStep(0)
             return
         }
 
-        // Validate required photos
-        const missingPhotos = checklistTemplate.items?.filter((item: any) => 
-            item.is_photo_required && !checklistResponses[item.id]?.photo_url
-        )
+        // Validate current step
+        const currentItem = checklistTemplate.items[currentStep]
+        const response = checklistResponses[currentItem.id]
 
-        if (missingPhotos && missingPhotos.length > 0) {
-            alert(`Необходимо прикрепить фото для следующих пунктов:\n${missingPhotos.map((i: any) => `- ${i.content}`).join('\n')}`)
+        if (response?.score === -1) {
+            alert('Пожалуйста, выберите "Да" или "Нет"')
             return
         }
 
-        onComplete(checklistResponses)
+        if (response?.score === 0 && !response.comment && !response.selected_workstations?.length) {
+            alert('При выборе "Нет" обязательно укажите комментарий или выберите проблемные места!')
+            return
+        }
+
+        if (currentItem.is_photo_required) {
+            const uploadedCount = response.photo_urls?.length || 0
+            const minRequired = currentItem.min_photos || 1 // Default to 1 if not specified
+            
+            if (uploadedCount < minRequired) {
+                alert(`Для этого пункта необходимо загрузить минимум ${minRequired} фото (загружено: ${uploadedCount})`)
+                return
+            }
+        }
+
+        if (currentStep < totalSteps - 1) {
+            setCurrentStep(prev => prev + 1)
+        } else {
+            handleComplete()
+        }
     }
+
+    const handleBack = () => {
+        if (currentStep > -1) {
+            setCurrentStep(prev => prev - 1)
+        }
+    }
+
+    const handleComplete = () => {
+        // Final validation (should be redundant if steps are validated)
+        onComplete(checklistResponses, selectedShiftId || undefined)
+    }
+
+    const currentItem = checklistTemplate?.items?.[currentStep]
+    const progress = ((currentStep + 1) / totalSteps) * 100
 
     return (
         <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-            <DialogContent className="w-full h-full max-w-none m-0 rounded-none sm:rounded-lg sm:max-w-2xl sm:h-auto sm:max-h-[90vh] bg-slate-950 border-slate-800 text-white overflow-hidden flex flex-col p-0 sm:p-6">
-                <DialogHeader className="p-4 sm:p-0">
-                    <DialogTitle>Приемка смены: {checklistTemplate.name}</DialogTitle>
-                    <DialogDescription className="text-slate-400">
-                        Проверьте состояние клуба после предыдущей смены
-                    </DialogDescription>
-                </DialogHeader>
+            <DialogContent className="w-full h-full max-w-none m-0 rounded-none sm:rounded-lg sm:max-w-2xl sm:h-auto sm:max-h-[90vh] bg-slate-950 border-slate-800 text-white overflow-hidden flex flex-col p-0">
+                
+                {/* Header with Progress */}
+                <div className="p-4 border-b border-slate-800 bg-slate-900/50">
+                    <div className="flex items-center justify-between mb-2">
+                        <DialogTitle className="text-lg">
+                            {currentStep === -1 ? 'Выбор смены' : 'Приемка смены'}
+                        </DialogTitle>
+                        {currentStep >= 0 && (
+                            <span className="text-xs text-slate-400 font-mono">
+                                {currentStep + 1} / {totalSteps}
+                            </span>
+                        )}
+                    </div>
+                    {currentStep >= 0 && (
+                        <div className="h-1 w-full bg-slate-800 rounded-full overflow-hidden">
+                            <div 
+                                className="h-full bg-purple-600 transition-all duration-300 ease-out"
+                                style={{ width: `${progress}%` }}
+                            />
+                        </div>
+                    )}
+                </div>
 
-                <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                    {checklistTemplate.items?.map((item: any) => (
-                        <div key={item.id} className="space-y-3 border-b border-slate-800 pb-4 last:border-0">
-                            <div className="flex flex-col gap-1">
-                                <div className="flex items-start justify-between gap-2">
-                                    <span className="text-sm font-medium text-slate-200 mt-1">{item.content}</span>
-                                    <div className="flex gap-1 bg-slate-900 p-1 rounded-md border border-slate-800 shrink-0">
-                                        <Button 
-                                            variant={checklistResponses[item.id]?.score === 1 ? 'default' : 'ghost'} 
-                                            size="sm"
-                                            className={`h-7 px-3 text-xs ${checklistResponses[item.id]?.score === 1 ? 'bg-green-600 hover:bg-green-700' : 'text-slate-400'}`}
-                                            onClick={() => handleChecklistChange(item.id, 1)}
-                                        >
-                                            Да
-                                        </Button>
-                                        <Button 
-                                            variant={checklistResponses[item.id]?.score === 0 ? 'default' : 'ghost'} 
-                                            size="sm"
-                                            className={`h-7 px-3 text-xs ${checklistResponses[item.id]?.score === 0 ? 'bg-red-600 hover:bg-red-700' : 'text-slate-400'}`}
-                                            onClick={() => handleChecklistChange(item.id, 0)}
-                                        >
-                                            Нет
-                                        </Button>
-                                    </div>
+                {/* Content Area */}
+                <div className="flex-1 overflow-y-auto p-4 sm:p-6 flex flex-col justify-center min-h-[300px]">
+                    {currentStep === -1 ? (
+                        <div className="space-y-6 animate-in fade-in slide-in-from-left-4 duration-300">
+                            <div className="space-y-2">
+                                <h2 className="text-xl sm:text-2xl font-bold leading-tight">Какую смену вы принимаете?</h2>
+                                <p className="text-sm text-slate-400">Выберите смену, чтобы привязать к ней результаты проверки.</p>
+                            </div>
+
+                            {isLoadingShifts ? (
+                                <div className="flex justify-center py-8">
+                                    <Loader2 className="h-8 w-8 animate-spin text-purple-500" />
                                 </div>
-                                {item.description && (
-                                    <p className="text-xs text-slate-500">{item.description}</p>
+                            ) : (
+                                <div className="grid gap-3">
+                                    {shifts.map((shift) => (
+                                        <button
+                                            key={shift.id}
+                                            onClick={() => setSelectedShiftId(shift.id)}
+                                            className={`
+                                                flex items-center justify-between p-4 rounded-xl border-2 transition-all text-left
+                                                ${selectedShiftId === shift.id
+                                                    ? 'bg-purple-500/10 border-purple-500 shadow-lg shadow-purple-500/10'
+                                                    : 'bg-slate-900 border-slate-800 hover:border-slate-700'}
+                                            `}
+                                        >
+                                            <div>
+                                                <div className="font-bold text-white flex items-center gap-2">
+                                                    {shift.employee_name}
+                                                    {shift.status === 'ACTIVE' && (
+                                                        <span className="px-2 py-0.5 rounded-full bg-green-500/20 text-green-400 text-[10px] uppercase tracking-wider font-bold border border-green-500/20">
+                                                            Активна
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <div className="text-xs text-slate-400 mt-1">
+                                                    {new Date(shift.check_in).toLocaleString('ru-RU', { 
+                                                        day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' 
+                                                    })}
+                                                    {shift.check_out && ` — ${new Date(shift.check_out).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}`}
+                                                </div>
+                                            </div>
+                                            {selectedShiftId === shift.id && (
+                                                <CheckCircle2 className="h-6 w-6 text-purple-500" />
+                                            )}
+                                        </button>
+                                    ))}
+                                    
+                                    {shifts.length === 0 && (
+                                        <div className="text-center py-8 text-slate-500 bg-slate-900/50 rounded-xl border border-slate-800 border-dashed">
+                                            Смен за последнее время не найдено
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    ) : currentItem && (
+                        <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300 key={currentStep}">
+                            <div className="space-y-2">
+                                <h2 className="text-xl sm:text-2xl font-bold leading-tight">{currentItem.content}</h2>
+                                {currentItem.description && (
+                                    <p className="text-sm text-slate-400">{currentItem.description}</p>
                                 )}
                             </div>
-                            
+
+                            <div className="grid grid-cols-2 gap-3">
+                                <button
+                                    onClick={() => handleChecklistChange(currentItem.id, 1)}
+                                    className={`
+                                        flex flex-col items-center justify-center gap-2 p-4 rounded-xl border-2 transition-all
+                                        ${checklistResponses[currentItem.id]?.score === 1
+                                            ? 'bg-green-500/10 border-green-500 text-green-400'
+                                            : 'bg-slate-900 border-slate-800 text-slate-400 hover:bg-slate-800'}
+                                    `}
+                                >
+                                    <CheckCircle2 className="h-8 w-8" />
+                                    <span className="font-bold">Все отлично</span>
+                                </button>
+
+                                <button
+                                    onClick={() => handleChecklistChange(currentItem.id, 0)}
+                                    className={`
+                                        flex flex-col items-center justify-center gap-2 p-4 rounded-xl border-2 transition-all
+                                        ${checklistResponses[currentItem.id]?.score === 0
+                                            ? 'bg-red-500/10 border-red-500 text-red-400'
+                                            : 'bg-slate-900 border-slate-800 text-slate-400 hover:bg-slate-800'}
+                                    `}
+                                >
+                                    <Trash2 className="h-8 w-8" /> {/* Using Trash icon as "Issues" metaphor or just XCircle */}
+                                    <span className="font-bold">Есть проблемы</span>
+                                </button>
+                            </div>
+
                             {/* Workstation Selection Grid */}
-                            {item.related_entity_type === 'workstations' && (
-                                <div className="mt-2 p-3 bg-slate-900 rounded-lg border border-slate-800">
-                                    <p className="text-xs text-slate-400 mb-2">Отметьте проблемные места:</p>
+                            {currentItem.related_entity_type === 'workstations' && (
+                                <div className="p-4 bg-slate-900/50 rounded-xl border border-slate-800">
+                                    <p className="text-xs text-slate-400 mb-3 font-medium uppercase tracking-wider">Отметьте проблемные места:</p>
                                     
                                     {isLoadingWorkstations ? (
                                         <div className="flex justify-center py-4">
-                                            <Loader2 className="h-5 w-5 animate-spin text-slate-500"/>
+                                            <Loader2 className="h-6 w-6 animate-spin text-purple-500"/>
                                         </div>
                                     ) : (
                                         <div className="grid grid-cols-4 sm:grid-cols-5 gap-2">
                                             {workstations.map(ws => (
                                                 <button
                                                     key={ws.id}
-                                                    onClick={() => toggleWorkstationSelection(item.id, ws.name)}
+                                                    onClick={() => toggleWorkstationSelection(currentItem.id, ws.name)}
                                                     className={`
-                                                        py-2 px-1 text-[10px] sm:text-xs font-medium rounded border transition-all truncate
-                                                        ${checklistResponses[item.id]?.selected_workstations?.includes(ws.name)
-                                                            ? 'bg-red-500/20 border-red-500 text-red-400'
+                                                        py-2 px-1 text-[10px] sm:text-xs font-medium rounded-lg border transition-all truncate
+                                                        ${checklistResponses[currentItem.id]?.selected_workstations?.includes(ws.name)
+                                                            ? 'bg-red-500 border-red-500 text-white shadow-lg shadow-red-500/20'
                                                             : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700'}
                                                     `}
                                                 >
@@ -241,104 +459,101 @@ export function ShiftOpeningWizard({
                                 </div>
                             )}
 
-                            {/* Photo Upload Section - Only show if required */}
-                            {(item.is_photo_required || checklistResponses[item.id]?.photo_url) && (
-                                <div className="mt-2">
-                                    {checklistResponses[item.id]?.photo_url ? (
-                                        <div className="flex items-center gap-3 p-2 bg-slate-900 rounded-lg border border-slate-800">
-                                            <div className="h-10 w-10 bg-slate-800 rounded overflow-hidden relative">
-                                                <img 
-                                                    src={checklistResponses[item.id].photo_url} 
-                                                    alt="Attached" 
-                                                    className="h-full w-full object-cover"
-                                                />
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                                <p className="text-xs text-slate-400 truncate">Фото прикреплено</p>
-                                                <a 
-                                                    href={checklistResponses[item.id].photo_url} 
-                                                    target="_blank" 
-                                                    rel="noopener noreferrer"
-                                                    className="text-xs text-blue-400 hover:underline flex items-center gap-1"
-                                                >
-                                                    Открыть <ExternalLink className="h-3 w-3" />
-                                                </a>
-                                            </div>
-                                            <button 
-                                                onClick={() => removePhoto(item.id)}
-                                                className="p-2 hover:bg-red-900/20 text-slate-400 hover:text-red-500 rounded-full transition-colors"
-                                            >
-                                                <Trash2 className="h-4 w-4" />
-                                            </button>
+                            {/* Photo Upload Section */}
+                            {(currentItem.is_photo_required || (checklistResponses[currentItem.id]?.photo_urls && checklistResponses[currentItem.id]?.photo_urls.length > 0)) && (
+                                <div className="space-y-3">
+                                    {/* Gallery */}
+                                    {checklistResponses[currentItem.id]?.photo_urls && checklistResponses[currentItem.id].photo_urls.length > 0 && (
+                                        <div className="grid grid-cols-2 gap-2">
+                                            {checklistResponses[currentItem.id].photo_urls.map((url, idx) => (
+                                                <div key={idx} className="relative rounded-xl overflow-hidden border border-slate-700 aspect-video bg-slate-900 group">
+                                                    <img 
+                                                        src={url} 
+                                                        alt={`Attached ${idx + 1}`} 
+                                                        className="h-full w-full object-cover"
+                                                    />
+                                                    <button 
+                                                        onClick={() => removePhoto(currentItem.id, url)}
+                                                        className="absolute top-2 right-2 p-2 bg-black/50 hover:bg-red-600 text-white rounded-full backdrop-blur-sm transition-colors opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+                                                    >
+                                                        <Trash2 className="h-4 w-4" />
+                                                    </button>
+                                                </div>
+                                            ))}
                                         </div>
-                                    ) : (
-                                        <label className={`
-                                            flex items-center justify-center gap-2 p-3 rounded-lg border border-dashed cursor-pointer transition-colors
-                                            ${item.is_photo_required ? 'border-purple-500/50 bg-purple-500/10 hover:bg-purple-500/20' : 'border-slate-700 hover:bg-slate-800'}
-                                        `}>
-                                            {uploadingState[item.id] ? (
-                                                <Loader2 className="h-4 w-4 animate-spin text-purple-400" />
-                                            ) : (
-                                                <Upload className={`h-4 w-4 ${item.is_photo_required ? 'text-purple-400' : 'text-slate-400'}`} />
-                                            )}
-                                            <span className={`text-xs font-medium ${item.is_photo_required ? 'text-purple-300' : 'text-slate-400'}`}>
-                                                {uploadingState[item.id] ? 'Загрузка...' : (item.is_photo_required ? 'Сделать обязательное фото' : 'Прикрепить фото')}
-                                            </span>
-                                            <input 
-                                                type="file" 
-                                                accept="image/*" 
-                                                capture="environment"
-                                                className="hidden" 
-                                                onChange={(e) => handlePhotoUpload(item.id, e)}
-                                                disabled={uploadingState[item.id]}
-                                            />
-                                        </label>
                                     )}
+
+                                    {/* Upload Button */}
+                                    <label className={`
+                                        flex flex-col items-center justify-center gap-3 p-6 rounded-xl border-2 border-dashed cursor-pointer transition-all
+                                        ${currentItem.is_photo_required && (!checklistResponses[currentItem.id]?.photo_urls || checklistResponses[currentItem.id].photo_urls.length < (currentItem.min_photos || 1))
+                                            ? 'border-purple-500/50 bg-purple-500/5 hover:bg-purple-500/10' 
+                                            : 'border-slate-700 hover:bg-slate-800'}
+                                    `}>
+                                        {uploadingState[currentItem.id] ? (
+                                            <Loader2 className="h-8 w-8 animate-spin text-purple-400" />
+                                        ) : (
+                                            <Camera className={`h-8 w-8 ${currentItem.is_photo_required ? 'text-purple-400' : 'text-slate-400'}`} />
+                                        )}
+                                        <div className="text-center">
+                                            <p className={`font-medium ${currentItem.is_photo_required ? 'text-purple-300' : 'text-slate-300'}`}>
+                                                {uploadingState[currentItem.id] ? 'Загрузка...' : (currentItem.is_photo_required 
+                                                    ? `Добавить фото (минимум ${currentItem.min_photos || 1})` 
+                                                    : 'Добавить фото')}
+                                            </p>
+                                            <p className="text-xs text-slate-500 mt-1">Нажмите, чтобы открыть камеру</p>
+                                        </div>
+                                        <input 
+                                            type="file" 
+                                            accept="image/*" 
+                                            multiple
+                                            capture="environment"
+                                            className="hidden" 
+                                            onChange={(e) => handlePhotoUpload(currentItem.id, e)}
+                                            disabled={uploadingState[currentItem.id]}
+                                        />
+                                    </label>
                                 </div>
                             )}
 
-                            {/* Optional photo trigger if not required and no photo yet - REMOVED per request */}
-                            {/* {!item.is_photo_required && !checklistResponses[item.id]?.photo_url && (
-                                <div className="flex justify-end">
-                                    <button 
-                                        onClick={() => document.getElementById(`shift-photo-${item.id}`)?.click()}
-                                        className="text-xs text-slate-500 hover:text-slate-300 flex items-center gap-1"
-                                    >
-                                        <Camera className="h-3 w-3" />
-                                        Добавить фото
-                                    </button>
-                                    <input 
-                                        id={`shift-photo-${item.id}`}
-                                        type="file" 
-                                        accept="image/*" 
-                                        capture="environment"
-                                        className="hidden" 
-                                        onChange={(e) => handlePhotoUpload(item.id, e)}
-                                        disabled={uploadingState[item.id]}
+                            {/* Comment Input */}
+                            {(checklistResponses[currentItem.id]?.score === 0 || checklistResponses[currentItem.id]?.comment) && (
+                                <div className="animate-in fade-in slide-in-from-bottom-2">
+                                    <Label className="text-xs text-slate-400 mb-2 block">Комментарий</Label>
+                                    <Input 
+                                        placeholder={checklistResponses[currentItem.id]?.score === 0 ? "Опишите проблему..." : "Комментарий (опционально)..."}
+                                        className="bg-slate-900 border-slate-700 focus-visible:ring-purple-500"
+                                        value={checklistResponses[currentItem.id]?.comment || ''}
+                                        onChange={(e) => setChecklistResponses(prev => ({
+                                            ...prev,
+                                            [currentItem.id]: { ...prev[currentItem.id], comment: e.target.value }
+                                        }))}
                                     />
                                 </div>
-                            )} */}
-
-                            {checklistResponses[item.id]?.score === 0 && (
-                                <Input 
-                                    placeholder="Комментарий (обязательно)..."
-                                    className="h-8 text-xs bg-slate-900 border-slate-700"
-                                    value={checklistResponses[item.id]?.comment || ''}
-                                    onChange={(e) => setChecklistResponses(prev => ({
-                                        ...prev,
-                                        [item.id]: { ...prev[item.id], comment: e.target.value }
-                                    }))}
-                                />
                             )}
                         </div>
-                    ))}
+                    )}
                 </div>
 
-                <DialogFooter className="p-4 border-t border-slate-800 sm:p-6 sm:pt-4 mt-auto">
-                    <Button onClick={handleComplete} className="w-full bg-blue-600 hover:bg-blue-700 h-12 sm:h-10 text-base sm:text-sm">
-                        <CheckCircle2 className="mr-2 h-4 w-4" />
-                        Подтвердить и начать смену
-                    </Button>
+                {/* Footer Navigation */}
+                <DialogFooter className="p-4 border-t border-slate-800 bg-slate-900/50 mt-auto">
+                    <div className="flex gap-3 w-full">
+                        <Button 
+                            variant="outline" 
+                            onClick={handleBack}
+                            disabled={currentStep === 0}
+                            className="flex-1 border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white"
+                        >
+                            Назад
+                        </Button>
+                        <Button 
+                            onClick={handleNext} 
+                            className="flex-[2] bg-purple-600 hover:bg-purple-700 text-white font-bold"
+                        >
+                            {currentStep === totalSteps - 1 ? 'Завершить' : 'Далее'}
+                            {currentStep < totalSteps - 1 && <ArrowRight className="ml-2 h-4 w-4" />}
+                        </Button>
+                    </div>
                 </DialogFooter>
             </DialogContent>
         </Dialog>
