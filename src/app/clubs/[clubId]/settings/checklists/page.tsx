@@ -57,6 +57,7 @@ interface EvaluationDetail extends Evaluation {
         score: number
         comment?: string
         photo_url?: string
+        photo_urls?: string[]
     }[]
 }
 
@@ -67,6 +68,7 @@ export default function ChecklistSettingsPage({ params }: { params: Promise<{ cl
     const [history, setHistory] = useState<Evaluation[]>([])
     const [selectedEvaluation, setSelectedEvaluation] = useState<EvaluationDetail | null>(null)
     const [isDetailLoading, setIsDetailLoading] = useState(false)
+    const [photoPreviewUrl, setPhotoPreviewUrl] = useState<string | null>(null)
     const [isEditing, setIsEditing] = useState(false)
     const [currentTemplate, setCurrentTemplate] = useState<Partial<ChecklistTemplate>>({
         name: '',
@@ -87,6 +89,10 @@ export default function ChecklistSettingsPage({ params }: { params: Promise<{ cl
             fetchZones(p.clubId)
         })
     }, [params])
+
+    useEffect(() => {
+        setPhotoPreviewUrl(null)
+    }, [selectedEvaluation])
 
     const fetchZones = async (id: string) => {
         try {
@@ -145,6 +151,29 @@ export default function ChecklistSettingsPage({ params }: { params: Promise<{ cl
             console.error(error)
         } finally {
             setIsDetailLoading(false)
+        }
+    }
+
+    const handleDeleteEvaluation = async (evaluationId: number) => {
+        if (!confirm('Удалить эту проверку?')) return
+
+        try {
+            const res = await fetch(`/api/clubs/${clubId}/evaluations/${evaluationId}`, {
+                method: 'DELETE'
+            })
+
+            if (res.ok) {
+                setHistory(prev => prev.filter(item => item.id !== evaluationId))
+                if (selectedEvaluation?.id === evaluationId) {
+                    setSelectedEvaluation(null)
+                    setPhotoPreviewUrl(null)
+                }
+            } else {
+                alert('Ошибка удаления')
+            }
+        } catch (error) {
+            console.error(error)
+            alert('Ошибка сервера')
         }
     }
 
@@ -606,6 +635,7 @@ export default function ChecklistSettingsPage({ params }: { params: Promise<{ cl
                                                 <TableHead>Сотрудник</TableHead>
                                                 <TableHead>Проверяющий</TableHead>
                                                 <TableHead className="text-right">Результат</TableHead>
+                                                <TableHead className="w-12"></TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
@@ -620,6 +650,19 @@ export default function ChecklistSettingsPage({ params }: { params: Promise<{ cl
                                                             {Math.round(evaluation.total_score)}%
                                                         </Badge>
                                                     </TableCell>
+                                                    <TableCell className="text-right">
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="text-muted-foreground hover:text-red-500"
+                                                            onClick={(event) => {
+                                                                event.stopPropagation()
+                                                                handleDeleteEvaluation(evaluation.id)
+                                                            }}
+                                                        >
+                                                            <Trash2 className="h-4 w-4" />
+                                                        </Button>
+                                                    </TableCell>
                                                 </TableRow>
                                             ))}
                                         </TableBody>
@@ -630,7 +673,15 @@ export default function ChecklistSettingsPage({ params }: { params: Promise<{ cl
                     </TabsContent>
                 </Tabs>
 
-                <Dialog open={!!selectedEvaluation} onOpenChange={() => setSelectedEvaluation(null)}>
+                <Dialog
+                    open={!!selectedEvaluation}
+                    onOpenChange={(open) => {
+                        if (!open) {
+                            setSelectedEvaluation(null)
+                            setPhotoPreviewUrl(null)
+                        }
+                    }}
+                >
                     <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
                         <DialogHeader>
                             <DialogTitle>Результаты проверки</DialogTitle>
@@ -672,7 +723,14 @@ export default function ChecklistSettingsPage({ params }: { params: Promise<{ cl
                                 <div>
                                     <h3 className="font-semibold mb-3">Детализация</h3>
                                     <div className="space-y-3">
-                                        {selectedEvaluation.responses?.map((response, index) => (
+                                        {selectedEvaluation.responses?.map((response, index) => {
+                                            const photos = response.photo_urls && response.photo_urls.length > 0
+                                                ? response.photo_urls
+                                                : response.photo_url
+                                                    ? [response.photo_url]
+                                                    : []
+
+                                            return (
                                             <div key={index} className="border rounded-lg p-3">
                                                 <div className="flex justify-between items-start mb-2">
                                                     <p className="text-sm font-medium">{response.item_content}</p>
@@ -687,22 +745,38 @@ export default function ChecklistSettingsPage({ params }: { params: Promise<{ cl
                                                         {response.comment}
                                                     </p>
                                                 )}
-                                                {response.photo_url && (
-                                                    <div className="mt-2">
-                                                        <a 
-                                                            href={response.photo_url} 
-                                                            target="_blank" 
-                                                            rel="noopener noreferrer"
-                                                            className="inline-flex items-center gap-2 text-xs text-blue-600 hover:underline bg-blue-50 px-2 py-1 rounded-md border border-blue-100"
-                                                        >
-                                                            <Camera className="h-3 w-3" />
-                                                            Посмотреть фото
-                                                            <ExternalLink className="h-3 w-3" />
-                                                        </a>
+                                                {photos.length > 0 && (
+                                                    <div className="mt-2 space-y-2">
+                                                        <div className="flex flex-wrap gap-2">
+                                                            {photos.map((url, photoIndex) => (
+                                                                <Button
+                                                                    key={`${response.id}-${photoIndex}`}
+                                                                    type="button"
+                                                                    variant="outline"
+                                                                    size="sm"
+                                                                    className="h-7 gap-2"
+                                                                    onClick={() => setPhotoPreviewUrl(url)}
+                                                                >
+                                                                    <Camera className="h-3 w-3" />
+                                                                    Посмотреть фото
+                                                                </Button>
+                                                            ))}
+                                                        </div>
+                                                        {photoPreviewUrl && photos.includes(photoPreviewUrl) && (
+                                                            <div className="border rounded-lg p-2 bg-muted/30">
+                                                                <img src={photoPreviewUrl} alt="Фото" className="w-full max-h-[360px] object-contain rounded" />
+                                                                <div className="flex justify-end mt-2">
+                                                                    <Button variant="ghost" size="sm" onClick={() => setPhotoPreviewUrl(null)}>
+                                                                        Закрыть
+                                                                    </Button>
+                                                                </div>
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 )}
                                             </div>
-                                        ))}
+                                            )
+                                        })}
                                     </div>
                                 </div>
                             </div>

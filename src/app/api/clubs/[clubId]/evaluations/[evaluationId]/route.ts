@@ -77,3 +77,37 @@ export async function GET(
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
 }
+
+export async function DELETE(
+    request: Request,
+    { params }: { params: Promise<{ clubId: string, evaluationId: string }> }
+) {
+    try {
+        const userId = (await cookies()).get('session_user_id')?.value;
+        const { clubId, evaluationId } = await params;
+
+        if (!userId) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
+        const ownerCheck = await query(
+            `SELECT 1 FROM clubs WHERE id = $1 AND owner_id = $2`,
+            [clubId, userId]
+        );
+
+        if ((ownerCheck.rowCount || 0) === 0) {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+
+        await query(
+            `DELETE FROM evaluations WHERE id = $1 AND club_id = $2`,
+            [evaluationId, clubId]
+        );
+
+        return NextResponse.json({ success: true });
+
+    } catch (error) {
+        console.error('Delete Evaluation Error:', error);
+        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    }
+}
