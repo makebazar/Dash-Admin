@@ -74,6 +74,7 @@ interface Equipment {
     model: string | null
     workstation_id: string | null
     is_active: boolean
+    cleaning_interval_days?: number
 }
 
 interface EquipmentType {
@@ -101,6 +102,10 @@ export default function WorkplacesManager() {
     const [selectedWorkstationId, setSelectedWorkstationId] = useState<string | null>(null)
     const [selectedEquipmentType, setSelectedEquipmentType] = useState<string>("all")
     const [searchEquipment, setSearchEquipment] = useState("")
+    const [isDetailsOpen, setIsDetailsOpen] = useState(false)
+    const [detailsWorkstationId, setDetailsWorkstationId] = useState<string | null>(null)
+    const [intervalDrafts, setIntervalDrafts] = useState<Record<string, string>>({})
+    const [savingIntervalId, setSavingIntervalId] = useState<string | null>(null)
 
     const fetchData = useCallback(async () => {
         setIsLoading(true)
@@ -245,6 +250,44 @@ export default function WorkplacesManager() {
         }
     }
 
+    const handleOpenDetails = (wsId: string) => {
+        setDetailsWorkstationId(wsId)
+        const drafts: Record<string, string> = {}
+        equipment
+            .filter(item => item.workstation_id === wsId)
+            .forEach(item => {
+                drafts[item.id] = String(item.cleaning_interval_days ?? 30)
+            })
+        setIntervalDrafts(drafts)
+        setIsDetailsOpen(true)
+    }
+
+    const handleIntervalChange = (equipmentId: string, value: string) => {
+        setIntervalDrafts(prev => ({ ...prev, [equipmentId]: value }))
+    }
+
+    const handleSaveInterval = async (equipmentId: string) => {
+        const raw = intervalDrafts[equipmentId]
+        const value = parseInt(raw, 10)
+        if (!value || value < 1) return
+
+        setSavingIntervalId(equipmentId)
+        try {
+            const res = await fetch(`/api/clubs/${clubId}/equipment/${equipmentId}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ cleaning_interval_days: value })
+            })
+            if (res.ok) {
+                fetchData()
+            }
+        } catch (error) {
+            console.error("Error updating interval:", error)
+        } finally {
+            setSavingIntervalId(null)
+        }
+    }
+
     // Filter available equipment for assignment (items on storage or unassigned)
     const availableEquipment = useMemo(() => {
         return equipment.filter(item => 
@@ -255,6 +298,22 @@ export default function WorkplacesManager() {
              item.brand?.toLowerCase().includes(searchEquipment.toLowerCase()))
         )
     }, [equipment, selectedEquipmentType, searchEquipment])
+
+    const activeWorkstation = useMemo(() => {
+        return workstations.find(w => w.id === detailsWorkstationId) || null
+    }, [workstations, detailsWorkstationId])
+
+    const activeEquipment = useMemo(() => {
+        return equipment.filter(item => item.workstation_id === detailsWorkstationId)
+    }, [equipment, detailsWorkstationId])
+
+    const pcEquipment = useMemo(() => {
+        return activeEquipment.filter(item => item.type === "PC")
+    }, [activeEquipment])
+
+    const peripheralEquipment = useMemo(() => {
+        return activeEquipment.filter(item => item.type !== "PC")
+    }, [activeEquipment])
 
     // Helper to get icon for equipment type
     const getEquipmentIcon = (type: string) => {
@@ -315,7 +374,7 @@ export default function WorkplacesManager() {
                                     const wsEquipment = equipment.filter(e => e.workstation_id === ws.id)
                                     
                                     return (
-                                        <Card key={ws.id} className="group hover:border-primary/50 transition-all border-slate-200 shadow-sm overflow-hidden flex flex-col h-full">
+                                        <Card key={ws.id} className="group hover:border-primary/50 transition-all border-slate-200 shadow-sm overflow-hidden flex flex-col h-full cursor-pointer" onClick={() => handleOpenDetails(ws.id)}>
                                             <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between space-y-0 bg-slate-50/50 border-b border-slate-100">
                                                 <div className="flex items-center gap-3">
                                                     <div className="h-10 w-10 bg-white rounded-xl border flex items-center justify-center text-slate-400 font-bold shadow-sm">
@@ -328,7 +387,7 @@ export default function WorkplacesManager() {
                                                 </div>
                                                 <DropdownMenu>
                                                     <DropdownMenuTrigger asChild>
-                                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-primary">
+                                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-primary" onClick={(e) => e.stopPropagation()}>
                                                             <MoreVertical className="h-4 w-4" />
                                                         </Button>
                                                     </DropdownMenuTrigger>
@@ -350,7 +409,7 @@ export default function WorkplacesManager() {
                                                     <div className="h-full min-h-[100px] flex flex-col items-center justify-center text-center border-2 border-dashed border-slate-100 rounded-lg p-4">
                                                         <Monitor className="h-8 w-8 text-slate-200 mb-2" />
                                                         <p className="text-xs text-muted-foreground font-medium">Оборудование не назначено</p>
-                                                        <Button variant="link" size="sm" className="text-xs h-auto p-0 mt-1 text-primary" onClick={() => handleOpenAssignDialog(ws.id)}>
+                                                        <Button variant="link" size="sm" className="text-xs h-auto p-0 mt-1 text-primary" onClick={(e) => { e.stopPropagation(); handleOpenAssignDialog(ws.id) }}>
                                                             Назначить сейчас
                                                         </Button>
                                                     </div>
@@ -372,7 +431,7 @@ export default function WorkplacesManager() {
                                                                     size="icon" 
                                                                     className="h-6 w-6 opacity-0 group-hover/item:opacity-100 text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-all"
                                                                     title="Убрать с места (на склад)"
-                                                                    onClick={() => handleUnassignEquipment(item.id)}
+                                                                    onClick={(e) => { e.stopPropagation(); handleUnassignEquipment(item.id) }}
                                                                 >
                                                                     <X className="h-3 w-3" />
                                                                 </Button>
@@ -387,7 +446,7 @@ export default function WorkplacesManager() {
                                                     variant="outline" 
                                                     size="sm" 
                                                     className="w-full text-xs h-8 bg-white hover:bg-primary hover:text-primary-foreground hover:border-primary transition-all shadow-sm"
-                                                    onClick={() => handleOpenAssignDialog(ws.id)}
+                                                    onClick={(e) => { e.stopPropagation(); handleOpenAssignDialog(ws.id) }}
                                                 >
                                                     <Plus className="h-3 w-3 mr-1.5" /> Добавить оборудование
                                                 </Button>
@@ -411,6 +470,114 @@ export default function WorkplacesManager() {
                     ))
                 )}
             </div>
+
+            <Dialog
+                open={isDetailsOpen}
+                onOpenChange={(open) => {
+                    setIsDetailsOpen(open)
+                    if (!open) setDetailsWorkstationId(null)
+                }}
+            >
+                <DialogContent className="sm:max-w-[900px]">
+                    <DialogHeader>
+                        <DialogTitle>{activeWorkstation ? `Место ${activeWorkstation.name}` : "Место"}</DialogTitle>
+                        <DialogDescription>
+                            {activeWorkstation ? `${activeWorkstation.zone} • ${activeEquipment.length} устройств` : ""}
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pt-2">
+                        <Card className="border-slate-200">
+                            <CardHeader className="pb-2">
+                                <CardTitle className="text-base">Основной ПК</CardTitle>
+                                <CardDescription>Регулярность чистки рабочего места</CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-3">
+                                {pcEquipment.length === 0 ? (
+                                    <div className="text-sm text-muted-foreground">ПК не назначен</div>
+                                ) : (
+                                    pcEquipment.map(item => (
+                                        <div key={item.id} className="flex items-center justify-between gap-3 rounded-lg border border-slate-100 bg-slate-50 p-3">
+                                            <div className="flex items-center gap-3 min-w-0">
+                                                <div className="h-9 w-9 rounded-lg bg-white border flex items-center justify-center text-slate-500 shrink-0">
+                                                    {getEquipmentIcon(item.type)}
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <p className="text-sm font-semibold truncate">{item.name}</p>
+                                                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{item.type_name || item.type}</p>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <Input
+                                                    type="number"
+                                                    min={1}
+                                                    className="w-24 h-8 text-xs"
+                                                    value={intervalDrafts[item.id] ?? String(item.cleaning_interval_days ?? 30)}
+                                                    onChange={(e) => handleIntervalChange(item.id, e.target.value)}
+                                                />
+                                                <Button
+                                                    size="sm"
+                                                    className="h-8"
+                                                    disabled={savingIntervalId === item.id}
+                                                    onClick={() => handleSaveInterval(item.id)}
+                                                >
+                                                    {savingIntervalId === item.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Сохранить"}
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
+                            </CardContent>
+                        </Card>
+
+                        <Card className="border-slate-200 lg:col-span-2">
+                            <CardHeader className="pb-2">
+                                <CardTitle className="text-base">Периферия</CardTitle>
+                                <CardDescription>Настройка регулярности чистки для устройств на месте</CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-3">
+                                {peripheralEquipment.length === 0 ? (
+                                    <div className="text-sm text-muted-foreground">Периферия не назначена</div>
+                                ) : (
+                                    peripheralEquipment.map(item => (
+                                        <div key={item.id} className="flex items-center justify-between gap-3 rounded-lg border border-slate-100 bg-white p-3">
+                                            <div className="flex items-center gap-3 min-w-0">
+                                                <div className="h-9 w-9 rounded-lg bg-slate-50 border flex items-center justify-center text-slate-500 shrink-0">
+                                                    {getEquipmentIcon(item.type)}
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <p className="text-sm font-semibold truncate">{item.name}</p>
+                                                    <div className="flex items-center gap-2">
+                                                        <Badge variant="secondary" className="text-[10px] h-5 px-1">{item.type_name || item.type}</Badge>
+                                                        <span className="text-[10px] text-muted-foreground truncate">{item.brand} {item.model}</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <Input
+                                                    type="number"
+                                                    min={1}
+                                                    className="w-24 h-8 text-xs"
+                                                    value={intervalDrafts[item.id] ?? String(item.cleaning_interval_days ?? 30)}
+                                                    onChange={(e) => handleIntervalChange(item.id, e.target.value)}
+                                                />
+                                                <Button
+                                                    size="sm"
+                                                    className="h-8"
+                                                    disabled={savingIntervalId === item.id}
+                                                    onClick={() => handleSaveInterval(item.id)}
+                                                >
+                                                    {savingIntervalId === item.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Сохранить"}
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
+                            </CardContent>
+                        </Card>
+                    </div>
+                </DialogContent>
+            </Dialog>
 
             {/* Workplace Edit/Create Dialog */}
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
