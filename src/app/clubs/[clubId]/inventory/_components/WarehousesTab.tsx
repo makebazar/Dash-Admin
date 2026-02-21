@@ -27,23 +27,32 @@ export function WarehousesTab({ warehouses, employees, currentUserId }: Warehous
 
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault()
-        if (!editingWarehouse?.name) return
+        if (!editingWarehouse) return
+        const name = editingWarehouse.name?.trim() || ''
+        if (!name) return
 
         startTransition(async () => {
             try {
-                const payload = {
-                    name: editingWarehouse.name,
-                    address: null, // Removed
-                    type: 'GENERAL', // Fixed default
-                    responsible_user_id: editingWarehouse.responsible_user_id,
-                    contact_info: null, // Removed
-                    characteristics: {}, // Removed
-                    is_active: editingWarehouse.is_active ?? true
-                }
-
                 if (editingWarehouse.id) {
+                    const payload = {
+                        name,
+                        address: editingWarehouse.address || undefined,
+                        type: editingWarehouse.type || 'GENERAL',
+                        responsible_user_id: editingWarehouse.responsible_user_id || undefined,
+                        contact_info: editingWarehouse.contact_info || undefined,
+                        characteristics: editingWarehouse.characteristics || undefined,
+                        is_active: editingWarehouse.is_active ?? true
+                    }
                     await updateWarehouse(editingWarehouse.id, clubId, currentUserId, payload)
                 } else {
+                    const payload = {
+                        name,
+                        address: editingWarehouse.address || undefined,
+                        type: editingWarehouse.type || 'GENERAL',
+                        responsible_user_id: editingWarehouse.responsible_user_id || undefined,
+                        contact_info: editingWarehouse.contact_info || undefined,
+                        characteristics: editingWarehouse.characteristics || undefined
+                    }
                     await createWarehouse(clubId, currentUserId, payload)
                 }
                 setIsDialogOpen(false)

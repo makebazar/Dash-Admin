@@ -58,8 +58,7 @@ import {
     DropdownMenuItem,
     DropdownMenuLabel,
     DropdownMenuSeparator,
-    DropdownMenuTrigger,
-    DropdownMenuCheckboxItem
+    DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu"
 import {
     Select,

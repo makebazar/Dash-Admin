@@ -36,6 +36,13 @@ interface Shift {
     role: string
 }
 
+interface Employee {
+    id: string
+    full_name: string
+    role: string
+    user_id?: string
+}
+
 function EvaluationForm({ params }: { params: { clubId: string } }) {
     const router = useRouter()
     const searchParams = useSearchParams()
