@@ -53,6 +53,7 @@ export type Warehouse = {
     name: string
     address?: string
     type: string
+    is_default?: boolean
     responsible_user_id?: string
     responsible_name?: string
     contact_info?: string

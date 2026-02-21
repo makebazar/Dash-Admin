@@ -33,13 +33,13 @@ export function CategoriesTab({ categories, currentUserId }: CategoriesTabProps)
             try {
                 if (editingCategory.id) {
                     await updateCategory(editingCategory.id, clubId, currentUserId, {
-                        name: editingCategory.name,
+                        name: editingCategory.name!,
                         description: editingCategory.description,
                         parent_id: editingCategory.parent_id
                     })
                 } else {
                     await createCategory(clubId, currentUserId, {
-                        name: editingCategory.name,
+                        name: editingCategory.name!,
                         description: editingCategory.description,
                         parent_id: editingCategory.parent_id
                     })

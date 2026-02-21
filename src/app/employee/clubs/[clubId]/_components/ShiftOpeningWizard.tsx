@@ -11,7 +11,11 @@ import { useParams } from "next/navigation"
 interface ShiftOpeningWizardProps {
     isOpen: boolean
     onClose: () => void
-    onComplete: (responses: Record<number, { score: number, comment: string, photo_urls?: string[], selected_workstations?: string[] }>, targetShiftId?: string) => void
+    onComplete: (
+        responses: Record<number, { score: number, comment: string, photo_urls?: string[], selected_workstations?: string[] }>,
+        targetShiftId?: string,
+        targetUserId?: string | null
+    ) => void
     checklistTemplate: any
 }
 
@@ -317,8 +321,10 @@ export function ShiftOpeningWizard({
     }
 
     const handleComplete = () => {
+        const selectedShift = shifts.find(s => s.id === selectedShiftId)
+        const selectedUserId = selectedShift?.user_id || null
         // Final validation (should be redundant if steps are validated)
-        onComplete(checklistResponses, selectedShiftId || undefined)
+        onComplete(checklistResponses, selectedShiftId || undefined, selectedUserId)
     }
 
     const currentItem = checklistTemplate?.items?.[currentStep]

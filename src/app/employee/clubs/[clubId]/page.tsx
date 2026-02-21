@@ -267,11 +267,37 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
     const submitEndShift = async (data: any) => {
         setIsActionLoading(true)
         try {
+            const { checklistResponses, checklistId, ...cleanReportData } = data || {}
+
+            if (checklistId && checklistResponses && currentUserId) {
+                const evalRes = await fetch(`/api/clubs/${clubId}/evaluations`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        template_id: checklistId,
+                        employee_id: currentUserId,
+                        target_user_id: currentUserId,
+                        shift_id: activeShift?.id,
+                        responses: Object.entries(checklistResponses).map(([k, v]: any) => ({
+                            item_id: parseInt(k),
+                            score: v.score,
+                            comment: v.comment
+                        }))
+                    })
+                })
+
+                if (!evalRes.ok) {
+                    const err = await evalRes.json().catch(() => ({}))
+                    alert(err.error || 'Не удалось сохранить чеклист закрытия смены')
+                    return
+                }
+            }
+
             const res = await fetch(`/api/employee/shifts/${activeShift?.id}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    reportData: data,
+                    reportData: cleanReportData,
                     templateId: reportTemplate?.id
                 }),
             })
@@ -579,18 +605,18 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                 <ShiftOpeningWizard
                     isOpen={isHandoverOpen}
                     onClose={() => setIsHandoverOpen(false)}
-                    onComplete={async (checklistResponses: Record<number, { score: number, comment: string, photo_urls?: string[] }>, targetShiftId?: string) => {
+                    onComplete={async (checklistResponses: Record<number, { score: number, comment: string, photo_urls?: string[] }>, targetShiftId?: string, selectedUserId?: string | null) => {
                         try {
                             // Find recent closed shift (previous shift) or use selected
-                            let targetUserId = null
+                            let targetUserId = selectedUserId || null
                             
-                            if (targetShiftId) {
+                            if (!targetUserId && targetShiftId) {
                                 const shiftRes = await fetch(`/api/clubs/${clubId}/shifts/${targetShiftId}`)
                                 if (shiftRes.ok) {
                                     const shiftData = await shiftRes.json()
                                     targetUserId = shiftData?.shift?.user_id || shiftData?.user_id || null
                                 }
-                            } else {
+                            } else if (!targetUserId) {
                                 const recentRes = await fetch(`/api/clubs/${clubId}/shifts/recent`)
                                 const recentData = await recentRes.json()
                                 const lastShift = (recentData?.shifts || []).find((s: any) => s.status === 'CLOSED')

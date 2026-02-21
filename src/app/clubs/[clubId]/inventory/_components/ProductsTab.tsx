@@ -168,7 +168,6 @@ export function ProductsTab({ products, categories, warehouses, currentUserId }:
                         category_id: editingProduct.category_id || null,
                         cost_price: Number(editingProduct.cost_price) || 0,
                         selling_price: Number(editingProduct.selling_price) || 0,
-                        current_stock: Number(editingProduct.current_stock) || 0,
                         min_stock_level: Number(editingProduct.min_stock_level) || 0,
                         is_active: editingProduct.is_active ?? true
                     })
