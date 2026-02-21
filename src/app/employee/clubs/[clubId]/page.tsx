@@ -580,7 +580,7 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                 <ShiftOpeningWizard
                     isOpen={isHandoverOpen}
                     onClose={() => setIsHandoverOpen(false)}
-                    onComplete={async (checklistResponses: Record<number, { score: number, comment: string }>) => {
+                    onComplete={async (checklistResponses: Record<number, { score: number, comment: string, photo_url?: string }>) => {
                         try {
                             // Find recent closed shift (previous shift)
                             const recentRes = await fetch(`/api/clubs/${clubId}/shifts/recent`)
@@ -598,7 +598,8 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                                     responses: Object.entries(checklistResponses).map(([k, v]: any) => ({
                                         item_id: parseInt(k),
                                         score: v.score,
-                                        comment: v.comment
+                                        comment: v.comment,
+                                        photo_url: v.photo_url
                                     }))
                                 })
                             })
