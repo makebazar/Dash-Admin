@@ -89,6 +89,8 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
     const [handoverTemplate, setHandoverTemplate] = useState<any>(null)
 
     const [currentUserId, setCurrentUserId] = useState<string>('')
+    const [evaluationScore, setEvaluationScore] = useState<number | null>(null)
+    const [isEvaluationsLoading, setIsEvaluationsLoading] = useState(false)
 
     useEffect(() => {
         // Fetch current user ID
@@ -111,6 +113,46 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
         const clubInfo = employeeClubs.find((c: ClubInfo) => c.id === parseInt(clubId))
         setClub(clubInfo || null)
     }, [clubId, employeeClubs])
+
+    useEffect(() => {
+        if (!clubId || !currentUserId) return
+        const fetchEvaluationScore = async () => {
+            setIsEvaluationsLoading(true)
+            try {
+                const res = await fetch(`/api/clubs/${clubId}/evaluations?employee_id=${currentUserId}`)
+                const data = await res.json()
+                if (res.ok && Array.isArray(data)) {
+                    const now = new Date()
+                    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+                    const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1)
+                    const monthlyScores = data
+                        .filter((item: any) => {
+                            const date = item.evaluation_date || item.created_at
+                            if (!date) return false
+                            const parsed = new Date(date)
+                            return parsed >= startOfMonth && parsed < nextMonth
+                        })
+                        .map((item: any) => Number(item.total_score))
+                        .filter((value: number) => Number.isFinite(value))
+
+                    if (monthlyScores.length > 0) {
+                        const avg = monthlyScores.reduce((sum: number, value: number) => sum + value, 0) / monthlyScores.length
+                        setEvaluationScore(avg)
+                    } else {
+                        setEvaluationScore(null)
+                    }
+                } else {
+                    setEvaluationScore(null)
+                }
+            } catch (error) {
+                console.error('Error fetching evaluations', error)
+                setEvaluationScore(null)
+            } finally {
+                setIsEvaluationsLoading(false)
+            }
+        }
+        fetchEvaluationScore()
+    }, [clubId, currentUserId])
 
     const fetchChecklistTemplates = async (clubId: string) => {
         try {
@@ -530,18 +572,43 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
 
                         {/* Evaluations */}
                         <Link href={`/employee/clubs/${clubId}/evaluations`} className="block">
-                            <Card className="hover:shadow-md transition-all active:scale-[0.99] border-l-4 border-l-orange-500">
-                                <CardContent className="p-4 flex items-center justify-between">
-                                    <div className="flex items-center gap-3">
-                                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-orange-100 text-orange-600">
-                                            <ClipboardCheck className="h-5 w-5" />
-                                        </div>
+                            <Card className={cn(
+                                "border-0 shadow-lg transition-all hover:scale-[1.02] active:scale-[0.98]",
+                                evaluationScore === null
+                                    ? "bg-white dark:bg-slate-800/50 backdrop-blur"
+                                    : "bg-gradient-to-br from-orange-500 to-amber-500 text-white"
+                            )}>
+                                <CardContent className="pt-6">
+                                    <div className="flex items-start justify-between">
                                         <div>
-                                            <p className="font-medium">Мои проверки</p>
-                                            <p className="text-xs text-muted-foreground">Результаты аудитов</p>
+                                            <p className={cn(
+                                                "text-sm font-medium",
+                                                evaluationScore === null ? "text-muted-foreground" : "text-white/80"
+                                            )}>Мои проверки</p>
+                                            <p className="text-3xl font-bold mt-1">
+                                                {isEvaluationsLoading
+                                                    ? '—'
+                                                    : evaluationScore !== null
+                                                        ? `${evaluationScore.toFixed(1)}%`
+                                                        : '—'}
+                                            </p>
+                                            <p className={cn(
+                                                "text-sm mt-1",
+                                                evaluationScore === null ? "text-emerald-500 font-medium" : "text-white/80"
+                                            )}>
+                                                {evaluationScore === null ? "Нет проверок" : "Последняя проверка"}
+                                            </p>
+                                        </div>
+                                        <div className={cn(
+                                            "p-3 rounded-xl",
+                                            evaluationScore === null ? "bg-orange-500/10" : "bg-white/20"
+                                        )}>
+                                            <ClipboardCheck className={cn(
+                                                "h-6 w-6",
+                                                evaluationScore === null ? "text-orange-500" : "text-white"
+                                            )} />
                                         </div>
                                     </div>
-                                    <ChevronRight className="h-5 w-5 text-muted-foreground" />
                                 </CardContent>
                             </Card>
                         </Link>
