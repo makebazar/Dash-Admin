@@ -237,19 +237,20 @@ export function ShiftClosingWizard({
                                 <h4 className="font-medium text-slate-200">Финансовый отчет</h4>
                                 {reportTemplate?.schema.map((field: any, idx: number) => (
                                     <div key={idx} className="space-y-2">
-                                    <Label>
-                                        {field.custom_label}
-                                        {field.is_required && <span className="text-red-500 ml-1">*</span>}
-                                    </Label>
-                                    <Input
-                                        required={field.is_required}
-                                        type={field.metric_key.includes('comment') ? 'text' : 'number'}
-                                        className="bg-slate-900 border-slate-700"
-                                        value={reportData[field.metric_key] || ''}
-                                        onChange={(e) => setReportData({ ...reportData, [field.metric_key]: e.target.value })}
-                                    />
-                                </div>
-                            ))}
+                                        <Label>
+                                            {field.custom_label}
+                                            {field.is_required && <span className="text-red-500 ml-1">*</span>}
+                                        </Label>
+                                        <Input
+                                            required={field.is_required}
+                                            type={field.metric_key.includes('comment') ? 'text' : 'number'}
+                                            className="bg-slate-900 border-slate-700"
+                                            value={reportData[field.metric_key] || ''}
+                                            onChange={(e) => setReportData({ ...reportData, [field.metric_key]: e.target.value })}
+                                        />
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     )}
 
