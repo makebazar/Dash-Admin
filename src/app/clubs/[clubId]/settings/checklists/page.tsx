@@ -287,6 +287,21 @@ export default function ChecklistSettingsPage({ params }: { params: Promise<{ cl
                                     </div>
                                     <div className="flex items-center justify-between rounded-lg border p-4">
                                         <div className="space-y-0.5">
+                                            <Label>Блокировать закрытие смены</Label>
+                                            <p className="text-sm text-muted-foreground">
+                                                Сотрудник не сможет завершить смену без прохождения этого чеклиста
+                                            </p>
+                                        </div>
+                                        <Switch 
+                                            checked={currentTemplate.settings?.block_shift_close}
+                                            onCheckedChange={checked => setCurrentTemplate({
+                                                ...currentTemplate, 
+                                                settings: { ...currentTemplate.settings, block_shift_close: checked }
+                                            })}
+                                        />
+                                    </div>
+                                    <div className="flex items-center justify-between rounded-lg border p-4">
+                                        <div className="space-y-0.5">
                                             <Label>Требовать фото</Label>
                                             <p className="text-sm text-muted-foreground">
                                                 Обязательное фото-подтверждение для проблемных пунктов
