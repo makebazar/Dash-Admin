@@ -22,6 +22,7 @@ interface ChecklistItem {
     is_photo_required?: boolean
     min_photos?: number
     related_entity_type?: 'workstations' | null
+    target_zone?: string | null
 }
 
 interface ChecklistTemplate {
@@ -76,14 +77,30 @@ export default function ChecklistSettingsPage({ params }: { params: Promise<{ cl
     })
     const [isLoading, setIsLoading] = useState(true)
     const [isSaving, setIsSaving] = useState(false)
+    const [zones, setZones] = useState<string[]>([])
 
     useEffect(() => {
         params.then(p => {
             setClubId(p.clubId)
             fetchTemplates(p.clubId)
             fetchHistory(p.clubId)
+            fetchZones(p.clubId)
         })
     }, [params])
+
+    const fetchZones = async (id: string) => {
+        try {
+            const res = await fetch(`/api/clubs/${id}/workstations`)
+            if (res.ok) {
+                const data = await res.json()
+                // Extract unique zones from workstations
+                const uniqueZones = Array.from(new Set(data.map((w: any) => w.zone))).filter(Boolean) as string[]
+                setZones(uniqueZones)
+            }
+        } catch (e) {
+            console.error('Failed to fetch zones', e)
+        }
+    }
 
     const fetchTemplates = async (id: string) => {
         try {
@@ -139,7 +156,8 @@ export default function ChecklistSettingsPage({ params }: { params: Promise<{ cl
             sort_order: (currentTemplate.items?.length || 0),
             is_photo_required: false,
             min_photos: 0,
-            related_entity_type: null
+            related_entity_type: null,
+            target_zone: null
         }
         setCurrentTemplate({
             ...currentTemplate,
@@ -448,6 +466,26 @@ export default function ChecklistSettingsPage({ params }: { params: Promise<{ cl
                                                     </SelectContent>
                                                 </Select>
                                             </div>
+
+                                            {item.related_entity_type === 'workstations' && (
+                                                <div className="flex items-center gap-2">
+                                                    <Label className="text-xs whitespace-nowrap">Зона (опционально):</Label>
+                                                    <Select 
+                                                        value={item.target_zone || 'all'} 
+                                                        onValueChange={(val) => handleUpdateItem(index, 'target_zone', val === 'all' ? null : val)}
+                                                    >
+                                                        <SelectTrigger className="h-8 w-[150px] text-sm">
+                                                            <SelectValue placeholder="Все зоны" />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            <SelectItem value="all">Все зоны</SelectItem>
+                                                            {zones.map(zone => (
+                                                                <SelectItem key={zone} value={zone}>{zone}</SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 </div>

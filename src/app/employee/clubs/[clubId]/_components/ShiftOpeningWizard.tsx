@@ -74,6 +74,20 @@ export function ShiftOpeningWizard({
         // Fetch workstations if any item needs them
         const needsWorkstations = checklistTemplate?.items?.some((item: any) => item.related_entity_type === 'workstations')
         if (needsWorkstations) {
+            const fetchWorkstations = async () => {
+                setIsLoadingWorkstations(true)
+                try {
+                    const res = await fetch(`/api/clubs/${clubId}/workstations`)
+                    if (res.ok) {
+                        const data = await res.json()
+                        setWorkstations(data)
+                    }
+                } catch (error) {
+                    console.error('Failed to fetch workstations:', error)
+                } finally {
+                    setIsLoadingWorkstations(false)
+                }
+            }
             fetchWorkstations()
         }
 
@@ -440,7 +454,9 @@ export function ShiftOpeningWizard({
                                         </div>
                                     ) : (
                                         <div className="grid grid-cols-4 sm:grid-cols-5 gap-2">
-                                            {workstations.map(ws => (
+                                            {workstations
+                                                .filter(w => !currentItem.target_zone || currentItem.target_zone === 'all' || w.zone === currentItem.target_zone)
+                                                .map(ws => (
                                                 <button
                                                     key={ws.id}
                                                     onClick={() => toggleWorkstationSelection(currentItem.id, ws.name)}
