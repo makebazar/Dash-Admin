@@ -64,6 +64,7 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
     const router = useRouter()
     const [clubId, setClubId] = useState<string>('')
     const [club, setClub] = useState<ClubInfo | null>(null)
+    const [employeeClubs, setEmployeeClubs] = useState<ClubInfo[]>([])
     const [activeShift, setActiveShift] = useState<ActiveShift | null>(null)
     const [stats, setStats] = useState<Stats | null>(null)
     const [kpiData, setKpiData] = useState<any>(null)
@@ -93,6 +94,9 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
         // Fetch current user ID
         fetch('/api/auth/me').then(res => res.json()).then(data => {
             if (data.user) setCurrentUserId(data.user.id)
+            if (Array.isArray(data.employeeClubs)) {
+                setEmployeeClubs(data.employeeClubs)
+            }
         })
         
         params.then(p => {
@@ -101,6 +105,12 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
             fetchChecklistTemplates(p.clubId)
         })
     }, [params])
+
+    useEffect(() => {
+        if (!clubId || employeeClubs.length === 0) return
+        const clubInfo = employeeClubs.find((c: ClubInfo) => c.id === parseInt(clubId))
+        setClub(clubInfo || null)
+    }, [clubId, employeeClubs])
 
     const fetchChecklistTemplates = async (clubId: string) => {
         try {
@@ -129,15 +139,6 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
 
     const fetchData = async (id: string) => {
         try {
-            // Fetch club info
-            const meRes = await fetch('/api/auth/me')
-            const meData = await meRes.json()
-
-            if (meRes.ok) {
-                const clubInfo = meData.employeeClubs.find((c: ClubInfo) => c.id === parseInt(id))
-                setClub(clubInfo || null)
-            }
-
             // Fetch active shift
             const shiftRes = await fetch(`/api/employee/clubs/${id}/active-shift`)
             const shiftData = await shiftRes.json()
