@@ -18,6 +18,7 @@ interface ShiftClosingWizardProps {
     reportTemplate: any
     activeShiftId: number
     skipInventory?: boolean
+    checklistTemplates?: any[]
 }
 
 export function ShiftClosingWizard({
@@ -28,64 +29,73 @@ export function ShiftClosingWizard({
     userId,
     reportTemplate,
     activeShiftId,
-    skipInventory = false
+    skipInventory = false,
+    checklistTemplates = []
 }: ShiftClosingWizardProps) {
-    const [step, setStep] = useState<1 | 2 | 3>(1)
+    const [step, setStep] = useState<0 | 1 | 2 | 3>(1)
     const [reportData, setReportData] = useState<any>({})
     const [inventoryId, setInventoryId] = useState<number | null>(null)
     const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([])
     const [isPending, startTransition] = useTransition()
     const [calculationResult, setCalculationResult] = useState<{ reported: number, calculated: number, diff: number } | null>(null)
+    const [requiredChecklist, setRequiredChecklist] = useState<any>(null)
+    const [checklistResponses, setChecklistResponses] = useState<Record<number, { score: number, comment: string }>>({})
 
     // Reset state when opening
     useEffect(() => {
         if (isOpen) {
-            setStep(1)
             setReportData({})
             setInventoryId(null)
             setInventoryItems([])
             setCalculationResult(null)
+            setChecklistResponses({})
+            
+            const mandatory = checklistTemplates?.find((t: any) => 
+                t.type === 'shift_handover' && t.settings?.block_shift_close
+            )
+            
+            if (mandatory) {
+                setRequiredChecklist(mandatory)
+                const initial: Record<number, { score: number, comment: string }> = {}
+                mandatory.items?.forEach((item: any) => {
+                    initial[item.id] = { score: 1, comment: '' }
+                })
+                setChecklistResponses(initial)
+            } else {
+                setRequiredChecklist(null)
+            }
+            setStep(1)
         }
-    }, [isOpen])
+    }, [isOpen, checklistTemplates])
 
-    // Step 1: Financial Report
+    // Step 1: Financial Report + Checklist
     const handleStep1Submit = () => {
-        // Basic validation
         const requiredFields = reportTemplate?.schema.filter((f: any) => f.is_required).map((f: any) => f.metric_key) || []
         const missing = requiredFields.filter((key: string) => !reportData[key])
-        
-        if (missing.length > 0) {
-            alert(`Заполните обязательные поля`)
-            return
-        }
+        if (missing.length > 0) return alert(`Заполните обязательные поля отчета`)
 
         if (skipInventory) {
-            onComplete(reportData)
+            onComplete({ ...reportData, checklistResponses, checklistId: requiredChecklist?.id })
             return
         }
         
         setStep(2)
-        // Initialize Inventory
         startInventory()
+    }
+
+    const handleChecklistChange = (itemId: number, score: number) => {
+        setChecklistResponses(prev => ({
+            ...prev,
+            [itemId]: { ...prev[itemId], score }
+        }))
     }
 
     const startInventory = () => {
         startTransition(async () => {
             try {
-                // Determine target metric key (e.g., 'bar_revenue')
-                // For simplicity, we assume there is a 'bar_revenue' or similar key in reportData
-                // Or we ask the user. But here we want automation.
-                // Let's look for a metric with type 'INCOME' and 'bar' in label/key, or default to first money metric?
-                // Better: hardcode or config. Let's assume 'cash_income' + 'card_income' is total revenue.
-                // But inventory usually checks specific stock vs specific revenue (e.g. Bar).
-                // Let's use a generic 'total_revenue' or specific key if available.
-                // For now, let's use 'revenue_cash' as a placeholder or 'bar_revenue' if exists.
-                
-                // We'll create inventory attached to this shift closing process.
+                // Determine target metric key
                 const newInvId = await createInventory(clubId, userId, 'shift_closing_check')
                 setInventoryId(newInvId)
-                
-                // Load items
                 const items = await getInventoryItems(newInvId)
                 setInventoryItems(items)
             } catch (e) {
@@ -106,7 +116,7 @@ export function ShiftClosingWizard({
             try {
                 // Save all items first
                 await Promise.all(inventoryItems.map(item => 
-                    item.actual_stock !== null ? updateInventoryItem(item.id, item.actual_stock) : Promise.resolve()
+                    item.actual_stock !== null ? updateInventoryItem(item.id, item.actual_stock, clubId) : Promise.resolve()
                 ))
 
                 // Calculate local result for preview (Step 3)
@@ -118,10 +128,6 @@ export function ShiftClosingWizard({
                     }
                 })
 
-                // Get reported revenue from Step 1
-                // Assuming 'bar_revenue' or sum of incomes. 
-                // Let's use a heuristic: sum of all MONEY fields in reportData?
-                // Or specific field 'bar_revenue'.
                 const reportedRev = parseFloat(reportData['bar_revenue'] || reportData['total_revenue'] || '0')
                 
                 setCalculationResult({
@@ -147,7 +153,7 @@ export function ShiftClosingWizard({
                 await closeInventory(inventoryId, clubId, calculationResult.reported)
                 
                 // Complete shift closing
-                onComplete(reportData)
+                onComplete({ ...reportData, checklistResponses, checklistId: requiredChecklist?.id })
             } catch (e) {
                 console.error(e)
                 alert("Ошибка завершения")
@@ -170,11 +176,67 @@ export function ShiftClosingWizard({
                 </DialogHeader>
 
                 <div className="flex-1 overflow-y-auto py-4 pr-2">
-                    {/* STEP 1: REPORT FORM */}
+                    {/* STEP 1: REPORT FORM + CHECKLIST */}
                     {step === 1 && (
-                        <div className="space-y-4">
-                            {reportTemplate?.schema.map((field: any, idx: number) => (
-                                <div key={idx} className="space-y-2">
+                        <div className="space-y-6">
+                            {/* Checklist Section if Required */}
+                            {requiredChecklist && (
+                                <div className="bg-orange-900/10 border border-orange-900/30 p-4 rounded-lg space-y-4">
+                                    <div className="flex items-start gap-3">
+                                        <div className="bg-orange-100/10 p-2 rounded-full">
+                                            <CheckCircle2 className="h-5 w-5 text-orange-400" />
+                                        </div>
+                                        <div>
+                                            <h4 className="font-medium text-orange-100">Обязательный чеклист: {requiredChecklist.name}</h4>
+                                            <p className="text-sm text-orange-200/70">Необходимо заполнить перед закрытием смены</p>
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-3 pl-2 border-l-2 border-orange-800/30 ml-4">
+                                        {requiredChecklist.items?.map((item: any) => (
+                                            <div key={item.id} className="space-y-2">
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-sm font-medium text-slate-200">{item.content}</span>
+                                                    <div className="flex gap-1 bg-slate-900 p-1 rounded-md border border-slate-800">
+                                                        <Button 
+                                                            variant={checklistResponses[item.id]?.score === 1 ? 'default' : 'ghost'} 
+                                                            size="sm"
+                                                            className={`h-7 px-3 text-xs ${checklistResponses[item.id]?.score === 1 ? 'bg-green-600 hover:bg-green-700' : 'text-slate-400'}`}
+                                                            onClick={() => handleChecklistChange(item.id, 1)}
+                                                        >
+                                                            Да
+                                                        </Button>
+                                                        <Button 
+                                                            variant={checklistResponses[item.id]?.score === 0 ? 'default' : 'ghost'} 
+                                                            size="sm"
+                                                            className={`h-7 px-3 text-xs ${checklistResponses[item.id]?.score === 0 ? 'bg-red-600 hover:bg-red-700' : 'text-slate-400'}`}
+                                                            onClick={() => handleChecklistChange(item.id, 0)}
+                                                        >
+                                                            Нет
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                                {checklistResponses[item.id]?.score === 0 && (
+                                                    <Input 
+                                                        placeholder="Комментарий (обязательно при отказе)..."
+                                                        className="h-8 text-xs bg-slate-900 border-slate-700"
+                                                        value={checklistResponses[item.id]?.comment || ''}
+                                                        onChange={(e) => setChecklistResponses(prev => ({
+                                                            ...prev,
+                                                            [item.id]: { ...prev[item.id], comment: e.target.value }
+                                                        }))}
+                                                    />
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="space-y-4">
+                                <h4 className="font-medium text-slate-200">Финансовый отчет</h4>
+                                {reportTemplate?.schema.map((field: any, idx: number) => (
+                                    <div key={idx} className="space-y-2">
                                     <Label>
                                         {field.custom_label}
                                         {field.is_required && <span className="text-red-500 ml-1">*</span>}
