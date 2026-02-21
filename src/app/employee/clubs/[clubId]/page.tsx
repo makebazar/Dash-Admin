@@ -59,6 +59,7 @@ interface RecentShift {
 }
 
 import { ShiftClosingWizard } from "./_components/ShiftClosingWizard"
+import { ShiftOpeningWizard } from "./_components/ShiftOpeningWizard"
 
 export default function EmployeeClubPage({ params }: { params: Promise<{ clubId: string }> }) {
     const router = useRouter()
@@ -81,6 +82,11 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
     const [isReportModalOpen, setIsReportModalOpen] = useState(false)
     const [reportTemplate, setReportTemplate] = useState<any>(null)
     const [reportData, setReportData] = useState<Record<string, any>>({})
+    
+    // Checklist State
+    const [checklistTemplates, setChecklistTemplates] = useState<any[]>([])
+    const [isHandoverOpen, setIsHandoverOpen] = useState(false)
+    const [handoverTemplate, setHandoverTemplate] = useState<any>(null)
 
     const [currentUserId, setCurrentUserId] = useState<string>('')
 
@@ -93,8 +99,19 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
         params.then(p => {
             setClubId(p.clubId)
             fetchData(p.clubId)
+            fetchChecklistTemplates(p.clubId)
         })
     }, [params])
+
+    const fetchChecklistTemplates = async (clubId: string) => {
+        try {
+            const res = await fetch(`/api/clubs/${clubId}/evaluations/templates`)
+            const data = await res.json()
+            if (res.ok) setChecklistTemplates(data)
+        } catch (e) {
+            console.error('Failed to fetch checklists', e)
+        }
+    }
 
     // Live timer effect
     useEffect(() => {
@@ -169,6 +186,18 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
     }
 
     const handleStartShift = async () => {
+        const requiredHandover = checklistTemplates.find((t: any) => t.type === 'shift_handover' && t.settings?.block_shift_open)
+        
+        if (requiredHandover) {
+            setHandoverTemplate(requiredHandover)
+            setIsHandoverOpen(true)
+            return
+        }
+
+        await executeStartShift()
+    }
+
+    const executeStartShift = async () => {
         setIsActionLoading(true)
         try {
             const res = await fetch('/api/employee/shifts', {
@@ -546,6 +575,43 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
 
                 {/* Workday Progress (if shift active) - Removed */}
             </div>
+
+            {isHandoverOpen && handoverTemplate && (
+                <ShiftOpeningWizard
+                    isOpen={isHandoverOpen}
+                    onClose={() => setIsHandoverOpen(false)}
+                    onComplete={async (checklistResponses: Record<number, { score: number, comment: string }>) => {
+                        try {
+                            // Find recent closed shift (previous shift)
+                            const recentRes = await fetch(`/api/clubs/${clubId}/shifts/recent`)
+                            const recentShifts = await recentRes.json()
+                            const lastShift = recentShifts.find((s: any) => s.status === 'CLOSED')
+                            
+                            // Submit evaluation for previous employee
+                            await fetch(`/api/clubs/${clubId}/evaluations`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    template_id: handoverTemplate.id,
+                                    employee_id: lastShift ? lastShift.user_id : null,
+                                    target_user_id: lastShift ? lastShift.user_id : null, // New field to bypass lookup
+                                    responses: Object.entries(checklistResponses).map(([k, v]: any) => ({
+                                        item_id: parseInt(k),
+                                        score: v.score,
+                                        comment: v.comment
+                                    }))
+                                })
+                            })
+                        } catch (e) {
+                            console.error(e)
+                        }
+
+                        setIsHandoverOpen(false)
+                        await executeStartShift()
+                    }}
+                    checklistTemplate={handoverTemplate}
+                />
+            )}
 
             {/* Report Modal */}
             {activeShift && club && (

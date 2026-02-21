@@ -63,32 +63,35 @@ export async function POST(
     try {
         const userId = (await cookies()).get('session_user_id')?.value;
         const { clubId } = await params;
-        const { template_id, employee_id, responses, comments, shift_id } = await request.json();
+        const { template_id, employee_id, responses, comments, shift_id, target_user_id } = await request.json();
 
         if (!userId) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        // Validate employee_id
-        if (!employee_id) {
-            return NextResponse.json({ error: 'Employee ID is required' }, { status: 400 });
+        let targetUserId = target_user_id;
+
+        if (!targetUserId) {
+            // Validate employee_id
+            if (!employee_id) {
+                // If neither target_user_id nor employee_id is provided
+                // Maybe it's a self-evaluation or shift opening checklist?
+                // If it's a shift opening checklist (handover), and no previous employee found, maybe link to self or just club?
+                // For now, require ID.
+                return NextResponse.json({ error: 'Employee ID is required' }, { status: 400 });
+            }
+
+            // Fetch user_id for the employee_id
+            const employeeUserRes = await query(
+                `SELECT user_id FROM club_employees WHERE id = $1 AND club_id = $2`,
+                [employee_id, clubId]
+            );
+
+            if (employeeUserRes.rowCount === 0) {
+                return NextResponse.json({ error: 'Invalid Employee ID' }, { status: 400 });
+            }
+            targetUserId = employeeUserRes.rows[0].user_id;
         }
-
-        // Fetch user_id for the employee_id (since evaluations links to users table via employee_id)
-        // Note: employee_id passed from frontend is `club_employees.id` (integer)
-        // But `evaluations.employee_id` is a UUID (referencing `users.id`)
-        // We need to resolve this.
-        
-        const employeeUserRes = await query(
-            `SELECT user_id FROM club_employees WHERE id = $1 AND club_id = $2`,
-            [employee_id, clubId]
-        );
-
-        if (employeeUserRes.rowCount === 0) {
-            return NextResponse.json({ error: 'Invalid Employee ID' }, { status: 400 });
-        }
-
-        const targetUserId = employeeUserRes.rows[0].user_id;
 
         // Check access (Manager check - typically owners or managers can evaluate)
         const accessCheck = await query(
