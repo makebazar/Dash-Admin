@@ -63,7 +63,7 @@ export async function PATCH(
 
         // Fetch evaluations for this shift
         const evaluationsRes = await query(
-            `SELECT template_id, score_percent FROM evaluations WHERE shift_id = $1`,
+            `SELECT template_id, total_score as score_percent FROM evaluations WHERE shift_id = $1`,
             [shiftId]
         );
         const evaluations = evaluationsRes.rows;
