@@ -36,10 +36,6 @@ export function ClubSidebar({ clubId }: ClubSidebarProps) {
     const pathname = usePathname()
     const [club, setClub] = useState<Club | null>(null)
 
-    useEffect(() => {
-        fetchClub()
-    }, [])
-
     const fetchClub = async () => {
         try {
             const res = await fetch(`/api/clubs/${clubId}`)
@@ -51,6 +47,10 @@ export function ClubSidebar({ clubId }: ClubSidebarProps) {
             console.error('Error fetching club:', error)
         }
     }
+
+    useEffect(() => {
+        fetchClub()
+    }, [])
 
     const mainLinks = [
         { href: `/clubs/${clubId}`, label: 'Дашборд', icon: <LayoutDashboard className="h-4 w-4" /> },

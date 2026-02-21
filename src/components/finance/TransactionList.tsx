@@ -302,7 +302,7 @@ export default function TransactionList({
     // Group transactions by shift_report_id
     const groupTransactions = (): (Transaction | TransactionGroup)[] => {
         // Filter out imported transactions if hideImported is true
-        let filteredTransactions = hideImported
+        const filteredTransactions = hideImported
             ? transactions.filter(t => !t.related_shift_report_id)
             : transactions
 

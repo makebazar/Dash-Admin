@@ -14,6 +14,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
 import { KpiOverview } from "@/components/employee/kpi/KpiOverview"
+import { ShiftClosingWizard } from "@/app/employee/clubs/[clubId]/_components/ShiftClosingWizard"
+import { ShiftOpeningWizard } from "@/app/employee/clubs/[clubId]/_components/ShiftOpeningWizard"
 
 interface ClubInfo {
     id: number
@@ -57,9 +59,6 @@ interface RecentShift {
     hours: number
     earnings: number
 }
-
-import { ShiftClosingWizard } from "./_components/ShiftClosingWizard"
-import { ShiftOpeningWizard } from "./_components/ShiftOpeningWizard"
 
 export default function EmployeeClubPage({ params }: { params: Promise<{ clubId: string }> }) {
     const router = useRouter()
@@ -586,37 +585,45 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                             let targetUserId = null
                             
                             if (targetShiftId) {
-                                // If user selected a shift, fetch its details to get user_id
                                 const shiftRes = await fetch(`/api/clubs/${clubId}/shifts/${targetShiftId}`)
                                 if (shiftRes.ok) {
                                     const shiftData = await shiftRes.json()
-                                    targetUserId = shiftData.user_id
+                                    targetUserId = shiftData?.shift?.user_id || shiftData?.user_id || null
                                 }
                             } else {
-                                // Fallback to auto-detection (should be covered by wizard now but safe to keep)
                                 const recentRes = await fetch(`/api/clubs/${clubId}/shifts/recent`)
-                                const recentShifts = await recentRes.json()
-                                const lastShift = recentShifts.find((s: any) => s.status === 'CLOSED')
+                                const recentData = await recentRes.json()
+                                const lastShift = (recentData?.shifts || []).find((s: any) => s.status === 'CLOSED')
                                 if (lastShift) targetUserId = lastShift.user_id
                             }
-                            
-                            // Submit evaluation for previous employee
-                            await fetch(`/api/clubs/${clubId}/evaluations`, {
+
+                            if (!targetUserId) {
+                                alert('Не удалось определить сотрудника предыдущей смены. Попробуйте выбрать смену вручную.')
+                                return
+                            }
+
+                            const evalRes = await fetch(`/api/clubs/${clubId}/evaluations`, {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({
                                     template_id: handoverTemplate.id,
-                                    employee_id: targetUserId, // Using targetUserId derived from shift
-                                    target_user_id: targetUserId, 
-                                    shift_id: targetShiftId, // Linking evaluation to specific shift
+                                    employee_id: targetUserId,
+                                    target_user_id: targetUserId,
+                                    shift_id: targetShiftId,
                                     responses: Object.entries(checklistResponses).map(([k, v]: any) => ({
                                         item_id: parseInt(k),
                                         score: v.score,
                                         comment: v.comment,
-                                        photo_urls: v.photo_urls // Send array of photos
+                                        photo_urls: v.photo_urls
                                     }))
                                 })
                             })
+
+                            if (!evalRes.ok) {
+                                const err = await evalRes.json().catch(() => ({}))
+                                alert(err.error || 'Не удалось сохранить результат чеклиста')
+                                return
+                            }
                         } catch (e) {
                             console.error(e)
                         }

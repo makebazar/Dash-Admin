@@ -30,15 +30,15 @@ export default function MetricsPage() {
     const [category, setCategory] = useState('FINANCE')
     const [description, setDescription] = useState('')
 
-    useEffect(() => {
-        fetchMetrics()
-    }, [])
-
     const fetchMetrics = async () => {
         const res = await fetch('/api/super-admin/metrics')
         const data = await res.json()
         if (data.metrics) setMetrics(data.metrics)
     }
+
+    useEffect(() => {
+        fetchMetrics()
+    }, [])
 
     const handleCreate = async () => {
         const res = await fetch('/api/super-admin/metrics', {

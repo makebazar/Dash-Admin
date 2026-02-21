@@ -15,10 +15,6 @@ export function Sidebar({ clubs }: SidebarProps) {
     const router = useRouter()
     const [hasEmployeeClubs, setHasEmployeeClubs] = useState(false)
 
-    useEffect(() => {
-        checkEmployeeStatus()
-    }, [])
-
     const checkEmployeeStatus = async () => {
         try {
             const res = await fetch('/api/auth/me')
@@ -30,6 +26,10 @@ export function Sidebar({ clubs }: SidebarProps) {
             console.error('Error checking employee status:', error)
         }
     }
+
+    useEffect(() => {
+        checkEmployeeStatus()
+    }, [])
 
     const handleLogout = async () => {
         try {

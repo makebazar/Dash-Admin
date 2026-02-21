@@ -66,6 +66,14 @@ export function KpiOverview({
     const onTrack = kpi.avg_per_shift >= nextThreshold.per_shift_to_reach;
 
     // Мотивирующие сообщения
+    const getMessageIndex = (seed: string, length: number) => {
+        let hash = 0
+        for (let i = 0; i < seed.length; i++) {
+            hash = (hash * 31 + seed.charCodeAt(i)) | 0
+        }
+        return Math.abs(hash) % length
+    }
+
     const getMotivationMessage = () => {
         if (onTrack) {
             const messages = [
@@ -74,7 +82,8 @@ export function KpiOverview({
                 `Так держать! Бонус уже близко.`,
                 `Вы на верном пути! Продолжайте в том же духе.`
             ];
-            return messages[Math.floor(Math.random() * messages.length)];
+            const seed = `${kpi.avg_per_shift}-${nextThreshold.level}-${kpi.current_value}-${kpi.bonus_amount}`
+            return messages[getMessageIndex(seed, messages.length)];
         } else {
             const diff = nextThreshold.per_shift_to_reach - kpi.avg_per_shift;
             const percentDiff = (diff / nextThreshold.per_shift_to_reach) * 100;
