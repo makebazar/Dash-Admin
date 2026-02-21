@@ -28,7 +28,7 @@ export async function GET(
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
-        // Get 5 most recent shifts (active or closed)
+        // Get 3 most recent shifts (active or closed)
         // Including user info
         const shifts = await query(
             `
@@ -45,7 +45,7 @@ export async function GET(
             LEFT JOIN roles r ON u.role_id = r.id
             WHERE s.club_id = $1
             ORDER BY s.check_in DESC
-            LIMIT 5
+            LIMIT 3
             `,
             [clubId]
         );

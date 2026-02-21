@@ -107,6 +107,7 @@ export async function PATCH(
         await query(
             `UPDATE shifts 
        SET check_out = NOW(),
+           status = 'CLOSED',
            total_hours = $8,
            report_data = $1,
            template_id = $2,

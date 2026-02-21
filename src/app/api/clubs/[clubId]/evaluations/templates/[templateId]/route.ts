@@ -52,17 +52,17 @@ export async function PATCH(
                     // Update existing
                     await query(
                         `UPDATE evaluation_template_items 
-                         SET content = $1, description = $2, weight = $3, sort_order = $4, is_photo_required = $5, is_active = TRUE
-                         WHERE id = $6 AND template_id = $7`,
-                        [item.content, item.description, item.weight || 1.0, i, item.is_photo_required || false, item.id, templateId]
+                         SET content = $1, description = $2, weight = $3, sort_order = $4, is_photo_required = $5, related_entity_type = $6, min_photos = $7, target_zone = $8, is_active = TRUE
+                         WHERE id = $9 AND template_id = $10`,
+                        [item.content, item.description, item.weight || 1.0, i, item.is_photo_required || false, item.related_entity_type || null, item.min_photos || 0, item.target_zone || null, item.id, templateId]
                     )
                     updatedIds.add(item.id)
                 } else {
                     // Insert new
                     await query(
-                        `INSERT INTO evaluation_template_items (template_id, content, description, weight, sort_order, is_photo_required, is_active)
-                         VALUES ($1, $2, $3, $4, $5, $6, TRUE)`,
-                        [templateId, item.content, item.description, item.weight || 1.0, i, item.is_photo_required || false]
+                        `INSERT INTO evaluation_template_items (template_id, content, description, weight, sort_order, is_photo_required, related_entity_type, min_photos, target_zone, is_active)
+                         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, TRUE)`,
+                        [templateId, item.content, item.description, item.weight || 1.0, i, item.is_photo_required || false, item.related_entity_type || null, item.min_photos || 0, item.target_zone || null]
                     )
                 }
             }
