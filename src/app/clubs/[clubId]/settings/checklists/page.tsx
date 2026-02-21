@@ -20,6 +20,8 @@ interface ChecklistItem {
     weight: number
     sort_order: number
     is_photo_required?: boolean
+    min_photos?: number
+    related_entity_type?: 'workstations' | null
 }
 
 interface ChecklistTemplate {
@@ -135,7 +137,9 @@ export default function ChecklistSettingsPage({ params }: { params: Promise<{ cl
             description: '',
             weight: 1.0,
             sort_order: (currentTemplate.items?.length || 0),
-            is_photo_required: false
+            is_photo_required: false,
+            min_photos: 0,
+            related_entity_type: null
         }
         setCurrentTemplate({
             ...currentTemplate,
@@ -402,16 +406,48 @@ export default function ChecklistSettingsPage({ params }: { params: Promise<{ cl
                                                 />
                                             </div>
                                         </div>
-                                        <div className="flex items-center gap-2 pt-2">
-                                            <Switch 
-                                                id={`photo-required-${index}`}
-                                                checked={item.is_photo_required}
-                                                onCheckedChange={checked => handleUpdateItem(index, 'is_photo_required', checked)}
-                                            />
-                                            <Label htmlFor={`photo-required-${index}`} className="flex items-center gap-1 text-sm cursor-pointer">
-                                                <Camera className="h-3 w-3" />
-                                                Требовать фото
-                                            </Label>
+                                        <div className="flex flex-wrap items-center gap-4 pt-2">
+                                            <div className="flex items-center gap-2">
+                                                <Switch 
+                                                    id={`photo-required-${index}`}
+                                                    checked={item.is_photo_required}
+                                                    onCheckedChange={checked => handleUpdateItem(index, 'is_photo_required', checked)}
+                                                />
+                                                <Label htmlFor={`photo-required-${index}`} className="flex items-center gap-1 text-sm cursor-pointer">
+                                                    <Camera className="h-3 w-3" />
+                                                    Требовать фото
+                                                </Label>
+                                            </div>
+
+                                            {item.is_photo_required && (
+                                                <div className="flex items-center gap-2">
+                                                    <Label className="text-xs whitespace-nowrap">Мин. фото:</Label>
+                                                    <Input
+                                                        type="number"
+                                                        min="1"
+                                                        max="10"
+                                                        value={item.min_photos || 1}
+                                                        onChange={e => handleUpdateItem(index, 'min_photos', parseInt(e.target.value))}
+                                                        className="w-16 h-8 text-sm"
+                                                    />
+                                                </div>
+                                            )}
+
+                                            <div className="flex items-center gap-2">
+                                                <Label className="text-xs whitespace-nowrap">Привязка:</Label>
+                                                <Select 
+                                                    value={item.related_entity_type || 'none'} 
+                                                    onValueChange={(val) => handleUpdateItem(index, 'related_entity_type', val === 'none' ? null : val)}
+                                                >
+                                                    <SelectTrigger className="h-8 w-[180px] text-sm">
+                                                        <SelectValue placeholder="Нет" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="none">Нет</SelectItem>
+                                                        <SelectItem value="workstations">Рабочие станции (ПК)</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
