@@ -27,7 +27,11 @@ export function ShiftOpeningWizard({
         if (checklistTemplate?.items) {
             const initial: Record<number, { score: number, comment: string, photo_url?: string }> = {}
             checklistTemplate.items.forEach((item: any) => {
-                initial[item.id] = { score: 1, comment: '', photo_url: '' }
+                // No pre-selection of score
+                // score is undefined initially
+                // But types say score: number. Let's make it nullable or handle -1 as unset.
+                // Better yet, update type or just use -1 as "not set"
+                initial[item.id] = { score: -1, comment: '', photo_url: '' }
             })
             setChecklistResponses(initial)
         }
@@ -117,29 +121,34 @@ export function ShiftOpeningWizard({
                 <div className="flex-1 overflow-y-auto p-4 space-y-4">
                     {checklistTemplate.items?.map((item: any) => (
                         <div key={item.id} className="space-y-3 border-b border-slate-800 pb-4 last:border-0">
-                            <div className="flex items-start justify-between gap-2">
-                                <span className="text-sm font-medium text-slate-200 mt-1">{item.content}</span>
-                                <div className="flex gap-1 bg-slate-900 p-1 rounded-md border border-slate-800 shrink-0">
-                                    <Button 
-                                        variant={checklistResponses[item.id]?.score === 1 ? 'default' : 'ghost'} 
-                                        size="sm"
-                                        className={`h-7 px-3 text-xs ${checklistResponses[item.id]?.score === 1 ? 'bg-green-600 hover:bg-green-700' : 'text-slate-400'}`}
-                                        onClick={() => handleChecklistChange(item.id, 1)}
-                                    >
-                                        Да
-                                    </Button>
-                                    <Button 
-                                        variant={checklistResponses[item.id]?.score === 0 ? 'default' : 'ghost'} 
-                                        size="sm"
-                                        className={`h-7 px-3 text-xs ${checklistResponses[item.id]?.score === 0 ? 'bg-red-600 hover:bg-red-700' : 'text-slate-400'}`}
-                                        onClick={() => handleChecklistChange(item.id, 0)}
-                                    >
-                                        Нет
-                                    </Button>
+                            <div className="flex flex-col gap-1">
+                                <div className="flex items-start justify-between gap-2">
+                                    <span className="text-sm font-medium text-slate-200 mt-1">{item.content}</span>
+                                    <div className="flex gap-1 bg-slate-900 p-1 rounded-md border border-slate-800 shrink-0">
+                                        <Button 
+                                            variant={checklistResponses[item.id]?.score === 1 ? 'default' : 'ghost'} 
+                                            size="sm"
+                                            className={`h-7 px-3 text-xs ${checklistResponses[item.id]?.score === 1 ? 'bg-green-600 hover:bg-green-700' : 'text-slate-400'}`}
+                                            onClick={() => handleChecklistChange(item.id, 1)}
+                                        >
+                                            Да
+                                        </Button>
+                                        <Button 
+                                            variant={checklistResponses[item.id]?.score === 0 ? 'default' : 'ghost'} 
+                                            size="sm"
+                                            className={`h-7 px-3 text-xs ${checklistResponses[item.id]?.score === 0 ? 'bg-red-600 hover:bg-red-700' : 'text-slate-400'}`}
+                                            onClick={() => handleChecklistChange(item.id, 0)}
+                                        >
+                                            Нет
+                                        </Button>
+                                    </div>
                                 </div>
+                                {item.description && (
+                                    <p className="text-xs text-slate-500">{item.description}</p>
+                                )}
                             </div>
                             
-                            {/* Photo Upload Section */}
+                            {/* Photo Upload Section - Only show if required */}
                             {(item.is_photo_required || checklistResponses[item.id]?.photo_url) && (
                                 <div className="mt-2">
                                     {checklistResponses[item.id]?.photo_url ? (
@@ -195,8 +204,8 @@ export function ShiftOpeningWizard({
                                 </div>
                             )}
 
-                            {/* Optional photo trigger if not required and no photo yet */}
-                            {!item.is_photo_required && !checklistResponses[item.id]?.photo_url && (
+                            {/* Optional photo trigger if not required and no photo yet - REMOVED per request */}
+                            {/* {!item.is_photo_required && !checklistResponses[item.id]?.photo_url && (
                                 <div className="flex justify-end">
                                     <button 
                                         onClick={() => document.getElementById(`shift-photo-${item.id}`)?.click()}
@@ -215,7 +224,7 @@ export function ShiftOpeningWizard({
                                         disabled={uploadingState[item.id]}
                                     />
                                 </div>
-                            )}
+                            )} */}
 
                             {checklistResponses[item.id]?.score === 0 && (
                                 <Input 
