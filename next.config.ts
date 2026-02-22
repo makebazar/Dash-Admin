@@ -10,10 +10,10 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: true,
   },
   // Completely disable static optimization and export
-  experimental: {
-    // Optimize for Docker/production builds
-    optimizePackageImports: ['lucide-react', 'recharts'],
-  },
+  // experimental: {
+  //   // Optimize for Docker/production builds
+  //   optimizePackageImports: ['lucide-react', 'recharts'],
+  // },
   // Skip static generation completely
   skipTrailingSlashRedirect: true,
   // Force dynamic rendering for all routes
