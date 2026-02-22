@@ -971,12 +971,16 @@ export default function WorkplacesManager() {
                                             <SelectValue placeholder="Выберите зону" />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            {zones.length > 0 ? zones.map(z => (
-                                                <SelectItem key={z} value={z}>{z}</SelectItem>
-                                            )) : (
-                                                <SelectItem value="General">General</SelectItem>
-                                            )}
-                                        </SelectContent>
+                                        {zones.length > 0 ? zones.map(z => (
+                                            <SelectItem key={z} value={z}>{z}</SelectItem>
+                                        )) : (
+                                            <SelectItem value="General">General</SelectItem>
+                                        )}
+                                        {/* Add custom zone if it's set and not in the list */}
+                                        {editingWorkplace?.zone && !zones.includes(editingWorkplace.zone) && (
+                                            <SelectItem value={editingWorkplace.zone}>{editingWorkplace.zone}</SelectItem>
+                                        )}
+                                    </SelectContent>
                                     </Select>
                                 </div>
                                 <Dialog open={isNewZoneDialogOpen} onOpenChange={setIsNewZoneDialogOpen}>
