@@ -123,9 +123,12 @@ export default function WorkplacesManager() {
 
     // Zone Editing State
     const [isEditZoneOpen, setIsEditZoneOpen] = useState(false)
+    const [isAssignZoneOpen, setIsAssignZoneOpen] = useState(false)
     const [editingZone, setEditingZone] = useState("")
     const [renamingZoneName, setRenamingZoneName] = useState("")
     const [renamingZoneResponsible, setRenamingZoneResponsible] = useState<string>("no_one")
+    const [isNewZoneDialogOpen, setIsNewZoneDialogOpen] = useState(false)
+    const [newZoneName, setNewZoneName] = useState("")
     const [isDetailsOpen, setIsDetailsOpen] = useState(false)
     const [detailsWorkstationId, setDetailsWorkstationId] = useState<string | null>(null)
     const [intervalDrafts, setIntervalDrafts] = useState<Record<string, string>>({})
@@ -291,14 +294,19 @@ export default function WorkplacesManager() {
     const handleOpenEditZone = (zone: string) => {
         setEditingZone(zone)
         setRenamingZoneName(zone)
+        setIsEditZoneOpen(true)
+    }
+
+    const handleOpenAssignZone = (zone: string) => {
+        setEditingZone(zone)
         const zoneWorkstations = workstations.filter(w => w.zone === zone)
         // Find the first assigned user if any
         const responsibleId = zoneWorkstations.find(w => w.assigned_user_id)?.assigned_user_id || "no_one"
         setRenamingZoneResponsible(responsibleId)
-        setIsEditZoneOpen(true)
+        setIsAssignZoneOpen(true)
     }
 
-    const handleSaveZone = async () => {
+    const handleSaveRenameZone = async () => {
         if (!editingZone || !renamingZoneName.trim()) return
         
         try {
@@ -307,13 +315,39 @@ export default function WorkplacesManager() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ 
                     oldZone: editingZone, 
-                    newZone: renamingZoneName,
+                    newZone: renamingZoneName
+                })
+            })
+            
+            if (res.ok) {
+                setWorkstations(prev => prev.map(w => 
+                    w.zone === editingZone ? { 
+                        ...w, 
+                        zone: renamingZoneName
+                    } : w
+                ))
+                setIsEditZoneOpen(false)
+            }
+        } catch (error) {
+            console.error("Error renaming zone:", error)
+        }
+    }
+
+    const handleSaveAssignZone = async () => {
+        if (!editingZone) return
+
+        try {
+            const res = await fetch(`/api/clubs/${clubId}/workstations/zones`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ 
+                    oldZone: editingZone, 
+                    newZone: editingZone, // Zone name doesn't change
                     assignedUserId: renamingZoneResponsible === "no_one" ? null : renamingZoneResponsible
                 })
             })
             
             if (res.ok) {
-                // Optimistic update
                 const responsibleName = renamingZoneResponsible === "no_one" 
                     ? null 
                     : employees.find(e => e.id === renamingZoneResponsible)?.full_name || null
@@ -321,15 +355,14 @@ export default function WorkplacesManager() {
                 setWorkstations(prev => prev.map(w => 
                     w.zone === editingZone ? { 
                         ...w, 
-                        zone: renamingZoneName,
                         assigned_user_id: renamingZoneResponsible === "no_one" ? null : renamingZoneResponsible,
                         assigned_user_name: responsibleName
                     } : w
                 ))
-                setIsEditZoneOpen(false)
+                setIsAssignZoneOpen(false)
             }
         } catch (error) {
-            console.error("Error renaming zone:", error)
+            console.error("Error assigning zone:", error)
         }
     }
 
@@ -565,8 +598,23 @@ export default function WorkplacesManager() {
                                         size="icon" 
                                         className="h-6 w-6 text-slate-400 hover:text-primary opacity-0 group-hover:opacity-100 transition-opacity"
                                         onClick={() => handleOpenEditZone(zone)}
+                                        title="Переименовать зону"
                                     >
                                         <Pencil className="h-3 w-3" />
+                                    </Button>
+                                    <Button 
+                                        variant="ghost" 
+                                        size="icon" 
+                                        className="h-6 w-6 text-slate-400 hover:text-primary opacity-0 group-hover:opacity-100 transition-opacity"
+                                        onClick={() => handleOpenAssignZone(zone)}
+                                        title="Назначить ответственного"
+                                    >
+                                        <div className="relative">
+                                            <MousePointer2 className="h-3 w-3" />
+                                            {workstations.find(w => w.zone === zone)?.assigned_user_id && (
+                                                <div className="absolute -top-1 -right-1 h-1.5 w-1.5 bg-green-500 rounded-full border border-white" />
+                                            )}
+                                        </div>
                                     </Button>
                                 </h2>
                             </div>
@@ -1059,7 +1107,7 @@ export default function WorkplacesManager() {
                 </DialogContent>
             </Dialog>
 
-            {/* Edit Zone Dialog */}
+            {/* Rename Zone Dialog */}
             <Dialog open={isEditZoneOpen} onOpenChange={setIsEditZoneOpen}>
                 <DialogContent>
                     <DialogHeader>
@@ -1068,37 +1116,52 @@ export default function WorkplacesManager() {
                             Измените название зоны "{editingZone}". Это обновит название для всех рабочих мест в этой зоне.
                         </DialogDescription>
                     </DialogHeader>
-                    <div className="py-4 space-y-4">
-                        <div className="space-y-2">
-                            <Label>Название зоны</Label>
-                            <Input 
-                                value={renamingZoneName} 
-                                onChange={(e) => setRenamingZoneName(e.target.value)} 
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <Label>Ответственный</Label>
-                            <Select value={renamingZoneResponsible} onValueChange={setRenamingZoneResponsible}>
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Выберите ответственного" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="no_one">Не назначен</SelectItem>
-                                    {employees.map(emp => (
-                                        <SelectItem key={emp.id} value={emp.user_id || emp.id}>
-                                            {emp.full_name}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                            <p className="text-xs text-muted-foreground">
-                                Назначение ответственного автоматически применится ко всему оборудованию в этой зоне.
-                            </p>
-                        </div>
+                    <div className="py-4">
+                        <Label>Название зоны</Label>
+                        <Input 
+                            value={renamingZoneName} 
+                            onChange={(e) => setRenamingZoneName(e.target.value)} 
+                            className="mt-2"
+                        />
                     </div>
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setIsEditZoneOpen(false)}>Отмена</Button>
-                        <Button onClick={handleSaveZone}>Сохранить</Button>
+                        <Button onClick={handleSaveRenameZone}>Сохранить</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Assign Responsible Dialog */}
+            <Dialog open={isAssignZoneOpen} onOpenChange={setIsAssignZoneOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Назначить ответственного</DialogTitle>
+                        <DialogDescription>
+                            Выберите ответственного для зоны "{editingZone}".
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="py-4">
+                        <Label>Ответственный</Label>
+                        <Select value={renamingZoneResponsible} onValueChange={setRenamingZoneResponsible}>
+                            <SelectTrigger className="mt-2">
+                                <SelectValue placeholder="Выберите ответственного" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="no_one">Не назначен</SelectItem>
+                                {employees.map(emp => (
+                                    <SelectItem key={emp.id} value={emp.user_id || emp.id}>
+                                        {emp.full_name}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground mt-2">
+                            Назначение ответственного автоматически применится ко всему оборудованию в этой зоне.
+                        </p>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setIsAssignZoneOpen(false)}>Отмена</Button>
+                        <Button onClick={handleSaveAssignZone}>Сохранить</Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
