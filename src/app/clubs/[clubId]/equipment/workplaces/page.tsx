@@ -127,8 +127,6 @@ export default function WorkplacesManager() {
     const [editingZone, setEditingZone] = useState("")
     const [renamingZoneName, setRenamingZoneName] = useState("")
     const [renamingZoneResponsible, setRenamingZoneResponsible] = useState<string>("no_one")
-    const [isNewZoneDialogOpen, setIsNewZoneDialogOpen] = useState(false)
-    const [newZoneName, setNewZoneName] = useState("")
     const [isDetailsOpen, setIsDetailsOpen] = useState(false)
     const [detailsWorkstationId, setDetailsWorkstationId] = useState<string | null>(null)
     const [intervalDrafts, setIntervalDrafts] = useState<Record<string, string>>({})
@@ -1149,7 +1147,7 @@ export default function WorkplacesManager() {
                             <SelectContent>
                                 <SelectItem value="no_one">Не назначен</SelectItem>
                                 {employees.map(emp => (
-                                    <SelectItem key={emp.id} value={emp.user_id || emp.id}>
+                                    <SelectItem key={emp.id} value={emp.id}>
                                         {emp.full_name}
                                     </SelectItem>
                                 ))}
