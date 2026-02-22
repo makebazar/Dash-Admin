@@ -192,16 +192,52 @@ export async function DELETE(
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
-        const result = await query(
-            `DELETE FROM equipment_maintenance_tasks mt
-             USING equipment e
-             WHERE mt.equipment_id = e.id AND mt.id = $1 AND e.club_id = $2
-             RETURNING mt.id`,
+        // Get task details before deletion to update equipment status if needed
+        const taskCheck = await query(
+            `SELECT mt.equipment_id, mt.task_type, mt.status 
+             FROM equipment_maintenance_tasks mt
+             JOIN equipment e ON mt.equipment_id = e.id
+             WHERE mt.id = $1 AND e.club_id = $2`,
             [taskId, clubId]
+        );
+
+        if ((taskCheck.rowCount || 0) === 0) {
+            return NextResponse.json({ error: 'Task not found' }, { status: 404 });
+        }
+
+        const task = taskCheck.rows[0];
+
+        const result = await query(
+            `DELETE FROM equipment_maintenance_tasks
+             WHERE id = $1
+             RETURNING id`,
+            [taskId]
         );
 
         if (result.rowCount === 0) {
             return NextResponse.json({ error: 'Task not found' }, { status: 404 });
+        }
+
+        // If we deleted a COMPLETED CLEANING task, we need to revert/update the last_cleaned_at date
+        // to the date of the most recent completed task remaining.
+        if (task.task_type === 'CLEANING' && task.status === 'COMPLETED') {
+            const lastCleanedRes = await query(
+                `SELECT completed_at 
+                 FROM equipment_maintenance_tasks 
+                 WHERE equipment_id = $1 
+                   AND task_type = 'CLEANING' 
+                   AND status = 'COMPLETED'
+                 ORDER BY completed_at DESC 
+                 LIMIT 1`,
+                [task.equipment_id]
+            );
+
+            const newLastCleaned = lastCleanedRes.rows[0]?.completed_at || null;
+
+            await query(
+                `UPDATE equipment SET last_cleaned_at = $1 WHERE id = $2`,
+                [newLastCleaned, task.equipment_id]
+            );
         }
 
         return NextResponse.json({ success: true });

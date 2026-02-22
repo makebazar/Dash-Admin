@@ -19,6 +19,8 @@ export async function GET(
         const dateTo = searchParams.get('date_to');
         const includeOverdue = searchParams.get('include_overdue') === 'true';
         const myTasks = searchParams.get('my_tasks') === 'true' || assignedTo === 'me';
+        const sortBy = searchParams.get('sort_by');
+        const order = searchParams.get('order') || 'asc';
 
         if (!userId) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -109,9 +111,13 @@ export async function GET(
             paramIndex++;
         }
 
-        sql += ` ORDER BY 
-            CASE mt.status WHEN 'PENDING' THEN 1 WHEN 'IN_PROGRESS' THEN 2 ELSE 3 END,
-            mt.due_date ASC`;
+        if (sortBy === 'completed_at') {
+            sql += ` ORDER BY mt.completed_at ${order === 'desc' ? 'DESC' : 'ASC'} NULLS LAST`;
+        } else {
+            sql += ` ORDER BY 
+                CASE mt.status WHEN 'PENDING' THEN 1 WHEN 'IN_PROGRESS' THEN 2 ELSE 3 END,
+                mt.due_date ASC`;
+        }
 
         const result = await query(sql, queryParams);
 
