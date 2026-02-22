@@ -125,6 +125,7 @@ export default function WorkplacesManager() {
     const [isEditZoneOpen, setIsEditZoneOpen] = useState(false)
     const [editingZone, setEditingZone] = useState("")
     const [renamingZoneName, setRenamingZoneName] = useState("")
+    const [renamingZoneResponsible, setRenamingZoneResponsible] = useState<string>("no_one")
     const [isDetailsOpen, setIsDetailsOpen] = useState(false)
     const [detailsWorkstationId, setDetailsWorkstationId] = useState<string | null>(null)
     const [intervalDrafts, setIntervalDrafts] = useState<Record<string, string>>({})
@@ -290,6 +291,10 @@ export default function WorkplacesManager() {
     const handleOpenEditZone = (zone: string) => {
         setEditingZone(zone)
         setRenamingZoneName(zone)
+        const zoneWorkstations = workstations.filter(w => w.zone === zone)
+        // Find the first assigned user if any
+        const responsibleId = zoneWorkstations.find(w => w.assigned_user_id)?.assigned_user_id || "no_one"
+        setRenamingZoneResponsible(responsibleId)
         setIsEditZoneOpen(true)
     }
 
@@ -300,13 +305,26 @@ export default function WorkplacesManager() {
             const res = await fetch(`/api/clubs/${clubId}/workstations/zones`, {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ oldZone: editingZone, newZone: renamingZoneName })
+                body: JSON.stringify({ 
+                    oldZone: editingZone, 
+                    newZone: renamingZoneName,
+                    assignedUserId: renamingZoneResponsible === "no_one" ? null : renamingZoneResponsible
+                })
             })
             
             if (res.ok) {
                 // Optimistic update
+                const responsibleName = renamingZoneResponsible === "no_one" 
+                    ? null 
+                    : employees.find(e => e.id === renamingZoneResponsible)?.full_name || null
+
                 setWorkstations(prev => prev.map(w => 
-                    w.zone === editingZone ? { ...w, zone: renamingZoneName } : w
+                    w.zone === editingZone ? { 
+                        ...w, 
+                        zone: renamingZoneName,
+                        assigned_user_id: renamingZoneResponsible === "no_one" ? null : renamingZoneResponsible,
+                        assigned_user_name: responsibleName
+                    } : w
                 ))
                 setIsEditZoneOpen(false)
             }
@@ -1050,13 +1068,33 @@ export default function WorkplacesManager() {
                             Измените название зоны "{editingZone}". Это обновит название для всех рабочих мест в этой зоне.
                         </DialogDescription>
                     </DialogHeader>
-                    <div className="py-4">
-                        <Label>Название зоны</Label>
-                        <Input 
-                            value={renamingZoneName} 
-                            onChange={(e) => setRenamingZoneName(e.target.value)} 
-                            className="mt-2"
-                        />
+                    <div className="py-4 space-y-4">
+                        <div className="space-y-2">
+                            <Label>Название зоны</Label>
+                            <Input 
+                                value={renamingZoneName} 
+                                onChange={(e) => setRenamingZoneName(e.target.value)} 
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Ответственный</Label>
+                            <Select value={renamingZoneResponsible} onValueChange={setRenamingZoneResponsible}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Выберите ответственного" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="no_one">Не назначен</SelectItem>
+                                    {employees.map(emp => (
+                                        <SelectItem key={emp.id} value={emp.user_id || emp.id}>
+                                            {emp.full_name}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            <p className="text-xs text-muted-foreground">
+                                Назначение ответственного автоматически применится ко всему оборудованию в этой зоне.
+                            </p>
+                        </div>
                     </div>
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setIsEditZoneOpen(false)}>Отмена</Button>

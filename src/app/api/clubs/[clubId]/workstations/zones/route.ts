@@ -10,7 +10,7 @@ export async function PATCH(
         const userId = (await cookies()).get('session_user_id')?.value;
         const { clubId } = await params;
         const body = await request.json();
-        const { oldZone, newZone } = body;
+        const { oldZone, newZone, assignedUserId } = body;
 
         if (!userId) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -32,13 +32,39 @@ export async function PATCH(
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
-        // Update zone name for all workstations in this zone
+        // Update zone name and assigned user for all workstations in this zone
         const result = await query(
             `UPDATE club_workstations 
-             SET zone = $1 
-             WHERE club_id = $2 AND zone = $3`,
-            [newZone, clubId, oldZone]
+             SET zone = $1, assigned_user_id = $4
+             WHERE club_id = $2 AND zone = $3
+             RETURNING id`,
+            [newZone, clubId, oldZone, assignedUserId || null]
         );
+
+        // Also update equipment linked to these workstations
+        if (assignedUserId) {
+            const workstationIds = result.rows.map(r => r.id);
+            if (workstationIds.length > 0) {
+                await query(
+                    `UPDATE equipment 
+                     SET assigned_user_id = $1
+                     WHERE workstation_id = ANY($2)`,
+                    [assignedUserId, workstationIds]
+                );
+            }
+        } else if (assignedUserId === null) {
+            // If clearing the user, clear from equipment too?
+            // The user said "when we set him...", but usually clearing should also propagate.
+            const workstationIds = result.rows.map(r => r.id);
+            if (workstationIds.length > 0) {
+                await query(
+                    `UPDATE equipment 
+                     SET assigned_user_id = NULL
+                     WHERE workstation_id = ANY($1)`,
+                    [workstationIds]
+                );
+            }
+        }
 
         return NextResponse.json({ 
             message: 'Zone updated successfully',
