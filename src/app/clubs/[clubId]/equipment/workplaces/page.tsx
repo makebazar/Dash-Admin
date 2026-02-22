@@ -120,6 +120,11 @@ export default function WorkplacesManager() {
     const [selectedWorkstationId, setSelectedWorkstationId] = useState<string | null>(null)
     const [selectedEquipmentType, setSelectedEquipmentType] = useState<string>("all")
     const [searchEquipment, setSearchEquipment] = useState("")
+
+    // Zone Editing State
+    const [isEditZoneOpen, setIsEditZoneOpen] = useState(false)
+    const [editingZone, setEditingZone] = useState("")
+    const [renamingZoneName, setRenamingZoneName] = useState("")
     const [isDetailsOpen, setIsDetailsOpen] = useState(false)
     const [detailsWorkstationId, setDetailsWorkstationId] = useState<string | null>(null)
     const [intervalDrafts, setIntervalDrafts] = useState<Record<string, string>>({})
@@ -277,6 +282,36 @@ export default function WorkplacesManager() {
             }
         } catch (error) {
             console.error("Error unassigning equipment:", error)
+        }
+    }
+
+    // --- Zone Management ---
+
+    const handleOpenEditZone = (zone: string) => {
+        setEditingZone(zone)
+        setRenamingZoneName(zone)
+        setIsEditZoneOpen(true)
+    }
+
+    const handleSaveZone = async () => {
+        if (!editingZone || !renamingZoneName.trim()) return
+        
+        try {
+            const res = await fetch(`/api/clubs/${clubId}/workstations/zones`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ oldZone: editingZone, newZone: renamingZoneName })
+            })
+            
+            if (res.ok) {
+                // Optimistic update
+                setWorkstations(prev => prev.map(w => 
+                    w.zone === editingZone ? { ...w, zone: renamingZoneName } : w
+                ))
+                setIsEditZoneOpen(false)
+            }
+        } catch (error) {
+            console.error("Error renaming zone:", error)
         }
     }
 
@@ -502,11 +537,19 @@ export default function WorkplacesManager() {
                 ) : (
                     zones.map(zone => (
                         <section key={zone} className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                            <div className="flex items-center justify-between px-2 sticky top-0 z-10 bg-background/95 backdrop-blur py-2 border-b">
+                            <div className="group flex items-center justify-between px-2 sticky top-0 z-10 bg-background/95 backdrop-blur py-2 border-b">
                                 <h2 className="text-lg font-black uppercase tracking-widest text-slate-500 flex items-center gap-3">
                                     <Layers className="h-5 w-5 text-primary" />
                                     {zone}
                                     <Badge variant="secondary" className="bg-slate-100 text-slate-600 border-none px-2">{workstations.filter(w => w.zone === zone).length}</Badge>
+                                    <Button 
+                                        variant="ghost" 
+                                        size="icon" 
+                                        className="h-6 w-6 text-slate-400 hover:text-primary opacity-0 group-hover:opacity-100 transition-opacity"
+                                        onClick={() => handleOpenEditZone(zone)}
+                                    >
+                                        <Pencil className="h-3 w-3" />
+                                    </Button>
                                 </h2>
                             </div>
 
@@ -994,6 +1037,30 @@ export default function WorkplacesManager() {
                     
                     <DialogFooter className="p-4 border-t bg-white">
                         <Button onClick={() => setIsAssignDialogOpen(false)}>Готово</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Edit Zone Dialog */}
+            <Dialog open={isEditZoneOpen} onOpenChange={setIsEditZoneOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Переименовать зону</DialogTitle>
+                        <DialogDescription>
+                            Измените название зоны "{editingZone}". Это обновит название для всех рабочих мест в этой зоне.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="py-4">
+                        <Label>Название зоны</Label>
+                        <Input 
+                            value={renamingZoneName} 
+                            onChange={(e) => setRenamingZoneName(e.target.value)} 
+                            className="mt-2"
+                        />
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setIsEditZoneOpen(false)}>Отмена</Button>
+                        <Button onClick={handleSaveZone}>Сохранить</Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
