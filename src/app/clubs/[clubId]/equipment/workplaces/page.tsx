@@ -82,6 +82,7 @@ interface Equipment {
     workstation_id: string | null
     is_active: boolean
     cleaning_interval_days?: number
+    last_cleaned_at?: string | null
     thermal_paste_last_changed_at?: string | null
     thermal_paste_interval_days?: number | null
     thermal_paste_type?: string | null
@@ -122,6 +123,7 @@ export default function WorkplacesManager() {
     const [isDetailsOpen, setIsDetailsOpen] = useState(false)
     const [detailsWorkstationId, setDetailsWorkstationId] = useState<string | null>(null)
     const [intervalDrafts, setIntervalDrafts] = useState<Record<string, string>>({})
+    const [lastCleanedDrafts, setLastCleanedDrafts] = useState<Record<string, string>>({})
     const [savingIntervalId, setSavingIntervalId] = useState<string | null>(null)
     const [thermalPasteDateDrafts, setThermalPasteDateDrafts] = useState<Record<string, string>>({})
     const [thermalPasteIntervalDrafts, setThermalPasteIntervalDrafts] = useState<Record<string, string>>({})
@@ -281,6 +283,7 @@ export default function WorkplacesManager() {
     const handleOpenDetails = (wsId: string) => {
         setDetailsWorkstationId(wsId)
         const drafts: Record<string, string> = {}
+        const cleanedDrafts: Record<string, string> = {}
         const dateDrafts: Record<string, string> = {}
         const intervalDraftsMap: Record<string, string> = {}
         const typeDrafts: Record<string, string> = {}
@@ -290,15 +293,26 @@ export default function WorkplacesManager() {
             .filter(item => item.workstation_id === wsId)
             .forEach(item => {
                 drafts[item.id] = String(item.cleaning_interval_days ?? 30)
-                const dateValue = item.thermal_paste_last_changed_at
-                    ? new Date(item.thermal_paste_last_changed_at).toISOString().split('T')[0]
-                    : ""
+                
+                let cleanedValue = ""
+                if (item.last_cleaned_at) {
+                    const d = new Date(item.last_cleaned_at)
+                    cleanedValue = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+                }
+                cleanedDrafts[item.id] = cleanedValue
+
+                let dateValue = ""
+                if (item.thermal_paste_last_changed_at) {
+                    const d = new Date(item.thermal_paste_last_changed_at)
+                    dateValue = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+                }
                 dateDrafts[item.id] = dateValue
                 intervalDraftsMap[item.id] = String(item.thermal_paste_interval_days ?? 365)
                 typeDrafts[item.id] = item.thermal_paste_type ?? ""
                 noteDrafts[item.id] = item.thermal_paste_note ?? ""
             })
         setIntervalDrafts(drafts)
+        setLastCleanedDrafts(cleanedDrafts)
         setThermalPasteDateDrafts(dateDrafts)
         setThermalPasteIntervalDrafts(intervalDraftsMap)
         setThermalPasteTypeDrafts(typeDrafts)
@@ -308,6 +322,10 @@ export default function WorkplacesManager() {
 
     const handleIntervalChange = (equipmentId: string, value: string) => {
         setIntervalDrafts(prev => ({ ...prev, [equipmentId]: value }))
+    }
+
+    const handleLastCleanedChange = (equipmentId: string, value: string) => {
+        setLastCleanedDrafts(prev => ({ ...prev, [equipmentId]: value }))
     }
 
     const handleSaveInterval = async (equipmentId: string) => {
@@ -320,7 +338,10 @@ export default function WorkplacesManager() {
             const res = await fetch(`/api/clubs/${clubId}/equipment/${equipmentId}`, {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ cleaning_interval_days: value })
+                body: JSON.stringify({ 
+                    cleaning_interval_days: value,
+                    last_cleaned_at: lastCleanedDrafts[equipmentId] || null
+                })
             })
             if (res.ok) {
                 fetchData()
@@ -647,21 +668,35 @@ export default function WorkplacesManager() {
                                                 </div>
                                             </div>
                                             <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
-                                                <Input
-                                                    type="number"
-                                                    min={1}
-                                                    className="w-full sm:w-24 h-8 text-xs"
-                                                    value={intervalDrafts[primaryEquipment.id] ?? String(primaryEquipment.cleaning_interval_days ?? 30)}
-                                                    onChange={(e) => handleIntervalChange(primaryEquipment.id, e.target.value)}
-                                                />
-                                                <Button
-                                                    size="sm"
-                                                    className="h-8 w-full sm:w-auto"
-                                                    disabled={savingIntervalId === primaryEquipment.id}
-                                                    onClick={() => handleSaveInterval(primaryEquipment.id)}
-                                                >
-                                                    {savingIntervalId === primaryEquipment.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Сохранить"}
-                                                </Button>
+                                                <div className="flex flex-col gap-1">
+                                                    <Label className="text-[10px] text-muted-foreground">Посл. чистка</Label>
+                                                    <Input
+                                                        type="date"
+                                                        className="w-full sm:w-32 h-8 text-xs"
+                                                        value={lastCleanedDrafts[primaryEquipment.id] ?? ""}
+                                                        onChange={(e) => handleLastCleanedChange(primaryEquipment.id, e.target.value)}
+                                                    />
+                                                </div>
+                                                <div className="flex flex-col gap-1">
+                                                    <Label className="text-[10px] text-muted-foreground">Интервал</Label>
+                                                    <Input
+                                                        type="number"
+                                                        min={1}
+                                                        className="w-full sm:w-20 h-8 text-xs"
+                                                        value={intervalDrafts[primaryEquipment.id] ?? String(primaryEquipment.cleaning_interval_days ?? 30)}
+                                                        onChange={(e) => handleIntervalChange(primaryEquipment.id, e.target.value)}
+                                                    />
+                                                </div>
+                                                <div className="flex flex-col gap-1 justify-end">
+                                                    <Button
+                                                        size="sm"
+                                                        className="h-8 w-full sm:w-auto mt-auto"
+                                                        disabled={savingIntervalId === primaryEquipment.id}
+                                                        onClick={() => handleSaveInterval(primaryEquipment.id)}
+                                                    >
+                                                        {savingIntervalId === primaryEquipment.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Сохранить"}
+                                                    </Button>
+                                                </div>
                                             </div>
                                         </div>
                                     )}
@@ -755,21 +790,35 @@ export default function WorkplacesManager() {
                                                 </div>
                                             </div>
                                             <div className="flex items-center gap-2">
-                                                <Input
-                                                    type="number"
-                                                    min={1}
-                                                    className="w-24 h-8 text-xs"
-                                                    value={intervalDrafts[item.id] ?? String(item.cleaning_interval_days ?? 30)}
-                                                    onChange={(e) => handleIntervalChange(item.id, e.target.value)}
-                                                />
-                                                <Button
-                                                    size="sm"
-                                                    className="h-8"
-                                                    disabled={savingIntervalId === item.id}
-                                                    onClick={() => handleSaveInterval(item.id)}
-                                                >
-                                                    {savingIntervalId === item.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Сохранить"}
-                                                </Button>
+                                                <div className="flex flex-col gap-1">
+                                                    <Label className="text-[10px] text-muted-foreground">Посл. чистка</Label>
+                                                    <Input
+                                                        type="date"
+                                                        className="w-28 h-8 text-xs"
+                                                        value={lastCleanedDrafts[item.id] ?? ""}
+                                                        onChange={(e) => handleLastCleanedChange(item.id, e.target.value)}
+                                                    />
+                                                </div>
+                                                <div className="flex flex-col gap-1">
+                                                    <Label className="text-[10px] text-muted-foreground">Интервал</Label>
+                                                    <Input
+                                                        type="number"
+                                                        min={1}
+                                                        className="w-20 h-8 text-xs"
+                                                        value={intervalDrafts[item.id] ?? String(item.cleaning_interval_days ?? 30)}
+                                                        onChange={(e) => handleIntervalChange(item.id, e.target.value)}
+                                                    />
+                                                </div>
+                                                <div className="flex flex-col gap-1 justify-end">
+                                                    <Button
+                                                        size="sm"
+                                                        className="h-8 mt-auto"
+                                                        disabled={savingIntervalId === item.id}
+                                                        onClick={() => handleSaveInterval(item.id)}
+                                                    >
+                                                        {savingIntervalId === item.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "ОК"}
+                                                    </Button>
+                                                </div>
                                             </div>
                                         </div>
                                     ))

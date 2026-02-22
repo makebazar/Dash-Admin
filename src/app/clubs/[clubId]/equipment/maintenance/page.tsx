@@ -65,8 +65,6 @@ export default function MaintenanceSchedule() {
     const [employees, setEmployees] = useState<Employee[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [isGenerating, setIsGenerating] = useState(false)
-    const [lastCleanedDrafts, setLastCleanedDrafts] = useState<Record<string, string>>({})
-    const [savingLastCleanedId, setSavingLastCleanedId] = useState<string | null>(null)
 
     // View state
     const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1)
@@ -124,16 +122,6 @@ export default function MaintenanceSchedule() {
         fetchData()
     }, [fetchData])
 
-    useEffect(() => {
-        const map: Record<string, string> = {}
-        tasks.forEach(task => {
-            if (!map[task.equipment_id]) {
-                map[task.equipment_id] = task.last_cleaned_at ? task.last_cleaned_at.split('T')[0] : ""
-            }
-        })
-        setLastCleanedDrafts(map)
-    }, [tasks])
-
     const handleGenerateTasks = async () => {
         try {
             fetchData()
@@ -157,26 +145,6 @@ export default function MaintenanceSchedule() {
         } catch (error) {
             console.error("Error assigning task:", error)
             fetchData() // Rollback
-        }
-    }
-
-    const handleSaveLastCleaned = async (equipmentId: string) => {
-        setSavingLastCleanedId(equipmentId)
-        try {
-            const res = await fetch(`/api/clubs/${clubId}/equipment/${equipmentId}`, {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    last_cleaned_at: lastCleanedDrafts[equipmentId] || null
-                })
-            })
-            if (res.ok) {
-                fetchData()
-            }
-        } catch (error) {
-            console.error("Error updating last cleaned date:", error)
-        } finally {
-            setSavingLastCleanedId(null)
         }
     }
 
@@ -409,23 +377,13 @@ export default function MaintenanceSchedule() {
                                                     </div>
                                                 </TableCell>
                                                 <TableCell>
-                                                    <div className="flex items-center gap-2">
-                                                        <Input
-                                                            type="date"
-                                                            className="h-8 text-xs w-[130px]"
-                                                            value={lastCleanedDrafts[task.equipment_id] ?? ""}
-                                                            onChange={(e) => setLastCleanedDrafts(prev => ({ ...prev, [task.equipment_id]: e.target.value }))}
-                                                        />
-                                                        <Button
-                                                            size="sm"
-                                                            variant="outline"
-                                                            className="h-8 text-xs"
-                                                            onClick={() => handleSaveLastCleaned(task.equipment_id)}
-                                                            disabled={savingLastCleanedId === task.equipment_id}
-                                                        >
-                                                            {savingLastCleanedId === task.equipment_id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Сохранить"}
-                                                        </Button>
-                                                    </div>
+                                                    {task.last_cleaned_at ? (
+                                                        <span className="text-xs text-muted-foreground font-medium">
+                                                            {new Date(task.last_cleaned_at).toLocaleDateString("ru-RU")}
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-xs text-slate-300">—</span>
+                                                    )}
                                                 </TableCell>
                                                 <TableCell>
                                                     {isCompleted ? (
