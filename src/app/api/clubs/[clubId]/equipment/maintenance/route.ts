@@ -215,59 +215,61 @@ export async function POST(
         let createdCount = 0;
 
         for (const eq of equipmentResult.rows) {
+            // Check if ANY active task (PENDING or IN_PROGRESS) exists for this equipment
+            const pendingRes = await query(
+                `SELECT 1 FROM equipment_maintenance_tasks 
+                 WHERE equipment_id = $1 AND status IN ('PENDING', 'IN_PROGRESS')
+                 LIMIT 1`,
+                [eq.id]
+            );
+
+            if ((pendingRes.rowCount || 0) > 0) {
+                continue;
+            }
+
             const intervalDays = eq.cleaning_interval_days || 30;
-            const lastCleaned = eq.last_cleaned_at ? new Date(eq.last_cleaned_at) : new Date(date_from);
-
-            let nextDue = new Date(lastCleaned);
-            nextDue.setDate(nextDue.getDate() + intervalDays);
-
             const startDate = new Date(date_from);
             const endDate = new Date(date_to);
 
-            if (nextDue < startDate) {
-                const pendingRes = await query(
-                    `SELECT 1 FROM equipment_maintenance_tasks 
-                     WHERE equipment_id = $1 AND status = 'PENDING' AND due_date < $2
-                     LIMIT 1`,
-                    [eq.id, date_from]
-                );
-
-                if ((pendingRes.rowCount || 0) > 0) {
-                    continue;
-                }
-
-                nextDue = startDate;
+            let nextDue: Date;
+            if (eq.last_cleaned_at) {
+                const lastCleaned = new Date(eq.last_cleaned_at);
+                nextDue = new Date(lastCleaned);
+                nextDue.setDate(nextDue.getDate() + intervalDays);
+            } else {
+                // If never cleaned, due date defaults to the start of the requested period
+                nextDue = new Date(startDate);
             }
 
-            while (nextDue <= endDate) {
-                if (nextDue >= startDate) {
-                    const originalDue = nextDue.toISOString().split('T')[0];
-                    let dueDateStr = originalDue;
-                    let assignedUserId = eq.assigned_user_id || null;
+            // If the calculated due date is beyond the current view range, skip it.
+            if (nextDue > endDate) {
+                continue;
+            }
 
-                    if (assignedUserId) {
-                        const shiftDate = findNextShiftDate(assignedUserId, originalDue);
-                        if (!shiftDate) {
-                            nextDue.setDate(nextDue.getDate() + intervalDays);
-                            continue;
-                        }
-                        dueDateStr = shiftDate;
-                    }
+            const originalDue = nextDue.toISOString().split('T')[0];
+            let dueDateStr = originalDue;
+            let assignedUserId = eq.assigned_user_id || null;
 
-                    const insertResult = await query(
-                        `INSERT INTO equipment_maintenance_tasks (equipment_id, task_type, due_date, assigned_user_id)
-                         VALUES ($1, $2, $3, $4)
-                         ON CONFLICT (equipment_id, due_date, task_type) DO NOTHING
-                         RETURNING id`,
-                        [eq.id, task_type, dueDateStr, assignedUserId]
-                    );
-
-                    if (insertResult.rowCount && insertResult.rowCount > 0) {
-                        createdCount++;
-                    }
+            // Only attempt to align with shift if the task falls within the current view range.
+            // If it's overdue (date < startDate), we keep the original date to show "Overdue by X days".
+            if (assignedUserId && nextDue >= startDate) {
+                const shiftDate = findNextShiftDate(assignedUserId, originalDue);
+                if (shiftDate) {
+                    dueDateStr = shiftDate;
                 }
+                // If no shift found, fall back to original date (ensure task is created)
+            }
 
-                nextDue.setDate(nextDue.getDate() + intervalDays);
+            const insertResult = await query(
+                `INSERT INTO equipment_maintenance_tasks (equipment_id, task_type, due_date, assigned_user_id)
+                 VALUES ($1, $2, $3, $4)
+                 ON CONFLICT (equipment_id, due_date, task_type) DO NOTHING
+                 RETURNING id`,
+                [eq.id, task_type, dueDateStr, assignedUserId]
+            );
+
+            if (insertResult.rowCount && insertResult.rowCount > 0) {
+                createdCount++;
             }
         }
 
