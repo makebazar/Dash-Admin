@@ -40,7 +40,17 @@ export async function GET(
 
         let sql = `
             SELECT 
-                mt.*,
+                mt.id,
+                mt.equipment_id,
+                mt.task_type,
+                mt.status,
+                mt.due_date,
+                mt.completed_at,
+                mt.completed_by,
+                mt.notes,
+                mt.created_at,
+                mt.updated_at,
+                COALESCE(mt.assigned_user_id, e.assigned_user_id) as assigned_user_id,
                 e.name as equipment_name,
                 e.type as equipment_type,
                 e.last_cleaned_at as last_cleaned_at,
@@ -48,13 +58,14 @@ export async function GET(
                 et.icon as equipment_icon,
                 w.name as workstation_name,
                 w.zone as workstation_zone,
-                u.full_name as assigned_to_name,
+                COALESCE(u.full_name, eu.full_name) as assigned_to_name,
                 cu.full_name as completed_by_name
             FROM equipment_maintenance_tasks mt
             JOIN equipment e ON mt.equipment_id = e.id
             LEFT JOIN equipment_types et ON e.type = et.code
             LEFT JOIN club_workstations w ON e.workstation_id = w.id
             LEFT JOIN users u ON mt.assigned_user_id = u.id
+            LEFT JOIN users eu ON e.assigned_user_id = eu.id
             LEFT JOIN users cu ON mt.completed_by = cu.id
             WHERE e.club_id = $1
         `;
