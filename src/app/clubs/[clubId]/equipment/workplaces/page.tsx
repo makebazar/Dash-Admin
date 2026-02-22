@@ -657,40 +657,43 @@ export default function WorkplacesManager() {
                                     {!primaryEquipment ? (
                                         <div className="text-sm text-muted-foreground">Основное устройство не назначено</div>
                                     ) : (
-                                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 rounded-lg border border-slate-100 bg-slate-50 p-4">
-                                            <div className="flex items-center gap-3 min-w-0">
-                                                <div className="h-9 w-9 rounded-lg bg-white border flex items-center justify-center text-slate-500 shrink-0">
+                                        <div className="flex flex-col gap-4 rounded-lg border border-slate-100 bg-slate-50 p-4">
+                                            <div className="flex items-center gap-3 w-full">
+                                                <div className="h-10 w-10 rounded-lg bg-white border flex items-center justify-center text-slate-500 shrink-0 shadow-sm">
                                                     {getEquipmentIcon(primaryEquipment.type)}
                                                 </div>
-                                                <div className="min-w-0">
+                                                <div className="min-w-0 flex-1">
                                                     <p className="text-sm font-semibold truncate">{primaryEquipment.name}</p>
-                                                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{primaryEquipment.type_name || primaryEquipment.type}</p>
+                                                    <div className="flex items-center gap-2">
+                                                        <Badge variant="outline" className="text-[10px] h-5 px-1 bg-white text-slate-500 border-slate-200 font-normal">{primaryEquipment.type_name || primaryEquipment.type}</Badge>
+                                                    </div>
                                                 </div>
                                             </div>
-                                            <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
-                                                <div className="flex flex-col gap-1">
-                                                    <Label className="text-[10px] text-muted-foreground">Посл. чистка</Label>
+                                            
+                                            <div className="grid grid-cols-2 gap-3 items-end">
+                                                <div className="flex flex-col gap-1.5 col-span-2">
+                                                    <Label className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Посл. чистка</Label>
                                                     <Input
                                                         type="date"
-                                                        className="w-full sm:w-32 h-8 text-xs"
+                                                        className="w-full h-9 text-xs bg-white"
                                                         value={lastCleanedDrafts[primaryEquipment.id] ?? ""}
                                                         onChange={(e) => handleLastCleanedChange(primaryEquipment.id, e.target.value)}
                                                     />
                                                 </div>
-                                                <div className="flex flex-col gap-1">
-                                                    <Label className="text-[10px] text-muted-foreground">Интервал</Label>
+                                                <div className="flex flex-col gap-1.5">
+                                                    <Label className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Интервал (дн.)</Label>
                                                     <Input
                                                         type="number"
                                                         min={1}
-                                                        className="w-full sm:w-20 h-8 text-xs"
+                                                        className="w-full h-9 text-xs bg-white"
                                                         value={intervalDrafts[primaryEquipment.id] ?? String(primaryEquipment.cleaning_interval_days ?? 30)}
                                                         onChange={(e) => handleIntervalChange(primaryEquipment.id, e.target.value)}
                                                     />
                                                 </div>
-                                                <div className="flex flex-col gap-1 justify-end">
+                                                <div className="flex flex-col justify-end">
                                                     <Button
                                                         size="sm"
-                                                        className="h-8 w-full sm:w-auto mt-auto"
+                                                        className="h-9 w-full bg-slate-900 text-white hover:bg-slate-800"
                                                         disabled={savingIntervalId === primaryEquipment.id}
                                                         onClick={() => handleSaveInterval(primaryEquipment.id)}
                                                     >
@@ -776,47 +779,47 @@ export default function WorkplacesManager() {
                                     <div className="text-sm text-muted-foreground">Периферия не назначена</div>
                                 ) : (
                                     peripheralEquipment.map(item => (
-                                        <div key={item.id} className="flex items-center justify-between gap-3 rounded-lg border border-slate-100 bg-white p-3">
-                                            <div className="flex items-center gap-3 min-w-0">
-                                                <div className="h-9 w-9 rounded-lg bg-slate-50 border flex items-center justify-center text-slate-500 shrink-0">
+                                        <div key={item.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-lg border border-slate-100 bg-white p-3">
+                                            <div className="flex items-center gap-3 min-w-0 flex-1">
+                                                <div className="h-10 w-10 rounded-lg bg-slate-50 border flex items-center justify-center text-slate-500 shrink-0">
                                                     {getEquipmentIcon(item.type)}
                                                 </div>
                                                 <div className="min-w-0">
-                                                    <p className="text-sm font-semibold truncate">{item.name}</p>
-                                                    <div className="flex items-center gap-2">
-                                                        <Badge variant="secondary" className="text-[10px] h-5 px-1">{item.type_name || item.type}</Badge>
+                                                    <p className="text-sm font-semibold truncate text-slate-900">{item.name}</p>
+                                                    <div className="flex items-center gap-2 mt-0.5">
+                                                        <Badge variant="secondary" className="text-[10px] h-5 px-1.5 font-normal bg-slate-100 text-slate-600 hover:bg-slate-200">{item.type_name || item.type}</Badge>
                                                         <span className="text-[10px] text-muted-foreground truncate">{item.brand} {item.model}</span>
                                                     </div>
                                                 </div>
                                             </div>
-                                            <div className="flex items-center gap-2">
-                                                <div className="flex flex-col gap-1">
-                                                    <Label className="text-[10px] text-muted-foreground">Посл. чистка</Label>
+                                            <div className="flex items-center gap-3 flex-shrink-0 w-full sm:w-auto">
+                                                <div className="flex flex-col gap-1.5 flex-1 sm:flex-none sm:w-[140px]">
+                                                    <Label className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Посл. чистка</Label>
                                                     <Input
                                                         type="date"
-                                                        className="w-28 h-8 text-xs"
+                                                        className="h-9 text-xs"
                                                         value={lastCleanedDrafts[item.id] ?? ""}
                                                         onChange={(e) => handleLastCleanedChange(item.id, e.target.value)}
                                                     />
                                                 </div>
-                                                <div className="flex flex-col gap-1">
-                                                    <Label className="text-[10px] text-muted-foreground">Интервал</Label>
+                                                <div className="flex flex-col gap-1.5 w-[80px]">
+                                                    <Label className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Интервал</Label>
                                                     <Input
                                                         type="number"
                                                         min={1}
-                                                        className="w-20 h-8 text-xs"
+                                                        className="h-9 text-xs text-center"
                                                         value={intervalDrafts[item.id] ?? String(item.cleaning_interval_days ?? 30)}
                                                         onChange={(e) => handleIntervalChange(item.id, e.target.value)}
                                                     />
                                                 </div>
-                                                <div className="flex flex-col gap-1 justify-end">
+                                                <div className="flex flex-col justify-end">
                                                     <Button
                                                         size="sm"
-                                                        className="h-8 mt-auto"
+                                                        className="h-9 w-12 bg-slate-900 text-white hover:bg-slate-800"
                                                         disabled={savingIntervalId === item.id}
                                                         onClick={() => handleSaveInterval(item.id)}
                                                     >
-                                                        {savingIntervalId === item.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "ОК"}
+                                                        {savingIntervalId === item.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "OK"}
                                                     </Button>
                                                 </div>
                                             </div>
