@@ -24,6 +24,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Input } from "@/components/ui/input"
 import {
     Select,
     SelectContent,
@@ -41,6 +42,7 @@ interface MaintenanceTask {
     equipment_type: string
     equipment_type_name: string
     equipment_icon: string
+    last_cleaned_at: string | null
     workstation_name: string | null
     workstation_zone: string | null
     assigned_user_id: string | null
@@ -63,6 +65,8 @@ export default function MaintenanceSchedule() {
     const [employees, setEmployees] = useState<Employee[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [isGenerating, setIsGenerating] = useState(false)
+    const [lastCleanedDrafts, setLastCleanedDrafts] = useState<Record<string, string>>({})
+    const [savingLastCleanedId, setSavingLastCleanedId] = useState<string | null>(null)
 
     // View state
     const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1)
@@ -120,6 +124,16 @@ export default function MaintenanceSchedule() {
         fetchData()
     }, [fetchData])
 
+    useEffect(() => {
+        const map: Record<string, string> = {}
+        tasks.forEach(task => {
+            if (!map[task.equipment_id]) {
+                map[task.equipment_id] = task.last_cleaned_at ? task.last_cleaned_at.split('T')[0] : ""
+            }
+        })
+        setLastCleanedDrafts(map)
+    }, [tasks])
+
     const handleGenerateTasks = async () => {
         try {
             fetchData()
@@ -146,6 +160,26 @@ export default function MaintenanceSchedule() {
         }
     }
 
+    const handleSaveLastCleaned = async (equipmentId: string) => {
+        setSavingLastCleanedId(equipmentId)
+        try {
+            const res = await fetch(`/api/clubs/${clubId}/equipment/${equipmentId}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    last_cleaned_at: lastCleanedDrafts[equipmentId] || null
+                })
+            })
+            if (res.ok) {
+                fetchData()
+            }
+        } catch (error) {
+            console.error("Error updating last cleaned date:", error)
+        } finally {
+            setSavingLastCleanedId(null)
+        }
+    }
+
     const stats = useMemo(() => {
         const total = tasks.length
         const completed = tasks.filter(t => t.status === 'COMPLETED').length
@@ -153,6 +187,23 @@ export default function MaintenanceSchedule() {
         const overdue = tasks.filter(t => t.status === 'PENDING' && new Date(t.due_date) < new Date()).length
         const progress = total > 0 ? (completed / total) * 100 : 0
         return { total, completed, pending, overdue, progress }
+    }, [tasks])
+
+    const groupedTasks = useMemo(() => {
+        const map = new Map<string, { key: string; name: string; zone: string; tasks: MaintenanceTask[] }>()
+        tasks.forEach(task => {
+            const name = task.workstation_name || "Склад"
+            const zone = task.workstation_zone || "Без зоны"
+            const key = `${zone}::${name}`
+            if (!map.has(key)) {
+                map.set(key, { key, name, zone, tasks: [] })
+            }
+            map.get(key)?.tasks.push(task)
+        })
+        return Array.from(map.values()).sort((a, b) => {
+            if (a.zone === b.zone) return a.name.localeCompare(b.name)
+            return a.zone.localeCompare(b.zone)
+        })
     }, [tasks])
 
     return (
@@ -264,7 +315,7 @@ export default function MaintenanceSchedule() {
                 <div className="flex items-center justify-between px-2">
                     <h2 className="text-xl font-bold tracking-tight flex items-center gap-2">
                         <Layers className="h-5 w-5 text-indigo-500" />
-                        Пообъектный контроль
+                        Группы по местам
                     </h2>
                     <div className="flex items-center gap-4 text-xs">
                         <div className="flex items-center gap-1.5"><div className="h-2 w-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.4)]"></div> Готово</div>
@@ -273,143 +324,172 @@ export default function MaintenanceSchedule() {
                     </div>
                 </div>
 
-                <Card className="border-none shadow-sm overflow-hidden bg-white">
-                    <Table>
-                        <TableHeader className="bg-slate-50/50">
-                            <TableRow className="hover:bg-transparent">
-                                <TableHead className="w-[300px]">Объект обслуживания</TableHead>
-                                <TableHead>Место / Зона</TableHead>
-                                <TableHead>Срок выполнения</TableHead>
-                                <TableHead>Ответственный</TableHead>
-                                <TableHead>Статус</TableHead>
-                                <TableHead className="text-right">Завершено</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {isLoading ? (
-                                <TableRow>
-                                    <TableCell colSpan={6} className="h-48 text-center text-muted-foreground">
-                                        <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2 opacity-50 text-indigo-500" />
-                                        Синхронизация графика...
-                                    </TableCell>
-                                </TableRow>
-                            ) : tasks.length === 0 ? (
-                                <TableRow>
-                                    <TableCell colSpan={6} className="p-20 text-center">
-                                        <div className="flex flex-col items-center gap-4 max-w-sm mx-auto opacity-60">
-                                            <div className="h-20 w-20 bg-slate-50 rounded-[40px] flex items-center justify-center border-4 border-white shadow-lg">
-                                                <Calendar className="h-10 w-10 text-slate-300" />
-                                            </div>
-                                            <div className="space-y-1">
-                                                <p className="text-lg font-bold">Нет задач на период</p>
-                                                <p className="text-sm text-muted-foreground leading-relaxed">Система не нашла устройств, требующих чистки в выбранном периоде.</p>
-                                            </div>
-                                                <Button onClick={handleGenerateTasks} variant="secondary" className="mt-2">
-                                                    Пересчитать план
-                                                </Button>
-                                        </div>
-                                    </TableCell>
-                                </TableRow>
-                            ) : (
-                                tasks.map((task) => {
-                                    const isOverdue = task.status === 'PENDING' && new Date(task.due_date) < new Date()
-                                    const isCompleted = task.status === 'COMPLETED'
+                {isLoading ? (
+                    <Card className="border-none shadow-sm overflow-hidden bg-white">
+                        <div className="h-48 flex items-center justify-center text-muted-foreground">
+                            <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2 opacity-50 text-indigo-500" />
+                            Синхронизация графика...
+                        </div>
+                    </Card>
+                ) : tasks.length === 0 ? (
+                    <Card className="border-none shadow-sm overflow-hidden bg-white">
+                        <div className="p-20 text-center">
+                            <div className="flex flex-col items-center gap-4 max-w-sm mx-auto opacity-60">
+                                <div className="h-20 w-20 bg-slate-50 rounded-[40px] flex items-center justify-center border-4 border-white shadow-lg">
+                                    <Calendar className="h-10 w-10 text-slate-300" />
+                                </div>
+                                <div className="space-y-1">
+                                    <p className="text-lg font-bold">Нет задач на период</p>
+                                    <p className="text-sm text-muted-foreground leading-relaxed">Система не нашла устройств, требующих чистки в выбранном периоде.</p>
+                                </div>
+                                <Button onClick={handleGenerateTasks} variant="secondary" className="mt-2">
+                                    Пересчитать план
+                                </Button>
+                            </div>
+                        </div>
+                    </Card>
+                ) : (
+                    groupedTasks.map(group => (
+                        <Card key={group.key} className="border-none shadow-sm overflow-hidden bg-white">
+                            <div className="flex items-center justify-between px-6 py-4 border-b bg-slate-50/50">
+                                <div className="space-y-1">
+                                    <h3 className="font-bold text-base">{group.name}</h3>
+                                    <p className="text-[10px] uppercase text-muted-foreground tracking-widest">{group.zone}</p>
+                                </div>
+                                <Badge variant="secondary" className="text-xs">{group.tasks.length}</Badge>
+                            </div>
+                            <Table>
+                                <TableHeader className="bg-white">
+                                    <TableRow className="hover:bg-transparent">
+                                        <TableHead className="w-[260px]">Объект обслуживания</TableHead>
+                                        <TableHead>Место / Зона</TableHead>
+                                        <TableHead>Срок выполнения</TableHead>
+                                        <TableHead>Последняя чистка</TableHead>
+                                        <TableHead>Ответственный</TableHead>
+                                        <TableHead>Статус</TableHead>
+                                        <TableHead className="text-right">Завершено</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {group.tasks.map(task => {
+                                        const isOverdue = task.status === 'PENDING' && new Date(task.due_date) < new Date()
+                                        const isCompleted = task.status === 'COMPLETED'
 
-                                    return (
-                                        <TableRow key={task.id} className="group hover:bg-slate-50/30 transition-colors">
-                                            <TableCell>
-                                                <div className="flex items-center gap-3">
-                                                    <div className={cn(
-                                                        "h-10 w-10 rounded-xl flex items-center justify-center transition-all border",
-                                                        isCompleted ? "bg-green-50 text-green-600 border-green-100" : "bg-slate-50 text-slate-500 border-slate-100 group-hover:border-slate-200 group-hover:bg-white"
-                                                    )}>
-                                                        <Monitor className="h-5 w-5" />
+                                        return (
+                                            <TableRow key={task.id} className="group hover:bg-slate-50/30 transition-colors">
+                                                <TableCell>
+                                                    <div className="flex items-center gap-3">
+                                                        <div className={cn(
+                                                            "h-10 w-10 rounded-xl flex items-center justify-center transition-all border",
+                                                            isCompleted ? "bg-green-50 text-green-600 border-green-100" : "bg-slate-50 text-slate-500 border-slate-100 group-hover:border-slate-200 group-hover:bg-white"
+                                                        )}>
+                                                            <Monitor className="h-5 w-5" />
+                                                        </div>
+                                                        <div>
+                                                            <p className="font-bold text-sm">{task.equipment_name}</p>
+                                                            <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest">{task.equipment_type_name}</p>
+                                                        </div>
                                                     </div>
-                                                    <div>
-                                                        <p className="font-bold text-sm">{task.equipment_name}</p>
-                                                        <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest">{task.equipment_type_name}</p>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <div className="flex flex-col">
+                                                        <span className="text-xs font-semibold">{task.workstation_name || "Склад"}</span>
+                                                        <span className="text-[10px] text-muted-foreground uppercase">{task.workstation_zone}</span>
                                                     </div>
-                                                </div>
-                                            </TableCell>
-                                            <TableCell>
-                                                <div className="flex flex-col">
-                                                    <span className="text-xs font-semibold">{task.workstation_name || "Склад"}</span>
-                                                    <span className="text-[10px] text-muted-foreground uppercase">{task.workstation_zone}</span>
-                                                </div>
-                                            </TableCell>
-                                            <TableCell>
-                                                <div className="flex items-center gap-2">
-                                                    <Badge variant="outline" className={cn(
-                                                        "text-[10px] px-2 py-0 border-none shadow-none font-bold",
-                                                        isOverdue ? "text-rose-600 bg-rose-50" : "text-slate-500 bg-slate-100"
-                                                    )}>
-                                                        {new Date(task.due_date).toLocaleDateString("ru-RU", { day: 'numeric', month: 'short' })}
-                                                    </Badge>
-                                                    {isOverdue && <AlertCircle className="h-3 w-3 text-rose-500 animate-pulse" />}
-                                                </div>
-                                            </TableCell>
-                                            <TableCell>
-                                                {isCompleted ? (
-                                                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                                        <User className="h-3 w-3" />
-                                                        {task.completed_by_name || task.assigned_to_name}
+                                                </TableCell>
+                                                <TableCell>
+                                                    <div className="flex items-center gap-2">
+                                                        <Badge variant="outline" className={cn(
+                                                            "text-[10px] px-2 py-0 border-none shadow-none font-bold",
+                                                            isOverdue ? "text-rose-600 bg-rose-50" : "text-slate-500 bg-slate-100"
+                                                        )}>
+                                                            {new Date(task.due_date).toLocaleDateString("ru-RU", { day: 'numeric', month: 'short' })}
+                                                        </Badge>
+                                                        {isOverdue && <AlertCircle className="h-3 w-3 text-rose-500 animate-pulse" />}
                                                     </div>
-                                                ) : (
-                                                    <Select
-                                                        value={task.assigned_user_id || "none"}
-                                                        onValueChange={(val) => handleAssign(task.id, val)}
-                                                    >
-                                                        <SelectTrigger className="h-8 text-xs bg-white border-dashed w-[160px]">
-                                                            <div className="flex items-center gap-2">
-                                                                <UserPlus className="h-3 w-3 text-muted-foreground" />
-                                                                <SelectValue placeholder="Назначить" />
-                                                            </div>
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                            <SelectItem value="none">👥 Свободный пул</SelectItem>
-                                                            {employees.map(emp => (
-                                                                <SelectItem key={emp.id} value={emp.id}>{emp.full_name}</SelectItem>
-                                                            ))}
-                                                        </SelectContent>
-                                                    </Select>
-                                                )}
-                                            </TableCell>
-                                            <TableCell>
-                                                {task.status === 'COMPLETED' ? (
-                                                    <Badge className="bg-green-500/10 text-green-700 hover:bg-green-500/20 shadow-none border-none text-[10px] gap-1">
-                                                        <CheckCircle2 className="h-3 w-3" /> Выполнено
-                                                    </Badge>
-                                                ) : task.status === 'IN_PROGRESS' ? (
-                                                    <Badge className="bg-blue-500/10 text-blue-700 hover:bg-blue-500/20 shadow-none border-none text-[10px] gap-1 animate-pulse">
-                                                        <CircleDashed className="h-3 w-3 animate-spin" /> В работе
-                                                    </Badge>
-                                                ) : (
-                                                    <Badge variant="secondary" className="bg-slate-100 text-slate-500 shadow-none border-none text-[10px] gap-1">
-                                                        <Clock className="h-3 w-3" /> Ожидает
-                                                    </Badge>
-                                                )}
-                                            </TableCell>
-                                            <TableCell className="text-right">
-                                                {task.completed_at ? (
-                                                    <div className="flex flex-col items-end">
-                                                        <span className="text-[11px] font-bold">
-                                                            {new Date(task.completed_at).toLocaleDateString("ru-RU")}
-                                                        </span>
-                                                        <span className="text-[10px] text-muted-foreground italic">
-                                                            {new Date(task.completed_at).toLocaleTimeString("ru-RU", { hour: '2-digit', minute: '2-digit' })}
-                                                        </span>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <div className="flex items-center gap-2">
+                                                        <Input
+                                                            type="date"
+                                                            className="h-8 text-xs w-[130px]"
+                                                            value={lastCleanedDrafts[task.equipment_id] ?? ""}
+                                                            onChange={(e) => setLastCleanedDrafts(prev => ({ ...prev, [task.equipment_id]: e.target.value }))}
+                                                        />
+                                                        <Button
+                                                            size="sm"
+                                                            variant="outline"
+                                                            className="h-8 text-xs"
+                                                            onClick={() => handleSaveLastCleaned(task.equipment_id)}
+                                                            disabled={savingLastCleanedId === task.equipment_id}
+                                                        >
+                                                            {savingLastCleanedId === task.equipment_id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Сохранить"}
+                                                        </Button>
                                                     </div>
-                                                ) : (
-                                                    <span className="text-slate-200">—</span>
-                                                )}
-                                            </TableCell>
-                                        </TableRow>
-                                    )
-                                })
-                            )}
-                        </TableBody>
-                    </Table>
-                </Card>
+                                                </TableCell>
+                                                <TableCell>
+                                                    {isCompleted ? (
+                                                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                                            <User className="h-3 w-3" />
+                                                            {task.completed_by_name || task.assigned_to_name}
+                                                        </div>
+                                                    ) : (
+                                                        <Select
+                                                            value={task.assigned_user_id || "none"}
+                                                            onValueChange={(val) => handleAssign(task.id, val)}
+                                                        >
+                                                            <SelectTrigger className="h-8 text-xs bg-white border-dashed w-[160px]">
+                                                                <div className="flex items-center gap-2">
+                                                                    <UserPlus className="h-3 w-3 text-muted-foreground" />
+                                                                    <SelectValue placeholder="Назначить" />
+                                                                </div>
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                <SelectItem value="none">👥 Свободный пул</SelectItem>
+                                                                {employees.map(emp => (
+                                                                    <SelectItem key={emp.id} value={emp.id}>{emp.full_name}</SelectItem>
+                                                                ))}
+                                                            </SelectContent>
+                                                        </Select>
+                                                    )}
+                                                </TableCell>
+                                                <TableCell>
+                                                    {task.status === 'COMPLETED' ? (
+                                                        <Badge className="bg-green-500/10 text-green-700 hover:bg-green-500/20 shadow-none border-none text-[10px] gap-1">
+                                                            <CheckCircle2 className="h-3 w-3" /> Выполнено
+                                                        </Badge>
+                                                    ) : task.status === 'IN_PROGRESS' ? (
+                                                        <Badge className="bg-blue-500/10 text-blue-700 hover:bg-blue-500/20 shadow-none border-none text-[10px] gap-1 animate-pulse">
+                                                            <CircleDashed className="h-3 w-3 animate-spin" /> В работе
+                                                        </Badge>
+                                                    ) : (
+                                                        <Badge variant="secondary" className="bg-slate-100 text-slate-500 shadow-none border-none text-[10px] gap-1">
+                                                            <Clock className="h-3 w-3" /> Ожидает
+                                                        </Badge>
+                                                    )}
+                                                </TableCell>
+                                                <TableCell className="text-right">
+                                                    {task.completed_at ? (
+                                                        <div className="flex flex-col items-end">
+                                                            <span className="text-[11px] font-bold">
+                                                                {new Date(task.completed_at).toLocaleDateString("ru-RU")}
+                                                            </span>
+                                                            <span className="text-[10px] text-muted-foreground italic">
+                                                                {new Date(task.completed_at).toLocaleTimeString("ru-RU", { hour: '2-digit', minute: '2-digit' })}
+                                                            </span>
+                                                        </div>
+                                                    ) : (
+                                                        <span className="text-slate-200">—</span>
+                                                    )}
+                                                </TableCell>
+                                            </TableRow>
+                                        )
+                                    })}
+                                </TableBody>
+                            </Table>
+                        </Card>
+                    ))
+                )}
             </div>
         </div>
     )

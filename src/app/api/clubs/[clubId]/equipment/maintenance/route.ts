@@ -41,6 +41,7 @@ export async function GET(
                 mt.*,
                 e.name as equipment_name,
                 e.type as equipment_type,
+                e.last_cleaned_at as last_cleaned_at,
                 et.name_ru as equipment_type_name,
                 et.icon as equipment_icon,
                 w.name as workstation_name,
