@@ -34,15 +34,24 @@ interface MaintenanceTask {
 export default function EmployeeTasksPage() {
     const { clubId } = useParams()
     const [tasks, setTasks] = useState<MaintenanceTask[]>([])
+    const [freeTasks, setFreeTasks] = useState<MaintenanceTask[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [isUpdating, setIsUpdating] = useState<string | null>(null)
 
     const fetchData = useCallback(async () => {
         setIsLoading(true)
         try {
-            const res = await fetch(`/api/clubs/${clubId}/equipment/maintenance?assigned=me&status=PENDING,IN_PROGRESS`)
-            const data = await res.json()
-            if (res.ok) setTasks(data.tasks || [])
+            const today = new Date().toISOString().split('T')[0]
+            const [assignedRes, freeRes] = await Promise.all([
+                fetch(`/api/clubs/${clubId}/equipment/maintenance?assigned=me&status=PENDING,IN_PROGRESS`),
+                fetch(`/api/clubs/${clubId}/equipment/maintenance?assigned=unassigned&status=PENDING&date_to=${today}`)
+            ])
+
+            const assignedData = await assignedRes.json()
+            const freeData = await freeRes.json()
+
+            if (assignedRes.ok) setTasks(assignedData.tasks || [])
+            if (freeRes.ok) setFreeTasks(freeData.tasks || [])
         } catch (error) {
             console.error("Error fetching tasks:", error)
         } finally {
@@ -73,6 +82,26 @@ export default function EmployeeTasksPage() {
             }
         } catch (error) {
             console.error("Error updating task status:", error)
+        } finally {
+            setIsUpdating(null)
+        }
+    }
+
+    const handleClaim = async (taskId: string) => {
+        setIsUpdating(taskId)
+        try {
+            const res = await fetch(`/api/clubs/${clubId}/equipment/maintenance/${taskId}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ claim: true })
+            })
+
+            if (res.ok) {
+                setFreeTasks(prev => prev.filter(t => t.id !== taskId))
+                fetchData()
+            }
+        } catch (error) {
+            console.error("Error claiming task:", error)
         } finally {
             setIsUpdating(null)
         }
@@ -139,6 +168,41 @@ export default function EmployeeTasksPage() {
                     </CardContent>
                 </Card>
             </div>
+
+            {/* Free Tasks */}
+            {freeTasks.length > 0 && (
+                <div className="space-y-4">
+                    <h2 className="text-lg font-bold">Свободные задачи</h2>
+                    <div className="grid gap-4">
+                        {freeTasks.map(task => (
+                            <Card key={task.id} className="border-none shadow-sm bg-white dark:bg-slate-800/80">
+                                <CardContent className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                    <div className="flex items-center gap-4">
+                                        <div className="h-12 w-12 rounded-2xl bg-slate-100 dark:bg-slate-700 text-slate-400 flex items-center justify-center">
+                                            <Monitor className="h-6 w-6" />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <h4 className="font-bold">{task.equipment_name}</h4>
+                                            <div className="flex items-center gap-3 text-xs text-muted-foreground font-medium">
+                                                <span className="bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded uppercase tracking-wider">{task.equipment_type_name}</span>
+                                                <span className="uppercase tracking-widest">{task.workstation_name || "Склад"}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <Button
+                                        size="lg"
+                                        className="h-12 px-6 rounded-xl font-bold"
+                                        onClick={() => handleClaim(task.id)}
+                                        disabled={isUpdating === task.id}
+                                    >
+                                        {isUpdating === task.id ? <Loader2 className="h-4 w-4 animate-spin" /> : "Взять в работу"}
+                                    </Button>
+                                </CardContent>
+                            </Card>
+                        ))}
+                    </div>
+                </div>
+            )}
 
             {/* Tasks List */}
             <div className="space-y-4">

@@ -17,6 +17,7 @@ export async function GET(
         const equipmentId = searchParams.get('equipment_id');
         const dateFrom = searchParams.get('date_from');
         const dateTo = searchParams.get('date_to');
+        const includeOverdue = searchParams.get('include_overdue') === 'true';
         const myTasks = searchParams.get('my_tasks') === 'true' || assignedTo === 'me';
 
         if (!userId) {
@@ -90,9 +91,15 @@ export async function GET(
         }
 
         if (dateFrom) {
-            sql += ` AND mt.due_date >= $${paramIndex}`;
-            queryParams.push(dateFrom);
-            paramIndex++;
+            if (includeOverdue) {
+                sql += ` AND (mt.due_date >= $${paramIndex} OR (mt.status = 'PENDING' AND mt.due_date < $${paramIndex}))`;
+                queryParams.push(dateFrom);
+                paramIndex++;
+            } else {
+                sql += ` AND mt.due_date >= $${paramIndex}`;
+                queryParams.push(dateFrom);
+                paramIndex++;
+            }
         }
 
         if (dateTo) {
@@ -162,16 +169,43 @@ export async function POST(
             return NextResponse.json({ error: 'date_from and date_to are required' }, { status: 400 });
         }
 
-        // Get equipment that needs tasks in the date range
+        let scheduleMap: Record<string, string[]> | null = null;
+        try {
+            const scheduleRes = await query(
+                `SELECT user_id, date FROM work_schedules WHERE club_id = $1 AND date >= $2 AND date <= $3`,
+                [clubId, date_from, date_to]
+            );
+            const map: Record<string, string[]> = {};
+            scheduleRes.rows.forEach((row: any) => {
+                if (!map[row.user_id]) map[row.user_id] = [];
+                map[row.user_id].push(row.date);
+            });
+            Object.keys(map).forEach(key => map[key].sort());
+            scheduleMap = map;
+        } catch (error) {
+            scheduleMap = null;
+        }
+
+        const findNextShiftDate = (userId: string, fromDate: string) => {
+            if (!scheduleMap) return null;
+            const dates = scheduleMap[userId];
+            if (!dates || dates.length === 0) return null;
+            for (const d of dates) {
+                if (d >= fromDate) return d;
+            }
+            return null;
+        };
+
         let equipmentSql = `
-            SELECT id, name, cleaning_interval_days, last_cleaned_at
-            FROM equipment
-            WHERE club_id = $1 AND is_active = TRUE
+            SELECT e.id, e.name, e.cleaning_interval_days, e.last_cleaned_at, e.workstation_id, w.assigned_user_id
+            FROM equipment e
+            LEFT JOIN club_workstations w ON e.workstation_id = w.id
+            WHERE e.club_id = $1 AND e.is_active = TRUE
         `;
         const eqParams: any[] = [clubId];
 
         if (equipment_ids && equipment_ids.length > 0) {
-            equipmentSql += ` AND id = ANY($2)`;
+            equipmentSql += ` AND e.id = ANY($2)`;
             eqParams.push(equipment_ids);
         }
 
@@ -180,26 +214,51 @@ export async function POST(
         let createdCount = 0;
 
         for (const eq of equipmentResult.rows) {
-            // Calculate due dates based on interval
             const intervalDays = eq.cleaning_interval_days || 30;
             const lastCleaned = eq.last_cleaned_at ? new Date(eq.last_cleaned_at) : new Date(date_from);
 
             let nextDue = new Date(lastCleaned);
             nextDue.setDate(nextDue.getDate() + intervalDays);
 
+            const startDate = new Date(date_from);
             const endDate = new Date(date_to);
 
-            while (nextDue <= endDate) {
-                if (nextDue >= new Date(date_from)) {
-                    const dueDateStr = nextDue.toISOString().split('T')[0];
+            if (nextDue < startDate) {
+                const pendingRes = await query(
+                    `SELECT 1 FROM equipment_maintenance_tasks 
+                     WHERE equipment_id = $1 AND status = 'PENDING' AND due_date < $2
+                     LIMIT 1`,
+                    [eq.id, date_from]
+                );
 
-                    // Insert task if not exists (using ON CONFLICT)
+                if ((pendingRes.rowCount || 0) > 0) {
+                    continue;
+                }
+
+                nextDue = startDate;
+            }
+
+            while (nextDue <= endDate) {
+                if (nextDue >= startDate) {
+                    const originalDue = nextDue.toISOString().split('T')[0];
+                    let dueDateStr = originalDue;
+                    let assignedUserId = eq.assigned_user_id || null;
+
+                    if (assignedUserId) {
+                        const shiftDate = findNextShiftDate(assignedUserId, originalDue);
+                        if (!shiftDate) {
+                            nextDue.setDate(nextDue.getDate() + intervalDays);
+                            continue;
+                        }
+                        dueDateStr = shiftDate;
+                    }
+
                     const insertResult = await query(
-                        `INSERT INTO equipment_maintenance_tasks (equipment_id, task_type, due_date)
-                         VALUES ($1, $2, $3)
+                        `INSERT INTO equipment_maintenance_tasks (equipment_id, task_type, due_date, assigned_user_id)
+                         VALUES ($1, $2, $3, $4)
                          ON CONFLICT (equipment_id, due_date, task_type) DO NOTHING
                          RETURNING id`,
-                        [eq.id, task_type, dueDateStr]
+                        [eq.id, task_type, dueDateStr, assignedUserId]
                     );
 
                     if (insertResult.rowCount && insertResult.rowCount > 0) {

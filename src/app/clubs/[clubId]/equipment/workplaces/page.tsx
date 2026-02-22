@@ -20,7 +20,12 @@ import {
     Headphones,
     Keyboard,
     Wrench,
-    Search
+    Search,
+    Gamepad2,
+    Gamepad,
+    Tv,
+    Glasses,
+    Square
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -61,6 +66,8 @@ interface Workstation {
     id: string
     name: string
     zone: string
+    assigned_user_id?: string | null
+    assigned_user_name?: string | null
     equipment_count?: number
 }
 
@@ -75,6 +82,10 @@ interface Equipment {
     workstation_id: string | null
     is_active: boolean
     cleaning_interval_days?: number
+    thermal_paste_last_changed_at?: string | null
+    thermal_paste_interval_days?: number | null
+    thermal_paste_type?: string | null
+    thermal_paste_note?: string | null
 }
 
 interface EquipmentType {
@@ -83,11 +94,17 @@ interface EquipmentType {
     icon: string
 }
 
+interface Employee {
+    id: string
+    full_name: string
+}
+
 export default function WorkplacesManager() {
     const { clubId } = useParams()
     const [workstations, setWorkstations] = useState<Workstation[]>([])
     const [equipment, setEquipment] = useState<Equipment[]>([])
     const [equipmentTypes, setEquipmentTypes] = useState<EquipmentType[]>([])
+    const [employees, setEmployees] = useState<Employee[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [isSaving, setIsSaving] = useState(false)
 
@@ -106,19 +123,27 @@ export default function WorkplacesManager() {
     const [detailsWorkstationId, setDetailsWorkstationId] = useState<string | null>(null)
     const [intervalDrafts, setIntervalDrafts] = useState<Record<string, string>>({})
     const [savingIntervalId, setSavingIntervalId] = useState<string | null>(null)
+    const [thermalPasteDateDrafts, setThermalPasteDateDrafts] = useState<Record<string, string>>({})
+    const [thermalPasteIntervalDrafts, setThermalPasteIntervalDrafts] = useState<Record<string, string>>({})
+    const [thermalPasteTypeDrafts, setThermalPasteTypeDrafts] = useState<Record<string, string>>({})
+    const [thermalPasteNoteDrafts, setThermalPasteNoteDrafts] = useState<Record<string, string>>({})
+    const [savingThermalId, setSavingThermalId] = useState<string | null>(null)
+    const [isAssigningWorkstationId, setIsAssigningWorkstationId] = useState<string | null>(null)
 
     const fetchData = useCallback(async () => {
         setIsLoading(true)
         try {
-            const [wsRes, eqRes, typesRes] = await Promise.all([
+            const [wsRes, eqRes, typesRes, empRes] = await Promise.all([
                 fetch(`/api/clubs/${clubId}/workstations`),
                 fetch(`/api/clubs/${clubId}/equipment`),
-                fetch(`/api/equipment-types`)
+                fetch(`/api/equipment-types`),
+                fetch(`/api/clubs/${clubId}/employees`)
             ])
 
             const wsData = await wsRes.json()
             const eqData = await eqRes.json()
             const typesData = await typesRes.json()
+            const empData = await empRes.json()
 
             if (wsRes.ok && eqRes.ok) {
                 const allEquipment = eqData.equipment || []
@@ -132,6 +157,9 @@ export default function WorkplacesManager() {
             }
             if (typesRes.ok) {
                 setEquipmentTypes(typesData)
+            }
+            if (empRes.ok) {
+                setEmployees(empData.employees || [])
             }
         } catch (error) {
             console.error("Error fetching workplaces:", error)
@@ -253,12 +281,28 @@ export default function WorkplacesManager() {
     const handleOpenDetails = (wsId: string) => {
         setDetailsWorkstationId(wsId)
         const drafts: Record<string, string> = {}
+        const dateDrafts: Record<string, string> = {}
+        const intervalDraftsMap: Record<string, string> = {}
+        const typeDrafts: Record<string, string> = {}
+        const noteDrafts: Record<string, string> = {}
+
         equipment
             .filter(item => item.workstation_id === wsId)
             .forEach(item => {
                 drafts[item.id] = String(item.cleaning_interval_days ?? 30)
+                const dateValue = item.thermal_paste_last_changed_at
+                    ? new Date(item.thermal_paste_last_changed_at).toISOString().split('T')[0]
+                    : ""
+                dateDrafts[item.id] = dateValue
+                intervalDraftsMap[item.id] = String(item.thermal_paste_interval_days ?? 365)
+                typeDrafts[item.id] = item.thermal_paste_type ?? ""
+                noteDrafts[item.id] = item.thermal_paste_note ?? ""
             })
         setIntervalDrafts(drafts)
+        setThermalPasteDateDrafts(dateDrafts)
+        setThermalPasteIntervalDrafts(intervalDraftsMap)
+        setThermalPasteTypeDrafts(typeDrafts)
+        setThermalPasteNoteDrafts(noteDrafts)
         setIsDetailsOpen(true)
     }
 
@@ -288,6 +332,53 @@ export default function WorkplacesManager() {
         }
     }
 
+    const handleThermalSave = async (equipmentId: string) => {
+        const intervalRaw = thermalPasteIntervalDrafts[equipmentId]
+        const intervalValue = intervalRaw ? parseInt(intervalRaw, 10) : null
+        if (intervalValue !== null && intervalValue < 1) return
+
+        setSavingThermalId(equipmentId)
+        try {
+            const res = await fetch(`/api/clubs/${clubId}/equipment/${equipmentId}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    thermal_paste_last_changed_at: thermalPasteDateDrafts[equipmentId] || null,
+                    thermal_paste_interval_days: intervalValue,
+                    thermal_paste_type: thermalPasteTypeDrafts[equipmentId] || null,
+                    thermal_paste_note: thermalPasteNoteDrafts[equipmentId] || null
+                })
+            })
+            if (res.ok) {
+                fetchData()
+            }
+        } catch (error) {
+            console.error("Error updating thermal paste:", error)
+        } finally {
+            setSavingThermalId(null)
+        }
+    }
+
+    const handleAssignWorkstation = async (userId: string | null) => {
+        if (!detailsWorkstationId) return
+
+        setIsAssigningWorkstationId(detailsWorkstationId)
+        try {
+            const res = await fetch(`/api/clubs/${clubId}/workstations/${detailsWorkstationId}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ assigned_user_id: userId })
+            })
+            if (res.ok) {
+                fetchData()
+            }
+        } catch (error) {
+            console.error("Error assigning workstation:", error)
+        } finally {
+            setIsAssigningWorkstationId(null)
+        }
+    }
+
     // Filter available equipment for assignment (items on storage or unassigned)
     const availableEquipment = useMemo(() => {
         return equipment.filter(item => 
@@ -307,13 +398,37 @@ export default function WorkplacesManager() {
         return equipment.filter(item => item.workstation_id === detailsWorkstationId)
     }, [equipment, detailsWorkstationId])
 
-    const pcEquipment = useMemo(() => {
-        return activeEquipment.filter(item => item.type === "PC")
+    const primaryEquipment = useMemo(() => {
+        const priority = ["PC", "CONSOLE", "TV"]
+        for (const type of priority) {
+            const found = activeEquipment.find(item => item.type === type)
+            if (found) return found
+        }
+        return activeEquipment[0] || null
     }, [activeEquipment])
 
+    const primaryLabel = useMemo(() => {
+        if (!primaryEquipment) return "Основное устройство"
+        if (primaryEquipment.type === "CONSOLE") return "Основная консоль"
+        if (primaryEquipment.type === "TV") return "Основной дисплей"
+        return "Основной ПК"
+    }, [primaryEquipment])
+
+    const primaryDescription = useMemo(() => {
+        if (!primaryEquipment) return "Регулярность чистки"
+        if (primaryEquipment.type === "CONSOLE") return "Регулярность чистки консоли"
+        if (primaryEquipment.type === "TV") return "Регулярность чистки дисплея"
+        return "Регулярность чистки рабочего места"
+    }, [primaryEquipment])
+
+    const thermalEligible = useMemo(() => {
+        return primaryEquipment ? ["PC", "CONSOLE"].includes(primaryEquipment.type) : false
+    }, [primaryEquipment])
+
     const peripheralEquipment = useMemo(() => {
-        return activeEquipment.filter(item => item.type !== "PC")
-    }, [activeEquipment])
+        if (!primaryEquipment) return activeEquipment
+        return activeEquipment.filter(item => item.id !== primaryEquipment.id)
+    }, [activeEquipment, primaryEquipment])
 
     // Helper to get icon for equipment type
     const getEquipmentIcon = (type: string) => {
@@ -322,6 +437,11 @@ export default function WorkplacesManager() {
             case 'MOUSE': return <MousePointer2 className="h-4 w-4" />
             case 'KEYBOARD': return <Keyboard className="h-4 w-4" />
             case 'HEADSET': return <Headphones className="h-4 w-4" />
+            case 'CONSOLE': return <Gamepad2 className="h-4 w-4" />
+            case 'GAMEPAD': return <Gamepad className="h-4 w-4" />
+            case 'TV': return <Tv className="h-4 w-4" />
+            case 'VR_HEADSET': return <Glasses className="h-4 w-4" />
+            case 'MOUSEPAD': return <Square className="h-4 w-4" />
             default: return <Wrench className="h-4 w-4" />
         }
     }
@@ -486,49 +606,130 @@ export default function WorkplacesManager() {
                         </DialogDescription>
                     </DialogHeader>
 
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                        <Label className="text-xs text-muted-foreground">Ответственный</Label>
+                        <Select
+                            value={activeWorkstation?.assigned_user_id || "none"}
+                            onValueChange={(val) => handleAssignWorkstation(val === "none" ? null : val)}
+                            disabled={isAssigningWorkstationId === detailsWorkstationId}
+                        >
+                            <SelectTrigger className="w-full sm:w-[260px]">
+                                <SelectValue placeholder="Свободный пул" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="none">Свободный пул</SelectItem>
+                                {employees.map(emp => (
+                                    <SelectItem key={emp.id} value={emp.id}>{emp.full_name}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pt-2">
-                        <Card className="border-slate-200">
-                            <CardHeader className="pb-2">
-                                <CardTitle className="text-base">Основной ПК</CardTitle>
-                                <CardDescription>Регулярность чистки рабочего места</CardDescription>
-                            </CardHeader>
-                            <CardContent className="space-y-3">
-                                {pcEquipment.length === 0 ? (
-                                    <div className="text-sm text-muted-foreground">ПК не назначен</div>
-                                ) : (
-                                    pcEquipment.map(item => (
-                                        <div key={item.id} className="flex items-center justify-between gap-3 rounded-lg border border-slate-100 bg-slate-50 p-3">
+                        <div className="space-y-4">
+                            <Card className="border-slate-200">
+                                <CardHeader className="pb-2">
+                                    <CardTitle className="text-base">{primaryLabel}</CardTitle>
+                                    <CardDescription>{primaryDescription}</CardDescription>
+                                </CardHeader>
+                                <CardContent className="space-y-3">
+                                    {!primaryEquipment ? (
+                                        <div className="text-sm text-muted-foreground">Основное устройство не назначено</div>
+                                    ) : (
+                                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 rounded-lg border border-slate-100 bg-slate-50 p-4">
                                             <div className="flex items-center gap-3 min-w-0">
                                                 <div className="h-9 w-9 rounded-lg bg-white border flex items-center justify-center text-slate-500 shrink-0">
-                                                    {getEquipmentIcon(item.type)}
+                                                    {getEquipmentIcon(primaryEquipment.type)}
                                                 </div>
                                                 <div className="min-w-0">
-                                                    <p className="text-sm font-semibold truncate">{item.name}</p>
-                                                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{item.type_name || item.type}</p>
+                                                    <p className="text-sm font-semibold truncate">{primaryEquipment.name}</p>
+                                                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{primaryEquipment.type_name || primaryEquipment.type}</p>
                                                 </div>
                                             </div>
-                                            <div className="flex items-center gap-2">
+                                            <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
                                                 <Input
                                                     type="number"
                                                     min={1}
-                                                    className="w-24 h-8 text-xs"
-                                                    value={intervalDrafts[item.id] ?? String(item.cleaning_interval_days ?? 30)}
-                                                    onChange={(e) => handleIntervalChange(item.id, e.target.value)}
+                                                    className="w-full sm:w-24 h-8 text-xs"
+                                                    value={intervalDrafts[primaryEquipment.id] ?? String(primaryEquipment.cleaning_interval_days ?? 30)}
+                                                    onChange={(e) => handleIntervalChange(primaryEquipment.id, e.target.value)}
                                                 />
                                                 <Button
                                                     size="sm"
-                                                    className="h-8"
-                                                    disabled={savingIntervalId === item.id}
-                                                    onClick={() => handleSaveInterval(item.id)}
+                                                    className="h-8 w-full sm:w-auto"
+                                                    disabled={savingIntervalId === primaryEquipment.id}
+                                                    onClick={() => handleSaveInterval(primaryEquipment.id)}
                                                 >
-                                                    {savingIntervalId === item.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Сохранить"}
+                                                    {savingIntervalId === primaryEquipment.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Сохранить"}
                                                 </Button>
                                             </div>
                                         </div>
-                                    ))
-                                )}
-                            </CardContent>
-                        </Card>
+                                    )}
+                                </CardContent>
+                            </Card>
+
+                            <Card className="border-slate-200">
+                                <CardHeader className="pb-2">
+                                    <CardTitle className="text-base">Термопаста</CardTitle>
+                                    <CardDescription>Данные по замене и обслуживанию</CardDescription>
+                                </CardHeader>
+                                <CardContent className="space-y-3">
+                                    {!primaryEquipment ? (
+                                        <div className="text-sm text-muted-foreground">Основное устройство не назначено</div>
+                                    ) : !thermalEligible ? (
+                                        <div className="text-sm text-muted-foreground">Доступно для ПК и консолей</div>
+                                    ) : (
+                                        <div className="space-y-3">
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                                <div className="space-y-1">
+                                                    <Label className="text-xs text-muted-foreground">Дата замены</Label>
+                                                    <Input
+                                                        type="date"
+                                                        value={thermalPasteDateDrafts[primaryEquipment.id] ?? ""}
+                                                        onChange={(e) => setThermalPasteDateDrafts(prev => ({ ...prev, [primaryEquipment.id]: e.target.value }))}
+                                                    />
+                                                </div>
+                                                <div className="space-y-1">
+                                                    <Label className="text-xs text-muted-foreground">Интервал (дней)</Label>
+                                                    <Input
+                                                        type="number"
+                                                        min={1}
+                                                        value={thermalPasteIntervalDrafts[primaryEquipment.id] ?? ""}
+                                                        onChange={(e) => setThermalPasteIntervalDrafts(prev => ({ ...prev, [primaryEquipment.id]: e.target.value }))}
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                                <div className="space-y-1">
+                                                    <Label className="text-xs text-muted-foreground">Тип пасты</Label>
+                                                    <Input
+                                                        placeholder="Arctic MX-4"
+                                                        value={thermalPasteTypeDrafts[primaryEquipment.id] ?? ""}
+                                                        onChange={(e) => setThermalPasteTypeDrafts(prev => ({ ...prev, [primaryEquipment.id]: e.target.value }))}
+                                                    />
+                                                </div>
+                                                <div className="space-y-1">
+                                                    <Label className="text-xs text-muted-foreground">Заметка</Label>
+                                                    <Input
+                                                        placeholder="Например, жидкий металл"
+                                                        value={thermalPasteNoteDrafts[primaryEquipment.id] ?? ""}
+                                                        onChange={(e) => setThermalPasteNoteDrafts(prev => ({ ...prev, [primaryEquipment.id]: e.target.value }))}
+                                                    />
+                                                </div>
+                                            </div>
+                                            <Button
+                                                size="sm"
+                                                className="h-8"
+                                                disabled={savingThermalId === primaryEquipment.id}
+                                                onClick={() => handleThermalSave(primaryEquipment.id)}
+                                            >
+                                                {savingThermalId === primaryEquipment.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Сохранить данные"}
+                                            </Button>
+                                        </div>
+                                    )}
+                                </CardContent>
+                            </Card>
+                        </div>
 
                         <Card className="border-slate-200 lg:col-span-2">
                             <CardHeader className="pb-2">

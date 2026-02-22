@@ -9,7 +9,7 @@ export async function PATCH(
     try {
         const userId = (await cookies()).get('session_user_id')?.value;
         const { clubId, workstationId } = await params;
-        const { name, zone } = await request.json();
+        const body = await request.json();
 
         if (!userId) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -25,13 +25,40 @@ export async function PATCH(
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
+        const updates: string[] = [];
+        const values: any[] = [];
+        let paramIndex = 1;
+
+        if (body.name !== undefined) {
+            updates.push(`name = $${paramIndex}`);
+            values.push(body.name);
+            paramIndex++;
+        }
+
+        if (body.zone !== undefined) {
+            updates.push(`zone = $${paramIndex}`);
+            values.push(body.zone);
+            paramIndex++;
+        }
+
+        if (body.assigned_user_id !== undefined) {
+            updates.push(`assigned_user_id = $${paramIndex}`);
+            values.push(body.assigned_user_id === '' ? null : body.assigned_user_id);
+            paramIndex++;
+        }
+
+        if (updates.length === 0) {
+            return NextResponse.json({ error: 'No fields to update' }, { status: 400 });
+        }
+
+        values.push(workstationId, clubId);
+
         const result = await query(
             `UPDATE club_workstations 
-             SET name = COALESCE($1, name), 
-                 zone = COALESCE($2, zone)
-             WHERE id = $3 AND club_id = $4
+             SET ${updates.join(', ')}
+             WHERE id = $${paramIndex} AND club_id = $${paramIndex + 1}
              RETURNING *`,
-            [name, zone, workstationId, clubId]
+            values
         );
 
         if (result.rowCount === 0) {

@@ -27,7 +27,11 @@ export async function GET(
         }
 
         const result = await query(
-            `SELECT * FROM club_workstations WHERE club_id = $1 ORDER BY zone, name`,
+            `SELECT w.*, u.full_name as assigned_user_name
+             FROM club_workstations w
+             LEFT JOIN users u ON w.assigned_user_id = u.id
+             WHERE w.club_id = $1
+             ORDER BY w.zone, w.name`,
             [clubId]
         );
 

@@ -42,6 +42,7 @@ export async function PATCH(
         }
 
         const { status, assigned_user_id, notes, claim } = body;
+        const task = taskCheck.rows[0];
 
         const updates: string[] = [];
         const values: any[] = [];
@@ -69,7 +70,6 @@ export async function PATCH(
                     updates.push(`completed_at = CURRENT_TIMESTAMP`);
 
                     // Also update equipment's last_cleaned_at if this is a cleaning task
-                    const task = taskCheck.rows[0];
                     if (task.task_type === 'CLEANING') {
                         await query(
                             `UPDATE equipment SET last_cleaned_at = CURRENT_TIMESTAMP WHERE id = $1`,
@@ -83,8 +83,8 @@ export async function PATCH(
                         [clubId]
                     );
 
-                    if (kpiConfig.rows[0]?.enabled) {
-                        const config = kpiConfig.rows[0];
+                    const config = kpiConfig.rows[0];
+                    if (config?.enabled) {
                         const dueDate = new Date(task.due_date);
                         const today = new Date();
                         today.setHours(0, 0, 0, 0);
@@ -100,6 +100,37 @@ export async function PATCH(
                         updates.push(`bonus_earned = $${paramIndex}`);
                         values.push(bonus);
                         paramIndex++;
+                    }
+
+                    if (config?.enabled && task.assigned_user_id) {
+                        const dueDate = new Date(task.due_date);
+                        const year = dueDate.getFullYear();
+                        const month = dueDate.getMonth() + 1;
+                        const monthStr = month.toString().padStart(2, '0');
+                        const monthStart = `${year}-${monthStr}-01`;
+                        const monthEnd = new Date(year, month, 0).toISOString().split('T')[0];
+
+                        const remaining = await query(
+                            `SELECT 1 FROM equipment_maintenance_tasks mt
+                             JOIN equipment e ON mt.equipment_id = e.id
+                             WHERE e.club_id = $1 AND mt.assigned_user_id = $2
+                               AND mt.status != 'COMPLETED'
+                               AND mt.due_date >= $3 AND mt.due_date <= $4
+                             LIMIT 1`,
+                            [clubId, task.assigned_user_id, monthStart, monthEnd]
+                        );
+
+                        if ((remaining.rowCount || 0) === 0) {
+                            const monthlyBonus = parseFloat(config.bonus_per_point) * (config.points_per_cleaning || 1);
+                            if (monthlyBonus > 0) {
+                                await query(
+                                    `INSERT INTO maintenance_monthly_bonuses (club_id, user_id, year, month, bonus_amount)
+                                     VALUES ($1, $2, $3, $4, $5)
+                                     ON CONFLICT (club_id, user_id, year, month) DO NOTHING`,
+                                    [clubId, task.assigned_user_id, year, month, monthlyBonus]
+                                );
+                            }
+                        }
                     }
                 }
             }

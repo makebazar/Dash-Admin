@@ -73,6 +73,23 @@ export default function MaintenanceSchedule() {
         'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'
     ], [])
 
+    const ensurePlan = useCallback(async (firstDay: string, lastDay: string) => {
+        setIsGenerating(true)
+        try {
+            await fetch(`/api/clubs/${clubId}/equipment/maintenance`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    date_from: firstDay,
+                    date_to: lastDay,
+                    task_type: 'CLEANING'
+                })
+            })
+        } finally {
+            setIsGenerating(false)
+        }
+    }, [clubId])
+
     const fetchData = useCallback(async () => {
         setIsLoading(true)
         try {
@@ -80,8 +97,10 @@ export default function MaintenanceSchedule() {
             const firstDay = new Date(selectedYear, selectedMonth - 1, 1).toISOString().split('T')[0]
             const lastDay = new Date(selectedYear, selectedMonth, 0).toISOString().split('T')[0]
 
+            await ensurePlan(firstDay, lastDay)
+
             const [tasksRes, empRes] = await Promise.all([
-                fetch(`/api/clubs/${clubId}/equipment/maintenance?date_from=${firstDay}&date_to=${lastDay}`),
+                fetch(`/api/clubs/${clubId}/equipment/maintenance?date_from=${firstDay}&date_to=${lastDay}&include_overdue=true`),
                 fetch(`/api/clubs/${clubId}/employees`)
             ])
 
@@ -95,35 +114,17 @@ export default function MaintenanceSchedule() {
         } finally {
             setIsLoading(false)
         }
-    }, [clubId, selectedMonth, selectedYear])
+    }, [clubId, selectedMonth, selectedYear, ensurePlan])
 
     useEffect(() => {
         fetchData()
     }, [fetchData])
 
     const handleGenerateTasks = async () => {
-        setIsGenerating(true)
         try {
-            const firstDay = new Date(selectedYear, selectedMonth - 1, 1).toISOString().split('T')[0]
-            const lastDay = new Date(selectedYear, selectedMonth, 0).toISOString().split('T')[0]
-
-            const res = await fetch(`/api/clubs/${clubId}/equipment/maintenance`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    date_from: firstDay,
-                    date_to: lastDay,
-                    task_type: 'CLEANING'
-                })
-            })
-
-            if (res.ok) {
-                fetchData()
-            }
+            fetchData()
         } catch (error) {
             console.error("Error generating tasks:", error)
-        } finally {
-            setIsGenerating(false)
         }
     }
 
@@ -239,7 +240,7 @@ export default function MaintenanceSchedule() {
                                     className="h-20 w-full rounded-2xl bg-white text-indigo-600 hover:bg-slate-50 font-black shadow-xl hover:scale-[1.02] transition-all"
                                 >
                                     {isGenerating ? <Loader2 className="mr-2 h-6 w-6 animate-spin" /> : <Plus className="mr-2 h-6 w-6" />}
-                                    Сформировать план на {monthNames[selectedMonth - 1]}
+                                    Пересчитать план на {monthNames[selectedMonth - 1]}
                                 </Button>
                             ) : (
                                 <>
@@ -300,12 +301,12 @@ export default function MaintenanceSchedule() {
                                                 <Calendar className="h-10 w-10 text-slate-300" />
                                             </div>
                                             <div className="space-y-1">
-                                                <p className="text-lg font-bold">План не сформирован</p>
-                                                <p className="text-sm text-muted-foreground leading-relaxed">Система проанализирует интервалы чистки каждого девайса и подготовит список задач.</p>
+                                                <p className="text-lg font-bold">Нет задач на период</p>
+                                                <p className="text-sm text-muted-foreground leading-relaxed">Система не нашла устройств, требующих чистки в выбранном периоде.</p>
                                             </div>
-                                            <Button onClick={handleGenerateTasks} variant="secondary" className="mt-2">
-                                                Подготовить план задач
-                                            </Button>
+                                                <Button onClick={handleGenerateTasks} variant="secondary" className="mt-2">
+                                                    Пересчитать план
+                                                </Button>
                                         </div>
                                     </TableCell>
                                 </TableRow>

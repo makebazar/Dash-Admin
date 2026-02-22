@@ -244,7 +244,15 @@ export async function GET(
             );
             const totalMaintenanceBonus = parseFloat(maintenanceRes.rows[0]?.total_maintenance_bonus || 0);
 
-            monthlyMetrics['maintenance_bonus'] = totalMaintenanceBonus;
+            const monthBonusRes = await query(
+                `SELECT COALESCE(SUM(bonus_amount), 0) as total_monthly_bonus
+                 FROM maintenance_monthly_bonuses
+                 WHERE club_id = $1 AND user_id = $2 AND year = $3 AND month = $4`,
+                [clubId, emp.id, startOfMonth.getFullYear(), startOfMonth.getMonth() + 1]
+            );
+            const totalMonthlyBonus = parseFloat(monthBonusRes.rows[0]?.total_monthly_bonus || 0);
+
+            monthlyMetrics['maintenance_bonus'] = totalMaintenanceBonus + totalMonthlyBonus;
 
             const shifts_count = finishedShifts.length;
             const planned_shifts = empPlannedShifts?.planned_shifts || 20;
