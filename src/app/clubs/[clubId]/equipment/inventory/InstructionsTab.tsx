@@ -1,8 +1,7 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useParams } from "next/navigation"
-import dynamic from "next/dynamic"
 import {
     Loader2,
     Save,
@@ -24,14 +23,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
-import { Label } from "@/components/ui/label"
-import 'react-quill/dist/quill.snow.css';
-
-// Dynamic import for ReactQuill to avoid SSR issues
-const ReactQuill = dynamic(() => import("react-quill"), { 
-    ssr: false,
-    loading: () => <div className="h-64 w-full bg-slate-50 animate-pulse rounded-md" />
-})
+import 'quill/dist/quill.snow.css';
 
 interface EquipmentType {
     code: string
@@ -53,6 +45,9 @@ export function InstructionsTab() {
     const [isLoading, setIsLoading] = useState(true)
     const [isSaving, setIsSaving] = useState(false)
     const [content, setContent] = useState("")
+    const editorRef = useRef<HTMLDivElement | null>(null)
+    const quillRef = useRef<any>(null)
+    const isSyncingRef = useRef(false)
 
     useEffect(() => {
         fetchData()
@@ -121,22 +116,56 @@ export function InstructionsTab() {
         }
     }
 
-    const modules = {
-        toolbar: [
-            [{ 'header': [1, 2, false] }],
-            ['bold', 'italic', 'underline', 'strike', 'blockquote'],
-            [{'list': 'ordered'}, {'list': 'bullet'}, {'indent': '-1'}, {'indent': '+1'}],
-            ['link', 'image'],
-            ['clean']
-        ],
-    }
+    useEffect(() => {
+        let isMounted = true
 
-    const formats = [
-        'header',
-        'bold', 'italic', 'underline', 'strike', 'blockquote',
-        'list', 'bullet', 'indent',
-        'link', 'image'
-    ]
+        const setupEditor = async () => {
+            if (!editorRef.current || quillRef.current) return
+            const Quill = (await import("quill")).default
+
+            if (!editorRef.current) return
+
+            const quill = new Quill(editorRef.current, {
+                theme: "snow",
+                modules: {
+                    toolbar: [
+                        [{ header: [1, 2, false] }],
+                        ["bold", "italic", "underline", "strike", "blockquote"],
+                        [{ list: "ordered" }, { list: "bullet" }, { indent: "-1" }, { indent: "+1" }],
+                        ["link", "image"],
+                        ["clean"]
+                    ]
+                }
+            })
+
+            quill.on("text-change", () => {
+                if (isSyncingRef.current) return
+                setContent(quill.root.innerHTML)
+            })
+
+            quillRef.current = quill
+
+            if (isMounted && content) {
+                isSyncingRef.current = true
+                quill.root.innerHTML = content
+                isSyncingRef.current = false
+            }
+        }
+
+        setupEditor()
+
+        return () => {
+            isMounted = false
+        }
+    }, [content])
+
+    useEffect(() => {
+        if (!quillRef.current) return
+        if (quillRef.current.root.innerHTML === content) return
+        isSyncingRef.current = true
+        quillRef.current.root.innerHTML = content
+        isSyncingRef.current = false
+    }, [content])
 
     if (isLoading) {
         return <div className="flex justify-center p-8"><Loader2 className="h-8 w-8 animate-spin text-slate-400" /></div>
@@ -184,12 +213,8 @@ export function InstructionsTab() {
                 </CardHeader>
                 <CardContent>
                     <div className="h-[600px] flex flex-col bg-slate-50 rounded-md border">
-                        <ReactQuill 
-                            theme="snow"
-                            value={content}
-                            onChange={setContent}
-                            modules={modules}
-                            formats={formats}
+                        <div
+                            ref={editorRef}
                             className="flex-1 flex flex-col h-full [&_.ql-toolbar]:border-t-0 [&_.ql-toolbar]:border-x-0 [&_.ql-toolbar]:bg-white [&_.ql-toolbar]:rounded-t-md [&_.ql-container]:border-x-0 [&_.ql-container]:border-b-0"
                         />
                     </div>

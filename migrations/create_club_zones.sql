@@ -13,11 +13,12 @@ CREATE INDEX IF NOT EXISTS idx_club_zones_club_id ON club_zones(club_id);
 
 -- Migrate existing zones from club_workstations
 INSERT INTO club_zones (club_id, name, assigned_user_id)
-SELECT DISTINCT 
-    w.club_id, 
-    w.zone, 
-    w.assigned_user_id 
+SELECT DISTINCT ON (w.club_id, w.zone)
+    w.club_id,
+    w.zone,
+    w.assigned_user_id
 FROM club_workstations w
-WHERE w.zone IS NOT NULL 
-ON CONFLICT (club_id, name) DO UPDATE 
+WHERE w.zone IS NOT NULL
+ORDER BY w.club_id, w.zone, (w.assigned_user_id IS NULL), w.assigned_user_id
+ON CONFLICT (club_id, name) DO UPDATE
 SET assigned_user_id = EXCLUDED.assigned_user_id;
