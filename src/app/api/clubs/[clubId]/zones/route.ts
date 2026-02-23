@@ -26,6 +26,22 @@ export async function GET(
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
+        // Auto-create missing zones from workstations to ensure they appear in the list
+        await query(
+            `INSERT INTO club_zones (club_id, name)
+             SELECT DISTINCT w.club_id, w.zone
+             FROM club_workstations w
+             WHERE w.club_id = $1
+             AND w.zone IS NOT NULL
+             AND w.zone != ''
+             AND NOT EXISTS (
+                 SELECT 1 FROM club_zones z 
+                 WHERE z.club_id = w.club_id 
+                 AND z.name = w.zone
+             )`,
+            [clubId]
+        );
+
         const result = await query(
             `SELECT 
                 z.id,
