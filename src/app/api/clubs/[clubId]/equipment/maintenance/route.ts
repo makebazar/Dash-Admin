@@ -67,7 +67,7 @@ export async function GET(
             LEFT JOIN users u ON mt.assigned_user_id = u.id
             LEFT JOIN users eu ON e.assigned_user_id = eu.id
             LEFT JOIN users cu ON mt.completed_by = cu.id
-            WHERE e.club_id = $1
+            WHERE e.club_id = $1 AND e.maintenance_enabled = TRUE
         `;
         const queryParams: any[] = [clubId];
         let paramIndex = 2;

@@ -85,6 +85,7 @@ interface Equipment {
     model: string | null
     workstation_id: string | null
     is_active: boolean
+    maintenance_enabled: boolean
     cleaning_interval_days?: number
     last_cleaned_at?: string | null
     thermal_paste_last_changed_at?: string | null
@@ -290,6 +291,21 @@ export default function WorkplacesPage() {
             }
         } catch (error) {
             console.error("Error unassigning equipment:", error)
+        }
+    }
+
+    const handleToggleMaintenance = async (equipmentId: string, enabled: boolean) => {
+        try {
+            const res = await fetch(`/api/clubs/${clubId}/equipment/${equipmentId}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ maintenance_enabled: enabled })
+            })
+            if (res.ok) {
+                fetchData() // Refresh
+            }
+        } catch (error) {
+            console.error("Error toggling maintenance:", error)
         }
     }
 
@@ -710,6 +726,16 @@ export default function WorkplacesPage() {
                                                         <Badge variant="outline" className="text-[10px] h-5 px-1 bg-white text-slate-500 border-slate-200 font-normal">{primaryEquipment.type_name || primaryEquipment.type}</Badge>
                                                     </div>
                                                 </div>
+                                                <div className="flex items-center gap-2">
+                                                    <Label htmlFor={`maintenance-${primaryEquipment.id}`} className="text-xs text-muted-foreground cursor-pointer">Обслуживание</Label>
+                                                    <input
+                                                        type="checkbox"
+                                                        id={`maintenance-${primaryEquipment.id}`}
+                                                        className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                                                        checked={primaryEquipment.maintenance_enabled !== false}
+                                                        onChange={(e) => handleToggleMaintenance(primaryEquipment.id, e.target.checked)}
+                                                    />
+                                                </div>
                                             </div>
                                             
                                             <div className="grid grid-cols-2 gap-3 items-end">
@@ -832,6 +858,14 @@ export default function WorkplacesPage() {
                                                         <Badge variant="secondary" className="text-[10px] h-5 px-1.5 font-normal bg-slate-100 text-slate-600 hover:bg-slate-200">{item.type_name || item.type}</Badge>
                                                         <span className="text-[10px] text-muted-foreground truncate">{item.brand} {item.model}</span>
                                                     </div>
+                                                </div>
+                                                <div className="flex items-center gap-2 ml-4">
+                                                    <input
+                                                        type="checkbox"
+                                                        className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                                                        checked={item.maintenance_enabled !== false}
+                                                        onChange={(e) => handleToggleMaintenance(item.id, e.target.checked)}
+                                                    />
                                                 </div>
                                             </div>
                                             <div className="flex items-center gap-3 flex-shrink-0 w-full sm:w-auto">
