@@ -158,9 +158,9 @@ export default function EquipmentInventory() {
         setIsLoading(true)
         try {
             const [eqRes, typeRes, wsRes] = await Promise.all([
-                fetch(`/api/clubs/${clubId}/equipment?include_inactive=true`),
-                fetch(`/api/equipment-types`),
-                fetch(`/api/clubs/${clubId}/workstations`)
+                fetch(`/api/clubs/${clubId}/equipment?include_inactive=true`, { cache: 'no-store' }),
+                fetch(`/api/equipment-types`, { cache: 'no-store' }),
+                fetch(`/api/clubs/${clubId}/workstations`, { cache: 'no-store' })
             ])
 
             const eqData = await eqRes.json()
