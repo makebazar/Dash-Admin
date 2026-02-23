@@ -334,7 +334,7 @@ export default function IssuesBoard() {
                                 </div>
                                 <h2 className="text-xl font-bold">{selectedIssue.title}</h2>
                                 <p className="text-sm text-muted-foreground mt-1">
-                                    {selectedIssue.equipment_name} — {selectedIssue.workstation_name || "Свободный пул"}
+                                    {selectedIssue.equipment_name} — {selectedIssue.workstation_name || "Не назначено"}
                                 </p>
                             </div>
 

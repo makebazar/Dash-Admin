@@ -393,8 +393,8 @@ export default function MaintenanceSchedule() {
                                                         </div>
                                                     ) : (
                                                         <Select
-                                                            value={task.assigned_user_id || "none"}
-                                                            onValueChange={(val) => handleAssign(task.id, val)}
+                                                            value={task.assigned_user_id || "unassigned"}
+                                                            onValueChange={(val) => handleAssign(task.id, val === "unassigned" ? "none" : val)}
                                                         >
                                                             <SelectTrigger className="h-8 text-xs bg-white border-dashed w-[160px]">
                                                                 <div className="flex items-center gap-2">
@@ -403,7 +403,7 @@ export default function MaintenanceSchedule() {
                                                                 </div>
                                                             </SelectTrigger>
                                                             <SelectContent>
-                                                                <SelectItem value="none">👥 Свободный пул</SelectItem>
+                                                                <SelectItem value="unassigned">⛔ Не назначено</SelectItem>
                                                                 {employees.map(emp => (
                                                                     <SelectItem key={emp.id} value={emp.id}>{emp.full_name}</SelectItem>
                                                                 ))}

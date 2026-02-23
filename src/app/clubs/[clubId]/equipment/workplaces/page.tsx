@@ -559,10 +559,10 @@ export default function WorkplacesPage() {
                                                         <h4 className="font-bold text-slate-900 leading-tight">{ws.name}</h4>
                                                         <div className="flex flex-col gap-0.5 mt-0.5">
                                                             <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">{wsEquipment.length} устройств</p>
-                                                            <div className="flex items-center gap-1.5" title={ws.assigned_user_name || "Свободный пул"}>
+                                                            <div className="flex items-center gap-1.5" title={ws.assigned_user_name || "Не назначено"}>
                                                                 <User className={cn("h-3 w-3", ws.assigned_user_name ? "text-primary" : "text-slate-400")} />
                                                                 <span className={cn("text-[10px] font-medium truncate max-w-[100px]", ws.assigned_user_name ? "text-primary" : "text-slate-400")}>
-                                                                    {ws.assigned_user_name || "Свободный пул"}
+                                                                    {ws.assigned_user_name || "Не назначено"}
                                                                 </span>
                                                             </div>
                                                         </div>
@@ -677,10 +677,10 @@ export default function WorkplacesPage() {
                             disabled={isAssigningWorkstationId === detailsWorkstationId}
                         >
                             <SelectTrigger className="w-full sm:w-[260px]">
-                                <SelectValue placeholder="Свободный пул" />
+                                <SelectValue placeholder="Не назначено" />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="none">Свободный пул</SelectItem>
+                                <SelectItem value="none">Не назначено</SelectItem>
                                 {employees.map(emp => (
                                     <SelectItem key={emp.id} value={emp.id}>{emp.full_name}</SelectItem>
                                 ))}
