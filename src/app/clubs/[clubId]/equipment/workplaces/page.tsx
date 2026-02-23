@@ -26,7 +26,8 @@ import {
     Tv,
     Glasses,
     Square,
-    User
+    User,
+    Sofa
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -475,6 +476,7 @@ export default function WorkplacesPage() {
             case 'TV': return <Tv className="h-4 w-4" />
             case 'VR_HEADSET': return <Glasses className="h-4 w-4" />
             case 'MOUSEPAD': return <Square className="h-4 w-4" />
+            case 'CHAIR': return <Sofa className="h-4 w-4" />
             default: return <Wrench className="h-4 w-4" />
         }
     }

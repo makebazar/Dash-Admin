@@ -29,7 +29,16 @@ import {
     FileText,
     Download,
     RefreshCw,
-    Box
+    Box,
+    MousePointer2,
+    Keyboard,
+    Headphones,
+    Gamepad2,
+    Gamepad,
+    Tv,
+    Glasses,
+    Square,
+    Sofa
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -292,6 +301,22 @@ export default function EquipmentInventory() {
         return <Badge variant="outline" className="text-amber-600 border-amber-200 bg-amber-50">На складе</Badge>
     }
 
+    const getEquipmentIcon = (type: string) => {
+        switch(type) {
+            case 'PC': return <Monitor className="h-5 w-5" />
+            case 'MOUSE': return <MousePointer2 className="h-5 w-5" />
+            case 'KEYBOARD': return <Keyboard className="h-5 w-5" />
+            case 'HEADSET': return <Headphones className="h-5 w-5" />
+            case 'CONSOLE': return <Gamepad2 className="h-5 w-5" />
+            case 'GAMEPAD': return <Gamepad className="h-5 w-5" />
+            case 'TV': return <Tv className="h-5 w-5" />
+            case 'VR_HEADSET': return <Glasses className="h-5 w-5" />
+            case 'MOUSEPAD': return <Square className="h-5 w-5" />
+            case 'CHAIR': return <Sofa className="h-5 w-5" />
+            default: return <Wrench className="h-5 w-5" />
+        }
+    }
+
     // --- Stats Calculation ---
     const stats = useMemo(() => {
         const total = equipment.length
@@ -525,7 +550,7 @@ export default function EquipmentInventory() {
                                         <TableCell>
                                             <div className="flex items-center gap-3">
                                                 <div className="h-10 w-10 bg-slate-100 rounded-lg flex items-center justify-center text-slate-500 group-hover:bg-white group-hover:shadow-sm transition-all border border-transparent group-hover:border-slate-200">
-                                                    <Monitor className="h-5 w-5" />
+                                                    {getEquipmentIcon(item.type)}
                                                 </div>
                                                 <div>
                                                     <p className="font-semibold text-sm">{item.name}</p>
