@@ -22,7 +22,6 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
-import 'quill/dist/quill.snow.css';
 
 interface EquipmentType {
     code: string
@@ -45,9 +44,6 @@ export function InstructionsTab() {
     const [isSaving, setIsSaving] = useState(false)
     const [content, setContent] = useState("")
     const editorRef = useRef<HTMLDivElement | null>(null)
-    const quillRef = useRef<any>(null)
-    const isSyncingRef = useRef(false)
-    const contentRef = useRef("")
 
     useEffect(() => {
         fetchData()
@@ -117,55 +113,9 @@ export function InstructionsTab() {
     }
 
     useEffect(() => {
-        let isMounted = true
-
-        const setupEditor = async () => {
-            if (!editorRef.current || quillRef.current) return
-            const Quill = (await import("quill")).default
-
-            if (!editorRef.current) return
-
-            const quill = new Quill(editorRef.current, {
-                theme: "snow",
-                modules: {
-                    toolbar: [
-                        [{ header: [1, 2, false] }],
-                        ["bold", "italic", "underline", "strike", "blockquote"],
-                        [{ list: "ordered" }, { list: "bullet" }, { indent: "-1" }, { indent: "+1" }],
-                        ["link", "image"],
-                        ["clean"]
-                    ]
-                }
-            })
-
-            quill.on("text-change", () => {
-                if (isSyncingRef.current) return
-                setContent(quill.root.innerHTML)
-            })
-
-            quillRef.current = quill
-
-            if (isMounted) {
-                isSyncingRef.current = true
-                quill.root.innerHTML = contentRef.current
-                isSyncingRef.current = false
-            }
-        }
-
-        setupEditor()
-
-        return () => {
-            isMounted = false
-        }
-    }, [])
-
-    useEffect(() => {
-        contentRef.current = content
-        if (!quillRef.current) return
-        if (quillRef.current.root.innerHTML === content) return
-        isSyncingRef.current = true
-        quillRef.current.root.innerHTML = content
-        isSyncingRef.current = false
+        if (!editorRef.current) return
+        if (editorRef.current.innerText === content) return
+        editorRef.current.innerText = content
     }, [content])
 
     if (isLoading) {
@@ -213,10 +163,16 @@ export function InstructionsTab() {
                     </Button>
                 </CardHeader>
                 <CardContent>
-                    <div className="h-[600px] flex flex-col bg-slate-50 rounded-md border">
+                    <div className="h-[600px] flex flex-col bg-slate-50 rounded-md border p-4">
                         <div
                             ref={editorRef}
-                            className="flex-1 flex flex-col h-full [&_.ql-toolbar]:border-t-0 [&_.ql-toolbar]:border-x-0 [&_.ql-toolbar]:bg-white [&_.ql-toolbar]:rounded-t-md [&_.ql-container]:border-x-0 [&_.ql-container]:border-b-0"
+                            className="flex-1 h-full outline-none whitespace-pre-wrap text-sm text-slate-800"
+                            contentEditable
+                            suppressContentEditableWarning
+                            onInput={(event) => {
+                                const value = (event.target as HTMLDivElement).innerText
+                                setContent(value)
+                            }}
                         />
                     </div>
                 </CardContent>
