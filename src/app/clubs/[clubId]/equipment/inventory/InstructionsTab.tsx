@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react"
 import { useParams } from "next/navigation"
+import * as ReactDOM from "react-dom"
 import dynamic from "next/dynamic"
 import {
     Loader2,
@@ -26,6 +27,11 @@ import {
 } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
 import 'react-quill/dist/quill.snow.css';
+
+const reactDomAny = ReactDOM as any
+if (reactDomAny?.default && !reactDomAny.default.findDOMNode && reactDomAny.findDOMNode) {
+    reactDomAny.default.findDOMNode = reactDomAny.findDOMNode
+}
 
 // Dynamic import for ReactQuill to avoid SSR issues
 const ReactQuill = dynamic(() => import("react-quill"), { 
