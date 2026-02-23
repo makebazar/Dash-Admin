@@ -76,11 +76,13 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
+import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
+import { InstructionsTab } from "./InstructionsTab"
 
 // --- Types ---
 
@@ -104,6 +106,7 @@ interface Equipment {
     cleaning_interval_days?: number
     is_active: boolean
     notes: string | null
+    maintenance_enabled?: boolean
     // Extended fields for prototype
     status?: EquipmentStatus
     purchase_date?: string
@@ -356,6 +359,14 @@ export default function EquipmentInventory() {
                     </div>
                 </div>
             </div>
+
+            <Tabs defaultValue="list" className="space-y-6">
+                <TabsList>
+                    <TabsTrigger value="list">Список оборудования</TabsTrigger>
+                    <TabsTrigger value="instructions">Инструкции</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="list" className="space-y-6">
 
             {/* Dashboard Stats (New) */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -635,6 +646,13 @@ export default function EquipmentInventory() {
                 </div>
             </Card>
 
+                </TabsContent>
+
+                <TabsContent value="instructions">
+                    <InstructionsTab />
+                </TabsContent>
+            </Tabs>
+
             {/* Create/Edit Dialog with Tabs */}
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                 <DialogContent className="sm:max-w-[700px] p-0 overflow-hidden max-h-[90vh] flex flex-col gap-0">
@@ -776,24 +794,38 @@ export default function EquipmentInventory() {
                                         </div>
                                     </div>
 
-                                    <div className="grid grid-cols-2 gap-6">
-                                        <div className="space-y-2">
-                                            <Label>Интервал чистки (дней)</Label>
-                                            <Input
-                                                type="number"
-                                                value={editingEquipment?.cleaning_interval_days || 30}
-                                                onChange={(e) => setEditingEquipment(prev => ({ ...prev, cleaning_interval_days: parseInt(e.target.value) }))}
-                                            />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <Label>Окончание гарантии</Label>
-                                            <Input
-                                                type="date"
-                                                value={editingEquipment?.warranty_expires ? editingEquipment.warranty_expires.split('T')[0] : ""}
-                                                onChange={(e) => setEditingEquipment(prev => ({ ...prev, warranty_expires: e.target.value }))}
-                                            />
-                                        </div>
+                                    <div className="flex items-center space-x-2 border p-4 rounded-lg bg-slate-50">
+                                        <Switch 
+                                            id="maintenance-mode" 
+                                            checked={editingEquipment?.maintenance_enabled ?? true}
+                                            onCheckedChange={(checked) => setEditingEquipment(prev => ({ ...prev, maintenance_enabled: checked }))}
+                                        />
+                                        <Label htmlFor="maintenance-mode" className="flex flex-col">
+                                            <span>Включить обслуживание</span>
+                                            <span className="font-normal text-xs text-muted-foreground">Если выключено, задачи по обслуживанию создаваться не будут</span>
+                                        </Label>
                                     </div>
+
+                                    {(editingEquipment?.maintenance_enabled ?? true) && (
+                                        <div className="grid grid-cols-2 gap-6 animate-in fade-in slide-in-from-top-2">
+                                            <div className="space-y-2">
+                                                <Label>Интервал чистки (дней)</Label>
+                                                <Input
+                                                    type="number"
+                                                    value={editingEquipment?.cleaning_interval_days || 30}
+                                                    onChange={(e) => setEditingEquipment(prev => ({ ...prev, cleaning_interval_days: parseInt(e.target.value) }))}
+                                                />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label>Окончание гарантии</Label>
+                                                <Input
+                                                    type="date"
+                                                    value={editingEquipment?.warranty_expires ? editingEquipment.warranty_expires.split('T')[0] : ""}
+                                                    onChange={(e) => setEditingEquipment(prev => ({ ...prev, warranty_expires: e.target.value }))}
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
 
                                     <div className="space-y-2">
                                         <Label>Последняя чистка</Label>

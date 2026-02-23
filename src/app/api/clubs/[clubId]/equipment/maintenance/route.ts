@@ -67,7 +67,7 @@ export async function GET(
             LEFT JOIN users u ON mt.assigned_user_id = u.id
             LEFT JOIN users eu ON e.assigned_user_id = eu.id
             LEFT JOIN users cu ON mt.completed_by = cu.id
-            WHERE e.club_id = $1 AND e.maintenance_enabled = TRUE
+            WHERE e.club_id = $1 AND (e.maintenance_enabled IS NULL OR e.maintenance_enabled = TRUE)
         `;
         const queryParams: any[] = [clubId];
         let paramIndex = 2;
@@ -227,7 +227,7 @@ export async function POST(
             FROM equipment e
             LEFT JOIN club_workstations w ON e.workstation_id = w.id
             LEFT JOIN club_zones z ON w.club_id = z.club_id AND w.zone = z.name
-            WHERE e.club_id = $1 AND e.is_active = TRUE
+            WHERE e.club_id = $1 AND e.is_active = TRUE AND (e.maintenance_enabled IS NULL OR e.maintenance_enabled = TRUE)
         `;
         const eqParams: any[] = [clubId];
 

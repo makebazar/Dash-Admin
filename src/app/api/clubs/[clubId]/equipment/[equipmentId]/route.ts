@@ -141,7 +141,7 @@ export async function PATCH(
             'purchase_date', 'warranty_expires', 'receipt_url',
             'cleaning_interval_days', 'last_cleaned_at', 'is_active', 'notes',
             'thermal_paste_last_changed_at', 'thermal_paste_interval_days',
-            'thermal_paste_type', 'thermal_paste_note'
+            'thermal_paste_type', 'thermal_paste_note', 'maintenance_enabled'
         ];
 
         for (const field of allowedFields) {

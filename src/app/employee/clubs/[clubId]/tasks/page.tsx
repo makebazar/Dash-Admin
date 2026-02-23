@@ -19,11 +19,13 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
+import { MaintenanceSessionWizard } from "../../../../../clubs/[clubId]/equipment/maintenance/MaintenanceSessionWizard"
 
 interface MaintenanceTask {
     id: string
     equipment_id: string
     equipment_name: string
+    equipment_type: string
     equipment_type_name: string
     workstation_name: string | null
     due_date: string
@@ -37,6 +39,10 @@ export default function EmployeeTasksPage() {
     const [freeTasks, setFreeTasks] = useState<MaintenanceTask[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [isUpdating, setIsUpdating] = useState<string | null>(null)
+    
+    // Session Wizard State
+    const [isSessionOpen, setIsSessionOpen] = useState(false)
+    const [sessionTasks, setSessionTasks] = useState<MaintenanceTask[]>([])
 
     const fetchData = useCallback(async () => {
         setIsLoading(true)
@@ -63,21 +69,33 @@ export default function EmployeeTasksPage() {
         fetchData()
     }, [fetchData])
 
+    const handleStartSession = (task: MaintenanceTask) => {
+        setSessionTasks([task])
+        setIsSessionOpen(true)
+    }
+
     const handleAction = async (taskId: string, action: 'START' | 'COMPLETE') => {
+        // If completing, open wizard directly (wizard handles completion logic)
+        if (action === 'COMPLETE') {
+            const task = tasks.find(t => t.id === taskId)
+            if (task) handleStartSession(task)
+            return
+        }
+
+        // If starting, mark as IN_PROGRESS then open wizard
         setIsUpdating(taskId)
         try {
-            const status = action === 'START' ? 'IN_PROGRESS' : 'COMPLETED'
             const res = await fetch(`/api/clubs/${clubId}/equipment/maintenance/${taskId}`, {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ status })
+                body: JSON.stringify({ status: 'IN_PROGRESS' })
             })
 
             if (res.ok) {
-                if (action === 'COMPLETE') {
-                    setTasks(prev => prev.filter(t => t.id !== taskId))
-                } else {
-                    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: 'IN_PROGRESS' } : t))
+                setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: 'IN_PROGRESS' } : t))
+                const updatedTask = tasks.find(t => t.id === taskId)
+                if (updatedTask) {
+                    handleStartSession({ ...updatedTask, status: 'IN_PROGRESS' })
                 }
             }
         } catch (error) {
@@ -169,41 +187,6 @@ export default function EmployeeTasksPage() {
                 </Card>
             </div>
 
-            {/* Free Tasks */}
-            {freeTasks.length > 0 && (
-                <div className="space-y-4">
-                    <h2 className="text-lg font-bold">Свободные задачи</h2>
-                    <div className="grid gap-4">
-                        {freeTasks.map(task => (
-                            <Card key={task.id} className="border-none shadow-sm bg-white dark:bg-slate-800/80">
-                                <CardContent className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                                    <div className="flex items-center gap-4">
-                                        <div className="h-12 w-12 rounded-2xl bg-slate-100 dark:bg-slate-700 text-slate-400 flex items-center justify-center">
-                                            <Monitor className="h-6 w-6" />
-                                        </div>
-                                        <div className="space-y-1">
-                                            <h4 className="font-bold">{task.equipment_name}</h4>
-                                            <div className="flex items-center gap-3 text-xs text-muted-foreground font-medium">
-                                                <span className="bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded uppercase tracking-wider">{task.equipment_type_name}</span>
-                                                <span className="uppercase tracking-widest">{task.workstation_name || "Склад"}</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <Button
-                                        size="lg"
-                                        className="h-12 px-6 rounded-xl font-bold"
-                                        onClick={() => handleClaim(task.id)}
-                                        disabled={isUpdating === task.id}
-                                    >
-                                        {isUpdating === task.id ? <Loader2 className="h-4 w-4 animate-spin" /> : "Взять в работу"}
-                                    </Button>
-                                </CardContent>
-                            </Card>
-                        ))}
-                    </div>
-                </div>
-            )}
-
             {/* Tasks List */}
             <div className="space-y-4">
                 {isLoading ? (
@@ -289,6 +272,42 @@ export default function EmployeeTasksPage() {
                 )}
             </div>
 
+            {/* Free Tasks */}
+            {freeTasks.length > 0 && (
+                <div className="space-y-4 pt-4 border-t border-slate-200 dark:border-slate-800">
+                    <h2 className="text-lg font-bold text-slate-500">Свободные задачи</h2>
+                    <div className="grid gap-4 opacity-75 hover:opacity-100 transition-opacity">
+                        {freeTasks.map(task => (
+                            <Card key={task.id} className="border-none shadow-sm bg-white dark:bg-slate-800/80">
+                                <CardContent className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                    <div className="flex items-center gap-4">
+                                        <div className="h-12 w-12 rounded-2xl bg-slate-100 dark:bg-slate-700 text-slate-400 flex items-center justify-center">
+                                            <Monitor className="h-6 w-6" />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <h4 className="font-bold">{task.equipment_name}</h4>
+                                            <div className="flex items-center gap-3 text-xs text-muted-foreground font-medium">
+                                                <span className="bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded uppercase tracking-wider">{task.equipment_type_name}</span>
+                                                <span className="uppercase tracking-widest">{task.workstation_name || "Склад"}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <Button
+                                        size="lg"
+                                        variant="secondary"
+                                        className="h-12 px-6 rounded-xl font-bold"
+                                        onClick={() => handleClaim(task.id)}
+                                        disabled={isUpdating === task.id}
+                                    >
+                                        {isUpdating === task.id ? <Loader2 className="h-4 w-4 animate-spin" /> : "Взять в работу"}
+                                    </Button>
+                                </CardContent>
+                            </Card>
+                        ))}
+                    </div>
+                </div>
+            )}
+
             {/* Info Footer */}
             <div className="p-6 rounded-3xl bg-amber-50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-900/20 flex items-start gap-4">
                 <Trophy className="h-6 w-6 text-amber-500 shrink-0 mt-0.5" />
@@ -300,6 +319,16 @@ export default function EmployeeTasksPage() {
                     </p>
                 </div>
             </div>
+
+            <MaintenanceSessionWizard
+                isOpen={isSessionOpen}
+                onClose={() => setIsSessionOpen(false)}
+                tasks={sessionTasks}
+                onComplete={() => {
+                    setIsSessionOpen(false)
+                    fetchData()
+                }}
+            />
         </div>
     )
 }

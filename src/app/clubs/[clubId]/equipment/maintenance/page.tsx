@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
+import { MaintenanceSessionWizard } from "./MaintenanceSessionWizard"
 
 interface MaintenanceTask {
     id: string
@@ -70,10 +71,35 @@ export default function MaintenanceSchedule() {
     const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1)
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear())
 
+    // Batch Session State
+    const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set())
+    const [isSessionOpen, setIsSessionOpen] = useState(false)
+    const [sessionTasks, setSessionTasks] = useState<MaintenanceTask[]>([])
+
     const monthNames = useMemo(() => [
         'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
         'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'
     ], [])
+
+    const handleToggleTask = (taskId: string) => {
+        const newSet = new Set(selectedTaskIds)
+        if (newSet.has(taskId)) newSet.delete(taskId)
+        else newSet.add(taskId)
+        setSelectedTaskIds(newSet)
+    }
+
+    const handleStartSession = (taskIds?: string[]) => {
+        const ids = taskIds || Array.from(selectedTaskIds)
+        const selected = tasks.filter(t => ids.includes(t.id))
+        setSessionTasks(selected)
+        setIsSessionOpen(true)
+    }
+
+    const handleSessionComplete = () => {
+        setIsSessionOpen(false)
+        fetchData()
+        setSelectedTaskIds(new Set())
+    }
 
     const ensurePlan = useCallback(async (firstDay: string, lastDay: string) => {
         setIsGenerating(true)
@@ -188,6 +214,15 @@ export default function MaintenanceSchedule() {
                         <p className="text-muted-foreground mt-1">Планирование чистки и технического регламента</p>
                     </div>
                     <div className="flex items-center gap-4">
+                        {selectedTaskIds.size > 0 && (
+                            <Button 
+                                onClick={() => handleStartSession()} 
+                                className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-md animate-in fade-in slide-in-from-right-4"
+                            >
+                                <ClipboardList className="mr-2 h-4 w-4" />
+                                Начать сессию ({selectedTaskIds.size})
+                            </Button>
+                        )}
                         <div className="flex items-center bg-white border border-slate-200 rounded-xl px-2 py-1.5 shadow-sm">
                             <Button
                                 variant="ghost"
@@ -329,6 +364,23 @@ export default function MaintenanceSchedule() {
                             <Table>
                                 <TableHeader className="bg-white">
                                     <TableRow className="hover:bg-transparent">
+                                        <TableHead className="w-[40px] pl-4">
+                                            <input 
+                                                type="checkbox" 
+                                                className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 h-4 w-4"
+                                                onChange={(e) => {
+                                                    const ids = group.tasks.map(t => t.id)
+                                                    const newSet = new Set(selectedTaskIds)
+                                                    if (e.target.checked) {
+                                                        ids.forEach(id => newSet.add(id))
+                                                    } else {
+                                                        ids.forEach(id => newSet.delete(id))
+                                                    }
+                                                    setSelectedTaskIds(newSet)
+                                                }}
+                                                checked={group.tasks.length > 0 && group.tasks.every(t => selectedTaskIds.has(t.id))}
+                                            />
+                                        </TableHead>
                                         <TableHead className="w-[260px]">Объект обслуживания</TableHead>
                                         <TableHead>Место / Зона</TableHead>
                                         <TableHead>Срок выполнения</TableHead>
@@ -336,6 +388,7 @@ export default function MaintenanceSchedule() {
                                         <TableHead>Ответственный</TableHead>
                                         <TableHead>Статус</TableHead>
                                         <TableHead className="text-right">Завершено</TableHead>
+                                        <TableHead className="w-[100px]"></TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
@@ -345,6 +398,14 @@ export default function MaintenanceSchedule() {
 
                                         return (
                                             <TableRow key={task.id} className="group hover:bg-slate-50/30 transition-colors">
+                                                <TableCell className="pl-4">
+                                                    <input 
+                                                        type="checkbox"
+                                                        className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 h-4 w-4"
+                                                        checked={selectedTaskIds.has(task.id)}
+                                                        onChange={() => handleToggleTask(task.id)}
+                                                    />
+                                                </TableCell>
                                                 <TableCell>
                                                     <div className="flex items-center gap-3">
                                                         <div className={cn(
@@ -440,6 +501,18 @@ export default function MaintenanceSchedule() {
                                                         <span className="text-slate-200">—</span>
                                                     )}
                                                 </TableCell>
+                                                <TableCell>
+                                                    {task.status !== 'COMPLETED' && (
+                                                        <Button 
+                                                            size="sm" 
+                                                            variant="ghost" 
+                                                            className="h-8 px-2 text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50"
+                                                            onClick={() => handleStartSession([task.id])}
+                                                        >
+                                                            Начать
+                                                        </Button>
+                                                    )}
+                                                </TableCell>
                                             </TableRow>
                                         )
                                     })}
@@ -449,6 +522,12 @@ export default function MaintenanceSchedule() {
                     ))
                 )}
             </div>
+            <MaintenanceSessionWizard
+                isOpen={isSessionOpen}
+                onClose={() => setIsSessionOpen(false)}
+                tasks={sessionTasks}
+                onComplete={handleSessionComplete}
+            />
         </div>
     )
 }
