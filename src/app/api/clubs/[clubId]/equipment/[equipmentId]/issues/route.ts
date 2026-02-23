@@ -36,6 +36,7 @@ export async function POST(
 
         const result = await query(
             `INSERT INTO equipment_issues (
+                club_id,
                 equipment_id, 
                 reported_by, 
                 title, 
@@ -44,9 +45,10 @@ export async function POST(
                 status,
                 maintenance_task_id
             )
-             VALUES ($1, $2, $3, $4, $5, 'OPEN', $6)
+             VALUES ($1, $2, $3, $4, $5, $6, 'OPEN', $7)
              RETURNING *`,
             [
+                clubId,
                 equipmentId, 
                 userId, 
                 title, 
