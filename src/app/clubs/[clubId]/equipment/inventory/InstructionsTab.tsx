@@ -5,7 +5,6 @@ import { useParams } from "next/navigation"
 import {
     Loader2,
     Save,
-    Check
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -48,6 +47,7 @@ export function InstructionsTab() {
     const editorRef = useRef<HTMLDivElement | null>(null)
     const quillRef = useRef<any>(null)
     const isSyncingRef = useRef(false)
+    const contentRef = useRef("")
 
     useEffect(() => {
         fetchData()
@@ -145,9 +145,9 @@ export function InstructionsTab() {
 
             quillRef.current = quill
 
-            if (isMounted && content) {
+            if (isMounted) {
                 isSyncingRef.current = true
-                quill.root.innerHTML = content
+                quill.root.innerHTML = contentRef.current
                 isSyncingRef.current = false
             }
         }
@@ -157,9 +157,10 @@ export function InstructionsTab() {
         return () => {
             isMounted = false
         }
-    }, [content])
+    }, [])
 
     useEffect(() => {
+        contentRef.current = content
         if (!quillRef.current) return
         if (quillRef.current.root.innerHTML === content) return
         isSyncingRef.current = true
