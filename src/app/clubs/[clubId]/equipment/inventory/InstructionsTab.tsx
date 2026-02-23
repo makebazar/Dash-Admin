@@ -29,7 +29,10 @@ import { Label } from "@/components/ui/label"
 import 'react-quill/dist/quill.snow.css';
 
 const reactDomAny = ReactDOM as any
-if (reactDomAny?.default && !reactDomAny.default.findDOMNode && reactDomAny.findDOMNode) {
+if (!reactDomAny?.default) {
+    reactDomAny.default = reactDomAny
+}
+if (!reactDomAny.default.findDOMNode && reactDomAny.findDOMNode) {
     reactDomAny.default.findDOMNode = reactDomAny.findDOMNode
 }
 
