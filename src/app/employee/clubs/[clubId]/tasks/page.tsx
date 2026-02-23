@@ -19,7 +19,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
-import { MaintenanceSessionWizard } from "../../../../../clubs/[clubId]/equipment/maintenance/MaintenanceSessionWizard"
+import { MaintenanceSessionWizard } from "@/app/clubs/[clubId]/equipment/maintenance/MaintenanceSessionWizard"
 
 interface MaintenanceTask {
     id: string
