@@ -38,7 +38,9 @@ import {
     Tv,
     Glasses,
     Square,
-    Sofa
+    Sofa,
+    ChevronDown,
+    ChevronRight
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -160,6 +162,9 @@ export default function EquipmentInventory() {
     // Selection
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 
+    // Grouping & Expansion
+    const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set(['unassigned']))
+
     // Dialog states
     const [isDialogOpen, setIsDialogOpen] = useState(false)
     const [editingEquipment, setEditingEquipment] = useState<Partial<Equipment> | null>(null)
@@ -266,6 +271,57 @@ export default function EquipmentInventory() {
     }
 
     const filteredEquipment = equipment // Now filtered on server side
+
+    const groupedEquipment = useMemo(() => {
+        const groups: Record<string, { name: string, zone?: string, items: Equipment[] }> = {
+            'unassigned': { name: 'Склад (Не назначено)', items: [] }
+        }
+
+        // Initialize groups for all workstations
+        workstations.forEach(ws => {
+            groups[ws.id] = { name: ws.name, zone: ws.zone, items: [] }
+        })
+
+        // Distribute equipment into groups
+        filteredEquipment.forEach(item => {
+            const groupId = item.workstation_id || 'unassigned'
+            if (!groups[groupId]) {
+                groups[groupId] = { 
+                    name: item.workstation_name || 'Неизвестная локация', 
+                    zone: item.workstation_zone || undefined,
+                    items: [] 
+                }
+            }
+            groups[groupId].items.push(item)
+        })
+
+        // Filter out empty workstation groups, but keep unassigned if it has items or if we are filtering
+        return Object.entries(groups)
+            .filter(([id, group]) => group.items.length > 0)
+            .sort(([idA, groupA], [idB, groupB]) => {
+                if (idA === 'unassigned') return -1
+                if (idB === 'unassigned') return 1
+                return groupA.name.localeCompare(groupB.name)
+            })
+    }, [filteredEquipment, workstations])
+
+    const toggleGroup = (groupId: string) => {
+        const newSet = new Set(expandedGroups)
+        if (newSet.has(groupId)) newSet.delete(groupId)
+        else newSet.add(groupId)
+        setExpandedGroups(newSet)
+    }
+
+    const toggleGroupSelection = (groupId: string, items: Equipment[]) => {
+        const allSelected = items.every(item => selectedIds.has(item.id))
+        const newSet = new Set(selectedIds)
+        if (allSelected) {
+            items.forEach(item => newSet.delete(item.id))
+        } else {
+            items.forEach(item => newSet.add(item.id))
+        }
+        setSelectedIds(newSet)
+    }
 
     // --- Actions ---
 
@@ -632,7 +688,7 @@ export default function EquipmentInventory() {
                                         <p className="text-muted-foreground mt-2">Загрузка реестра...</p>
                                     </TableCell>
                                 </TableRow>
-                            ) : filteredEquipment.length === 0 ? (
+                            ) : groupedEquipment.length === 0 ? (
                                 <TableRow>
                                     <TableCell colSpan={7} className="h-64 text-center text-muted-foreground">
                                         <div className="flex flex-col items-center gap-2">
@@ -645,109 +701,157 @@ export default function EquipmentInventory() {
                                     </TableCell>
                                 </TableRow>
                             ) : (
-                                filteredEquipment.map((item) => (
-                                    <TableRow 
-                                        key={item.id} 
-                                        className={cn(
-                                            "group hover:bg-slate-50/80 transition-colors cursor-pointer",
-                                            selectedIds.has(item.id) && "bg-blue-50/50 hover:bg-blue-50/80"
-                                        )}
-                                        onClick={(e) => {
-                                            // Prevent row click if clicking checkbox or button
-                                            if ((e.target as HTMLElement).closest('button') || (e.target as HTMLElement).closest('input')) return
-                                            handleEdit(item)
-                                        }}
-                                    >
-                                        <TableCell>
-                                            <input 
-                                                type="checkbox" 
-                                                className="rounded border-gray-300"
-                                                checked={selectedIds.has(item.id)}
-                                                onChange={() => toggleSelection(item.id)}
-                                            />
-                                        </TableCell>
-                                        <TableCell>
-                                            <div className="flex items-center gap-3">
-                                                <div className="h-10 w-10 bg-slate-100 rounded-lg flex items-center justify-center text-slate-500 group-hover:bg-white group-hover:shadow-sm transition-all border border-transparent group-hover:border-slate-200">
-                                                    {getEquipmentIcon(item.type)}
-                                                </div>
-                                                <div>
-                                                    <p className="font-semibold text-sm">{item.name}</p>
-                                                    <Badge variant="secondary" className="text-[10px] h-5 px-1.5 font-normal bg-slate-100 text-slate-500">{item.type_name || item.type}</Badge>
-                                                </div>
-                                            </div>
-                                        </TableCell>
-                                        <TableCell>
-                                            <div className="space-y-1">
-                                                {item.identifier ? (
-                                                    <code className="text-[11px] bg-slate-100 px-1.5 py-0.5 rounded text-slate-600 font-mono border border-slate-200">{item.identifier}</code>
-                                                ) : <span className="text-xs text-muted-foreground">—</span>}
-                                                <p className="text-[11px] text-muted-foreground">{item.brand} {item.model}</p>
-                                            </div>
-                                        </TableCell>
-                                        <TableCell>
-                                            {item.workstation_name ? (
-                                                <div className="flex items-center gap-2">
-                                                    <LayoutGrid className="h-3.5 w-3.5 text-muted-foreground" />
-                                                    <div className="flex flex-col">
-                                                        <span className="text-xs font-medium">{item.workstation_name}</span>
-                                                        <span className="text-[10px] text-muted-foreground">{item.workstation_zone}</span>
+                                groupedEquipment.map(([groupId, group]) => {
+                                    const isExpanded = expandedGroups.has(groupId)
+                                    const allGroupSelected = group.items.every(item => selectedIds.has(item.id))
+                                    const someGroupSelected = group.items.some(item => selectedIds.has(item.id)) && !allGroupSelected
+
+                                    return (
+                                        <>
+                                            {/* Group Header Row */}
+                                            <TableRow 
+                                                key={`group-${groupId}`}
+                                                className="bg-slate-50/50 hover:bg-slate-100/80 transition-colors border-y border-slate-200 cursor-pointer sticky top-0 z-10"
+                                                onClick={() => toggleGroup(groupId)}
+                                            >
+                                                <TableCell className="w-[40px]" onClick={(e) => e.stopPropagation()}>
+                                                    <input 
+                                                        type="checkbox" 
+                                                        className={cn(
+                                                            "rounded border-gray-300",
+                                                            someGroupSelected && "opacity-50"
+                                                        )}
+                                                        checked={allGroupSelected}
+                                                        onChange={() => toggleGroupSelection(groupId, group.items)}
+                                                    />
+                                                </TableCell>
+                                                <TableCell colSpan={6} className="py-3">
+                                                    <div className="flex items-center justify-between">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="text-slate-400">
+                                                                {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                                                            </div>
+                                                            <div className="flex items-center gap-2">
+                                                                {groupId === 'unassigned' ? (
+                                                                    <Box className="h-4 w-4 text-amber-500" />
+                                                                ) : (
+                                                                    <LayoutGrid className="h-4 w-4 text-indigo-500" />
+                                                                )}
+                                                                <span className="font-bold text-sm tracking-tight text-slate-700">
+                                                                    {group.name} 
+                                                                    {group.zone && <span className="text-slate-400 font-normal ml-2">({group.zone})</span>}
+                                                                </span>
+                                                                <Badge variant="outline" className="ml-2 bg-white text-[10px] font-bold text-slate-500 border-slate-200">
+                                                                    {group.items.length}
+                                                                </Badge>
+                                                            </div>
+                                                        </div>
+                                                        
+                                                        <div className="flex items-center gap-4 text-[11px] text-slate-400 font-medium">
+                                                            <span>{group.items.filter(i => i.is_active).length} активных</span>
+                                                            <div className="h-3 w-px bg-slate-200" />
+                                                            <span>{group.items.filter(i => !i.is_active).length} списано</span>
+                                                        </div>
                                                     </div>
-                                                </div>
-                                            ) : (
-                                                <div className="flex items-center gap-2">
-                                                    <Box className="h-3.5 w-3.5 text-amber-500" />
-                                                    <span className="text-xs text-amber-600 font-medium">Склад</span>
-                                                </div>
-                                            )}
-                                        </TableCell>
-                                        <TableCell>
-                                            {getStatusBadge(item)}
-                                        </TableCell>
-                                        <TableCell>
-                                            {item.warranty_expires ? (
-                                                <div className="flex flex-col gap-1">
-                                                    <span className={cn(
-                                                        "text-xs font-medium",
-                                                        item.warranty_status === 'EXPIRED' ? "text-rose-600" : 
-                                                        item.warranty_status === 'EXPIRING_SOON' ? "text-amber-600" : "text-slate-600"
-                                                    )}>
-                                                        {new Date(item.warranty_expires).toLocaleDateString("ru-RU")}
-                                                    </span>
-                                                    {item.warranty_status === 'EXPIRED' && <span className="text-[9px] text-rose-600 font-bold uppercase tracking-wide">Истекла</span>}
-                                                </div>
-                                            ) : (
-                                                <span className="text-muted-foreground text-xs">—</span>
-                                            )}
-                                        </TableCell>
-                                        <TableCell className="text-right">
-                                            <DropdownMenu>
-                                                <DropdownMenuTrigger asChild>
-                                                    <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-slate-200">
-                                                        <MoreVertical className="h-4 w-4" />
-                                                    </Button>
-                                                </DropdownMenuTrigger>
-                                                <DropdownMenuContent align="end" className="w-[200px]">
-                                                    <DropdownMenuLabel>Управление</DropdownMenuLabel>
-                                                    <DropdownMenuItem onClick={() => handleEdit(item)}>
-                                                        <Pencil className="mr-2 h-4 w-4" /> Редактировать
-                                                    </DropdownMenuItem>
-                                                    <DropdownMenuItem onClick={() => router.push(`/clubs/${clubId}/equipment/${item.id}`)}>
-                                                        <FileText className="mr-2 h-4 w-4" /> Карточка товара
-                                                    </DropdownMenuItem>
-                                                    <DropdownMenuSeparator />
-                                                    <DropdownMenuItem onClick={() => {}}>
-                                                        <History className="mr-2 h-4 w-4" /> История
-                                                    </DropdownMenuItem>
-                                                    <DropdownMenuSeparator />
-                                                    <DropdownMenuItem className="text-rose-600 focus:text-rose-600 focus:bg-rose-50" onClick={() => handleDelete(item.id)}>
-                                                        <Trash2 className="mr-2 h-4 w-4" /> Удалить
-                                                    </DropdownMenuItem>
-                                                </DropdownMenuContent>
-                                            </DropdownMenu>
-                                        </TableCell>
-                                    </TableRow>
-                                ))
+                                                </TableCell>
+                                            </TableRow>
+
+                                            {/* Group Items */}
+                                            {isExpanded && group.items.map((item) => (
+                                                <TableRow 
+                                                    key={item.id} 
+                                                    className={cn(
+                                                        "group hover:bg-slate-50/80 transition-colors cursor-pointer border-l-2 border-l-transparent",
+                                                        selectedIds.has(item.id) && "bg-blue-50/30 hover:bg-blue-50/50 border-l-indigo-500"
+                                                    )}
+                                                    onClick={(e) => {
+                                                        if ((e.target as HTMLElement).closest('button') || (e.target as HTMLElement).closest('input')) return
+                                                        handleEdit(item)
+                                                    }}
+                                                >
+                                                    <TableCell className="pl-6">
+                                                        <input 
+                                                            type="checkbox" 
+                                                            className="rounded border-gray-300"
+                                                            checked={selectedIds.has(item.id)}
+                                                            onChange={() => toggleSelection(item.id)}
+                                                        />
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="h-9 w-9 bg-slate-50 rounded-lg flex items-center justify-center text-slate-400 group-hover:bg-white group-hover:shadow-sm transition-all border border-transparent group-hover:border-slate-200">
+                                                                {getEquipmentIcon(item.type)}
+                                                            </div>
+                                                            <div>
+                                                                <p className="font-semibold text-sm text-slate-700">{item.name}</p>
+                                                                <p className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">{item.type_name || item.type}</p>
+                                                            </div>
+                                                        </div>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <div className="space-y-1">
+                                                            {item.identifier ? (
+                                                                <code className="text-[10px] bg-slate-100 px-1.5 py-0.5 rounded text-slate-600 font-mono border border-slate-200">{item.identifier}</code>
+                                                            ) : <span className="text-xs text-muted-foreground">—</span>}
+                                                            <p className="text-[10px] text-slate-400">{item.brand} {item.model}</p>
+                                                        </div>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <div className="flex flex-col">
+                                                            <span className="text-[11px] font-medium text-slate-600">{group.name}</span>
+                                                            {group.zone && <span className="text-[10px] text-slate-400">{group.zone}</span>}
+                                                        </div>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        {getStatusBadge(item)}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        {item.warranty_expires ? (
+                                                            <div className="flex flex-col">
+                                                                <span className={cn(
+                                                                    "text-[11px] font-bold",
+                                                                    item.warranty_status === 'EXPIRED' ? "text-rose-500" : 
+                                                                    item.warranty_status === 'EXPIRING_SOON' ? "text-amber-500" : "text-slate-500"
+                                                                )}>
+                                                                    {new Date(item.warranty_expires).toLocaleDateString("ru-RU")}
+                                                                </span>
+                                                                {item.warranty_status === 'EXPIRED' && <span className="text-[9px] text-rose-500 font-black uppercase">Истекла</span>}
+                                                            </div>
+                                                        ) : (
+                                                            <span className="text-slate-300 text-[11px]">—</span>
+                                                        )}
+                                                    </TableCell>
+                                                    <TableCell className="text-right">
+                                                        <DropdownMenu>
+                                                            <DropdownMenuTrigger asChild>
+                                                                <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-slate-200">
+                                                                    <MoreVertical className="h-4 w-4" />
+                                                                </Button>
+                                                            </DropdownMenuTrigger>
+                                                            <DropdownMenuContent align="end" className="w-[200px]">
+                                                                <DropdownMenuLabel>Управление</DropdownMenuLabel>
+                                                                <DropdownMenuItem onClick={() => handleEdit(item)}>
+                                                                    <Pencil className="mr-2 h-4 w-4" /> Редактировать
+                                                                </DropdownMenuItem>
+                                                                <DropdownMenuItem onClick={() => router.push(`/clubs/${clubId}/equipment/${item.id}`)}>
+                                                                    <FileText className="mr-2 h-4 w-4" /> Карточка товара
+                                                                </DropdownMenuItem>
+                                                                <DropdownMenuSeparator />
+                                                                <DropdownMenuItem onClick={() => handleEdit(item)}>
+                                                                    <History className="mr-2 h-4 w-4" /> История
+                                                                </DropdownMenuItem>
+                                                                <DropdownMenuSeparator />
+                                                                <DropdownMenuItem className="text-rose-600 focus:text-rose-600 focus:bg-rose-50" onClick={() => handleDelete(item.id)}>
+                                                                    <Trash2 className="mr-2 h-4 w-4" /> Удалить
+                                                                </DropdownMenuItem>
+                                                            </DropdownMenuContent>
+                                                        </DropdownMenu>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </>
+                                    )
+                                })
                             )}
                         </TableBody>
                     </Table>
