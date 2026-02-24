@@ -161,7 +161,8 @@ export function ManageZonesDialog({ clubId, zones, employees, onZonesChange, tri
                                     <SelectValue placeholder="Ответственный" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="none">Не назначен</SelectItem>
+                                    <SelectItem value="none">⛔ Не требует обслуживания</SelectItem>
+                                    <SelectItem value="00000000-0000-0000-0000-000000000001">🤝 Свободный пул</SelectItem>
                                     {employees.map(emp => (
                                         <SelectItem key={emp.id} value={emp.id}>{emp.full_name}</SelectItem>
                                     ))}
@@ -208,15 +209,16 @@ export function ManageZonesDialog({ clubId, zones, employees, onZonesChange, tri
                                                     <SelectValue placeholder="Ответственный" />
                                                 </SelectTrigger>
                                                 <SelectContent>
-                                                    <SelectItem value="none">Не назначен</SelectItem>
-                                                    {employees.map(emp => (
-                                                        <SelectItem key={emp.id} value={emp.id}>{emp.full_name}</SelectItem>
-                                                    ))}
-                                                </SelectContent>
+                                                <SelectItem value="none">⛔ Не требует обслуживания</SelectItem>
+                                                <SelectItem value="00000000-0000-0000-0000-000000000001">🤝 Свободный пул</SelectItem>
+                                                {employees.map(emp => (
+                                                    <SelectItem key={emp.id} value={emp.id}>{emp.full_name}</SelectItem>
+                                                ))}
+                                            </SelectContent>
                                             </Select>
                                         ) : (
                                             <span className="text-sm text-muted-foreground">
-                                                {zone.assigned_user_name || "Не назначен"}
+                                                {zone.assigned_user_id === '00000000-0000-0000-0000-000000000001' ? "🤝 Свободный пул" : (zone.assigned_user_name || "Не назначено")}
                                             </span>
                                         )}
                                     </TableCell>

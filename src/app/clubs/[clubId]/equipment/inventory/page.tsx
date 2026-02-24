@@ -1201,15 +1201,19 @@ export default function EquipmentInventory() {
                                     <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl flex gap-3">
                                         <Info className="h-5 w-5 text-blue-500 shrink-0" />
                                         <div className="text-sm text-blue-700">
-                                            <p className="font-semibold">Настройка техобслуживания</p>
-                                            <p className="opacity-80">Укажите интервал для автоматического создания задач на чистку и проверку этого устройства.</p>
+                                            <p className="font-semibold">Настройка обслуживания</p>
+                                            <ul className="list-disc ml-4 mt-1 opacity-80 space-y-1">
+                                                <li>Если <strong>Ответственный не назначен</strong> (в настройках единицы, зоны или места) — задачи на чистку создаваться <strong>не будут</strong>.</li>
+                                                <li>Вы можете назначить ответственного прямо здесь, либо он будет взят из настроек места/зоны.</li>
+                                                <li>Для создания задач, которые может взять любой сотрудник, назначьте <strong>"Свободный пул"</strong>.</li>
+                                            </ul>
                                         </div>
                                     </div>
 
                                     <div className="space-y-4">
                                         <div className="flex items-center justify-between p-4 rounded-xl border">
                                             <div className="space-y-0.5">
-                                                <Label className="text-base font-bold">Автоматическое обслуживание</Label>
+                                                <Label className="text-base font-bold">Обслуживание</Label>
                                                 <p className="text-xs text-muted-foreground">Включает напоминания о необходимости чистки</p>
                                             </div>
                                             <Switch
@@ -1219,16 +1223,40 @@ export default function EquipmentInventory() {
                                         </div>
 
                                         {editingEquipment?.maintenance_enabled && (
-                                            <div className="space-y-2 p-4 rounded-xl bg-slate-50 border animate-in fade-in slide-in-from-top-2">
-                                                <Label>Интервал обслуживания (дней)</Label>
-                                                <div className="flex items-center gap-4">
-                                                    <Input
-                                                        type="number"
-                                                        className="w-24"
-                                                        value={editingEquipment?.cleaning_interval_days || 30}
-                                                        onChange={(e) => setEditingEquipment(prev => ({ ...prev, cleaning_interval_days: Number(e.target.value) }))}
-                                                    />
-                                                    <span className="text-sm text-muted-foreground">Рекомендуется: 30 дней для ПК, 14 дней для периферии</span>
+                                            <div className="space-y-4 p-4 rounded-xl bg-slate-50 border animate-in fade-in slide-in-from-top-2">
+                                                <div className="space-y-2">
+                                                    <Label>Интервал обслуживания (дней)</Label>
+                                                    <div className="flex items-center gap-4">
+                                                        <Input
+                                                            type="number"
+                                                            className="w-24"
+                                                            value={editingEquipment?.cleaning_interval_days || 30}
+                                                            onChange={(e) => setEditingEquipment(prev => ({ ...prev, cleaning_interval_days: Number(e.target.value) }))}
+                                                        />
+                                                        <span className="text-sm text-muted-foreground">Рекомендуется: 30 дней для ПК, 14 дней для периферии</span>
+                                                    </div>
+                                                </div>
+
+                                                <div className="space-y-2">
+                                                    <Label>Ответственный за обслуживание</Label>
+                                                    <Select
+                                                        value={editingEquipment?.assigned_user_id || "none"}
+                                                        onValueChange={(val) => setEditingEquipment(prev => ({ ...prev, assigned_user_id: val === "none" ? null : val }))}
+                                                    >
+                                                        <SelectTrigger className="bg-white">
+                                                            <SelectValue placeholder="Наследовать (из зоны/места)" />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            <SelectItem value="none">Наследовать (из зоны/места)</SelectItem>
+                                                            <SelectItem value="00000000-0000-0000-0000-000000000001">🤝 Свободный пул</SelectItem>
+                                                            {employees.map(emp => (
+                                                                <SelectItem key={emp.id} value={emp.id}>{emp.full_name}</SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
+                                                    <p className="text-[10px] text-muted-foreground italic">
+                                                        Если не назначено прямо здесь, система возьмет ответственного из настроек рабочего места или игровой зоны.
+                                                    </p>
                                                 </div>
                                             </div>
                                         )}
