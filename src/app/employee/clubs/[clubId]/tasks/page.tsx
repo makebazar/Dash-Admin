@@ -213,7 +213,7 @@ export default function EmployeeTasksPage() {
                                     <Button
                                         size="sm"
                                         variant="secondary"
-                                        className="h-9 px-4 rounded-lg font-bold bg-slate-100 hover:bg-slate-200 text-slate-900 text-xs transition-all"
+                                        className="h-9 w-24 rounded-lg font-bold bg-slate-100 hover:bg-slate-200 text-slate-900 text-xs transition-all"
                                         onClick={() => handleClaim(task.id)}
                                         disabled={isUpdating === task.id}
                                     >
@@ -222,7 +222,7 @@ export default function EmployeeTasksPage() {
                                 ) : isInProgress ? (
                                     <Button
                                         size="sm"
-                                        className="bg-emerald-600 hover:bg-emerald-700 h-9 px-4 rounded-lg font-bold text-xs shadow-sm shadow-emerald-200 dark:shadow-none transition-all"
+                                        className="bg-emerald-600 hover:bg-emerald-700 h-9 w-24 rounded-lg font-bold text-xs shadow-sm shadow-emerald-200 dark:shadow-none transition-all"
                                         onClick={() => handleAction(task.id, 'COMPLETE')}
                                         disabled={isUpdating === task.id}
                                     >
@@ -232,7 +232,7 @@ export default function EmployeeTasksPage() {
                                     <Button
                                         size="sm"
                                         variant="outline"
-                                        className="h-9 px-4 rounded-lg font-bold border-indigo-200 text-indigo-600 hover:bg-indigo-50 hover:border-indigo-300 text-xs transition-all"
+                                        className="h-9 w-24 rounded-lg font-bold border-indigo-200 text-indigo-600 hover:bg-indigo-50 hover:border-indigo-300 text-xs transition-all"
                                         onClick={() => handleAction(task.id, 'START')}
                                         disabled={isUpdating === task.id}
                                     >
