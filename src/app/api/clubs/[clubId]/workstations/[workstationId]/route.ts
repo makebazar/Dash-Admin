@@ -65,6 +65,17 @@ export async function PATCH(
             return NextResponse.json({ error: 'Workstation not found' }, { status: 404 });
         }
 
+        if (body.assigned_user_id !== undefined) {
+            const assignedUserId = body.assigned_user_id === '' ? null : body.assigned_user_id;
+            await query(
+                `UPDATE equipment
+                 SET assigned_user_id = $1,
+                     maintenance_enabled = CASE WHEN $1 IS NULL THEN FALSE ELSE TRUE END
+                 WHERE workstation_id = $2`,
+                [assignedUserId, workstationId]
+            );
+        }
+
         return NextResponse.json(result.rows[0]);
     } catch (error) {
         console.error('Update Workstation Error:', error);

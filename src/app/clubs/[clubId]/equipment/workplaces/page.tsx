@@ -424,18 +424,6 @@ export default function WorkplacesPage() {
                 body: JSON.stringify({ assigned_user_id: userId })
             })
             
-            if (res.ok && userId) {
-                // Если назначен ответственный (пользователь или свободный пул), 
-                // автоматически включаем обслуживание для всего оборудования на этом месте
-                await Promise.all(activeEquipment.map(item => 
-                    fetch(`/api/clubs/${clubId}/equipment/${item.id}`, {
-                        method: "PATCH",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ maintenance_enabled: true })
-                    })
-                ))
-            }
-
             if (res.ok) {
                 fetchData()
             }

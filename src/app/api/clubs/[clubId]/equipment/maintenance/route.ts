@@ -227,12 +227,8 @@ export async function POST(
                 e.cleaning_interval_days, 
                 e.last_cleaned_at, 
                 e.workstation_id, 
-                e.assigned_user_id as eq_assigned_user_id,
-                w.assigned_user_id as ws_assigned_user_id,
-                z.assigned_user_id as zone_assigned_user_id
+                e.assigned_user_id
             FROM equipment e
-            LEFT JOIN club_workstations w ON e.workstation_id = w.id
-            LEFT JOIN club_zones z ON w.club_id = z.club_id AND w.zone = z.name
             WHERE e.club_id = $1 AND e.is_active = TRUE AND (e.maintenance_enabled IS NULL OR e.maintenance_enabled = TRUE)
         `;
         const eqParams: any[] = [clubId];
@@ -281,11 +277,8 @@ export async function POST(
             const originalDue = nextDue.toISOString().split('T')[0];
             let dueDateStr = originalDue;
             
-            // Priority: 1. Equipment, 2. Workstation, 3. Zone
-            let assignedUserId = eq.eq_assigned_user_id || eq.ws_assigned_user_id || eq.zone_assigned_user_id || null;
+            let assignedUserId = eq.assigned_user_id || null;
 
-            // NEW LOGIC: If no one is assigned (not even to zone/workstation), 
-            // it means the equipment doesn't need maintenance.
             if (!assignedUserId) {
                 continue;
             }

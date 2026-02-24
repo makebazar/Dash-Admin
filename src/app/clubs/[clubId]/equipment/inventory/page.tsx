@@ -238,16 +238,11 @@ export default function EquipmentInventory() {
             const empData = await empRes.json()
 
             if (eqRes.ok) {
-                // Enrich data with status logic for prototype
-                const enriched = (eqData.equipment || []).map((e: any) => {
-                    // Logic: if equipment has a direct assignee OR inherited from workstation, maintenance MUST be enabled
-                    const hasAssignee = e.assigned_user_id || e.workstation_assigned_user_id;
-                    return {
-                        ...e,
-                        status: e.is_active ? 'ACTIVE' : 'WRITTEN_OFF',
-                        maintenance_enabled: hasAssignee ? true : e.maintenance_enabled
-                    };
-                })
+                const enriched = (eqData.equipment || []).map((e: any) => ({
+                    ...e,
+                    status: e.is_active ? 'ACTIVE' : 'WRITTEN_OFF',
+                    maintenance_enabled: e.assigned_user_id ? true : e.maintenance_enabled
+                }))
                 setEquipment(enriched)
                 setTotalItems(eqData.total || 0)
                 
@@ -1218,9 +1213,8 @@ export default function EquipmentInventory() {
                                         <div className="text-sm text-blue-700">
                                             <p className="font-semibold">Настройка обслуживания</p>
                                             <ul className="list-disc ml-4 mt-1 opacity-80 space-y-1">
-                                                <li>Если <strong>Ответственный не назначен</strong> (в настройках единицы, зоны или места) — задачи на чистку создаваться <strong>не будут</strong>.</li>
-                                                <li>Вы можете назначить ответственного прямо здесь, либо он будет взят из настроек места/зоны.</li>
-                                                <li>Для создания задач, которые может взять любой сотрудник, назначьте <strong>"Свободный пул"</strong>.</li>
+                                                <li>Если <strong>Ответственный не назначен</strong> — задачи на чистку создаваться <strong>не будут</strong>.</li>
+                                                <li>Назначьте конкретного сотрудника или выберите <strong>"Свободный пул"</strong>.</li>
                                             </ul>
                                         </div>
                                     </div>
@@ -1236,7 +1230,6 @@ export default function EquipmentInventory() {
                                                 onCheckedChange={(val) => setEditingEquipment(prev => ({ 
                                                     ...prev, 
                                                     maintenance_enabled: val,
-                                                    // Если выключаем обслуживание, сбрасываем ответственного
                                                     assigned_user_id: val ? prev?.assigned_user_id : null 
                                                 }))}
                                             />
@@ -1256,16 +1249,15 @@ export default function EquipmentInventory() {
                                                             setEditingEquipment(prev => ({ 
                                                                 ...prev, 
                                                                 assigned_user_id: userId,
-                                                                // Если выбран ответственный, автоматически включаем обслуживание
                                                                 maintenance_enabled: userId ? true : prev?.maintenance_enabled
                                                             }))
                                                         }}
                                                     >
                                                         <SelectTrigger className="bg-white">
-                                                            <SelectValue placeholder="Наследовать (из зоны/места)" />
+                                                            <SelectValue placeholder="Не назначено" />
                                                         </SelectTrigger>
                                                         <SelectContent>
-                                                            <SelectItem value="none">Наследовать (из зоны/места)</SelectItem>
+                                                            <SelectItem value="none">Не назначено</SelectItem>
                                                             <SelectItem value="00000000-0000-0000-0000-000000000001">🤝 Свободный пул</SelectItem>
                                                             {employees.map(emp => (
                                                                 <SelectItem key={emp.id} value={emp.id}>{emp.full_name}</SelectItem>
@@ -1273,7 +1265,7 @@ export default function EquipmentInventory() {
                                                         </SelectContent>
                                                     </Select>
                                                     <p className="text-[10px] text-muted-foreground italic">
-                                                        Если не назначено прямо здесь, система возьмет ответственного из настроек рабочего места или игровой зоны.
+                                                        При выборе сотрудника обслуживание включается автоматически.
                                                     </p>
                                                 </div>
 

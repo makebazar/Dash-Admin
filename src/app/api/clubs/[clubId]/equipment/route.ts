@@ -96,7 +96,6 @@ export async function GET(
                 e.maintenance_enabled, e.assigned_user_id,
                 w.name as workstation_name,
                 w.zone as workstation_zone,
-                w.assigned_user_id as workstation_assigned_user_id,
                 et.name_ru as type_name,
                 et.icon as type_icon,
                 COALESCE(ic.open_issues_count, 0)::integer as open_issues_count,

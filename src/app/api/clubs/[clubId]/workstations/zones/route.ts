@@ -47,19 +47,19 @@ export async function PATCH(
             if (workstationIds.length > 0) {
                 await query(
                     `UPDATE equipment 
-                     SET assigned_user_id = $1
+                     SET assigned_user_id = $1,
+                         maintenance_enabled = TRUE
                      WHERE workstation_id = ANY($2)`,
                     [assignedUserId, workstationIds]
                 );
             }
         } else if (assignedUserId === null) {
-            // If clearing the user, clear from equipment too?
-            // The user said "when we set him...", but usually clearing should also propagate.
             const workstationIds = result.rows.map(r => r.id);
             if (workstationIds.length > 0) {
                 await query(
                     `UPDATE equipment 
-                     SET assigned_user_id = NULL
+                     SET assigned_user_id = NULL,
+                         maintenance_enabled = FALSE
                      WHERE workstation_id = ANY($1)`,
                     [workstationIds]
                 );

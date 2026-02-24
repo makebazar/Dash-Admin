@@ -79,7 +79,8 @@ export async function PATCH(
                 const wsIds = workstations.rows.map(w => w.id);
                 await query(
                     `UPDATE equipment 
-                     SET assigned_user_id = $1 
+                     SET assigned_user_id = $1,
+                         maintenance_enabled = CASE WHEN $1 IS NULL THEN FALSE ELSE TRUE END
                      WHERE workstation_id = ANY($2)`,
                     [assigned_user_id, wsIds]
                 );
