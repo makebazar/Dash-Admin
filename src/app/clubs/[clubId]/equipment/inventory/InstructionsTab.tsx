@@ -43,17 +43,20 @@ export function InstructionsTab() {
     const [isLoading, setIsLoading] = useState(true)
     const [isSaving, setIsSaving] = useState(false)
     const [content, setContent] = useState("")
-    const editorRef = useRef<HTMLDivElement | null>(null)
+    const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
 
     useEffect(() => {
         fetchData()
     }, [clubId])
 
+    // Load content when selected type changes
     useEffect(() => {
         if (selectedType) {
-            setContent(instructions[selectedType] || "")
+            const savedContent = instructions[selectedType] || ""
+            setContent(savedContent)
+            setHasUnsavedChanges(false)
         }
-    }, [selectedType])
+    }, [selectedType, instructions])
 
     const fetchData = async () => {
         try {
@@ -100,23 +103,23 @@ export function InstructionsTab() {
             })
 
             if (res.ok) {
+                // Update local state
                 setInstructions(prev => ({
                     ...prev,
                     [selectedType]: content
                 }))
+                setHasUnsavedChanges(false)
+                alert("Инструкция сохранена")
+            } else {
+                alert("Ошибка при сохранении")
             }
         } catch (error) {
             console.error("Error saving instructions:", error)
+            alert("Ошибка при сохранении")
         } finally {
             setIsSaving(false)
         }
     }
-
-    useEffect(() => {
-        if (!editorRef.current) return
-        if (editorRef.current.innerText === content) return
-        editorRef.current.innerText = content
-    }, [selectedType]) // Only update when type changes to avoid cursor jumps during typing
 
     if (isLoading) {
         return <div className="flex justify-center p-8"><Loader2 className="h-8 w-8 animate-spin text-slate-400" /></div>
@@ -139,7 +142,12 @@ export function InstructionsTab() {
                                     "justify-start w-full text-sm",
                                     selectedType === type.code ? "bg-slate-100 font-medium" : "hover:bg-slate-50"
                                 )}
-                                onClick={() => setSelectedType(type.code)}
+                                onClick={() => {
+                                    if (hasUnsavedChanges && !confirm("У вас есть несохраненные изменения. Продолжить?")) {
+                                        return
+                                    }
+                                    setSelectedType(type.code)
+                                }}
                             >
                                 <span className="mr-2 opacity-70 w-4">{instructions[type.code] ? "📝" : "📄"}</span>
                                 {type.name_ru}
@@ -157,23 +165,26 @@ export function InstructionsTab() {
                             Опишите пошаговый процесс обслуживания для <span className="font-medium text-foreground">{equipmentTypes.find(t => t.code === selectedType)?.name_ru}</span>
                         </CardDescription>
                     </div>
-                    <Button onClick={handleSave} disabled={isSaving}>
+                    <Button onClick={handleSave} disabled={isSaving || !hasUnsavedChanges} className={cn(hasUnsavedChanges && "bg-green-600 hover:bg-green-700")}>
                         {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                        Сохранить
+                        {hasUnsavedChanges ? "Сохранить изменения" : "Сохранено"}
                     </Button>
                 </CardHeader>
                 <CardContent>
-                    <div className="h-[600px] flex flex-col bg-slate-50 rounded-md border p-4">
-                        <div
-                            ref={editorRef}
-                            className="flex-1 h-full outline-none whitespace-pre-wrap text-sm text-slate-800"
-                            contentEditable
-                            suppressContentEditableWarning
-                            onInput={(event) => {
-                                const value = (event.target as HTMLDivElement).innerText
-                                setContent(value)
+                    <div className="h-[600px] flex flex-col">
+                        <textarea
+                            className="flex-1 w-full p-4 rounded-md border bg-slate-50 outline-none focus:ring-2 focus:ring-primary/20 transition-all resize-none text-sm text-slate-800 font-sans"
+                            placeholder="Введите инструкции здесь..."
+                            value={content}
+                            onChange={(e) => {
+                                setContent(e.target.value)
+                                setHasUnsavedChanges(true)
                             }}
                         />
+                        <div className="mt-2 text-[10px] text-muted-foreground flex justify-between px-1">
+                            <span>Поддержка переноса строк включена</span>
+                            {hasUnsavedChanges && <span className="text-amber-600 font-medium">Есть несохраненные изменения</span>}
+                        </div>
                     </div>
                 </CardContent>
             </Card>
