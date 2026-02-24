@@ -124,7 +124,7 @@ export function MaintenanceSessionWizard({ isOpen, onClose, tasks, onComplete }:
 
     if (!isOpen || !currentTask) return null
 
-    const instructionHtml = instructions[currentTask.equipment_type] || "<p>Инструкция отсутствует.</p>"
+    const instructionContent = instructions[currentTask.equipment_type] || "Инструкция отсутствует."
 
     return (
         <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -148,16 +148,15 @@ export function MaintenanceSessionWizard({ isOpen, onClose, tasks, onComplete }:
                     {/* Instructions Panel */}
                     <div className="flex-1 p-6 overflow-y-auto border-r bg-white">
                         <h3 className="font-semibold mb-4 flex items-center gap-2">
-                            <ClipboardListIcon className="h-5 w-5 text-blue-600" />
+                            <CheckCircle2 className="h-5 w-5 text-blue-600" />
                             Инструкция
                         </h3>
                         {isLoading ? (
                             <div className="flex justify-center py-10"><Loader2 className="animate-spin text-slate-300" /></div>
                         ) : (
-                            <div 
-                                className="prose prose-sm max-w-none prose-blue"
-                                dangerouslySetInnerHTML={{ __html: instructionHtml }} 
-                            />
+                            <div className="text-sm text-slate-800 whitespace-pre-wrap leading-relaxed">
+                                {instructionContent}
+                            </div>
                         )}
                     </div>
 

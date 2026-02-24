@@ -14,13 +14,22 @@ export async function GET(
 
         const workstationId = searchParams.get('workstation_id');
         const type = searchParams.get('type');
+        const search = searchParams.get('search');
+        const status = searchParams.get('status');
         const includeInactive = searchParams.get('include_inactive') === 'true';
+        
+        // Pagination parameters
+        const limit = parseInt(searchParams.get('limit') || '50');
+        const offset = parseInt(searchParams.get('offset') || '0');
 
         if (!userId) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        // Verify access
+        // Performance monitoring: Start timer
+        const startTime = Date.now();
+
+        // Verify access (cached check or simple query)
         const accessCheck = await query(
             `SELECT 1 FROM clubs WHERE id = $1 AND owner_id = $2
              UNION
@@ -32,14 +41,63 @@ export async function GET(
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
-        let sql = `
+        let whereConditions = [`e.club_id = $1`];
+        const queryParams: any[] = [clubId];
+        let paramIndex = 2;
+
+        if (!includeInactive) {
+            whereConditions.push(`e.is_active = TRUE`);
+        }
+
+        if (workstationId) {
+            if (workstationId === 'unassigned') {
+                whereConditions.push(`e.workstation_id IS NULL`);
+            } else {
+                whereConditions.push(`e.workstation_id = $${paramIndex}`);
+                queryParams.push(workstationId);
+                paramIndex++;
+            }
+        }
+
+        if (type) {
+            whereConditions.push(`e.type = $${paramIndex}`);
+            queryParams.push(type);
+            paramIndex++;
+        }
+
+        if (search) {
+            whereConditions.push(`(e.name ILIKE $${paramIndex} OR e.identifier ILIKE $${paramIndex} OR e.brand ILIKE $${paramIndex} OR e.model ILIKE $${paramIndex})`);
+            queryParams.push(`%${search}%`);
+            paramIndex++;
+        }
+
+        if (status) {
+            if (status === 'active') {
+                whereConditions.push(`e.is_active = TRUE`);
+            } else if (status === 'written_off') {
+                whereConditions.push(`e.is_active = FALSE`);
+            }
+        }
+
+        const whereClause = whereConditions.join(' AND ');
+
+        // Optimized query: Use a JOIN instead of a subquery per row for counts
+        // Also limit fields to what's needed for the list view to reduce payload size
+        const sql = `
+            WITH issue_counts AS (
+                SELECT equipment_id, COUNT(*) as open_issues_count
+                FROM equipment_issues
+                WHERE status IN ('OPEN', 'IN_PROGRESS')
+                GROUP BY equipment_id
+            )
             SELECT 
-                e.*,
+                e.id, e.club_id, e.workstation_id, e.type, e.name, e.identifier, e.brand, e.model,
+                e.purchase_date, e.warranty_expires, e.last_cleaned_at, e.is_active, e.cleaning_interval_days,
                 w.name as workstation_name,
                 w.zone as workstation_zone,
                 et.name_ru as type_name,
                 et.icon as type_icon,
-                (SELECT COUNT(*) FROM equipment_issues WHERE equipment_id = e.id AND status IN ('OPEN', 'IN_PROGRESS')) as open_issues_count,
+                COALESCE(ic.open_issues_count, 0)::integer as open_issues_count,
                 CASE 
                     WHEN e.warranty_expires IS NULL THEN NULL
                     WHEN e.warranty_expires < CURRENT_DATE THEN 'EXPIRED'
@@ -49,38 +107,30 @@ export async function GET(
             FROM equipment e
             LEFT JOIN club_workstations w ON e.workstation_id = w.id
             LEFT JOIN equipment_types et ON e.type = et.code
-            WHERE e.club_id = $1
+            LEFT JOIN issue_counts ic ON e.id = ic.equipment_id
+            WHERE ${whereClause}
+            ORDER BY w.name NULLS LAST, e.type, e.name
+            LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
         `;
-        const queryParams: any[] = [clubId];
-        let paramIndex = 2;
+        
+        const countSql = `SELECT COUNT(*) FROM equipment e WHERE ${whereClause}`;
 
-        if (!includeInactive) {
-            sql += ` AND e.is_active = TRUE`;
-        }
+        const [result, countResult] = await Promise.all([
+            query(sql, [...queryParams, limit, offset]),
+            query(countSql, queryParams)
+        ]);
 
-        if (workstationId) {
-            if (workstationId === 'unassigned') {
-                sql += ` AND e.workstation_id IS NULL`;
-            } else {
-                sql += ` AND e.workstation_id = $${paramIndex}`;
-                queryParams.push(workstationId);
-                paramIndex++;
-            }
-        }
-
-        if (type) {
-            sql += ` AND e.type = $${paramIndex}`;
-            queryParams.push(type);
-            paramIndex++;
-        }
-
-        sql += ` ORDER BY w.name NULLS LAST, e.type, e.name`;
-
-        const result = await query(sql, queryParams);
+        const total = parseInt(countResult.rows[0].count);
+        const duration = Date.now() - startTime;
+        
+        console.log(`[PERF] GET /api/clubs/${clubId}/equipment: ${duration}ms, total: ${total}, count: ${result.rowCount}`);
 
         return NextResponse.json({
             equipment: result.rows,
-            total: result.rowCount
+            total,
+            limit,
+            offset,
+            duration_ms: duration
         });
     } catch (error) {
         console.error('Get Equipment Error:', error);

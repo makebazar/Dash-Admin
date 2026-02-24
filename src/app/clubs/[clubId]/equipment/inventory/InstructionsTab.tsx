@@ -116,7 +116,7 @@ export function InstructionsTab() {
         if (!editorRef.current) return
         if (editorRef.current.innerText === content) return
         editorRef.current.innerText = content
-    }, [content])
+    }, [selectedType]) // Only update when type changes to avoid cursor jumps during typing
 
     if (isLoading) {
         return <div className="flex justify-center p-8"><Loader2 className="h-8 w-8 animate-spin text-slate-400" /></div>

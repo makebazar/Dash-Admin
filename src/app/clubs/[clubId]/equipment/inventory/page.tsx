@@ -143,8 +143,23 @@ export default function EquipmentInventory() {
     const [isLoading, setIsLoading] = useState(true)
     const [isSaving, setIsSaving] = useState(false)
 
+    // Pagination
+    const [page, setPage] = useState(1)
+    const [limit] = useState(50)
+    const [totalItems, setTotalItems] = useState(0)
+    const totalPages = Math.ceil(totalItems / limit)
+
+    // Stats state
+    const [inventoryStats, setInventoryStats] = useState({
+        total: 0,
+        active: 0,
+        repair: 0,
+        value: 0
+    })
+
     // Filters
     const [search, setSearch] = useState("")
+    const [debouncedSearch, setDebouncedSearch] = useState("")
     const [typeFilter, setTypeFilter] = useState("all")
     const [workstationFilter, setWorkstationFilter] = useState("all")
     const [statusFilter, setStatusFilter] = useState<string>("all")
@@ -157,18 +172,41 @@ export default function EquipmentInventory() {
     const [editingEquipment, setEditingEquipment] = useState<Partial<Equipment> | null>(null)
     const [activeTab, setActiveTab] = useState("details")
 
+    // Debounce search
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setDebouncedSearch(search)
+            setPage(1) // Reset to first page on search
+        }, 500)
+        return () => clearTimeout(timer)
+    }, [search])
+
     const fetchData = useCallback(async () => {
         setIsLoading(true)
         try {
-            const [eqRes, typeRes, wsRes] = await Promise.all([
-                fetch(`/api/clubs/${clubId}/equipment?include_inactive=true`, { cache: 'no-store' }),
+            const offset = (page - 1) * limit
+            const params = new URLSearchParams({
+                include_inactive: 'true',
+                limit: limit.toString(),
+                offset: offset.toString()
+            })
+
+            if (debouncedSearch) params.append('search', debouncedSearch)
+            if (typeFilter !== 'all') params.append('type', typeFilter)
+            if (workstationFilter !== 'all') params.append('workstation_id', workstationFilter)
+            if (statusFilter !== 'all') params.append('status', statusFilter)
+
+            const [eqRes, typeRes, wsRes, statsRes] = await Promise.all([
+                fetch(`/api/clubs/${clubId}/equipment?${params.toString()}`, { cache: 'no-store' }),
                 fetch(`/api/equipment-types`, { cache: 'no-store' }),
-                fetch(`/api/clubs/${clubId}/workstations`, { cache: 'no-store' })
+                fetch(`/api/clubs/${clubId}/workstations`, { cache: 'no-store' }),
+                fetch(`/api/clubs/${clubId}/equipment/stats`, { cache: 'no-store' })
             ])
 
             const eqData = await eqRes.json()
             const typeData = await typeRes.json()
             const wsData = await wsRes.json()
+            const statsData = await statsRes.json()
 
             if (eqRes.ok) {
                 // Enrich data with status logic for prototype
@@ -177,16 +215,25 @@ export default function EquipmentInventory() {
                     status: e.is_active ? 'ACTIVE' : 'WRITTEN_OFF' // Simplified mapping
                 }))
                 setEquipment(enriched)
+                setTotalItems(eqData.total || 0)
             }
             if (typeRes.ok) setTypes(typeData || [])
             if (wsRes.ok) setWorkstations(wsData || [])
+            if (statsRes.ok) {
+                setInventoryStats({
+                    total: statsData.total || 0,
+                    active: statsData.active || 0,
+                    repair: statsData.repair || 0,
+                    value: statsData.value || 0
+                })
+            }
 
         } catch (error) {
             console.error("Error fetching inventory data:", error)
         } finally {
             setIsLoading(false)
         }
-    }, [clubId])
+    }, [clubId, page, limit, debouncedSearch, typeFilter, workstationFilter, statusFilter])
 
     useEffect(() => {
         fetchData()
@@ -198,27 +245,13 @@ export default function EquipmentInventory() {
         }
     }, [searchParams])
 
-    const filteredEquipment = useMemo(() => {
-        return equipment.filter(item => {
-            const matchesSearch =
-                item.name.toLowerCase().includes(search.toLowerCase()) ||
-                (item.identifier?.toLowerCase().includes(search.toLowerCase())) ||
-                (item.brand?.toLowerCase().includes(search.toLowerCase())) ||
-                (item.model?.toLowerCase().includes(search.toLowerCase()))
+    // Reset page when filters change
+    const handleFilterChange = (setter: (val: string) => void) => (val: string) => {
+        setter(val)
+        setPage(1)
+    }
 
-            const matchesType = typeFilter === "all" || item.type === typeFilter
-            const matchesWorkstation =
-                workstationFilter === "all" ||
-                (workstationFilter === "unassigned" ? !item.workstation_id : item.workstation_id === workstationFilter)
-            
-            const matchesStatus = statusFilter === "all" 
-                ? true 
-                : statusFilter === 'active' ? item.is_active 
-                : !item.is_active
-
-            return matchesSearch && matchesType && matchesWorkstation && matchesStatus
-        })
-    }, [equipment, search, typeFilter, workstationFilter, statusFilter])
+    const filteredEquipment = equipment // Now filtered on server side
 
     // --- Actions ---
 
@@ -320,14 +353,7 @@ export default function EquipmentInventory() {
         }
     }
 
-    // --- Stats Calculation ---
-    const stats = useMemo(() => {
-        const total = equipment.length
-        const active = equipment.filter(e => e.is_active).length
-        const repair = 0 // Mock
-        const value = equipment.length * 15000 // Mock avg value
-        return { total, active, repair, value }
-    }, [equipment])
+    // --- Stats calculation removed (now from server) ---
 
     return (
         <div className="p-8 space-y-6 max-w-[1600px] mx-auto">
@@ -374,7 +400,7 @@ export default function EquipmentInventory() {
                     <CardContent className="p-6 flex items-center justify-between">
                         <div>
                             <p className="text-sm font-medium text-muted-foreground">Всего единиц</p>
-                            <h3 className="text-2xl font-bold mt-1">{stats.total}</h3>
+                            <h3 className="text-2xl font-bold mt-1">{inventoryStats.total}</h3>
                         </div>
                         <div className="p-3 bg-blue-50 text-blue-600 rounded-xl">
                             <Box className="h-6 w-6" />
@@ -385,7 +411,7 @@ export default function EquipmentInventory() {
                     <CardContent className="p-6 flex items-center justify-between">
                         <div>
                             <p className="text-sm font-medium text-muted-foreground">В эксплуатации</p>
-                            <h3 className="text-2xl font-bold mt-1 text-green-600">{stats.active}</h3>
+                            <h3 className="text-2xl font-bold mt-1 text-green-600">{inventoryStats.active}</h3>
                         </div>
                         <div className="p-3 bg-green-50 text-green-600 rounded-xl">
                             <Monitor className="h-6 w-6" />
@@ -396,7 +422,7 @@ export default function EquipmentInventory() {
                     <CardContent className="p-6 flex items-center justify-between">
                         <div>
                             <p className="text-sm font-medium text-muted-foreground">В ремонте</p>
-                            <h3 className="text-2xl font-bold mt-1 text-orange-600">{stats.repair}</h3>
+                            <h3 className="text-2xl font-bold mt-1 text-orange-600">{inventoryStats.repair}</h3>
                         </div>
                         <div className="p-3 bg-orange-50 text-orange-600 rounded-xl">
                             <Wrench className="h-6 w-6" />
@@ -407,7 +433,7 @@ export default function EquipmentInventory() {
                     <CardContent className="p-6 flex items-center justify-between">
                         <div>
                             <p className="text-sm font-medium text-muted-foreground">Оценочная стоимость</p>
-                            <h3 className="text-2xl font-bold mt-1">≈ {stats.value.toLocaleString()} ₽</h3>
+                            <h3 className="text-2xl font-bold mt-1">≈ {inventoryStats.value.toLocaleString()} ₽</h3>
                         </div>
                         <div className="p-3 bg-purple-50 text-purple-600 rounded-xl">
                             <Tag className="h-6 w-6" />
@@ -429,7 +455,7 @@ export default function EquipmentInventory() {
                         />
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
-                        <Select value={typeFilter} onValueChange={setTypeFilter}>
+                        <Select value={typeFilter} onValueChange={handleFilterChange(setTypeFilter)}>
                             <SelectTrigger className="w-[160px] bg-slate-50 border-slate-200">
                                 <SelectValue placeholder="Тип оборудования" />
                             </SelectTrigger>
@@ -441,7 +467,7 @@ export default function EquipmentInventory() {
                             </SelectContent>
                         </Select>
 
-                        <Select value={workstationFilter} onValueChange={setWorkstationFilter}>
+                        <Select value={workstationFilter} onValueChange={handleFilterChange(setWorkstationFilter)}>
                             <SelectTrigger className="w-[160px] bg-slate-50 border-slate-200">
                                 <SelectValue placeholder="Локация" />
                             </SelectTrigger>
@@ -454,7 +480,7 @@ export default function EquipmentInventory() {
                             </SelectContent>
                         </Select>
 
-                        <Select value={statusFilter} onValueChange={setStatusFilter}>
+                        <Select value={statusFilter} onValueChange={handleFilterChange(setStatusFilter)}>
                             <SelectTrigger className="w-[160px] bg-slate-50 border-slate-200">
                                 <SelectValue placeholder="Статус" />
                             </SelectTrigger>
@@ -470,6 +496,7 @@ export default function EquipmentInventory() {
                             setTypeFilter("all")
                             setWorkstationFilter("all")
                             setStatusFilter("all")
+                            setPage(1)
                         }}>
                             <RefreshCw className="h-4 w-4" />
                         </Button>
@@ -644,6 +671,70 @@ export default function EquipmentInventory() {
                         </TableBody>
                     </Table>
                 </div>
+                
+                {/* Pagination Controls */}
+                {!isLoading && totalItems > 0 && (
+                    <div className="px-6 py-4 bg-slate-50 border-t flex items-center justify-between">
+                        <p className="text-xs text-muted-foreground">
+                            Показано <span className="font-medium">{Math.min(totalItems, (page - 1) * limit + 1)}</span> - <span className="font-medium">{Math.min(totalItems, page * limit)}</span> из <span className="font-medium">{totalItems}</span> позиций
+                        </p>
+                        <div className="flex items-center gap-2">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setPage(p => Math.max(1, p - 1))}
+                                disabled={page === 1}
+                                className="h-8 bg-white"
+                            >
+                                Назад
+                            </Button>
+                            <div className="flex items-center gap-1">
+                                {[...Array(Math.min(5, totalPages))].map((_, i) => {
+                                    // Logic for showing pages near current page
+                                    let pageNum = page;
+                                    if (totalPages <= 5) pageNum = i + 1;
+                                    else if (page <= 3) pageNum = i + 1;
+                                    else if (page >= totalPages - 2) pageNum = totalPages - 4 + i;
+                                    else pageNum = page - 2 + i;
+
+                                    return (
+                                        <Button
+                                            key={pageNum}
+                                            variant={page === pageNum ? "default" : "outline"}
+                                            size="sm"
+                                            onClick={() => setPage(pageNum)}
+                                            className="h-8 w-8 p-0 bg-white data-[variant=default]:bg-primary"
+                                        >
+                                            {pageNum}
+                                        </Button>
+                                    );
+                                })}
+                                {totalPages > 5 && page < totalPages - 2 && (
+                                    <>
+                                        <span className="text-muted-foreground px-1 text-xs">...</span>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => setPage(totalPages)}
+                                            className="h-8 w-8 p-0 bg-white"
+                                        >
+                                            {totalPages}
+                                        </Button>
+                                    </>
+                                )}
+                            </div>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                                disabled={page === totalPages}
+                                className="h-8 bg-white"
+                            >
+                                Вперед
+                            </Button>
+                        </div>
+                    </div>
+                )}
             </Card>
 
                 </TabsContent>

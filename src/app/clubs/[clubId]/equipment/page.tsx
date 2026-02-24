@@ -47,24 +47,18 @@ export default function EquipmentDashboard() {
 
     const fetchStats = async () => {
         try {
-            // In a real app, combine these or fetch from specialized stats endpoint
-            const [eqRes, issuesRes, tasksRes] = await Promise.all([
-                fetch(`/api/clubs/${clubId}/equipment`),
-                fetch(`/api/clubs/${clubId}/equipment/issues?status=OPEN`),
-                fetch(`/api/clubs/${clubId}/equipment/maintenance`)
-            ])
+            const res = await fetch(`/api/clubs/${clubId}/equipment/stats`, { cache: 'no-store' })
+            const data = await res.json()
 
-            const eqData = await eqRes.json()
-            const issuesData = await issuesRes.json()
-            const tasksData = await tasksRes.json()
-
-            setStats({
-                total: eqData.total || 0,
-                active_issues: issuesData.stats?.open_count + issuesData.stats?.in_progress_count || 0,
-                overdue_tasks: tasksData.stats?.overdue_count || 0,
-                due_today_tasks: tasksData.stats?.due_today_count || 0,
-                expiring_warranty: eqData.equipment?.filter((e: any) => e.warranty_status === 'EXPIRING_SOON').length || 0
-            })
+            if (res.ok) {
+                setStats({
+                    total: data.total || 0,
+                    active_issues: data.active_issues || 0,
+                    overdue_tasks: data.overdue_tasks || 0,
+                    due_today_tasks: data.due_today_tasks || 0,
+                    expiring_warranty: data.expiring_warranty || 0
+                })
+            }
         } catch (error) {
             console.error("Error fetching equipment stats:", error)
         } finally {
