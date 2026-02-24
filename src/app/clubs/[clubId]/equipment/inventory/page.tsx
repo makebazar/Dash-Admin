@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useCallback, useMemo } from "react"
+import { useEffect, useState, useCallback, useMemo, Fragment } from "react"
 import { useParams, useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import {
@@ -158,12 +158,13 @@ export default function EquipmentInventory() {
     const [typeFilter, setTypeFilter] = useState("all")
     const [workstationFilter, setWorkstationFilter] = useState("all")
     const [statusFilter, setStatusFilter] = useState<string>("all")
+    const [isGrouped, setIsGrouped] = useState(true)
 
     // Selection
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 
     // Grouping & Expansion
-    const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set(['unassigned']))
+    const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
 
     // Dialog states
     const [isDialogOpen, setIsDialogOpen] = useState(false)
@@ -235,6 +236,19 @@ export default function EquipmentInventory() {
                 }))
                 setEquipment(enriched)
                 setTotalItems(eqData.total || 0)
+                
+                // Automatically expand groups that have items when data is loaded
+                if (enriched.length > 0) {
+                    const groupIds = new Set<string>()
+                    enriched.forEach((e: any) => {
+                        groupIds.add(e.workstation_id || 'unassigned')
+                    })
+                    setExpandedGroups(prev => {
+                        const newSet = new Set(prev)
+                        groupIds.forEach(id => newSet.add(id))
+                        return newSet
+                    })
+                }
             }
             if (typeRes.ok) setTypes(typeData || [])
             if (wsRes.ok) setWorkstations(wsData || [])
@@ -627,6 +641,15 @@ export default function EquipmentInventory() {
                                 <SelectItem value="inactive">Списано / Архив</SelectItem>
                             </SelectContent>
                         </Select>
+
+                        <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-md px-3 h-10">
+                            <Label htmlFor="grouping-toggle" className="text-xs font-medium text-slate-500 cursor-pointer">Группировка</Label>
+                            <Switch 
+                                id="grouping-toggle"
+                                checked={isGrouped}
+                                onCheckedChange={setIsGrouped}
+                            />
+                        </div>
                         
                         <Button variant="ghost" size="icon" onClick={() => {
                             setSearch("")
@@ -688,30 +711,17 @@ export default function EquipmentInventory() {
                                         <p className="text-muted-foreground mt-2">Загрузка реестра...</p>
                                     </TableCell>
                                 </TableRow>
-                            ) : groupedEquipment.length === 0 ? (
-                                <TableRow>
-                                    <TableCell colSpan={7} className="h-64 text-center text-muted-foreground">
-                                        <div className="flex flex-col items-center gap-2">
-                                            <div className="p-4 bg-slate-100 rounded-full">
-                                                <Search className="h-8 w-8 opacity-20" />
-                                            </div>
-                                            <p className="font-semibold text-lg">Ничего не найдено</p>
-                                            <p className="text-sm max-w-xs mx-auto">Попробуйте изменить параметры фильтрации или добавить новое оборудование</p>
-                                        </div>
-                                    </TableCell>
-                                </TableRow>
-                            ) : (
+                            ) : (isGrouped && groupedEquipment.length > 0) ? (
                                 groupedEquipment.map(([groupId, group]) => {
                                     const isExpanded = expandedGroups.has(groupId)
                                     const allGroupSelected = group.items.every(item => selectedIds.has(item.id))
                                     const someGroupSelected = group.items.some(item => selectedIds.has(item.id)) && !allGroupSelected
 
                                     return (
-                                        <>
+                                        <Fragment key={groupId}>
                                             {/* Group Header Row */}
                                             <TableRow 
-                                                key={`group-${groupId}`}
-                                                className="bg-slate-50/50 hover:bg-slate-100/80 transition-colors border-y border-slate-200 cursor-pointer sticky top-0 z-10"
+                                                className="bg-slate-100 hover:bg-slate-200 transition-colors border-y-2 border-slate-300 cursor-pointer sticky top-0 z-10"
                                                 onClick={() => toggleGroup(groupId)}
                                             >
                                                 <TableCell className="w-[40px]" onClick={(e) => e.stopPropagation()}>
@@ -725,32 +735,32 @@ export default function EquipmentInventory() {
                                                         onChange={() => toggleGroupSelection(groupId, group.items)}
                                                     />
                                                 </TableCell>
-                                                <TableCell colSpan={6} className="py-3">
+                                                <TableCell colSpan={6} className="py-4">
                                                     <div className="flex items-center justify-between">
                                                         <div className="flex items-center gap-3">
-                                                            <div className="text-slate-400">
-                                                                {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                                                            <div className="text-slate-500">
+                                                                {isExpanded ? <ChevronDown className="h-5 w-5" /> : <ChevronRight className="h-5 w-5" />}
                                                             </div>
                                                             <div className="flex items-center gap-2">
                                                                 {groupId === 'unassigned' ? (
-                                                                    <Box className="h-4 w-4 text-amber-500" />
+                                                                    <Box className="h-5 w-5 text-amber-600" />
                                                                 ) : (
-                                                                    <LayoutGrid className="h-4 w-4 text-indigo-500" />
+                                                                    <LayoutGrid className="h-5 w-5 text-indigo-600" />
                                                                 )}
-                                                                <span className="font-bold text-sm tracking-tight text-slate-700">
+                                                                <span className="font-black text-sm uppercase tracking-wider text-slate-800">
                                                                     {group.name} 
-                                                                    {group.zone && <span className="text-slate-400 font-normal ml-2">({group.zone})</span>}
+                                                                    {group.zone && <span className="text-slate-500 font-bold ml-3">| {group.zone}</span>}
                                                                 </span>
-                                                                <Badge variant="outline" className="ml-2 bg-white text-[10px] font-bold text-slate-500 border-slate-200">
+                                                                <Badge className="ml-3 bg-indigo-600 text-white border-none text-[10px] font-black px-2">
                                                                     {group.items.length}
                                                                 </Badge>
                                                             </div>
                                                         </div>
                                                         
-                                                        <div className="flex items-center gap-4 text-[11px] text-slate-400 font-medium">
-                                                            <span>{group.items.filter(i => i.is_active).length} активных</span>
-                                                            <div className="h-3 w-px bg-slate-200" />
-                                                            <span>{group.items.filter(i => !i.is_active).length} списано</span>
+                                                        <div className="flex items-center gap-4 text-[10px] text-slate-500 font-black uppercase tracking-widest">
+                                                            <span className="text-green-600">{group.items.filter(i => i.is_active).length} активных</span>
+                                                            <div className="h-3 w-px bg-slate-300" />
+                                                            <span className="text-rose-600">{group.items.filter(i => !i.is_active).length} списано</span>
                                                         </div>
                                                     </div>
                                                 </TableCell>
@@ -761,8 +771,8 @@ export default function EquipmentInventory() {
                                                 <TableRow 
                                                     key={item.id} 
                                                     className={cn(
-                                                        "group hover:bg-slate-50/80 transition-colors cursor-pointer border-l-2 border-l-transparent",
-                                                        selectedIds.has(item.id) && "bg-blue-50/30 hover:bg-blue-50/50 border-l-indigo-500"
+                                                        "group hover:bg-slate-50 transition-colors cursor-pointer border-l-4 border-l-transparent",
+                                                        selectedIds.has(item.id) && "bg-indigo-50/50 hover:bg-indigo-50 border-l-indigo-600"
                                                     )}
                                                     onClick={(e) => {
                                                         if ((e.target as HTMLElement).closest('button') || (e.target as HTMLElement).closest('input')) return
@@ -779,27 +789,27 @@ export default function EquipmentInventory() {
                                                     </TableCell>
                                                     <TableCell>
                                                         <div className="flex items-center gap-3">
-                                                            <div className="h-9 w-9 bg-slate-50 rounded-lg flex items-center justify-center text-slate-400 group-hover:bg-white group-hover:shadow-sm transition-all border border-transparent group-hover:border-slate-200">
+                                                            <div className="h-10 w-10 bg-white rounded-xl flex items-center justify-center text-slate-400 group-hover:text-indigo-600 group-hover:shadow-md transition-all border border-slate-100 group-hover:border-indigo-100">
                                                                 {getEquipmentIcon(item.type)}
                                                             </div>
                                                             <div>
-                                                                <p className="font-semibold text-sm text-slate-700">{item.name}</p>
-                                                                <p className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">{item.type_name || item.type}</p>
+                                                                <p className="font-bold text-sm text-slate-800">{item.name}</p>
+                                                                <p className="text-[10px] text-slate-400 uppercase tracking-widest font-black">{item.type_name || item.type}</p>
                                                             </div>
                                                         </div>
                                                     </TableCell>
                                                     <TableCell>
                                                         <div className="space-y-1">
                                                             {item.identifier ? (
-                                                                <code className="text-[10px] bg-slate-100 px-1.5 py-0.5 rounded text-slate-600 font-mono border border-slate-200">{item.identifier}</code>
+                                                                <code className="text-[10px] bg-slate-100 px-2 py-0.5 rounded-lg text-slate-700 font-mono border border-slate-200 font-bold">{item.identifier}</code>
                                                             ) : <span className="text-xs text-muted-foreground">—</span>}
-                                                            <p className="text-[10px] text-slate-400">{item.brand} {item.model}</p>
+                                                            <p className="text-[10px] text-slate-400 font-medium tracking-tight">{item.brand} {item.model}</p>
                                                         </div>
                                                     </TableCell>
                                                     <TableCell>
                                                         <div className="flex flex-col">
-                                                            <span className="text-[11px] font-medium text-slate-600">{group.name}</span>
-                                                            {group.zone && <span className="text-[10px] text-slate-400">{group.zone}</span>}
+                                                            <span className="text-xs font-bold text-slate-600">{group.name}</span>
+                                                            {group.zone && <span className="text-[10px] text-slate-400 font-medium">{group.zone}</span>}
                                                         </div>
                                                     </TableCell>
                                                     <TableCell>
@@ -809,39 +819,39 @@ export default function EquipmentInventory() {
                                                         {item.warranty_expires ? (
                                                             <div className="flex flex-col">
                                                                 <span className={cn(
-                                                                    "text-[11px] font-bold",
+                                                                    "text-xs font-black",
                                                                     item.warranty_status === 'EXPIRED' ? "text-rose-500" : 
                                                                     item.warranty_status === 'EXPIRING_SOON' ? "text-amber-500" : "text-slate-500"
                                                                 )}>
                                                                     {new Date(item.warranty_expires).toLocaleDateString("ru-RU")}
                                                                 </span>
-                                                                {item.warranty_status === 'EXPIRED' && <span className="text-[9px] text-rose-500 font-black uppercase">Истекла</span>}
+                                                                {item.warranty_status === 'EXPIRED' && <span className="text-[9px] text-rose-500 font-black uppercase tracking-tighter">Гарантия истекла</span>}
                                                             </div>
                                                         ) : (
-                                                            <span className="text-slate-300 text-[11px]">—</span>
+                                                            <span className="text-slate-300 text-xs">—</span>
                                                         )}
                                                     </TableCell>
-                                                    <TableCell className="text-right">
+                                                    <TableCell className="text-right pr-6">
                                                         <DropdownMenu>
                                                             <DropdownMenuTrigger asChild>
-                                                                <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-slate-200">
-                                                                    <MoreVertical className="h-4 w-4" />
+                                                                <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-900">
+                                                                    <MoreVertical className="h-5 w-5" />
                                                                 </Button>
                                                             </DropdownMenuTrigger>
-                                                            <DropdownMenuContent align="end" className="w-[200px]">
-                                                                <DropdownMenuLabel>Управление</DropdownMenuLabel>
-                                                                <DropdownMenuItem onClick={() => handleEdit(item)}>
+                                                            <DropdownMenuContent align="end" className="w-[200px] rounded-xl shadow-xl border-slate-200">
+                                                                <DropdownMenuLabel className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-3 py-2">Управление</DropdownMenuLabel>
+                                                                <DropdownMenuItem onClick={() => handleEdit(item)} className="rounded-lg mx-1 focus:bg-indigo-50 focus:text-indigo-600 cursor-pointer">
                                                                     <Pencil className="mr-2 h-4 w-4" /> Редактировать
                                                                 </DropdownMenuItem>
-                                                                <DropdownMenuItem onClick={() => router.push(`/clubs/${clubId}/equipment/${item.id}`)}>
+                                                                <DropdownMenuItem onClick={() => router.push(`/clubs/${clubId}/equipment/${item.id}`)} className="rounded-lg mx-1 focus:bg-indigo-50 focus:text-indigo-600 cursor-pointer">
                                                                     <FileText className="mr-2 h-4 w-4" /> Карточка товара
                                                                 </DropdownMenuItem>
-                                                                <DropdownMenuSeparator />
-                                                                <DropdownMenuItem onClick={() => handleEdit(item)}>
+                                                                <DropdownMenuSeparator className="bg-slate-100 mx-1" />
+                                                                <DropdownMenuItem onClick={() => handleEdit(item)} className="rounded-lg mx-1 focus:bg-indigo-50 focus:text-indigo-600 cursor-pointer">
                                                                     <History className="mr-2 h-4 w-4" /> История
                                                                 </DropdownMenuItem>
-                                                                <DropdownMenuSeparator />
-                                                                <DropdownMenuItem className="text-rose-600 focus:text-rose-600 focus:bg-rose-50" onClick={() => handleDelete(item.id)}>
+                                                                <DropdownMenuSeparator className="bg-slate-100 mx-1" />
+                                                                <DropdownMenuItem className="text-rose-600 focus:text-white focus:bg-rose-500 rounded-lg mx-1 cursor-pointer" onClick={() => handleDelete(item.id)}>
                                                                     <Trash2 className="mr-2 h-4 w-4" /> Удалить
                                                                 </DropdownMenuItem>
                                                             </DropdownMenuContent>
@@ -849,9 +859,124 @@ export default function EquipmentInventory() {
                                                     </TableCell>
                                                 </TableRow>
                                             ))}
-                                        </>
+                                        </Fragment>
                                     )
                                 })
+                            ) : filteredEquipment.length === 0 ? (
+                                <TableRow>
+                                    <TableCell colSpan={7} className="h-64 text-center text-muted-foreground">
+                                        <div className="flex flex-col items-center gap-2">
+                                            <div className="p-4 bg-slate-100 rounded-full">
+                                                <Search className="h-8 w-8 opacity-20" />
+                                            </div>
+                                            <p className="font-semibold text-lg">Ничего не найдено</p>
+                                            <p className="text-sm max-w-xs mx-auto">Попробуйте изменить параметры фильтрации или добавить новое оборудование</p>
+                                        </div>
+                                    </TableCell>
+                                </TableRow>
+                            ) : (
+                                filteredEquipment.map((item) => (
+                                    <TableRow 
+                                        key={item.id} 
+                                        className={cn(
+                                            "group hover:bg-slate-50/80 transition-colors cursor-pointer",
+                                            selectedIds.has(item.id) && "bg-blue-50/50 hover:bg-blue-50/80"
+                                        )}
+                                        onClick={(e) => {
+                                            if ((e.target as HTMLElement).closest('button') || (e.target as HTMLElement).closest('input')) return
+                                            handleEdit(item)
+                                        }}
+                                    >
+                                        <TableCell>
+                                            <input 
+                                                type="checkbox" 
+                                                className="rounded border-gray-300"
+                                                checked={selectedIds.has(item.id)}
+                                                onChange={() => toggleSelection(item.id)}
+                                            />
+                                        </TableCell>
+                                        <TableCell>
+                                            <div className="flex items-center gap-3">
+                                                <div className="h-10 w-10 bg-slate-100 rounded-lg flex items-center justify-center text-slate-500 group-hover:bg-white group-hover:shadow-sm transition-all border border-transparent group-hover:border-slate-200">
+                                                    {getEquipmentIcon(item.type)}
+                                                </div>
+                                                <div>
+                                                    <p className="font-semibold text-sm">{item.name}</p>
+                                                    <Badge variant="secondary" className="text-[10px] h-5 px-1.5 font-normal bg-slate-100 text-slate-500">{item.type_name || item.type}</Badge>
+                                                </div>
+                                            </div>
+                                        </TableCell>
+                                        <TableCell>
+                                            <div className="space-y-1">
+                                                {item.identifier ? (
+                                                    <code className="text-[11px] bg-slate-100 px-1.5 py-0.5 rounded text-slate-600 font-mono border border-slate-200">{item.identifier}</code>
+                                                ) : <span className="text-xs text-muted-foreground">—</span>}
+                                                <p className="text-[11px] text-muted-foreground">{item.brand} {item.model}</p>
+                                            </div>
+                                        </TableCell>
+                                        <TableCell>
+                                            {item.workstation_name ? (
+                                                <div className="flex items-center gap-2">
+                                                    <LayoutGrid className="h-3.5 w-3.5 text-muted-foreground" />
+                                                    <div className="flex flex-col">
+                                                        <span className="text-xs font-medium">{item.workstation_name}</span>
+                                                        <span className="text-[10px] text-muted-foreground">{item.workstation_zone}</span>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <div className="flex items-center gap-2">
+                                                    <Box className="h-3.5 w-3.5 text-amber-500" />
+                                                    <span className="text-xs text-amber-600 font-medium">Склад</span>
+                                                </div>
+                                            )}
+                                        </TableCell>
+                                        <TableCell>
+                                            {getStatusBadge(item)}
+                                        </TableCell>
+                                        <TableCell>
+                                            {item.warranty_expires ? (
+                                                <div className="flex flex-col gap-1">
+                                                    <span className={cn(
+                                                        "text-xs font-medium",
+                                                        item.warranty_status === 'EXPIRED' ? "text-rose-600" : 
+                                                        item.warranty_status === 'EXPIRING_SOON' ? "text-amber-600" : "text-slate-600"
+                                                    )}>
+                                                        {new Date(item.warranty_expires).toLocaleDateString("ru-RU")}
+                                                    </span>
+                                                    {item.warranty_status === 'EXPIRED' && <span className="text-[9px] text-rose-600 font-bold uppercase tracking-wide">Истекла</span>}
+                                                </div>
+                                            ) : (
+                                                <span className="text-muted-foreground text-xs">—</span>
+                                            )}
+                                        </TableCell>
+                                        <TableCell className="text-right pr-6">
+                                            <DropdownMenu>
+                                                <DropdownMenuTrigger asChild>
+                                                    <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-slate-200">
+                                                        <MoreVertical className="h-4 w-4" />
+                                                    </Button>
+                                                </DropdownMenuTrigger>
+                                                <DropdownMenuContent align="end" className="w-[200px]">
+                                                    <DropdownMenuLabel>Управление</DropdownMenuLabel>
+                                                    <DropdownMenuItem onClick={() => handleEdit(item)}>
+                                                        <Pencil className="mr-2 h-4 w-4" /> Редактировать
+                                                    </DropdownMenuItem>
+                                                    <DropdownMenuItem onClick={() => router.push(`/clubs/${clubId}/equipment/${item.id}`)}>
+                                                        <FileText className="mr-2 h-4 w-4" /> Карточка товара
+                                                    </DropdownMenuItem>
+                                                    <DropdownMenuSeparator />
+                                                    <DropdownMenuItem onClick={() => handleEdit(item)}>
+                                                        <History className="mr-2 h-4 w-4" /> История
+                                                    </DropdownMenuItem>
+                                                    <DropdownMenuSeparator />
+                                                    <DropdownMenuItem className="text-rose-600 focus:text-rose-600 focus:bg-rose-50" onClick={() => handleDelete(item.id)}>
+                                                        <Trash2 className="mr-2 h-4 w-4" /> Удалить
+                                                    </DropdownMenuItem>
+                                                </DropdownMenuContent>
+                                            </DropdownMenu>
+                                        </TableCell>
+                                    </TableRow>
+                                ))
                             )}
                         </TableBody>
                     </Table>
@@ -985,31 +1110,17 @@ export default function EquipmentInventory() {
                                             </Select>
                                         </div>
                                         <div className="space-y-2">
-                                            <Label>Статус</Label>
-                                            <Select
-                                                value={editingEquipment?.is_active ? 'active' : 'inactive'}
-                                                onValueChange={(val) => setEditingEquipment(prev => ({ ...prev, is_active: val === 'active' }))}
-                                            >
-                                                <SelectTrigger>
-                                                    <SelectValue />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem value="active">
-                                                        <div className="flex items-center gap-2">
-                                                            <div className="h-2 w-2 rounded-full bg-green-500" /> Активно
-                                                        </div>
-                                                    </SelectItem>
-                                                    <SelectItem value="inactive">
-                                                        <div className="flex items-center gap-2">
-                                                            <div className="h-2 w-2 rounded-full bg-slate-400" /> Списано / Архив
-                                                        </div>
-                                                    </SelectItem>
-                                                </SelectContent>
-                                            </Select>
+                                            <Label>Серийный номер / ID</Label>
+                                            <Input
+                                                placeholder="SN12345678"
+                                                value={editingEquipment?.identifier || ""}
+                                                onChange={(e) => setEditingEquipment(prev => ({ ...prev, identifier: e.target.value }))}
+                                            />
                                         </div>
                                         <div className="space-y-2">
                                             <Label>Бренд</Label>
                                             <Input
+                                                placeholder="Напр: ASUS, Logitech"
                                                 value={editingEquipment?.brand || ""}
                                                 onChange={(e) => setEditingEquipment(prev => ({ ...prev, brand: e.target.value }))}
                                             />
@@ -1017,100 +1128,131 @@ export default function EquipmentInventory() {
                                         <div className="space-y-2">
                                             <Label>Модель</Label>
                                             <Input
+                                                placeholder="Напр: G502 Hero"
                                                 value={editingEquipment?.model || ""}
                                                 onChange={(e) => setEditingEquipment(prev => ({ ...prev, model: e.target.value }))}
                                             />
                                         </div>
-                                        <div className="col-span-2 space-y-2">
-                                            <Label>Идентификатор (S/N)</Label>
-                                            <Input
-                                                className="font-mono bg-slate-50"
-                                                value={editingEquipment?.identifier || ""}
-                                                onChange={(e) => setEditingEquipment(prev => ({ ...prev, identifier: e.target.value }))}
-                                            />
+                                        <div className="space-y-2">
+                                            <Label>Локация (Рабочее место)</Label>
+                                            <Select
+                                                value={editingEquipment?.workstation_id || "unassigned"}
+                                                onValueChange={(val) => setEditingEquipment(prev => ({ ...prev, workstation_id: val === 'unassigned' ? null : val }))}
+                                            >
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder="Склад" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="unassigned">Склад (Не назначено)</SelectItem>
+                                                    {workstations.map(w => (
+                                                        <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label>Статус активности</Label>
+                                            <div className="flex items-center space-x-2 p-2 rounded-md border bg-slate-50">
+                                                <Switch
+                                                    id="active-status"
+                                                    checked={editingEquipment?.is_active}
+                                                    onCheckedChange={(val) => setEditingEquipment(prev => ({ ...prev, is_active: val }))}
+                                                />
+                                                <Label htmlFor="active-status" className="font-medium">
+                                                    {editingEquipment?.is_active ? "Активно" : "Списано / В архиве"}
+                                                </Label>
+                                            </div>
                                         </div>
                                     </div>
-                                    
-                                    <Separator />
-                                    
-                                    <div className="space-y-2">
-                                        <Label>Локация</Label>
-                                        <Select
-                                            value={editingEquipment?.workstation_id || "none"}
-                                            onValueChange={(val) => setEditingEquipment(prev => ({ ...prev, workstation_id: val === "none" ? null : val }))}
-                                        >
-                                            <SelectTrigger>
-                                                <SelectValue placeholder="Не назначено (Склад)" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="none">📦 Склад</SelectItem>
-                                                {workstations.map(w => (
-                                                    <SelectItem key={w.id} value={w.id}>🖥 {w.name} ({w.zone})</SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
 
-                                    <div className="space-y-2">
-                                        <Label>Заметки</Label>
-                                        <Textarea
-                                            value={editingEquipment?.notes || ""}
-                                            onChange={(e) => setEditingEquipment(prev => ({ ...prev, notes: e.target.value }))}
-                                            className="min-h-[100px]"
-                                        />
+                                    <Separator />
+
+                                    <div className="grid grid-cols-2 gap-6">
+                                        <div className="space-y-2">
+                                            <Label>Дата покупки</Label>
+                                            <Input
+                                                type="date"
+                                                value={editingEquipment?.purchase_date || ""}
+                                                onChange={(e) => setEditingEquipment(prev => ({ ...prev, purchase_date: e.target.value }))}
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label>Цена (₽)</Label>
+                                            <Input
+                                                type="number"
+                                                placeholder="0"
+                                                value={editingEquipment?.price || ""}
+                                                onChange={(e) => setEditingEquipment(prev => ({ ...prev, price: Number(e.target.value) }))}
+                                            />
+                                        </div>
+                                        <div className="col-span-2 space-y-2">
+                                            <Label>Заметки / Примечания</Label>
+                                            <Textarea
+                                                placeholder="Любая дополнительная информация..."
+                                                className="resize-none"
+                                                value={editingEquipment?.notes || ""}
+                                                onChange={(e) => setEditingEquipment(prev => ({ ...prev, notes: e.target.value }))}
+                                            />
+                                        </div>
                                     </div>
                                 </TabsContent>
 
                                 <TabsContent value="maintenance" className="mt-0 space-y-6">
-                                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex gap-3">
-                                        <AlertCircle className="h-5 w-5 text-amber-600 shrink-0" />
-                                        <div>
-                                            <h4 className="font-medium text-amber-900">Регламент обслуживания</h4>
-                                            <p className="text-sm text-amber-700 mt-1">Настройте периодичность чистки и проверок для автоматического создания задач персоналу.</p>
+                                    <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl flex gap-3">
+                                        <Info className="h-5 w-5 text-blue-500 shrink-0" />
+                                        <div className="text-sm text-blue-700">
+                                            <p className="font-semibold">Настройка техобслуживания</p>
+                                            <p className="opacity-80">Укажите интервал для автоматического создания задач на чистку и проверку этого устройства.</p>
                                         </div>
                                     </div>
 
-                                    <div className="flex items-center space-x-2 border p-4 rounded-lg bg-slate-50">
-                                        <Switch 
-                                            id="maintenance-mode" 
-                                            checked={editingEquipment?.maintenance_enabled ?? true}
-                                            onCheckedChange={(checked) => setEditingEquipment(prev => ({ ...prev, maintenance_enabled: checked }))}
-                                        />
-                                        <Label htmlFor="maintenance-mode" className="flex flex-col">
-                                            <span>Включить обслуживание</span>
-                                            <span className="font-normal text-xs text-muted-foreground">Если выключено, задачи по обслуживанию создаваться не будут</span>
-                                        </Label>
-                                    </div>
-
-                                    {(editingEquipment?.maintenance_enabled ?? true) && (
-                                        <div className="grid grid-cols-2 gap-6 animate-in fade-in slide-in-from-top-2">
-                                            <div className="space-y-2">
-                                                <Label>Интервал чистки (дней)</Label>
-                                                <Input
-                                                    type="number"
-                                                    value={editingEquipment?.cleaning_interval_days || 30}
-                                                    onChange={(e) => setEditingEquipment(prev => ({ ...prev, cleaning_interval_days: parseInt(e.target.value) }))}
-                                                />
+                                    <div className="space-y-4">
+                                        <div className="flex items-center justify-between p-4 rounded-xl border">
+                                            <div className="space-y-0.5">
+                                                <Label className="text-base font-bold">Автоматическое обслуживание</Label>
+                                                <p className="text-xs text-muted-foreground">Включает напоминания о необходимости чистки</p>
                                             </div>
-                                            <div className="space-y-2">
-                                                <Label>Окончание гарантии</Label>
-                                                <Input
-                                                    type="date"
-                                                    value={editingEquipment?.warranty_expires ? editingEquipment.warranty_expires.split('T')[0] : ""}
-                                                    onChange={(e) => setEditingEquipment(prev => ({ ...prev, warranty_expires: e.target.value }))}
-                                                />
-                                            </div>
+                                            <Switch
+                                                checked={editingEquipment?.maintenance_enabled}
+                                                onCheckedChange={(val) => setEditingEquipment(prev => ({ ...prev, maintenance_enabled: val }))}
+                                            />
                                         </div>
-                                    )}
 
-                                    <div className="space-y-2">
-                                        <Label>Последняя чистка</Label>
-                                        <div className="flex items-center gap-2 text-sm text-muted-foreground bg-slate-50 p-3 rounded-md border">
-                                            <CheckCircle2 className="h-4 w-4 text-green-600" />
-                                            {editingEquipment?.last_cleaned_at 
-                                                ? new Date(editingEquipment.last_cleaned_at).toLocaleDateString() 
-                                                : "Данных нет"}
+                                        {editingEquipment?.maintenance_enabled && (
+                                            <div className="space-y-2 p-4 rounded-xl bg-slate-50 border animate-in fade-in slide-in-from-top-2">
+                                                <Label>Интервал обслуживания (дней)</Label>
+                                                <div className="flex items-center gap-4">
+                                                    <Input
+                                                        type="number"
+                                                        className="w-24"
+                                                        value={editingEquipment?.cleaning_interval_days || 30}
+                                                        onChange={(e) => setEditingEquipment(prev => ({ ...prev, cleaning_interval_days: Number(e.target.value) }))}
+                                                    />
+                                                    <span className="text-sm text-muted-foreground">Рекомендуется: 30 дней для ПК, 14 дней для периферии</span>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        <div className="space-y-2">
+                                            <Label>Срок гарантии до</Label>
+                                            <Input
+                                                type="date"
+                                                value={editingEquipment?.warranty_expires || ""}
+                                                onChange={(e) => setEditingEquipment(prev => ({ ...prev, warranty_expires: e.target.value }))}
+                                            />
                                         </div>
+
+                                        {editingEquipment?.last_cleaned_at && (
+                                            <div className="p-4 rounded-xl border bg-slate-50 flex items-center justify-between">
+                                                <div className="flex items-center gap-2">
+                                                    <CheckCircle2 className="h-4 w-4 text-green-500" />
+                                                    <span className="text-sm font-medium">Последнее обслуживание</span>
+                                                </div>
+                                                <span className="text-sm text-muted-foreground">
+                                                    {new Date(editingEquipment.last_cleaned_at).toLocaleDateString("ru-RU")}
+                                                </span>
+                                            </div>
+                                        )}
                                     </div>
                                 </TabsContent>
 
@@ -1150,15 +1292,17 @@ export default function EquipmentInventory() {
                                 </TabsContent>
                             </form>
                         </div>
-                    </Tabs>
 
-                    <DialogFooter className="p-4 border-t bg-white">
-                        <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Отмена</Button>
-                        <Button form="eq-form" type="submit" disabled={isSaving}>
-                            {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                            Сохранить
-                        </Button>
-                    </DialogFooter>
+                        <DialogFooter className="p-6 bg-slate-50 border-t">
+                            <Button variant="outline" onClick={() => setIsDialogOpen(false)} disabled={isSaving}>Отмена</Button>
+                            {activeTab !== 'history' && (
+                                <Button form="eq-form" type="submit" disabled={isSaving}>
+                                    {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                    {editingEquipment?.id ? "Сохранить изменения" : "Добавить в реестр"}
+                                </Button>
+                            )}
+                        </DialogFooter>
+                    </Tabs>
                 </DialogContent>
             </Dialog>
         </div>
