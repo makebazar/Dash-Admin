@@ -125,13 +125,6 @@ interface Workstation {
     zone: string
 }
 
-// --- Mock History Data (Prototype) ---
-const MOCK_HISTORY = [
-    { id: 1, date: '2023-10-15', action: 'Покупка', user: 'Admin', details: 'Поставлено на учет' },
-    { id: 2, date: '2023-11-01', action: 'Перемещение', user: 'Tech', details: 'Назначено на PC-01' },
-    { id: 3, date: '2024-01-10', action: 'Обслуживание', user: 'Cleaner', details: 'Плановая чистка от пыли' },
-]
-
 export default function EquipmentInventory() {
     const { clubId } = useParams()
     const router = useRouter()
@@ -171,6 +164,8 @@ export default function EquipmentInventory() {
     const [isDialogOpen, setIsDialogOpen] = useState(false)
     const [editingEquipment, setEditingEquipment] = useState<Partial<Equipment> | null>(null)
     const [activeTab, setActiveTab] = useState("details")
+    const [history, setHistory] = useState<any[]>([])
+    const [isHistoryLoading, setIsHistoryLoading] = useState(false)
 
     // Debounce search
     useEffect(() => {
@@ -180,6 +175,25 @@ export default function EquipmentInventory() {
         }, 500)
         return () => clearTimeout(timer)
     }, [search])
+
+    const fetchHistory = async (id: string) => {
+        setIsHistoryLoading(true)
+        try {
+            const res = await fetch(`/api/clubs/${clubId}/equipment/${id}/history`)
+            const data = await res.json()
+            if (res.ok) setHistory(data)
+        } catch (error) {
+            console.error("Error fetching history:", error)
+        } finally {
+            setIsHistoryLoading(false)
+        }
+    }
+
+    useEffect(() => {
+        if (activeTab === 'history' && editingEquipment?.id) {
+            fetchHistory(editingEquipment.id)
+        }
+    }, [activeTab, editingEquipment?.id])
 
     const fetchData = useCallback(async () => {
         setIsLoading(true)
@@ -329,6 +343,73 @@ export default function EquipmentInventory() {
         setSelectedIds(newSet)
     }
 
+    const handleExport = () => {
+        // Convert equipment to CSV
+        const headers = ["Название", "Тип", "S/N", "Бренд", "Модель", "Локация", "Статус", "Гарантия"]
+        const rows = filteredEquipment.map(e => [
+            e.name,
+            e.type_name || e.type,
+            e.identifier || "-",
+            e.brand || "-",
+            e.model || "-",
+            e.workstation_name || "Склад",
+            e.is_active ? "Активно" : "Списано",
+            e.warranty_expires ? new Date(e.warranty_expires).toLocaleDateString("ru-RU") : "-"
+        ])
+
+        const csvContent = [
+            headers.join(","),
+            ...rows.map(r => r.join(","))
+        ].join("\n")
+
+        const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' })
+        const url = URL.createObjectURL(blob)
+        const link = document.createElement("a")
+        link.setAttribute("href", url)
+        link.setAttribute("download", `inventory_export_${new Date().toISOString().split('T')[0]}.csv`)
+        link.style.visibility = 'hidden'
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+    }
+
+    const handleBulkRepair = async () => {
+        if (selectedIds.size === 0) return
+        if (!confirm(`Отправить в ремонт ${selectedIds.size} поз.?`)) return
+        
+        setIsSaving(true)
+        try {
+            // Logic for bulk repair (e.g., creating issues or changing status)
+            // For now, let's just show an alert since we don't have a bulk API yet
+            alert("Функция группового ремонта будет доступна в следующем обновлении")
+        } finally {
+            setIsSaving(false)
+        }
+    }
+
+    const handleBulkArchive = async () => {
+        if (selectedIds.size === 0) return
+        if (!confirm(`Списать ${selectedIds.size} поз.?`)) return
+        
+        setIsSaving(true)
+        try {
+            const ids = Array.from(selectedIds)
+            await Promise.all(ids.map(id => 
+                fetch(`/api/clubs/${clubId}/equipment/${id}`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ is_active: false })
+                })
+            ))
+            setSelectedIds(new Set())
+            fetchData()
+        } catch (error) {
+            console.error("Bulk archive error:", error)
+        } finally {
+            setIsSaving(false)
+        }
+    }
+
     // --- Render Helpers ---
 
     const getStatusBadge = (item: Equipment) => {
@@ -375,7 +456,7 @@ export default function EquipmentInventory() {
                         <Button variant="outline" size="sm" onClick={() => fetchData()}>
                             <RefreshCw className="h-4 w-4 mr-2" /> Обновить
                         </Button>
-                        <Button variant="outline" size="sm">
+                        <Button variant="outline" size="sm" onClick={handleExport}>
                             <Download className="h-4 w-4 mr-2" /> Экспорт
                         </Button>
                         <Button onClick={handleCreate} className="bg-primary text-primary-foreground shadow-md hover:bg-primary/90">
@@ -508,10 +589,10 @@ export default function EquipmentInventory() {
                     <div className="flex items-center gap-2 p-2 bg-blue-50 text-blue-700 rounded-lg text-sm animate-in fade-in slide-in-from-top-2">
                         <span className="font-medium ml-2">Выбрано: {selectedIds.size}</span>
                         <div className="h-4 w-px bg-blue-200 mx-2" />
-                        <Button size="sm" variant="ghost" className="hover:bg-blue-100 hover:text-blue-800">
+                        <Button size="sm" variant="ghost" className="hover:bg-blue-100 hover:text-blue-800" onClick={handleBulkRepair}>
                             <Wrench className="h-3.5 w-3.5 mr-2" /> Отправить в ремонт
                         </Button>
-                        <Button size="sm" variant="ghost" className="hover:bg-blue-100 hover:text-blue-800">
+                        <Button size="sm" variant="ghost" className="hover:bg-blue-100 hover:text-blue-800" onClick={handleBulkArchive}>
                             <Archive className="h-3.5 w-3.5 mr-2" /> Списать
                         </Button>
                         <Button size="sm" variant="ghost" className="hover:bg-blue-100 hover:text-blue-800 ml-auto" onClick={() => setSelectedIds(new Set())}>
@@ -930,26 +1011,37 @@ export default function EquipmentInventory() {
                                 </TabsContent>
 
                                 <TabsContent value="history" className="mt-0">
-                                    <div className="space-y-4">
-                                        {MOCK_HISTORY.map((log) => (
-                                            <div key={log.id} className="flex gap-4 pb-4 border-b last:border-0 last:pb-0 relative">
-                                                <div className="flex flex-col items-center">
-                                                    <div className="h-2 w-2 rounded-full bg-primary mt-2" />
-                                                    <div className="w-px h-full bg-slate-200 mt-1 absolute left-[3.5px] top-4 -z-10" />
-                                                </div>
-                                                <div className="flex-1">
-                                                    <div className="flex justify-between items-start">
-                                                        <p className="font-medium text-sm">{log.action}</p>
-                                                        <span className="text-xs text-muted-foreground">{log.date}</span>
+                                    <div className="space-y-4 p-6">
+                                        {isHistoryLoading ? (
+                                            <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-slate-300" /></div>
+                                        ) : history.length === 0 ? (
+                                            <div className="text-center py-8 text-muted-foreground text-sm italic">История изменений пуста</div>
+                                        ) : (
+                                            history.map((log) => (
+                                                <div key={log.id} className="flex gap-4 pb-4 border-b last:border-0 last:pb-0 relative">
+                                                    <div className="flex flex-col items-center">
+                                                        <div className={cn(
+                                                            "h-2 w-2 rounded-full mt-2",
+                                                            log.action_type === 'MAINTENANCE' ? "bg-green-500" :
+                                                            log.action_type === 'MOVE' ? "bg-blue-500" : "bg-rose-500"
+                                                        )} />
+                                                        <div className="w-px h-full bg-slate-100 mt-1 absolute left-[3.5px] top-4 -z-10" />
                                                     </div>
-                                                    <p className="text-sm text-slate-600 mt-0.5">{log.details}</p>
-                                                    <p className="text-xs text-slate-400 mt-1">Автор: {log.user}</p>
+                                                    <div className="flex-1">
+                                                        <div className="flex justify-between items-start">
+                                                            <div>
+                                                                <p className="text-sm font-bold">{log.action}</p>
+                                                                <p className="text-xs text-muted-foreground mt-0.5">{log.details || "Без описания"}</p>
+                                                            </div>
+                                                            <div className="text-right">
+                                                                <p className="text-[10px] font-medium text-slate-500">{new Date(log.date).toLocaleDateString("ru-RU")}</p>
+                                                                <p className="text-[10px] text-slate-400 mt-0.5">{log.user_name || "Система"}</p>
+                                                            </div>
+                                                        </div>
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        ))}
-                                        <Button variant="ghost" className="w-full text-xs text-muted-foreground">
-                                            Загрузить еще...
-                                        </Button>
+                                            ))
+                                        )}
                                     </div>
                                 </TabsContent>
                             </form>
