@@ -100,7 +100,7 @@ export function MaintenanceSessionWizard({ isOpen, onClose, tasks, onComplete }:
                     body: JSON.stringify({
                         title: issueTitle,
                         description: issueDescription,
-                        priority: "MEDIUM", // Default
+                        severity: "MEDIUM", // Default
                         maintenance_task_id: currentTask.id
                     })
                 })

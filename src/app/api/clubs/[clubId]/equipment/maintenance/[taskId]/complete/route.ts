@@ -72,7 +72,8 @@ export async function POST(
                      status, 
                      due_date,
                      task_type
-                 ) VALUES ($1, 'PENDING', $2, 'CLEANING')`,
+                 ) VALUES ($1, 'PENDING', $2, 'CLEANING')
+                 ON CONFLICT (equipment_id, due_date, task_type) DO NOTHING`,
                  [equipmentId, nextDueDate]
              );
         }

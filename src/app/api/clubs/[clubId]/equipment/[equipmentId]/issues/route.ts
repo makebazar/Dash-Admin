@@ -28,7 +28,7 @@ export async function POST(
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
-        const { title, description, priority, maintenance_task_id } = body;
+        const { title, description, severity, maintenance_task_id } = body;
 
         if (!title) {
             return NextResponse.json({ error: 'Title is required' }, { status: 400 });
@@ -36,24 +36,22 @@ export async function POST(
 
         const result = await query(
             `INSERT INTO equipment_issues (
-                club_id,
                 equipment_id, 
                 reported_by, 
                 title, 
                 description, 
-                priority, 
+                severity, 
                 status,
                 maintenance_task_id
             )
-             VALUES ($1, $2, $3, $4, $5, $6, 'OPEN', $7)
+             VALUES ($1, $2, $3, $4, $5, 'OPEN', $6)
              RETURNING *`,
             [
-                clubId,
                 equipmentId, 
                 userId, 
                 title, 
                 description || null, 
-                priority || 'MEDIUM',
+                severity || 'MEDIUM',
                 maintenance_task_id || null
             ]
         );
