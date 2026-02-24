@@ -17,9 +17,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Loader2, AlertTriangle, CheckCircle2, ChevronRight, ChevronLeft } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
-import { Progress } from "@/components/ui/progress"
 import { cn } from "@/lib/utils"
-import { X } from "lucide-react"
 
 interface MaintenanceTask {
     id: string
@@ -135,21 +133,10 @@ export function MaintenanceSessionWizard({ isOpen, onClose, tasks, onComplete }:
     return (
         <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
             <DialogContent className="p-0 gap-0 overflow-hidden flex flex-col w-full h-full max-h-none sm:h-[90vh] sm:max-h-[850px] sm:max-w-[900px] sm:rounded-3xl border-none shadow-2xl">
-                {/* Header with Progress */}
-                <div className="relative bg-white border-b pt-4 sm:pt-6 px-4 sm:px-8 pb-4">
-                    {/* Mobile Close Button */}
-                    <button 
-                        onClick={onClose}
-                        className="sm:hidden absolute right-4 top-4 p-2 rounded-full hover:bg-slate-100 text-slate-400"
-                    >
-                        <X className="h-5 w-5" />
-                    </button>
-
-                    <div className="flex items-center justify-between mb-4">
+                {/* Header */}
+                <div className="relative bg-white border-b pt-4 sm:pt-6 px-4 sm:px-8 pb-6">
+                    <div className="flex items-center justify-between mb-0">
                         <div className="flex items-center gap-3 sm:gap-4">
-                            <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center font-bold text-lg shadow-lg shadow-indigo-200">
-                                {currentIndex + 1}
-                            </div>
                             <div>
                                 <DialogTitle className="text-lg sm:text-xl font-bold text-slate-900 leading-tight">
                                     {currentTask.equipment_name}
@@ -172,7 +159,6 @@ export function MaintenanceSessionWizard({ isOpen, onClose, tasks, onComplete }:
                             <span className="text-sm font-black text-indigo-600">{Math.round(progress)}%</span>
                         </div>
                     </div>
-                    <Progress value={progress} className="h-1.5 bg-slate-100" />
                 </div>
 
                 <div className="flex-1 overflow-hidden flex flex-col md:flex-row bg-slate-50/50">
@@ -278,18 +264,6 @@ export function MaintenanceSessionWizard({ isOpen, onClose, tasks, onComplete }:
 
                 <div className="p-4 sm:p-6 bg-white border-t flex flex-col sm:flex-row gap-4 items-center justify-between">
                     <div className="flex items-center gap-3 text-slate-400 order-2 sm:order-1">
-                        <div className="flex -space-x-2">
-                            {tasks.slice(0, 5).map((_, i) => (
-                                <div key={i} className={cn("h-6 w-6 rounded-full border-2 border-white bg-slate-100 flex items-center justify-center text-[10px] font-bold", i <= currentIndex ? "bg-indigo-600 text-white" : "text-slate-400")}>
-                                    {i + 1}
-                                </div>
-                            ))}
-                            {tasks.length > 5 && (
-                                <div className="h-6 w-6 rounded-full border-2 border-white bg-slate-50 flex items-center justify-center text-[8px] font-bold text-slate-400">
-                                    +{tasks.length - 5}
-                                </div>
-                            )}
-                        </div>
                         <span className="text-xs font-bold tracking-tight">
                             {isLastTask ? "Финальный этап" : `Осталось: ${tasks.length - currentIndex - 1}`}
                         </span>
