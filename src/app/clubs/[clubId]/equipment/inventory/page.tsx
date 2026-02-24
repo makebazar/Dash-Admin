@@ -239,10 +239,15 @@ export default function EquipmentInventory() {
 
             if (eqRes.ok) {
                 // Enrich data with status logic for prototype
-                const enriched = (eqData.equipment || []).map((e: any) => ({
-                    ...e,
-                    status: e.is_active ? 'ACTIVE' : 'WRITTEN_OFF' // Simplified mapping
-                }))
+                const enriched = (eqData.equipment || []).map((e: any) => {
+                    // Logic: if equipment has a direct assignee OR inherited from workstation, maintenance MUST be enabled
+                    const hasAssignee = e.assigned_user_id || e.workstation_assigned_user_id;
+                    return {
+                        ...e,
+                        status: e.is_active ? 'ACTIVE' : 'WRITTEN_OFF',
+                        maintenance_enabled: hasAssignee ? true : e.maintenance_enabled
+                    };
+                })
                 setEquipment(enriched)
                 setTotalItems(eqData.total || 0)
                 
@@ -1237,41 +1242,41 @@ export default function EquipmentInventory() {
                                             />
                                         </div>
 
-                                        <div className={cn(
-                                            "space-y-4 p-4 rounded-xl border transition-all",
-                                            editingEquipment?.maintenance_enabled ? "bg-slate-50 border-slate-200" : "bg-slate-50/50 border-dashed border-slate-200 opacity-60"
-                                        )}>
-                                            <div className="space-y-2">
-                                                <Label>Ответственный за обслуживание</Label>
-                                                <Select
-                                                    value={editingEquipment?.assigned_user_id || "none"}
-                                                    onValueChange={(val) => {
-                                                        const userId = val === "none" ? null : val;
-                                                        setEditingEquipment(prev => ({ 
-                                                            ...prev, 
-                                                            assigned_user_id: userId,
-                                                            // Если выбран ответственный, автоматически включаем обслуживание
-                                                            maintenance_enabled: userId ? true : prev?.maintenance_enabled
-                                                        }))
-                                                    }}
-                                                >
-                                                    <SelectTrigger className="bg-white">
-                                                        <SelectValue placeholder="Наследовать (из зоны/места)" />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="none">Наследовать (из зоны/места)</SelectItem>
-                                                        <SelectItem value="00000000-0000-0000-0000-000000000001">🤝 Свободный пул</SelectItem>
-                                                        {employees.map(emp => (
-                                                            <SelectItem key={emp.id} value={emp.id}>{emp.full_name}</SelectItem>
-                                                        ))}
-                                                    </SelectContent>
-                                                </Select>
-                                                <p className="text-[10px] text-muted-foreground italic">
-                                                    Если не назначено прямо здесь, система возьмет ответственного из настроек рабочего места или игровой зоны.
-                                                </p>
-                                            </div>
+                                        {editingEquipment?.maintenance_enabled && (
+                                            <div className={cn(
+                                                "space-y-4 p-4 rounded-xl border transition-all bg-slate-50 border-slate-200",
+                                                "animate-in fade-in slide-in-from-top-2"
+                                            )}>
+                                                <div className="space-y-2">
+                                                    <Label>Ответственный за обслуживание</Label>
+                                                    <Select
+                                                        value={editingEquipment?.assigned_user_id || "none"}
+                                                        onValueChange={(val) => {
+                                                            const userId = val === "none" ? null : val;
+                                                            setEditingEquipment(prev => ({ 
+                                                                ...prev, 
+                                                                assigned_user_id: userId,
+                                                                // Если выбран ответственный, автоматически включаем обслуживание
+                                                                maintenance_enabled: userId ? true : prev?.maintenance_enabled
+                                                            }))
+                                                        }}
+                                                    >
+                                                        <SelectTrigger className="bg-white">
+                                                            <SelectValue placeholder="Наследовать (из зоны/места)" />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            <SelectItem value="none">Наследовать (из зоны/места)</SelectItem>
+                                                            <SelectItem value="00000000-0000-0000-0000-000000000001">🤝 Свободный пул</SelectItem>
+                                                            {employees.map(emp => (
+                                                                <SelectItem key={emp.id} value={emp.id}>{emp.full_name}</SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
+                                                    <p className="text-[10px] text-muted-foreground italic">
+                                                        Если не назначено прямо здесь, система возьмет ответственного из настроек рабочего места или игровой зоны.
+                                                    </p>
+                                                </div>
 
-                                            {editingEquipment?.maintenance_enabled && (
                                                 <div className="space-y-2 pt-2 border-t border-slate-200/50 animate-in fade-in slide-in-from-top-1">
                                                     <Label>Интервал обслуживания (дней)</Label>
                                                     <div className="flex items-center gap-4">
@@ -1284,8 +1289,8 @@ export default function EquipmentInventory() {
                                                         <span className="text-sm text-muted-foreground">Рекомендуется: 30 дней для ПК, 14 дней для периферии</span>
                                                     </div>
                                                 </div>
-                                            )}
-                                        </div>
+                                            </div>
+                                        )}
 
                                         <div className="space-y-2">
                                             <Label>Срок гарантии до</Label>
