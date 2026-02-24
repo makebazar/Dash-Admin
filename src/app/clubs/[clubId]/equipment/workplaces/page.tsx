@@ -299,7 +299,11 @@ export default function WorkplacesPage() {
             const res = await fetch(`/api/clubs/${clubId}/equipment/${equipmentId}`, {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ maintenance_enabled: enabled })
+                body: JSON.stringify({ 
+                    maintenance_enabled: enabled,
+                    // Если обслуживание выключается вручную, сбрасываем прямого ответственного
+                    assigned_user_id: enabled ? undefined : null
+                })
             })
             if (res.ok) {
                 fetchData() // Refresh

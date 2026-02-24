@@ -145,6 +145,11 @@ export async function PATCH(
             'assigned_user_id'
         ];
 
+        // Logic: if assigned_user_id is set to a user or free pool, maintenance must be enabled
+        if (body.assigned_user_id && body.assigned_user_id !== '') {
+            body.maintenance_enabled = true;
+        }
+
         for (const field of allowedFields) {
             if (body[field] !== undefined) {
                 updates.push(`${field} = $${paramIndex}`);
