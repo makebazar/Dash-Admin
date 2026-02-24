@@ -184,16 +184,16 @@ export default function EmployeeTasksPage() {
                             isFree ? "bg-slate-300 dark:bg-slate-600" : isOverdue ? "bg-rose-500" : isInProgress ? "bg-indigo-500" : "bg-slate-200 dark:bg-slate-700"
                         )} />
                         <div className="px-4 py-3 flex-1 flex items-center justify-between gap-4">
-                            <div className="flex items-center gap-3 min-w-0">
+                            <div className="flex items-center gap-3 min-w-0 flex-1">
                                 <div className={cn(
                                     "h-9 w-9 rounded-xl flex items-center justify-center transition-colors shrink-0",
                                     isInProgress ? "bg-indigo-500 text-white" : "bg-slate-100 dark:bg-slate-700 text-slate-400"
                                 )}>
                                     <Monitor className="h-5 w-5" />
                                 </div>
-                                <div className="min-w-0 flex flex-col justify-center">
+                                <div className="min-w-0 flex flex-col justify-center flex-1">
                                     <div className="flex items-center gap-2 mb-0.5">
-                                        <h4 className="font-bold text-sm truncate">{task.equipment_name}</h4>
+                                        <h4 className="font-bold text-sm truncate min-w-0">{task.equipment_name}</h4>
                                         {!isFree && isOverdue && (
                                             <div className="h-2 w-2 rounded-full bg-rose-500 animate-pulse shrink-0" title="Просрочено" />
                                         )}
@@ -319,14 +319,18 @@ export default function EmployeeTasksPage() {
                 ) : (
                     <div className="grid gap-8">
                         {groupedTasks.map(([location, groupTasks]) => (
-                            <div key={location} className="space-y-4">
-                                <div className="flex items-center gap-2 px-1">
-                                    <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 flex items-center gap-2">
-                                        <MapPin className="h-3 w-3 opacity-50" />
-                                        {location}
-                                        <span className="opacity-30 ml-0.5 font-normal">({groupTasks.length})</span>
-                                    </h3>
-                                    <div className="flex-1 h-px bg-slate-100 dark:bg-slate-800/50 ml-2" />
+                            <div key={location} className="space-y-3">
+                                <div className="flex items-center gap-3 px-1">
+                                    <div className="flex items-center gap-2">
+                                        <div className="h-5 w-5 rounded-md bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center text-indigo-500">
+                                            <MapPin className="h-3 w-3" />
+                                        </div>
+                                        <h3 className="text-xs font-black uppercase tracking-[0.1em] text-slate-700 dark:text-slate-200">
+                                            {location}
+                                            <span className="text-slate-400 ml-1.5 font-bold">({groupTasks.length})</span>
+                                        </h3>
+                                    </div>
+                                    <div className="flex-1 h-px bg-slate-200 dark:bg-slate-800/50" />
                                 </div>
                                 <div className="grid gap-2">
                                     {groupTasks.map(task => renderTaskCard(task, false, true))}
@@ -350,13 +354,17 @@ export default function EmployeeTasksPage() {
                     <div className="grid gap-8">
                         {groupedFreeTasks.map(([location, groupTasks]) => (
                             <div key={`free-${location}`} className="space-y-3">
-                                <div className="flex items-center gap-2 px-1 opacity-60">
-                                    <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 flex items-center gap-2">
-                                        <MapPin className="h-3 w-3 opacity-50" />
-                                        {location}
-                                        <span className="opacity-30 ml-0.5 font-normal">({groupTasks.length})</span>
-                                    </h3>
-                                    <div className="flex-1 h-px bg-slate-100 dark:bg-slate-800/50 ml-2" />
+                                <div className="flex items-center gap-3 px-1">
+                                    <div className="flex items-center gap-2 opacity-60">
+                                        <div className="h-5 w-5 rounded-md bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400">
+                                            <MapPin className="h-3 w-3" />
+                                        </div>
+                                        <h3 className="text-xs font-black uppercase tracking-[0.1em] text-slate-500">
+                                            {location}
+                                            <span className="text-slate-400 ml-1.5 font-bold">({groupTasks.length})</span>
+                                        </h3>
+                                    </div>
+                                    <div className="flex-1 h-px bg-slate-200 dark:bg-slate-800/50" />
                                 </div>
                                 <div className="grid gap-2">
                                     {groupTasks.map(task => renderTaskCard(task, true, true))}
