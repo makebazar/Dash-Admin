@@ -10,13 +10,7 @@ import {
     Monitor,
     Play,
     Check,
-    ChevronLeft,
-    Zap,
-    Trophy,
-    LayoutGrid,
     MapPin,
-    ChevronRight,
-    ChevronDown,
     Search
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -195,74 +189,76 @@ export default function EmployeeTasksPage() {
         return { total, in_progress, overdue }
     }, [tasks])
 
-    const renderTaskCard = (task: MaintenanceTask, isFree: boolean = false) => {
+    const renderTaskCard = (task: MaintenanceTask, isFree: boolean = false, hideLocation: boolean = false) => {
         const isOverdue = new Date(task.due_date) < new Date()
         const isInProgress = task.status === 'IN_PROGRESS'
 
         return (
             <Card key={task.id} className={cn(
                 "transition-all duration-300 border-none shadow-sm overflow-hidden",
-                isInProgress ? "ring-2 ring-indigo-500 bg-indigo-50/10" : "bg-white dark:bg-slate-800/80 hover:shadow-md",
+                isInProgress ? "ring-1 ring-indigo-500 bg-indigo-50/5" : "bg-white dark:bg-slate-800/80 hover:shadow-md",
                 isFree && "opacity-80 hover:opacity-100"
             )}>
                 <CardContent className="p-0">
-                    <div className="flex items-stretch min-h-[100px]">
+                    <div className="flex items-stretch">
                         <div className={cn(
-                            "w-2 transition-all",
+                            "w-1 transition-all",
                             isFree ? "bg-slate-300 dark:bg-slate-600" : isOverdue ? "bg-rose-500" : isInProgress ? "bg-indigo-500" : "bg-slate-200 dark:bg-slate-700"
                         )} />
-                        <div className="p-5 flex-1 flex flex-col md:flex-row md:items-center justify-between gap-6">
-                            <div className="flex items-center gap-4">
+                        <div className="px-4 py-3 flex-1 flex items-center justify-between gap-4">
+                            <div className="flex items-center gap-3 min-w-0">
                                 <div className={cn(
-                                    "h-12 w-12 rounded-2xl flex items-center justify-center transition-colors",
+                                    "h-9 w-9 rounded-xl flex items-center justify-center transition-colors shrink-0",
                                     isInProgress ? "bg-indigo-500 text-white" : "bg-slate-100 dark:bg-slate-700 text-slate-400"
                                 )}>
-                                    <Monitor className="h-6 w-6" />
+                                    <Monitor className="h-5 w-5" />
                                 </div>
-                                <div className="space-y-1">
-                                    <div className="flex items-center gap-2">
-                                        <h4 className="font-bold">{task.equipment_name}</h4>
-                                        {!isFree && isOverdue && <Badge className="bg-rose-100 text-rose-600 border-none text-[10px] font-bold">ПРОСРОЧЕНО</Badge>}
-                                        {isFree && <Badge variant="outline" className="text-[10px] font-bold opacity-60">СВОБОДНО</Badge>}
+                                <div className="min-w-0 flex flex-col justify-center">
+                                    <div className="flex items-center gap-2 mb-0.5">
+                                        <h4 className="font-bold text-sm truncate">{task.equipment_name}</h4>
+                                        {!isFree && isOverdue && (
+                                            <div className="h-2 w-2 rounded-full bg-rose-500 animate-pulse shrink-0" title="Просрочено" />
+                                        )}
                                     </div>
-                                    <div className="flex items-center gap-3 text-xs text-muted-foreground font-medium">
-                                        <span className="bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded uppercase tracking-wider">{task.equipment_type_name}</span>
-                                        <span className="uppercase tracking-widest">{task.workstation_name || "Склад"}</span>
+                                    <div className="flex items-center gap-2 text-[10px] text-muted-foreground font-bold uppercase tracking-wider">
+                                        <span className="bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded leading-none shrink-0">{task.equipment_type_name}</span>
+                                        {!hideLocation && (
+                                            <span className="truncate opacity-60">{task.workstation_name || "Склад"}</span>
+                                        )}
+                                        {isFree && <span className="text-indigo-500 opacity-100">СВОБОДНО</span>}
                                     </div>
                                 </div>
                             </div>
 
-                            <div className="flex items-center gap-4">
+                            <div className="shrink-0">
                                 {isFree ? (
                                     <Button
-                                        size="lg"
+                                        size="sm"
                                         variant="secondary"
-                                        className="h-12 px-6 rounded-xl font-bold bg-slate-100 hover:bg-slate-200 text-slate-900"
+                                        className="h-9 px-4 rounded-lg font-bold bg-slate-100 hover:bg-slate-200 text-slate-900 text-xs transition-all"
                                         onClick={() => handleClaim(task.id)}
                                         disabled={isUpdating === task.id}
                                     >
-                                        {isUpdating === task.id ? <Loader2 className="h-4 w-4 animate-spin" /> : "Взять в работу"}
+                                        {isUpdating === task.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Взять"}
                                     </Button>
                                 ) : isInProgress ? (
                                     <Button
-                                        size="lg"
-                                        className="bg-emerald-600 hover:bg-emerald-700 h-12 px-6 rounded-xl font-bold shadow-lg shadow-emerald-200 dark:shadow-none"
+                                        size="sm"
+                                        className="bg-emerald-600 hover:bg-emerald-700 h-9 px-4 rounded-lg font-bold text-xs shadow-sm shadow-emerald-200 dark:shadow-none transition-all"
                                         onClick={() => handleAction(task.id, 'COMPLETE')}
                                         disabled={isUpdating === task.id}
                                     >
-                                        {isUpdating === task.id ? <Loader2 className="h-4 w-4 animate-spin text-white" /> : <Check className="mr-2 h-5 w-5" />}
-                                        Завершить
+                                        {isUpdating === task.id ? <Loader2 className="h-3 w-3 animate-spin text-white" /> : "Завершить"}
                                     </Button>
                                 ) : (
                                     <Button
-                                        size="lg"
+                                        size="sm"
                                         variant="outline"
-                                        className="h-12 px-6 rounded-xl font-bold border-indigo-200 text-indigo-600 hover:bg-indigo-50 hover:border-indigo-300 transition-all"
+                                        className="h-9 px-4 rounded-lg font-bold border-indigo-200 text-indigo-600 hover:bg-indigo-50 hover:border-indigo-300 text-xs transition-all"
                                         onClick={() => handleAction(task.id, 'START')}
                                         disabled={isUpdating === task.id}
                                     >
-                                        {isUpdating === task.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4 fill-current" />}
-                                        Начать
+                                        {isUpdating === task.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Начать"}
                                     </Button>
                                 )}
                             </div>
@@ -274,33 +270,34 @@ export default function EmployeeTasksPage() {
     }
 
     return (
-        <div className="min-h-screen bg-slate-50 dark:bg-slate-900/50 p-6 space-y-8">
+        <div className="min-h-screen bg-slate-50 dark:bg-slate-900/50 p-4 md:p-6 space-y-6 md:space-y-8">
             {/* Header */}
-            <div className="flex flex-col gap-6">
+            <div className="flex flex-col gap-4">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div>
-                        <h1 className="text-3xl font-bold tracking-tight">🧹 Задачи по обслуживанию</h1>
-                        <p className="text-muted-foreground mt-1">Список оборудования, требующего вашего внимания</p>
+                        <h1 className="text-2xl md:text-3xl font-black tracking-tight uppercase">Задачи</h1>
+                        <p className="text-xs text-muted-foreground mt-1 uppercase tracking-widest opacity-60">Техобслуживание оборудования</p>
                     </div>
                     
-                    <div className="flex items-center gap-3 bg-white dark:bg-slate-800 p-2 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
-                        <div className="flex items-center gap-2 px-3 border-r border-slate-100 dark:border-slate-700">
+                    <div className="flex items-center gap-2 bg-white dark:bg-slate-800 px-3 py-1.5 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700">
+                        <div className="flex items-center gap-2 pr-3 border-r border-slate-100 dark:border-slate-700">
                             <Switch 
                                 id="grouping-mode" 
                                 checked={isGrouped}
                                 onCheckedChange={setIsGrouped}
+                                className="scale-75 origin-left"
                             />
-                            <Label htmlFor="grouping-mode" className="text-xs font-bold uppercase tracking-wider cursor-pointer select-none">
-                                Группировка
+                            <Label htmlFor="grouping-mode" className="text-[10px] font-black uppercase tracking-widest cursor-pointer select-none opacity-60">
+                                Места
                             </Label>
                         </div>
-                        <div className="relative flex-1 md:w-64">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                        <div className="relative flex-1 md:w-48">
+                            <Search className="absolute left-0 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
                             <Input 
-                                placeholder="Поиск по названию или месту..." 
+                                placeholder="Поиск..." 
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
-                                className="pl-9 h-10 bg-transparent border-none focus-visible:ring-0 text-sm"
+                                className="pl-6 h-8 bg-transparent border-none focus-visible:ring-0 text-xs"
                             />
                         </div>
                     </div>
@@ -308,42 +305,42 @@ export default function EmployeeTasksPage() {
             </div>
 
             {/* Stats Summary */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <Card className="border-none shadow-sm bg-blue-50 dark:bg-blue-900/10">
-                    <CardContent className="pt-6">
+            <div className="grid grid-cols-3 gap-3 md:gap-6">
+                <Card className="border-none shadow-sm bg-blue-50/50 dark:bg-blue-900/10">
+                    <CardContent className="p-3 md:p-6">
                         <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-xs font-black uppercase tracking-widest text-blue-600 dark:text-blue-400 mb-1">Всего задач</p>
-                                <p className="text-3xl font-black text-blue-900 dark:text-blue-100">{stats.total}</p>
+                            <div className="min-w-0">
+                                <p className="text-[9px] md:text-xs font-black uppercase tracking-widest text-blue-600 dark:text-blue-400 mb-0.5">Всего</p>
+                                <p className="text-xl md:text-3xl font-black text-blue-900 dark:text-blue-100">{stats.total}</p>
                             </div>
-                            <div className="h-12 w-12 bg-white dark:bg-slate-800 rounded-2xl flex items-center justify-center text-blue-600 shadow-sm">
-                                <Monitor className="h-6 w-6" />
+                            <div className="hidden md:flex h-10 w-10 bg-white dark:bg-slate-800 rounded-xl items-center justify-center text-blue-600 shadow-sm">
+                                <Monitor className="h-5 w-5" />
                             </div>
                         </div>
                     </CardContent>
                 </Card>
-                <Card className="border-none shadow-sm bg-indigo-50 dark:bg-indigo-900/10">
-                    <CardContent className="pt-6">
+                <Card className="border-none shadow-sm bg-indigo-50/50 dark:bg-indigo-900/10">
+                    <CardContent className="p-3 md:p-6">
                         <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-xs font-black uppercase tracking-widest text-indigo-600 dark:text-indigo-400 mb-1">В процессе</p>
-                                <p className="text-3xl font-black text-indigo-900 dark:text-indigo-100">{stats.in_progress}</p>
+                            <div className="min-w-0">
+                                <p className="text-[9px] md:text-xs font-black uppercase tracking-widest text-indigo-600 dark:text-indigo-400 mb-0.5">В работе</p>
+                                <p className="text-xl md:text-3xl font-black text-indigo-900 dark:text-indigo-100">{stats.in_progress}</p>
                             </div>
-                            <div className="h-12 w-12 bg-white dark:bg-slate-800 rounded-2xl flex items-center justify-center text-indigo-600 shadow-sm">
-                                <Play className="h-6 w-6" />
+                            <div className="hidden md:flex h-10 w-10 bg-white dark:bg-slate-800 rounded-xl items-center justify-center text-indigo-600 shadow-sm">
+                                <Play className="h-5 w-5" />
                             </div>
                         </div>
                     </CardContent>
                 </Card>
-                <Card className="border-none shadow-sm bg-rose-50 dark:bg-rose-900/10">
-                    <CardContent className="pt-6">
+                <Card className="border-none shadow-sm bg-rose-50/50 dark:bg-rose-900/10">
+                    <CardContent className="p-3 md:p-6">
                         <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-xs font-black uppercase tracking-widest text-rose-600 dark:text-rose-400 mb-1">Просрочено</p>
-                                <p className="text-3xl font-black text-rose-900 dark:text-rose-100">{stats.overdue}</p>
+                            <div className="min-w-0">
+                                <p className="text-[9px] md:text-xs font-black uppercase tracking-widest text-rose-600 dark:text-rose-400 mb-0.5">Срок</p>
+                                <p className="text-xl md:text-3xl font-black text-rose-900 dark:text-rose-100">{stats.overdue}</p>
                             </div>
-                            <div className="h-12 w-12 bg-white dark:bg-slate-800 rounded-2xl flex items-center justify-center text-rose-600 shadow-sm">
-                                <AlertCircle className="h-6 w-6" />
+                            <div className="hidden md:flex h-10 w-10 bg-white dark:bg-slate-800 rounded-xl items-center justify-center text-rose-600 shadow-sm">
+                                <AlertCircle className="h-5 w-5" />
                             </div>
                         </div>
                     </CardContent>
@@ -369,25 +366,21 @@ export default function EmployeeTasksPage() {
                         {isGrouped ? (
                             groupedTasks.map(([location, groupTasks]) => (
                                 <div key={location} className="space-y-4">
-                                    <div className="flex items-center gap-3 px-2">
-                                        <div className="h-8 w-8 rounded-lg bg-indigo-50 dark:bg-indigo-900/20 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
-                                            <MapPin className="h-4 w-4" />
-                                        </div>
-                                        <h3 className="text-sm font-black uppercase tracking-widest text-slate-500 flex items-center gap-2">
+                                    <div className="flex items-center gap-2 px-1">
+                                        <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 flex items-center gap-2">
+                                            <MapPin className="h-3 w-3 opacity-50" />
                                             {location}
-                                            <Badge variant="secondary" className="rounded-full px-2 py-0 h-5 text-[10px] font-bold">
-                                                {groupTasks.length}
-                                            </Badge>
+                                            <span className="opacity-30 ml-0.5 font-normal">({groupTasks.length})</span>
                                         </h3>
-                                        <div className="flex-1 h-px bg-slate-100 dark:bg-slate-800" />
+                                        <div className="flex-1 h-px bg-slate-100 dark:bg-slate-800/50 ml-2" />
                                     </div>
-                                    <div className="grid gap-4">
-                                        {groupTasks.map(task => renderTaskCard(task))}
+                                    <div className="grid gap-2">
+                                        {groupTasks.map(task => renderTaskCard(task, false, true))}
                                     </div>
                                 </div>
                             ))
                         ) : (
-                            <div className="grid gap-4">
+                            <div className="grid gap-2">
                                 {filteredTasks.map(task => renderTaskCard(task))}
                             </div>
                         )}
@@ -408,41 +401,28 @@ export default function EmployeeTasksPage() {
                     <div className="grid gap-8">
                         {isGrouped ? (
                             groupedFreeTasks.map(([location, groupTasks]) => (
-                                <div key={`free-${location}`} className="space-y-4">
-                                    <div className="flex items-center gap-3 px-2 opacity-60">
-                                        <div className="h-8 w-8 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400">
-                                            <MapPin className="h-4 w-4" />
-                                        </div>
-                                        <h3 className="text-sm font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
+                                <div key={`free-${location}`} className="space-y-3">
+                                    <div className="flex items-center gap-2 px-1 opacity-60">
+                                        <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 flex items-center gap-2">
+                                            <MapPin className="h-3 w-3 opacity-50" />
                                             {location}
+                                            <span className="opacity-30 ml-0.5 font-normal">({groupTasks.length})</span>
                                         </h3>
-                                        <div className="flex-1 h-px bg-slate-100 dark:bg-slate-800" />
+                                        <div className="flex-1 h-px bg-slate-100 dark:bg-slate-800/50 ml-2" />
                                     </div>
-                                    <div className="grid gap-4">
-                                        {groupTasks.map(task => renderTaskCard(task, true))}
+                                    <div className="grid gap-2">
+                                        {groupTasks.map(task => renderTaskCard(task, true, true))}
                                     </div>
                                 </div>
                             ))
                         ) : (
-                            <div className="grid gap-4">
+                            <div className="grid gap-2">
                                 {filteredFreeTasks.map(task => renderTaskCard(task, true))}
                             </div>
                         )}
                     </div>
                 </div>
             )}
-
-            {/* Info Footer */}
-            <div className="p-6 rounded-3xl bg-amber-50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-900/20 flex items-start gap-4">
-                <Trophy className="h-6 w-6 text-amber-500 shrink-0 mt-0.5" />
-                <div className="space-y-1">
-                    <p className="text-sm font-bold text-amber-900 dark:text-amber-100">Зарабатывайте бонусы!</p>
-                    <p className="text-xs text-amber-800/70 dark:text-amber-200/50 leading-relaxed">
-                        Своевременное выполнение задач по обслуживанию оборудования приносит дополнительные баллы в вашу систему KPI.
-                        Баллы конвертируются в денежный бонус при расчете зарплаты в конце месяца.
-                    </p>
-                </div>
-            </div>
 
             <MaintenanceSessionWizard
                 isOpen={isSessionOpen}
