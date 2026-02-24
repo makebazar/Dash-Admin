@@ -26,8 +26,8 @@ ENV NEXT_PRIVATE_SKIP_STATIC=1
 # Coolify injects NODE_ENV=development via ARG which breaks the build
 ENV NODE_ENV=production
 
-# Build Next.js application with explicit NODE_ENV
-RUN NODE_ENV=production npm run build
+# Build Next.js application with explicit NODE_ENV and memory limits
+RUN NODE_OPTIONS='--max-old-space-size=4096' NEXT_TELEMETRY_DISABLED=1 NODE_ENV=production npm run build
 
 # Production stage
 FROM node:20-alpine AS runner

@@ -109,6 +109,7 @@ interface Equipment {
     is_active: boolean
     notes: string | null
     maintenance_enabled?: boolean
+    assigned_user_id?: string | null
     // Extended fields for prototype
     status?: EquipmentStatus
     purchase_date?: string
@@ -127,6 +128,11 @@ interface Workstation {
     zone: string
 }
 
+interface Employee {
+    id: string
+    full_name: string
+}
+
 export default function EquipmentInventory() {
     const { clubId } = useParams()
     const router = useRouter()
@@ -135,6 +141,7 @@ export default function EquipmentInventory() {
     const [equipment, setEquipment] = useState<Equipment[]>([])
     const [types, setTypes] = useState<EquipmentType[]>([])
     const [workstations, setWorkstations] = useState<Workstation[]>([])
+    const [employees, setEmployees] = useState<Employee[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [isSaving, setIsSaving] = useState(false)
 
@@ -216,17 +223,19 @@ export default function EquipmentInventory() {
             if (workstationFilter !== 'all') params.append('workstation_id', workstationFilter)
             if (statusFilter !== 'all') params.append('status', statusFilter)
 
-            const [eqRes, typeRes, wsRes, statsRes] = await Promise.all([
+            const [eqRes, typeRes, wsRes, statsRes, empRes] = await Promise.all([
                 fetch(`/api/clubs/${clubId}/equipment?${params.toString()}`, { cache: 'no-store' }),
                 fetch(`/api/equipment-types`, { cache: 'no-store' }),
                 fetch(`/api/clubs/${clubId}/workstations`, { cache: 'no-store' }),
-                fetch(`/api/clubs/${clubId}/equipment/stats`, { cache: 'no-store' })
+                fetch(`/api/clubs/${clubId}/equipment/stats`, { cache: 'no-store' }),
+                fetch(`/api/clubs/${clubId}/employees`, { cache: 'no-store' })
             ])
 
             const eqData = await eqRes.json()
             const typeData = await typeRes.json()
             const wsData = await wsRes.json()
             const statsData = await statsRes.json()
+            const empData = await empRes.json()
 
             if (eqRes.ok) {
                 // Enrich data with status logic for prototype
@@ -252,6 +261,7 @@ export default function EquipmentInventory() {
             }
             if (typeRes.ok) setTypes(typeData || [])
             if (wsRes.ok) setWorkstations(wsData || [])
+            if (empRes.ok) setEmployees(empData.employees || [])
             if (statsRes.ok) {
                 setInventoryStats({
                     total: statsData.total || 0,
