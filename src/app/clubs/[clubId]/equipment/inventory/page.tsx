@@ -1251,7 +1251,16 @@ export default function EquipmentInventory() {
                                                     <Label>Ответственный за обслуживание</Label>
                                                     <Select
                                                         value={editingEquipment?.assigned_user_id || "none"}
-                                                        onValueChange={(val) => setEditingEquipment(prev => ({ ...prev, assigned_user_id: val === "none" ? null : val }))}
+                                                        onValueChange={(val) => {
+                                                            const userId = val === "none" ? null : val;
+                                                            setEditingEquipment(prev => ({ 
+                                                                ...prev, 
+                                                                assigned_user_id: userId,
+                                                                // Если выбран конкретный пользователь или свободный пул, 
+                                                                // автоматически включаем обслуживание
+                                                                maintenance_enabled: userId ? true : prev?.maintenance_enabled
+                                                            }))
+                                                        }}
                                                     >
                                                         <SelectTrigger className="bg-white">
                                                             <SelectValue placeholder="Наследовать (из зоны/места)" />

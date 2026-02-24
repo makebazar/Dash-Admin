@@ -144,7 +144,7 @@ export default function WorkplacesPage() {
         try {
             const [wsRes, eqRes, typesRes, empRes, zonesRes] = await Promise.all([
                 fetch(`/api/clubs/${clubId}/workstations`),
-                fetch(`/api/clubs/${clubId}/equipment`),
+                fetch(`/api/clubs/${clubId}/equipment?limit=1000`),
                 fetch(`/api/equipment-types`),
                 fetch(`/api/clubs/${clubId}/employees`),
                 fetch(`/api/clubs/${clubId}/zones`)
@@ -419,6 +419,19 @@ export default function WorkplacesPage() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ assigned_user_id: userId })
             })
+            
+            if (res.ok && userId) {
+                // Если назначен ответственный (пользователь или свободный пул), 
+                // автоматически включаем обслуживание для всего оборудования на этом месте
+                await Promise.all(activeEquipment.map(item => 
+                    fetch(`/api/clubs/${clubId}/equipment/${item.id}`, {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ maintenance_enabled: true })
+                    })
+                ))
+            }
+
             if (res.ok) {
                 fetchData()
             }
