@@ -191,9 +191,9 @@ export default function EmployeeTasksPage() {
                                 )}>
                                     <Monitor className="h-5 w-5" />
                                 </div>
-                                <div className="min-w-0 flex flex-col justify-center flex-1">
+                                <div className="min-w-0 flex flex-col justify-center flex-1 max-w-[180px] sm:max-w-none">
                                     <div className="flex items-center gap-2 mb-0.5">
-                                        <h4 className="font-bold text-sm truncate min-w-0">{task.equipment_name}</h4>
+                                        <h4 className="font-bold text-sm truncate min-w-0 w-full">{task.equipment_name}</h4>
                                         {!isFree && isOverdue && (
                                             <div className="h-2 w-2 rounded-full bg-rose-500 animate-pulse shrink-0" title="Просрочено" />
                                         )}
