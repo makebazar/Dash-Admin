@@ -42,8 +42,6 @@ export default function EmployeeTasksPage() {
     const [freeTasks, setFreeTasks] = useState<MaintenanceTask[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [isUpdating, setIsUpdating] = useState<string | null>(null)
-    const [isGrouped, setIsGrouped] = useState(true)
-    const [searchQuery, setSearchQuery] = useState("")
     
     // Session Wizard State
     const [isSessionOpen, setIsSessionOpen] = useState(false)
@@ -130,20 +128,10 @@ export default function EmployeeTasksPage() {
         }
     }
 
-    const filteredTasks = useMemo(() => {
-        if (!searchQuery) return tasks
-        const query = searchQuery.toLowerCase()
-        return tasks.filter(t => 
-            t.equipment_name.toLowerCase().includes(query) || 
-            t.equipment_type_name.toLowerCase().includes(query) ||
-            (t.workstation_name?.toLowerCase() || "склад").includes(query)
-        )
-    }, [tasks, searchQuery])
-
     const groupedTasks = useMemo(() => {
         const groups: Record<string, MaintenanceTask[]> = {}
         
-        filteredTasks.forEach(task => {
+        tasks.forEach(task => {
             const location = task.workstation_name || "Склад"
             if (!groups[location]) groups[location] = []
             groups[location].push(task)
@@ -154,22 +142,12 @@ export default function EmployeeTasksPage() {
             if (b === "Склад") return 1
             return a.localeCompare(b)
         })
-    }, [filteredTasks])
-
-    const filteredFreeTasks = useMemo(() => {
-        if (!searchQuery) return freeTasks
-        const query = searchQuery.toLowerCase()
-        return freeTasks.filter(t => 
-            t.equipment_name.toLowerCase().includes(query) || 
-            t.equipment_type_name.toLowerCase().includes(query) ||
-            (t.workstation_name?.toLowerCase() || "склад").includes(query)
-        )
-    }, [freeTasks, searchQuery])
+    }, [tasks])
 
     const groupedFreeTasks = useMemo(() => {
         const groups: Record<string, MaintenanceTask[]> = {}
         
-        filteredFreeTasks.forEach(task => {
+        freeTasks.forEach(task => {
             const location = task.workstation_name || "Склад"
             if (!groups[location]) groups[location] = []
             groups[location].push(task)
@@ -180,7 +158,7 @@ export default function EmployeeTasksPage() {
             if (b === "Склад") return 1
             return a.localeCompare(b)
         })
-    }, [filteredFreeTasks])
+    }, [freeTasks])
 
     const stats = useMemo(() => {
         const total = tasks.length
@@ -278,29 +256,6 @@ export default function EmployeeTasksPage() {
                         <h1 className="text-2xl md:text-3xl font-black tracking-tight uppercase">Задачи</h1>
                         <p className="text-xs text-muted-foreground mt-1 uppercase tracking-widest opacity-60">Техобслуживание оборудования</p>
                     </div>
-                    
-                    <div className="flex items-center gap-2 bg-white dark:bg-slate-800 px-3 py-1.5 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700">
-                        <div className="flex items-center gap-2 pr-3 border-r border-slate-100 dark:border-slate-700">
-                            <Switch 
-                                id="grouping-mode" 
-                                checked={isGrouped}
-                                onCheckedChange={setIsGrouped}
-                                className="scale-75 origin-left"
-                            />
-                            <Label htmlFor="grouping-mode" className="text-[10px] font-black uppercase tracking-widest cursor-pointer select-none opacity-60">
-                                Места
-                            </Label>
-                        </div>
-                        <div className="relative flex-1 md:w-48">
-                            <Search className="absolute left-0 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-                            <Input 
-                                placeholder="Поиск..." 
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                className="pl-6 h-8 bg-transparent border-none focus-visible:ring-0 text-xs"
-                            />
-                        </div>
-                    </div>
                 </div>
             </div>
 
@@ -363,63 +318,51 @@ export default function EmployeeTasksPage() {
                     </div>
                 ) : (
                     <div className="grid gap-8">
-                        {isGrouped ? (
-                            groupedTasks.map(([location, groupTasks]) => (
-                                <div key={location} className="space-y-4">
-                                    <div className="flex items-center gap-2 px-1">
-                                        <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 flex items-center gap-2">
-                                            <MapPin className="h-3 w-3 opacity-50" />
-                                            {location}
-                                            <span className="opacity-30 ml-0.5 font-normal">({groupTasks.length})</span>
-                                        </h3>
-                                        <div className="flex-1 h-px bg-slate-100 dark:bg-slate-800/50 ml-2" />
-                                    </div>
-                                    <div className="grid gap-2">
-                                        {groupTasks.map(task => renderTaskCard(task, false, true))}
-                                    </div>
+                        {groupedTasks.map(([location, groupTasks]) => (
+                            <div key={location} className="space-y-4">
+                                <div className="flex items-center gap-2 px-1">
+                                    <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 flex items-center gap-2">
+                                        <MapPin className="h-3 w-3 opacity-50" />
+                                        {location}
+                                        <span className="opacity-30 ml-0.5 font-normal">({groupTasks.length})</span>
+                                    </h3>
+                                    <div className="flex-1 h-px bg-slate-100 dark:bg-slate-800/50 ml-2" />
                                 </div>
-                            ))
-                        ) : (
-                            <div className="grid gap-2">
-                                {filteredTasks.map(task => renderTaskCard(task))}
+                                <div className="grid gap-2">
+                                    {groupTasks.map(task => renderTaskCard(task, false, true))}
+                                </div>
                             </div>
-                        )}
+                        ))}
                     </div>
                 )}
             </div>
 
             {/* Free Tasks */}
-            {filteredFreeTasks.length > 0 && (
+            {groupedFreeTasks.length > 0 && (
                 <div className="space-y-6 pt-8 border-t border-slate-200 dark:border-slate-800">
                     <div className="flex items-center justify-between px-2">
                         <h2 className="text-xl font-black tracking-tight text-slate-400 uppercase">Свободные задачи</h2>
                         <Badge variant="outline" className="text-slate-400 border-slate-200">
-                            {filteredFreeTasks.length} доступно
+                            {freeTasks.length} доступно
                         </Badge>
                     </div>
 
                     <div className="grid gap-8">
-                        {isGrouped ? (
-                            groupedFreeTasks.map(([location, groupTasks]) => (
-                                <div key={`free-${location}`} className="space-y-3">
-                                    <div className="flex items-center gap-2 px-1 opacity-60">
-                                        <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 flex items-center gap-2">
-                                            <MapPin className="h-3 w-3 opacity-50" />
-                                            {location}
-                                            <span className="opacity-30 ml-0.5 font-normal">({groupTasks.length})</span>
-                                        </h3>
-                                        <div className="flex-1 h-px bg-slate-100 dark:bg-slate-800/50 ml-2" />
-                                    </div>
-                                    <div className="grid gap-2">
-                                        {groupTasks.map(task => renderTaskCard(task, true, true))}
-                                    </div>
+                        {groupedFreeTasks.map(([location, groupTasks]) => (
+                            <div key={`free-${location}`} className="space-y-3">
+                                <div className="flex items-center gap-2 px-1 opacity-60">
+                                    <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 flex items-center gap-2">
+                                        <MapPin className="h-3 w-3 opacity-50" />
+                                        {location}
+                                        <span className="opacity-30 ml-0.5 font-normal">({groupTasks.length})</span>
+                                    </h3>
+                                    <div className="flex-1 h-px bg-slate-100 dark:bg-slate-800/50 ml-2" />
                                 </div>
-                            ))
-                        ) : (
-                            <div className="grid gap-2">
-                                {filteredFreeTasks.map(task => renderTaskCard(task, true))}
+                                <div className="grid gap-2">
+                                    {groupTasks.map(task => renderTaskCard(task, true, true))}
+                                </div>
                             </div>
-                        )}
+                        ))}
                     </div>
                 </div>
             )}
