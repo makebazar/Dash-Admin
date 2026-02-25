@@ -185,7 +185,7 @@ export function MaintenanceSessionWizard({ isOpen, onClose, tasks, onComplete }:
                                 </div>
                             </div>
                         </div>
-                        <div className="hidden sm:flex flex-col items-end gap-1">
+                        <div className="hidden sm:flex flex-col items-end gap-1 opacity-0">
                             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Прогресс</span>
                             <span className="text-sm font-black text-indigo-600">{Math.round(progress)}%</span>
                         </div>
@@ -331,7 +331,7 @@ export function MaintenanceSessionWizard({ isOpen, onClose, tasks, onComplete }:
                 </div>
 
                 <div className="p-4 sm:p-6 bg-white border-t flex flex-col sm:flex-row gap-4 items-center justify-between">
-                    <div className="flex items-center gap-3 text-slate-400 order-2 sm:order-1">
+                    <div className="flex items-center gap-3 text-slate-400 order-2 sm:order-1 opacity-0 pointer-events-none">
                         <span className="text-xs font-bold tracking-tight">
                             {isLastTask ? "Финальный этап" : `Осталось: ${tasks.length - currentIndex - 1}`}
                         </span>
@@ -340,15 +340,15 @@ export function MaintenanceSessionWizard({ isOpen, onClose, tasks, onComplete }:
                     <div className="flex gap-3 w-full sm:w-auto order-1 sm:order-2">
                         <Button 
                             onClick={handleCompleteTask} 
-                            disabled={isSubmitting || isUploading || (hasIssue && !issueTitle) || (isLastTask && photos.length === 0)}
+                            disabled={isSubmitting || isUploading || (hasIssue && !issueTitle) || (photos.length === 0)}
                             className="w-full sm:w-auto h-12 px-8 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold shadow-lg shadow-indigo-200 transition-all hover:translate-y-[-2px] active:translate-y-0 disabled:opacity-50"
                         >
                             {isSubmitting || isUploading ? (
                                 <Loader2 className="h-5 w-5 animate-spin" />
                             ) : (
                                 <>
-                                    {isLastTask ? "Завершить" : "Подтвердить и далее"}
-                                    {isLastTask ? <CheckCircle2 className="ml-2 h-5 w-5" /> : <ChevronRight className="ml-2 h-5 w-5" />}
+                                    Завершить
+                                    <CheckCircle2 className="ml-2 h-5 w-5" />
                                 </>
                             )}
                         </Button>
