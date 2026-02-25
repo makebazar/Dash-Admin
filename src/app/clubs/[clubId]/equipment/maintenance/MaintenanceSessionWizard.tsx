@@ -226,44 +226,40 @@ export function MaintenanceSessionWizard({ isOpen, onClose, tasks, onComplete }:
                     </div>
 
                     {/* Action Panel */}
-                    <div className="w-full md:w-[360px] p-4 sm:p-8 flex flex-col gap-6 overflow-y-auto border-t md:border-t-0 md:border-l border-slate-200">
-                        <div className="space-y-6">
+                    <div className="w-full md:w-[320px] p-4 sm:p-6 flex flex-col gap-4 overflow-y-auto border-t md:border-t-0 md:border-l border-slate-200">
+                        <div className="space-y-4">
                             <div>
-                                <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-4">Статус проверки</h3>
-                                <div 
-                                    className={cn(
-                                        "p-4 rounded-2xl border-2 transition-all cursor-pointer flex items-center justify-between group",
-                                        !hasIssue 
-                                            ? "bg-green-50 border-green-200 text-green-700" 
-                                            : "bg-white border-slate-100 text-slate-500 hover:border-slate-200"
-                                    )}
-                                    onClick={() => setHasIssue(false)}
-                                >
-                                    <div className="flex items-center gap-3">
-                                        <div className={cn("h-6 w-6 rounded-full flex items-center justify-center", !hasIssue ? "bg-green-500 text-white" : "bg-slate-100 text-slate-300")}>
-                                            <CheckCircle2 className="h-4 w-4" />
+                                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Статус проверки</h3>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <div 
+                                        className={cn(
+                                            "p-3 rounded-xl border-2 transition-all cursor-pointer flex flex-col items-center justify-center gap-2 text-center",
+                                            !hasIssue 
+                                                ? "bg-green-50 border-green-200 text-green-700" 
+                                                : "bg-white border-slate-100 text-slate-400 hover:border-slate-200"
+                                        )}
+                                        onClick={() => setHasIssue(false)}
+                                    >
+                                        <div className={cn("h-8 w-8 rounded-full flex items-center justify-center transition-colors", !hasIssue ? "bg-green-500 text-white" : "bg-slate-100")}>
+                                            <CheckCircle2 className="h-5 w-5" />
                                         </div>
-                                        <span className="font-bold text-sm">Все в порядке</span>
+                                        <span className="font-bold text-xs leading-none">В порядке</span>
                                     </div>
-                                    {!hasIssue && <Badge className="bg-green-500/20 text-green-700 border-none text-[10px]">Выбрано</Badge>}
-                                </div>
 
-                                <div 
-                                    className={cn(
-                                        "p-4 rounded-2xl border-2 transition-all cursor-pointer flex items-center justify-between mt-3 group",
-                                        hasIssue 
-                                            ? "bg-amber-50 border-amber-200 text-amber-700" 
-                                            : "bg-white border-slate-100 text-slate-500 hover:border-slate-200"
-                                    )}
-                                    onClick={() => setHasIssue(true)}
-                                >
-                                    <div className="flex items-center gap-3">
-                                        <div className={cn("h-6 w-6 rounded-full flex items-center justify-center", hasIssue ? "bg-amber-500 text-white" : "bg-slate-100 text-slate-300")}>
-                                            <AlertTriangle className="h-4 w-4" />
+                                    <div 
+                                        className={cn(
+                                            "p-3 rounded-xl border-2 transition-all cursor-pointer flex flex-col items-center justify-center gap-2 text-center",
+                                            hasIssue 
+                                                ? "bg-amber-50 border-amber-200 text-amber-700" 
+                                                : "bg-white border-slate-100 text-slate-400 hover:border-slate-200"
+                                        )}
+                                        onClick={() => setHasIssue(true)}
+                                    >
+                                        <div className={cn("h-8 w-8 rounded-full flex items-center justify-center transition-colors", hasIssue ? "bg-amber-500 text-white" : "bg-slate-100")}>
+                                            <AlertTriangle className="h-5 w-5" />
                                         </div>
-                                        <span className="font-bold text-sm">Есть проблема</span>
+                                        <span className="font-bold text-xs leading-none">Проблема</span>
                                     </div>
-                                    {hasIssue && <Badge className="bg-amber-500/20 text-amber-700 border-none text-[10px]">Выбрано</Badge>}
                                 </div>
                             </div>
 
