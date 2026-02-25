@@ -179,6 +179,27 @@ export async function PATCH(
                  VALUES ($1, $2, $3, $4, $5)`,
                 [equipmentId, currentWorkstationId, newWorkstationId || null, userId, body.move_reason || null]
             );
+
+            // Sync assigned user from new workstation
+            if (newWorkstationId) {
+                const workstationRes = await query(
+                    `SELECT assigned_user_id FROM club_workstations WHERE id = $1`,
+                    [newWorkstationId]
+                );
+                
+                if (workstationRes.rowCount && workstationRes.rowCount > 0) {
+                    const wsAssignedUser = workstationRes.rows[0].assigned_user_id;
+                    
+                    // Update equipment to match workstation's assigned user
+                    await query(
+                        `UPDATE equipment 
+                         SET assigned_user_id = $1,
+                             maintenance_enabled = CASE WHEN $1::uuid IS NOT NULL THEN TRUE ELSE maintenance_enabled END
+                         WHERE id = $2`,
+                        [wsAssignedUser, equipmentId]
+                    );
+                }
+            }
         }
 
         return NextResponse.json(result.rows[0]);
