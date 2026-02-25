@@ -70,8 +70,8 @@ export async function PATCH(
             const freePool = !!body.free_pool;
             await query(
                 `UPDATE equipment
-                 SET assigned_user_id = $1,
-                     maintenance_enabled = CASE WHEN $2 THEN TRUE ELSE (CASE WHEN $1 IS NULL THEN FALSE ELSE TRUE END) END
+                 SET assigned_user_id = $1::uuid,
+                     maintenance_enabled = CASE WHEN $2::boolean THEN TRUE ELSE (CASE WHEN $1::uuid IS NULL THEN FALSE ELSE TRUE END) END
                  WHERE workstation_id = $3`,
                 [assignedUserId, freePool, workstationId]
             );
