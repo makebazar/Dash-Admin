@@ -18,7 +18,8 @@ import {
     Filter,
     X,
     MessageCircle,
-    Info
+    Info,
+    Image as ImageIcon
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -60,6 +61,7 @@ interface Issue {
     resolved_at: string | null
     resolved_by_name: string | null
     resolution_notes: string | null
+    resolution_photos: string[] | null
 }
 
 interface Equipment {
@@ -85,6 +87,8 @@ export default function IssuesBoard() {
         severity: 'MEDIUM' as const
     })
     const [resolutionNotes, setResolutionNotes] = useState("")
+    const [resolutionPhotos, setResolutionPhotos] = useState<File[]>([])
+    const [isUploading, setIsUploading] = useState(false)
 
     const fetchData = useCallback(async () => {
         setIsLoading(true)
@@ -141,12 +145,12 @@ export default function IssuesBoard() {
         }
     }
 
-    const handleUpdateStatus = async (issueId: string, status: string, notes?: string) => {
+    const handleUpdateStatus = async (issueId: string, status: string, notes?: string, photos?: string[]) => {
         try {
             const res = await fetch(`/api/clubs/${clubId}/equipment/issues/${issueId}`, {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ status, resolution_notes: notes })
+                body: JSON.stringify({ status, resolution_notes: notes, resolution_photos: photos })
             })
             if (res.ok) {
                 setSelectedIssue(null)
@@ -154,6 +158,41 @@ export default function IssuesBoard() {
             }
         } catch (error) {
             console.error("Error updating issue status:", error)
+        }
+    }
+
+    const handleResolveWithPhotos = async () => {
+        if (!selectedIssue) return
+        
+        setIsUploading(true)
+        try {
+            const uploadedUrls: string[] = []
+            
+            // Upload photos one by one
+            for (const file of resolutionPhotos) {
+                const formData = new FormData()
+                formData.append('file', file)
+                
+                const res = await fetch('/api/upload', {
+                    method: 'POST',
+                    body: formData
+                })
+                
+                if (res.ok) {
+                    const data = await res.json()
+                    if (data.url) uploadedUrls.push(data.url)
+                }
+            }
+            
+            await handleUpdateStatus(selectedIssue.id, 'RESOLVED', resolutionNotes, uploadedUrls)
+            
+            // Reset state
+            setResolutionPhotos([])
+            setResolutionNotes("")
+        } catch (error) {
+            console.error("Error uploading photos:", error)
+        } finally {
+            setIsUploading(false)
         }
     }
 
@@ -393,11 +432,46 @@ export default function IssuesBoard() {
                                                 value={resolutionNotes}
                                                 onChange={(e) => setResolutionNotes(e.target.value)}
                                             />
+                                            
+                                            {/* Photo Upload Section */}
+                                            <div className="space-y-2">
+                                                <Label className="text-xs">Фотоотчет (опционально)</Label>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {resolutionPhotos.map((file, idx) => (
+                                                        <div key={idx} className="relative h-16 w-16 rounded border overflow-hidden group">
+                                                            <img src={URL.createObjectURL(file)} alt="preview" className="h-full w-full object-cover" />
+                                                            <button 
+                                                                onClick={() => setResolutionPhotos(prev => prev.filter((_, i) => i !== idx))}
+                                                                className="absolute top-0 right-0 bg-black/50 text-white p-0.5 opacity-0 group-hover:opacity-100 transition-opacity rounded-bl"
+                                                            >
+                                                                <X className="h-3 w-3" />
+                                                            </button>
+                                                        </div>
+                                                    ))}
+                                                    <label className="h-16 w-16 border-2 border-dashed border-slate-200 rounded flex flex-col items-center justify-center cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-colors">
+                                                        <ImageIcon className="h-4 w-4 text-muted-foreground" />
+                                                        <span className="text-[8px] text-muted-foreground mt-1">Фото</span>
+                                                        <input 
+                                                            type="file" 
+                                                            className="hidden" 
+                                                            accept="image/*" 
+                                                            multiple 
+                                                            onChange={(e) => {
+                                                                if (e.target.files) {
+                                                                    setResolutionPhotos(prev => [...prev, ...Array.from(e.target.files!)])
+                                                                }
+                                                            }} 
+                                                        />
+                                                    </label>
+                                                </div>
+                                            </div>
+
                                             <Button
                                                 className="w-full bg-green-600"
-                                                disabled={!resolutionNotes}
-                                                onClick={() => handleUpdateStatus(selectedIssue.id, 'RESOLVED', resolutionNotes)}
+                                                disabled={!resolutionNotes || isUploading}
+                                                onClick={handleResolveWithPhotos}
                                             >
+                                                {isUploading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                                                 Завершить ремонт
                                             </Button>
                                         </div>
@@ -412,7 +486,18 @@ export default function IssuesBoard() {
                                             <div className="p-4 bg-green-50 rounded-xl border border-green-100 italic text-sm text-green-800">
                                                 {selectedIssue.resolution_notes}
                                             </div>
-                                            <div className="flex items-center justify-between text-[10px] text-muted-foreground px-1">
+                                            
+                                            {selectedIssue.resolution_photos && selectedIssue.resolution_photos.length > 0 && (
+                                                <div className="flex flex-wrap gap-2 mt-2">
+                                                    {selectedIssue.resolution_photos.map((url, idx) => (
+                                                        <a key={idx} href={url} target="_blank" rel="noopener noreferrer" className="block h-16 w-16 rounded border overflow-hidden hover:opacity-80 transition-opacity">
+                                                            <img src={url} alt="Resolution" className="h-full w-full object-cover" />
+                                                        </a>
+                                                    ))}
+                                                </div>
+                                            )}
+
+                                            <div className="flex items-center justify-between text-[10px] text-muted-foreground px-1 pt-2">
                                                 <span>Решил: {selectedIssue.resolved_by_name}</span>
                                                 <span>{selectedIssue.resolved_at && new Date(selectedIssue.resolved_at).toLocaleString()}</span>
                                             </div>

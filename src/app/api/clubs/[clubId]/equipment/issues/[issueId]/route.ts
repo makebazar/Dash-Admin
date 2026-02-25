@@ -67,6 +67,12 @@ export async function PATCH(
             paramIndex++;
         }
 
+        if (body.resolution_photos !== undefined) {
+            updates.push(`resolution_photos = $${paramIndex}`);
+            values.push(body.resolution_photos);
+            paramIndex++;
+        }
+
         if (updates.length === 0) {
             return NextResponse.json({ error: 'No fields to update' }, { status: 400 });
         }
