@@ -10,7 +10,9 @@ import {
     History,
     User,
     Camera,
-    X
+    X,
+    ArrowRight,
+    Move
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -33,6 +35,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 interface MaintenanceTask {
     id: string
@@ -54,10 +57,25 @@ interface MaintenanceTask {
     photos: string[] | null
 }
 
+interface Movement {
+    id: string
+    moved_at: string
+    reason: string
+    equipment_name: string
+    equipment_type: string
+    from_workstation_name: string | null
+    from_zone: string | null
+    to_workstation_name: string | null
+    to_zone: string | null
+    moved_by_name: string | null
+}
+
 export default function MaintenanceHistory() {
     const { clubId } = useParams()
     const [tasks, setTasks] = useState<MaintenanceTask[]>([])
+    const [movements, setMovements] = useState<Movement[]>([])
     const [isLoading, setIsLoading] = useState(true)
+    const [isLoadingMovements, setIsLoadingMovements] = useState(true)
     const [deletingId, setDeletingId] = useState<string | null>(null)
     const [isDialogOpen, setIsDialogOpen] = useState(false)
     const [taskToDelete, setTaskToDelete] = useState<string | null>(null)
@@ -82,9 +100,25 @@ export default function MaintenanceHistory() {
         }
     }, [clubId])
 
+    const fetchMovements = useCallback(async () => {
+        setIsLoadingMovements(true)
+        try {
+            const res = await fetch(`/api/clubs/${clubId}/equipment/movements`)
+            const data = await res.json()
+            if (res.ok) {
+                setMovements(data || [])
+            }
+        } catch (error) {
+            console.error("Error fetching movements:", error)
+        } finally {
+            setIsLoadingMovements(false)
+        }
+    }, [clubId])
+
     useEffect(() => {
         fetchHistory()
-    }, [fetchHistory])
+        fetchMovements()
+    }, [fetchHistory, fetchMovements])
 
     const handleDeleteClick = (taskId: string) => {
         setTaskToDelete(taskId)
@@ -131,122 +165,215 @@ export default function MaintenanceHistory() {
                 <div>
                     <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
                         <History className="h-8 w-8 text-slate-700" />
-                        История обслуживания
+                        История оборудования
                     </h1>
                     <p className="text-muted-foreground mt-1">
-                        Лог выполненных работ и изменений статусов
+                        Лог всех операций с оборудованием
                     </p>
                 </div>
             </div>
 
-            {/* Content */}
-            <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
-                <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead>Дата выполнения</TableHead>
-                            <TableHead>Оборудование</TableHead>
-                            <TableHead>Тип работ</TableHead>
-                            <TableHead>Фото</TableHead>
-                            <TableHead>Исполнитель</TableHead>
-                            <TableHead>Местоположение</TableHead>
-                            <TableHead className="w-[100px]"></TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {isLoading ? (
-                            <TableRow>
-                                <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
-                                    Загрузка...
-                                </TableCell>
-                            </TableRow>
-                        ) : tasks.length === 0 ? (
-                            <TableRow>
-                                <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
-                                    История пуста
-                                </TableCell>
-                            </TableRow>
-                        ) : (
-                            tasks.map((task) => (
-                                <TableRow key={task.id}>
-                                    <TableCell>
-                                        <div className="flex flex-col">
-                                            <span className="font-medium">
-                                                {task.completed_at 
-                                                    ? format(new Date(task.completed_at), 'd MMMM yyyy, HH:mm', { locale: ru })
-                                                    : '-'
-                                                }
-                                            </span>
-                                            <span className="text-xs text-muted-foreground">
-                                                План: {format(new Date(task.due_date), 'd MMM', { locale: ru })}
-                                            </span>
-                                        </div>
-                                    </TableCell>
-                                    <TableCell>
-                                        <div className="flex items-center gap-2">
-                                            <div className="h-8 w-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500">
-                                                {task.equipment_type === 'PC' ? <Monitor className="h-4 w-4" /> : <Wrench className="h-4 w-4" />}
-                                            </div>
-                                            <div className="flex flex-col">
-                                                <span className="font-medium text-sm">{task.equipment_name}</span>
-                                                <span className="text-xs text-muted-foreground">{task.equipment_type_name}</span>
-                                            </div>
-                                        </div>
-                                    </TableCell>
-                                    <TableCell>
-                                        <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-                                            {task.task_type === 'CLEANING' ? 'Чистка' : task.task_type}
-                                        </Badge>
-                                    </TableCell>
-                                    <TableCell>
-                                        {task.photos && task.photos.length > 0 ? (
-                                            <Button 
-                                                variant="ghost" 
-                                                size="sm" 
-                                                className="h-8 gap-2 text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50"
-                                                onClick={() => setViewingPhotos(task.photos)}
-                                            >
-                                                <Camera className="h-4 w-4" />
-                                                <span className="text-xs font-bold">{task.photos.length}</span>
-                                            </Button>
-                                        ) : (
-                                            <span className="text-slate-300 text-xs">-</span>
-                                        )}
-                                    </TableCell>
-                                    <TableCell>
-                                        <div className="flex items-center gap-2">
-                                            <div className="h-6 w-6 rounded-full bg-slate-100 flex items-center justify-center">
-                                                <User className="h-3 w-3 text-slate-500" />
-                                            </div>
-                                            <span className="text-sm">{task.completed_by_name || '—'}</span>
-                                        </div>
-                                    </TableCell>
-                                    <TableCell>
-                                        <div className="text-sm text-muted-foreground">
-                                            {task.workstation_name ? (
-                                                <span className="px-2 py-1 rounded-md bg-slate-100 text-slate-700 font-medium text-xs">
-                                                    {task.workstation_zone} :: {task.workstation_name}
-                                                </span>
-                                            ) : 'Склад'}
-                                        </div>
-                                    </TableCell>
-                                    <TableCell>
-                                        <Button 
-                                            variant="ghost" 
-                                            size="icon" 
-                                            className="text-slate-400 hover:text-red-600 hover:bg-red-50"
-                                            onClick={() => handleDeleteClick(task.id)}
-                                            disabled={deletingId === task.id}
-                                        >
-                                            <Trash2 className="h-4 w-4" />
-                                        </Button>
-                                    </TableCell>
+            <Tabs defaultValue="maintenance" className="w-full">
+                <TabsList>
+                    <TabsTrigger value="maintenance">Обслуживание</TabsTrigger>
+                    <TabsTrigger value="movements">Перемещения</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="maintenance" className="mt-4">
+                    <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Дата выполнения</TableHead>
+                                    <TableHead>Оборудование</TableHead>
+                                    <TableHead>Тип работ</TableHead>
+                                    <TableHead>Фото</TableHead>
+                                    <TableHead>Исполнитель</TableHead>
+                                    <TableHead>Местоположение</TableHead>
+                                    <TableHead className="w-[100px]"></TableHead>
                                 </TableRow>
-                            ))
-                        )}
-                    </TableBody>
-                </Table>
-            </div>
+                            </TableHeader>
+                            <TableBody>
+                                {isLoading ? (
+                                    <TableRow>
+                                        <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                                            Загрузка...
+                                        </TableCell>
+                                    </TableRow>
+                                ) : tasks.length === 0 ? (
+                                    <TableRow>
+                                        <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                                            История пуста
+                                        </TableCell>
+                                    </TableRow>
+                                ) : (
+                                    tasks.map((task) => (
+                                        <TableRow key={task.id}>
+                                            <TableCell>
+                                                <div className="flex flex-col">
+                                                    <span className="font-medium">
+                                                        {task.completed_at 
+                                                            ? format(new Date(task.completed_at), 'd MMMM yyyy, HH:mm', { locale: ru })
+                                                            : '-'
+                                                        }
+                                                    </span>
+                                                    <span className="text-xs text-muted-foreground">
+                                                        План: {format(new Date(task.due_date), 'd MMM', { locale: ru })}
+                                                    </span>
+                                                </div>
+                                            </TableCell>
+                                            <TableCell>
+                                                <div className="flex items-center gap-2">
+                                                    <div className="h-8 w-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500">
+                                                        {task.equipment_type === 'PC' ? <Monitor className="h-4 w-4" /> : <Wrench className="h-4 w-4" />}
+                                                    </div>
+                                                    <div className="flex flex-col">
+                                                        <span className="font-medium text-sm">{task.equipment_name}</span>
+                                                        <span className="text-xs text-muted-foreground">{task.equipment_type_name}</span>
+                                                    </div>
+                                                </div>
+                                            </TableCell>
+                                            <TableCell>
+                                                <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                                                    {task.task_type === 'CLEANING' ? 'Чистка' : task.task_type}
+                                                </Badge>
+                                            </TableCell>
+                                            <TableCell>
+                                                {task.photos && task.photos.length > 0 ? (
+                                                    <Button 
+                                                        variant="ghost" 
+                                                        size="sm" 
+                                                        className="h-8 gap-2 text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50"
+                                                        onClick={() => setViewingPhotos(task.photos)}
+                                                    >
+                                                        <Camera className="h-4 w-4" />
+                                                        <span className="text-xs font-bold">{task.photos.length}</span>
+                                                    </Button>
+                                                ) : (
+                                                    <span className="text-slate-300 text-xs">-</span>
+                                                )}
+                                            </TableCell>
+                                            <TableCell>
+                                                <div className="flex items-center gap-2">
+                                                    <div className="h-6 w-6 rounded-full bg-slate-100 flex items-center justify-center">
+                                                        <User className="h-3 w-3 text-slate-500" />
+                                                    </div>
+                                                    <span className="text-sm">{task.completed_by_name || '—'}</span>
+                                                </div>
+                                            </TableCell>
+                                            <TableCell>
+                                                <div className="text-sm text-muted-foreground">
+                                                    {task.workstation_name ? (
+                                                        <span className="px-2 py-1 rounded-md bg-slate-100 text-slate-700 font-medium text-xs">
+                                                            {task.workstation_zone} :: {task.workstation_name}
+                                                        </span>
+                                                    ) : 'Склад'}
+                                                </div>
+                                            </TableCell>
+                                            <TableCell>
+                                                <Button 
+                                                    variant="ghost" 
+                                                    size="icon" 
+                                                    className="text-slate-400 hover:text-red-600 hover:bg-red-50"
+                                                    onClick={() => handleDeleteClick(task.id)}
+                                                    disabled={deletingId === task.id}
+                                                >
+                                                    <Trash2 className="h-4 w-4" />
+                                                </Button>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))
+                                )}
+                            </TableBody>
+                        </Table>
+                    </div>
+                </TabsContent>
+
+                <TabsContent value="movements" className="mt-4">
+                    <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Дата и время</TableHead>
+                                    <TableHead>Оборудование</TableHead>
+                                    <TableHead>Откуда</TableHead>
+                                    <TableHead className="w-8"></TableHead>
+                                    <TableHead>Куда</TableHead>
+                                    <TableHead>Кто переместил</TableHead>
+                                    <TableHead>Причина</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {isLoadingMovements ? (
+                                    <TableRow>
+                                        <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                                            Загрузка...
+                                        </TableCell>
+                                    </TableRow>
+                                ) : movements.length === 0 ? (
+                                    <TableRow>
+                                        <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                                            Перемещений не найдено
+                                        </TableCell>
+                                    </TableRow>
+                                ) : (
+                                    movements.map((move) => (
+                                        <TableRow key={move.id}>
+                                            <TableCell>
+                                                <span className="font-medium">
+                                                    {format(new Date(move.moved_at), 'd MMMM yyyy, HH:mm', { locale: ru })}
+                                                </span>
+                                            </TableCell>
+                                            <TableCell>
+                                                <div className="flex items-center gap-2">
+                                                    <div className="h-8 w-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500">
+                                                        {move.equipment_type === 'PC' ? <Monitor className="h-4 w-4" /> : <Wrench className="h-4 w-4" />}
+                                                    </div>
+                                                    <span className="font-medium text-sm">{move.equipment_name}</span>
+                                                </div>
+                                            </TableCell>
+                                            <TableCell>
+                                                {move.from_workstation_name ? (
+                                                    <div className="flex flex-col">
+                                                        <span className="text-sm font-medium">{move.from_workstation_name}</span>
+                                                        <span className="text-xs text-muted-foreground">{move.from_zone}</span>
+                                                    </div>
+                                                ) : (
+                                                    <Badge variant="outline" className="bg-slate-50">Склад</Badge>
+                                                )}
+                                            </TableCell>
+                                            <TableCell>
+                                                <ArrowRight className="h-4 w-4 text-slate-300" />
+                                            </TableCell>
+                                            <TableCell>
+                                                {move.to_workstation_name ? (
+                                                    <div className="flex flex-col">
+                                                        <span className="text-sm font-medium">{move.to_workstation_name}</span>
+                                                        <span className="text-xs text-muted-foreground">{move.to_zone}</span>
+                                                    </div>
+                                                ) : (
+                                                    <Badge variant="outline" className="bg-slate-50">Склад</Badge>
+                                                )}
+                                            </TableCell>
+                                            <TableCell>
+                                                <div className="flex items-center gap-2">
+                                                    <div className="h-6 w-6 rounded-full bg-slate-100 flex items-center justify-center">
+                                                        <User className="h-3 w-3 text-slate-500" />
+                                                    </div>
+                                                    <span className="text-sm">{move.moved_by_name || '—'}</span>
+                                                </div>
+                                            </TableCell>
+                                            <TableCell>
+                                                <span className="text-sm text-muted-foreground">{move.reason}</span>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))
+                                )}
+                            </TableBody>
+                        </Table>
+                    </div>
+                </TabsContent>
+            </Tabs>
 
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                 <DialogContent>

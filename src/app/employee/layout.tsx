@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import Link from "next/link"
-import { Building2, LogOut, User, LayoutDashboard, Calendar, Brush, Clock, Menu, X, Crown, ClipboardCheck } from "lucide-react"
+import { Building2, LogOut, User, LayoutDashboard, Calendar, Brush, Clock, Menu, X, Crown, ClipboardCheck, Monitor } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 
@@ -132,6 +132,18 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
                                                 >
                                                     <Calendar className="h-4 w-4" />
                                                     <span className="flex-1">График смен</span>
+                                                </Link>
+                                                <Link
+                                                    href={`/employee/clubs/${club.id}/equipment`}
+                                                    className={cn(
+                                                        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
+                                                        pathname.includes('/equipment')
+                                                            ? "bg-purple-100 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400 font-medium"
+                                                            : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                                                    )}
+                                                >
+                                                    <Monitor className="h-4 w-4" />
+                                                    <span className="flex-1">Оборудование</span>
                                                 </Link>
                                                 <Link
                                                     href={`/employee/clubs/${club.id}/tasks`}

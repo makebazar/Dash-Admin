@@ -81,9 +81,9 @@ export async function POST(
                 
                 // Log movement for Target device
                 await query(
-                    `INSERT INTO equipment_movements (equipment_id, from_workstation_id, to_workstation_id, moved_by, reason, comment)
-                     VALUES ($1, $2, $3, $4, $5, $6)`,
-                    [targetOccupantId, targetWorkstationId, sourceWorkstationId, userId, reason, `SWAP with ${equipment_id}: ${comment || ''}`]
+                    `INSERT INTO equipment_moves (equipment_id, from_workstation_id, to_workstation_id, moved_by, reason)
+                     VALUES ($1, $2, $3, $4, $5)`,
+                    [targetOccupantId, targetWorkstationId, sourceWorkstationId, userId, `SWAP with ${equipment_id}. ${reason || ''} ${comment ? `(${comment})` : ''}`]
                 );
             }
             // ACTION 2: REPLACE (Move target to warehouse)
@@ -96,9 +96,9 @@ export async function POST(
 
                 // Log movement for Target device
                 await query(
-                    `INSERT INTO equipment_movements (equipment_id, from_workstation_id, to_workstation_id, moved_by, reason, comment)
-                     VALUES ($1, $2, NULL, $3, $4, $5)`,
-                    [targetOccupantId, targetWorkstationId, userId, 'DISPLACED', `Displaced by incoming device ${equipment_id}`]
+                    `INSERT INTO equipment_moves (equipment_id, from_workstation_id, to_workstation_id, moved_by, reason)
+                     VALUES ($1, $2, NULL, $3, $4)`,
+                    [targetOccupantId, targetWorkstationId, userId, `DISPLACED by ${equipment_id}`]
                 );
             }
 
@@ -110,9 +110,9 @@ export async function POST(
 
             // Log movement for Source device
             await query(
-                `INSERT INTO equipment_movements (equipment_id, from_workstation_id, to_workstation_id, moved_by, reason, comment)
-                 VALUES ($1, $2, $3, $4, $5, $6)`,
-                [equipment_id, sourceWorkstationId, targetWorkstationId, userId, reason, comment]
+                `INSERT INTO equipment_moves (equipment_id, from_workstation_id, to_workstation_id, moved_by, reason)
+                 VALUES ($1, $2, $3, $4, $5)`,
+                [equipment_id, sourceWorkstationId, targetWorkstationId, userId, reason + (comment ? `. Comment: ${comment}` : '')]
             );
 
             await query('COMMIT');
