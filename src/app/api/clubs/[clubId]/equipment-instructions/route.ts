@@ -81,23 +81,34 @@ export async function POST(
         // Check for admin role if not owner (simplified check, assume any employee with access can edit for now, or check specific roles)
         // For now, allow any authorized employee to edit instructions to keep it simple as requested "we (admins) write"
 
-        const { equipment_type_code, instructions } = body;
+        const { equipment_type_code, instructions, default_interval_days, apply_to_existing } = body;
 
         if (!equipment_type_code) {
             return NextResponse.json({ error: 'Equipment type code is required' }, { status: 400 });
         }
 
         const result = await query(
-            `INSERT INTO club_equipment_instructions (club_id, equipment_type_code, instructions, updated_by)
-             VALUES ($1, $2, $3, $4)
+            `INSERT INTO club_equipment_instructions (club_id, equipment_type_code, instructions, updated_by, default_interval_days)
+             VALUES ($1, $2, $3, $4, $5)
              ON CONFLICT (club_id, equipment_type_code) 
              DO UPDATE SET 
                 instructions = EXCLUDED.instructions,
+                default_interval_days = EXCLUDED.default_interval_days,
                 updated_at = CURRENT_TIMESTAMP,
                 updated_by = EXCLUDED.updated_by
              RETURNING *`,
-            [clubId, equipment_type_code, instructions, userId]
+            [clubId, equipment_type_code, instructions, userId, default_interval_days || null]
         );
+
+        // Apply interval to existing equipment if requested
+        if (apply_to_existing && default_interval_days) {
+            await query(
+                `UPDATE equipment 
+                 SET cleaning_interval_days = $1 
+                 WHERE club_id = $2 AND type = $3`,
+                [default_interval_days, clubId, equipment_type_code]
+            );
+        }
 
         return NextResponse.json(result.rows[0]);
     } catch (error) {

@@ -5,6 +5,8 @@ import { useParams } from "next/navigation"
 import {
     Loader2,
     Save,
+    Clock,
+    RefreshCw
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -15,13 +17,9 @@ import {
     CardHeader,
     CardTitle,
 } from "@/components/ui/card"
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Switch } from "@/components/ui/switch"
 
 interface EquipmentType {
     code: string
@@ -33,16 +31,19 @@ interface Instruction {
     id: string
     equipment_type_code: string
     instructions: string
+    default_interval_days?: number
 }
 
 export function InstructionsTab() {
     const { clubId } = useParams()
     const [equipmentTypes, setEquipmentTypes] = useState<EquipmentType[]>([])
-    const [instructions, setInstructions] = useState<Record<string, string>>({})
+    const [instructions, setInstructions] = useState<Record<string, Instruction>>({})
     const [selectedType, setSelectedType] = useState<string>("")
     const [isLoading, setIsLoading] = useState(true)
     const [isSaving, setIsSaving] = useState(false)
     const [content, setContent] = useState("")
+    const [interval, setInterval] = useState<number>(30)
+    const [applyToExisting, setApplyToExisting] = useState(false)
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
 
     useEffect(() => {
@@ -52,9 +53,11 @@ export function InstructionsTab() {
     // Load content when selected type changes
     useEffect(() => {
         if (selectedType) {
-            const savedContent = instructions[selectedType] || ""
-            setContent(savedContent)
+            const savedInstr = instructions[selectedType]
+            setContent(savedInstr?.instructions || "")
+            setInterval(savedInstr?.default_interval_days || 30)
             setHasUnsavedChanges(false)
+            setApplyToExisting(false)
         }
     }, [selectedType, instructions])
 
@@ -70,10 +73,10 @@ export function InstructionsTab() {
 
             setEquipmentTypes(types)
             
-            const instrMap: Record<string, string> = {}
+            const instrMap: Record<string, Instruction> = {}
             if (Array.isArray(instrs)) {
                 instrs.forEach((i: Instruction) => {
-                    instrMap[i.equipment_type_code] = i.instructions
+                    instrMap[i.equipment_type_code] = i
                 })
             }
             setInstructions(instrMap)
@@ -98,18 +101,22 @@ export function InstructionsTab() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     equipment_type_code: selectedType,
-                    instructions: content
+                    instructions: content,
+                    default_interval_days: interval,
+                    apply_to_existing: applyToExisting
                 })
             })
 
             if (res.ok) {
+                const updatedInstr = await res.json()
                 // Update local state
                 setInstructions(prev => ({
                     ...prev,
-                    [selectedType]: content
+                    [selectedType]: updatedInstr
                 }))
                 setHasUnsavedChanges(false)
-                alert("Инструкция сохранена")
+                setApplyToExisting(false)
+                alert("Настройки сохранены")
             } else {
                 alert("Ошибка при сохранении")
             }
@@ -130,7 +137,7 @@ export function InstructionsTab() {
             <Card className="md:col-span-1 h-fit bg-white border-none shadow-sm">
                 <CardHeader>
                     <CardTitle className="text-lg">Типы оборудования</CardTitle>
-                    <CardDescription>Выберите тип для настройки инструкции</CardDescription>
+                    <CardDescription>Выберите тип для настройки</CardDescription>
                 </CardHeader>
                 <CardContent className="p-2">
                     <div className="flex flex-col gap-1">
@@ -160,9 +167,9 @@ export function InstructionsTab() {
             <Card className="md:col-span-3 bg-white border-none shadow-sm">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
                     <div className="space-y-1">
-                        <CardTitle>Редактор инструкций</CardTitle>
+                        <CardTitle>Редактор инструкций и регламентов</CardTitle>
                         <CardDescription>
-                            Опишите пошаговый процесс обслуживания для <span className="font-medium text-foreground">{equipmentTypes.find(t => t.code === selectedType)?.name_ru}</span>
+                            Настройка процесса обслуживания для <span className="font-medium text-foreground">{equipmentTypes.find(t => t.code === selectedType)?.name_ru}</span>
                         </CardDescription>
                     </div>
                     <Button onClick={handleSave} disabled={isSaving || !hasUnsavedChanges} className={cn(hasUnsavedChanges && "bg-green-600 hover:bg-green-700")}>
@@ -170,20 +177,71 @@ export function InstructionsTab() {
                         {hasUnsavedChanges ? "Сохранить изменения" : "Сохранено"}
                     </Button>
                 </CardHeader>
-                <CardContent>
-                    <div className="h-[600px] flex flex-col">
-                        <textarea
-                            className="flex-1 w-full p-4 rounded-md border bg-slate-50 outline-none focus:ring-2 focus:ring-primary/20 transition-all resize-none text-sm text-slate-800 font-sans"
-                            placeholder="Введите инструкции здесь..."
-                            value={content}
-                            onChange={(e) => {
-                                setContent(e.target.value)
-                                setHasUnsavedChanges(true)
-                            }}
-                        />
-                        <div className="mt-2 text-[10px] text-muted-foreground flex justify-between px-1">
-                            <span>Поддержка переноса строк включена</span>
-                            {hasUnsavedChanges && <span className="text-amber-600 font-medium">Есть несохраненные изменения</span>}
+                <CardContent className="space-y-6">
+                    {/* Settings Panel */}
+                    <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 space-y-4">
+                        <div className="flex items-center gap-2 mb-2">
+                            <Clock className="h-4 w-4 text-indigo-500" />
+                            <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wide">Периодичность обслуживания</h3>
+                        </div>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="space-y-2">
+                                <Label className="text-xs">Интервал чистки (дней)</Label>
+                                <div className="flex items-center gap-2">
+                                    <Input 
+                                        type="number" 
+                                        min="1" 
+                                        max="365"
+                                        className="w-24 bg-white" 
+                                        value={interval}
+                                        onChange={(e) => {
+                                            setInterval(parseInt(e.target.value) || 30)
+                                            setHasUnsavedChanges(true)
+                                        }}
+                                    />
+                                    <span className="text-sm text-muted-foreground">дней</span>
+                                </div>
+                                <p className="text-[10px] text-muted-foreground">Как часто нужно обслуживать этот тип устройств</p>
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label className="text-xs">Применить ко всем устройствам</Label>
+                                <div className="flex items-center gap-3 p-2 bg-white rounded-lg border border-slate-200">
+                                    <Switch 
+                                        checked={applyToExisting}
+                                        onCheckedChange={(checked) => {
+                                            setApplyToExisting(checked)
+                                            setHasUnsavedChanges(true)
+                                        }}
+                                    />
+                                    <div className="flex flex-col">
+                                        <span className="text-sm font-medium">Обновить существующие</span>
+                                        <span className="text-[10px] text-muted-foreground">Перезаписать интервалы у всех {equipmentTypes.find(t => t.code === selectedType)?.name_ru}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                             <Label className="text-sm font-bold text-slate-700 uppercase tracking-wide">Инструкция для персонала</Label>
+                        </div>
+                        <div className="h-[500px] flex flex-col">
+                            <textarea
+                                className="flex-1 w-full p-4 rounded-md border bg-slate-50 outline-none focus:ring-2 focus:ring-primary/20 transition-all resize-none text-sm text-slate-800 font-sans leading-relaxed"
+                                placeholder="Опишите пошаговый процесс обслуживания..."
+                                value={content}
+                                onChange={(e) => {
+                                    setContent(e.target.value)
+                                    setHasUnsavedChanges(true)
+                                }}
+                            />
+                            <div className="mt-2 text-[10px] text-muted-foreground flex justify-between px-1">
+                                <span>Поддержка переноса строк включена</span>
+                                {hasUnsavedChanges && <span className="text-amber-600 font-medium">Есть несохраненные изменения</span>}
+                            </div>
                         </div>
                     </div>
                 </CardContent>
