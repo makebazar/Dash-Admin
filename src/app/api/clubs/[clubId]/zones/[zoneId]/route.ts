@@ -59,13 +59,14 @@ export async function PATCH(
         }
 
         // If assigned user changed, propagate to workstations and equipment
-        if (assigned_user_id !== undefined && assigned_user_id !== oldAssignedUserId) {
+        if ((assigned_user_id !== undefined && assigned_user_id !== oldAssignedUserId) || body.free_pool !== undefined) {
+            const freePool = !!body.free_pool;
             // Update workstations assigned user
             await query(
                 `UPDATE club_workstations 
                  SET assigned_user_id = $1 
                  WHERE club_id = $2 AND zone = $3`,
-                [assigned_user_id, clubId, name || oldName]
+                [assigned_user_id ?? null, clubId, name || oldName]
             );
 
             // Update equipment assigned user
@@ -80,9 +81,9 @@ export async function PATCH(
                 await query(
                     `UPDATE equipment 
                      SET assigned_user_id = $1,
-                         maintenance_enabled = CASE WHEN $1 IS NULL THEN FALSE ELSE TRUE END
-                     WHERE workstation_id = ANY($2)`,
-                    [assigned_user_id, wsIds]
+                         maintenance_enabled = CASE WHEN $2 THEN TRUE ELSE (CASE WHEN $1 IS NULL THEN FALSE ELSE TRUE END) END
+                     WHERE workstation_id = ANY($3)`,
+                    [assigned_user_id ?? null, freePool, wsIds]
                 );
             }
         }

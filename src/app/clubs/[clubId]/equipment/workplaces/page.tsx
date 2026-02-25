@@ -163,7 +163,7 @@ export default function WorkplacesPage() {
             if (wsRes.ok && eqRes.ok) {
                 const allEquipment = (eqData.equipment || []).map((e: any) => ({
                     ...e,
-                    maintenance_enabled: !!e.assigned_user_id
+                    maintenance_enabled: !!e.maintenance_enabled
                 }))
                 setEquipment(allEquipment)
                 
@@ -585,8 +585,8 @@ export default function WorkplacesPage() {
                                                             <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">{wsEquipment.length} устройств</p>
                                                             <div className="flex items-center gap-1.5" title={ws.assigned_user_name || "Не назначено"}>
                                                                 <User className={cn("h-3 w-3", ws.assigned_user_name ? "text-primary" : "text-slate-400")} />
-                                                                <span className={cn("text-[10px] font-medium truncate max-w-[100px]", ws.assigned_user_name || ws.assigned_user_id === '00000000-0000-0000-0000-000000000001' ? "text-primary" : "text-slate-400")}>
-                                                                    {ws.assigned_user_id === '00000000-0000-0000-0000-000000000001' ? "🤝 Свободный пул" : (ws.assigned_user_name || "Не назначено")}
+                                                                <span className={cn("text-[10px] font-medium truncate max-w-[100px]", ws.assigned_user_name ? "text-primary" : "text-slate-400")}>
+                                                                    {ws.assigned_user_name || "Не назначено"}
                                                                 </span>
                                                             </div>
                                                         </div>
@@ -705,7 +705,6 @@ export default function WorkplacesPage() {
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="none">⛔ Не требует обслуживания</SelectItem>
-                                <SelectItem value="00000000-0000-0000-0000-000000000001">🤝 Свободный пул</SelectItem>
                                 {employees.map(emp => (
                                     <SelectItem key={emp.id} value={emp.id}>{emp.full_name}</SelectItem>
                                 ))}

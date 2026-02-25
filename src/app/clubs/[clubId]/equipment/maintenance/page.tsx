@@ -450,7 +450,7 @@ export default function MaintenanceSchedule() {
                                                     {isCompleted ? (
                                                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
                                                             <User className="h-3 w-3" />
-                                                            {task.assigned_user_id === '00000000-0000-0000-0000-000000000001' ? "🤝 Свободный пул" : (task.completed_by_name || task.assigned_to_name)}
+                                                            {task.assigned_user_id ? (task.completed_by_name || task.assigned_to_name) : "🤝 Свободный пул"}
                                                         </div>
                                                     ) : (
                                                         <Select
@@ -464,8 +464,7 @@ export default function MaintenanceSchedule() {
                                                                 </div>
                                                             </SelectTrigger>
                                                             <SelectContent>
-                                                                <SelectItem value="unassigned">⛔ Не требует обслуживания</SelectItem>
-                                                                <SelectItem value="00000000-0000-0000-0000-000000000001">🤝 Свободный пул</SelectItem>
+                                                                <SelectItem value="unassigned">🤝 Свободный пул</SelectItem>
                                                                 {employees.map(emp => (
                                                                     <SelectItem key={emp.id} value={emp.id}>{emp.full_name}</SelectItem>
                                                                 ))}

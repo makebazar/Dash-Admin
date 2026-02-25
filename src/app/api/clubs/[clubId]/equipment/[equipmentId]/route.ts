@@ -149,9 +149,6 @@ export async function PATCH(
         if (body.assigned_user_id && body.assigned_user_id !== '') {
             body.maintenance_enabled = true;
         }
-        if (body.assigned_user_id === null || body.assigned_user_id === '') {
-            body.maintenance_enabled = false;
-        }
 
         for (const field of allowedFields) {
             if (body[field] !== undefined) {

@@ -65,14 +65,15 @@ export async function PATCH(
             return NextResponse.json({ error: 'Workstation not found' }, { status: 404 });
         }
 
-        if (body.assigned_user_id !== undefined) {
+        if (body.assigned_user_id !== undefined || body.free_pool !== undefined) {
             const assignedUserId = body.assigned_user_id === '' ? null : body.assigned_user_id;
+            const freePool = !!body.free_pool;
             await query(
                 `UPDATE equipment
                  SET assigned_user_id = $1,
-                     maintenance_enabled = CASE WHEN $1 IS NULL THEN FALSE ELSE TRUE END
-                 WHERE workstation_id = $2`,
-                [assignedUserId, workstationId]
+                     maintenance_enabled = CASE WHEN $2 THEN TRUE ELSE (CASE WHEN $1 IS NULL THEN FALSE ELSE TRUE END) END
+                 WHERE workstation_id = $3`,
+                [assignedUserId, freePool, workstationId]
             );
         }
 

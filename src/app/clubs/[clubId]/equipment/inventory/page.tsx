@@ -241,7 +241,7 @@ export default function EquipmentInventory() {
                 const enriched = (eqData.equipment || []).map((e: any) => ({
                     ...e,
                     status: e.is_active ? 'ACTIVE' : 'WRITTEN_OFF',
-                    maintenance_enabled: !!e.assigned_user_id
+                    maintenance_enabled: !!e.maintenance_enabled
                 }))
                 setEquipment(enriched)
                 setTotalItems(eqData.total || 0)
@@ -1243,13 +1243,21 @@ export default function EquipmentInventory() {
                                                 <div className="space-y-2">
                                                     <Label>Ответственный за обслуживание</Label>
                                                     <Select
-                                                        value={editingEquipment?.assigned_user_id || "none"}
+                                                        value={editingEquipment?.assigned_user_id ? editingEquipment.assigned_user_id : (editingEquipment?.maintenance_enabled ? "free_pool" : "none")}
                                                         onValueChange={(val) => {
-                                                            const userId = val === "none" ? null : val;
-                                                            setEditingEquipment(prev => ({ 
-                                                                ...prev, 
+                                                            if (val === "free_pool") {
+                                                                setEditingEquipment(prev => ({
+                                                                    ...prev,
+                                                                    assigned_user_id: null,
+                                                                    maintenance_enabled: true
+                                                                }))
+                                                                return
+                                                            }
+                                                            const userId = val === "none" ? null : val
+                                                            setEditingEquipment(prev => ({
+                                                                ...prev,
                                                                 assigned_user_id: userId,
-                                                                maintenance_enabled: userId ? true : prev?.maintenance_enabled
+                                                                maintenance_enabled: userId ? true : false
                                                             }))
                                                         }}
                                                     >
@@ -1258,7 +1266,7 @@ export default function EquipmentInventory() {
                                                         </SelectTrigger>
                                                         <SelectContent>
                                                             <SelectItem value="none">Не назначено</SelectItem>
-                                                            <SelectItem value="00000000-0000-0000-0000-000000000001">🤝 Свободный пул</SelectItem>
+                                                            <SelectItem value="free_pool">🤝 Свободный пул</SelectItem>
                                                             {employees.map(emp => (
                                                                 <SelectItem key={emp.id} value={emp.id}>{emp.full_name}</SelectItem>
                                                             ))}

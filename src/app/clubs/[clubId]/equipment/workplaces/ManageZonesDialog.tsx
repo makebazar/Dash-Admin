@@ -162,7 +162,6 @@ export function ManageZonesDialog({ clubId, zones, employees, onZonesChange, tri
                                 </SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="none">⛔ Не требует обслуживания</SelectItem>
-                                    <SelectItem value="00000000-0000-0000-0000-000000000001">🤝 Свободный пул</SelectItem>
                                     {employees.map(emp => (
                                         <SelectItem key={emp.id} value={emp.id}>{emp.full_name}</SelectItem>
                                     ))}
@@ -210,7 +209,6 @@ export function ManageZonesDialog({ clubId, zones, employees, onZonesChange, tri
                                                 </SelectTrigger>
                                                 <SelectContent>
                                                 <SelectItem value="none">⛔ Не требует обслуживания</SelectItem>
-                                                <SelectItem value="00000000-0000-0000-0000-000000000001">🤝 Свободный пул</SelectItem>
                                                 {employees.map(emp => (
                                                     <SelectItem key={emp.id} value={emp.id}>{emp.full_name}</SelectItem>
                                                 ))}
@@ -218,7 +216,7 @@ export function ManageZonesDialog({ clubId, zones, employees, onZonesChange, tri
                                             </Select>
                                         ) : (
                                             <span className="text-sm text-muted-foreground">
-                                                {zone.assigned_user_id === '00000000-0000-0000-0000-000000000001' ? "🤝 Свободный пул" : (zone.assigned_user_name || "Не назначено")}
+                                                {zone.assigned_user_name || "Не назначено"}
                                             </span>
                                         )}
                                     </TableCell>

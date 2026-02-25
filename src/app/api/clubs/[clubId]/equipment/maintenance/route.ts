@@ -69,12 +69,9 @@ export async function GET(
             LEFT JOIN users cu ON mt.completed_by = cu.id
             WHERE e.club_id = $1 
               AND (e.maintenance_enabled IS NULL OR e.maintenance_enabled = TRUE)
-              AND mt.assigned_user_id IS NOT NULL
         `;
         const queryParams: any[] = [clubId];
         let paramIndex = 2;
-
-        const FREE_POOL_USER_ID = '00000000-0000-0000-0000-000000000001';
 
         if (myTasks) {
             sql += ` AND mt.assigned_user_id = $${paramIndex}`;
@@ -82,9 +79,7 @@ export async function GET(
             paramIndex++;
         } else if (assignedTo) {
             if (assignedTo === 'unassigned') {
-                sql += ` AND mt.assigned_user_id = $${paramIndex}`;
-                queryParams.push(FREE_POOL_USER_ID);
-                paramIndex++;
+                sql += ` AND mt.assigned_user_id IS NULL`;
             } else {
                 sql += ` AND mt.assigned_user_id = $${paramIndex}`;
                 queryParams.push(assignedTo);
@@ -231,7 +226,6 @@ export async function POST(
             FROM equipment e
             WHERE e.club_id = $1
               AND e.is_active = TRUE
-              AND e.assigned_user_id IS NOT NULL
               AND (e.maintenance_enabled IS NULL OR e.maintenance_enabled = TRUE)
         `;
         const eqParams: any[] = [clubId];
@@ -280,11 +274,7 @@ export async function POST(
             const originalDue = nextDue.toISOString().split('T')[0];
             let dueDateStr = originalDue;
             
-            let assignedUserId = eq.assigned_user_id || null;
-
-            if (!assignedUserId) {
-                continue;
-            }
+            const assignedUserId = eq.assigned_user_id || null;
 
             // Only attempt to align with shift if the task falls within the current view range.
             // If it's overdue (date < startDate), we keep the original date to show "Overdue by X days".
