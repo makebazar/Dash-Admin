@@ -8,7 +8,9 @@ import {
     Monitor,
     Wrench,
     History,
-    User
+    User,
+    Camera,
+    X
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -49,6 +51,7 @@ interface MaintenanceTask {
     completed_at: string | null
     completed_by_name: string | null
     task_type: string
+    photos: string[] | null
 }
 
 export default function MaintenanceHistory() {
@@ -58,6 +61,7 @@ export default function MaintenanceHistory() {
     const [deletingId, setDeletingId] = useState<string | null>(null)
     const [isDialogOpen, setIsDialogOpen] = useState(false)
     const [taskToDelete, setTaskToDelete] = useState<string | null>(null)
+    const [viewingPhotos, setViewingPhotos] = useState<string[] | null>(null)
 
     const fetchHistory = useCallback(async () => {
         setIsLoading(true)
@@ -143,6 +147,7 @@ export default function MaintenanceHistory() {
                             <TableHead>Дата выполнения</TableHead>
                             <TableHead>Оборудование</TableHead>
                             <TableHead>Тип работ</TableHead>
+                            <TableHead>Фото</TableHead>
                             <TableHead>Исполнитель</TableHead>
                             <TableHead>Местоположение</TableHead>
                             <TableHead className="w-[100px]"></TableHead>
@@ -151,13 +156,13 @@ export default function MaintenanceHistory() {
                     <TableBody>
                         {isLoading ? (
                             <TableRow>
-                                <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                                <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
                                     Загрузка...
                                 </TableCell>
                             </TableRow>
                         ) : tasks.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                                <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
                                     История пуста
                                 </TableCell>
                             </TableRow>
@@ -192,6 +197,21 @@ export default function MaintenanceHistory() {
                                         <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
                                             {task.task_type === 'CLEANING' ? 'Чистка' : task.task_type}
                                         </Badge>
+                                    </TableCell>
+                                    <TableCell>
+                                        {task.photos && task.photos.length > 0 ? (
+                                            <Button 
+                                                variant="ghost" 
+                                                size="sm" 
+                                                className="h-8 gap-2 text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50"
+                                                onClick={() => setViewingPhotos(task.photos)}
+                                            >
+                                                <Camera className="h-4 w-4" />
+                                                <span className="text-xs font-bold">{task.photos.length}</span>
+                                            </Button>
+                                        ) : (
+                                            <span className="text-slate-300 text-xs">-</span>
+                                        )}
                                     </TableCell>
                                     <TableCell>
                                         <div className="flex items-center gap-2">
@@ -249,6 +269,33 @@ export default function MaintenanceHistory() {
                             {deletingId ? "Удаление..." : "Удалить"}
                         </Button>
                     </DialogFooter>
+                </DialogContent>
+            </Dialog>
+            {/* Photo Viewer Dialog */}
+            <Dialog open={!!viewingPhotos} onOpenChange={(open) => !open && setViewingPhotos(null)}>
+                <DialogContent className="max-w-4xl p-0 overflow-hidden bg-black/95 border-none">
+                    <div className="relative w-full h-[80vh] flex items-center justify-center">
+                        <button 
+                            onClick={() => setViewingPhotos(null)}
+                            className="absolute top-4 right-4 z-50 p-2 bg-black/50 text-white rounded-full hover:bg-white/20 transition-colors"
+                        >
+                            <X className="h-6 w-6" />
+                        </button>
+                        
+                        <div className="w-full h-full p-4 overflow-y-auto">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {viewingPhotos?.map((url, idx) => (
+                                    <div key={idx} className="relative rounded-lg overflow-hidden border border-white/10">
+                                        <img 
+                                            src={url} 
+                                            alt={`Photo ${idx + 1}`} 
+                                            className="w-full h-auto object-contain"
+                                        />
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
                 </DialogContent>
             </Dialog>
         </div>

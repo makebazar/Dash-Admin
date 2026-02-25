@@ -268,22 +268,27 @@ export function MaintenanceSessionWizard({ isOpen, onClose, tasks, onComplete }:
                             </div>
 
                             <div className="space-y-4 pt-4 border-t border-slate-100">
-                                <Label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Фотоотчет</Label>
+                                <Label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-between">
+                                    Фотоотчет
+                                    <span className="text-rose-500 normal-case tracking-normal font-bold bg-rose-50 px-2 py-0.5 rounded-md">Обязательно</span>
+                                </Label>
                                 <div className="flex flex-wrap gap-2">
                                     {photos.map((file, idx) => (
-                                        <div key={idx} className="relative h-16 w-16 rounded border overflow-hidden group">
+                                        <div key={idx} className="relative h-20 w-20 rounded-xl border-2 border-slate-100 overflow-hidden group shadow-sm">
                                             <img src={URL.createObjectURL(file)} alt="preview" className="h-full w-full object-cover" />
                                             <button 
                                                 onClick={() => setPhotos(prev => prev.filter((_, i) => i !== idx))}
-                                                className="absolute top-0 right-0 bg-black/50 text-white p-0.5 opacity-0 group-hover:opacity-100 transition-opacity rounded-bl"
+                                                className="absolute top-0 right-0 bg-black/50 text-white p-1 opacity-0 group-hover:opacity-100 transition-opacity rounded-bl-xl backdrop-blur-sm"
                                             >
-                                                <X className="h-3 w-3" />
+                                                <X className="h-4 w-4" />
                                             </button>
                                         </div>
                                     ))}
-                                    <label className="h-16 w-16 border-2 border-dashed border-slate-200 rounded flex flex-col items-center justify-center cursor-pointer hover:border-indigo-200 hover:bg-indigo-50 transition-colors">
-                                        <ImageIcon className="h-4 w-4 text-slate-400" />
-                                        <span className="text-[8px] text-slate-400 mt-1">Фото</span>
+                                    <label className="h-20 w-20 border-2 border-dashed border-indigo-200 bg-indigo-50/50 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-indigo-400 hover:bg-indigo-100 transition-all group">
+                                        <div className="h-8 w-8 rounded-full bg-indigo-100 flex items-center justify-center mb-1 group-hover:bg-indigo-200 transition-colors">
+                                            <ImageIcon className="h-4 w-4 text-indigo-500" />
+                                        </div>
+                                        <span className="text-[10px] font-bold text-indigo-500 uppercase tracking-wider">Фото</span>
                                         <input 
                                             type="file" 
                                             className="hidden" 
@@ -335,14 +340,14 @@ export function MaintenanceSessionWizard({ isOpen, onClose, tasks, onComplete }:
                     <div className="flex gap-3 w-full sm:w-auto order-1 sm:order-2">
                         <Button 
                             onClick={handleCompleteTask} 
-                            disabled={isSubmitting || isUploading || (hasIssue && !issueTitle)}
+                            disabled={isSubmitting || isUploading || (hasIssue && !issueTitle) || (isLastTask && photos.length === 0)}
                             className="w-full sm:w-auto h-12 px-8 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold shadow-lg shadow-indigo-200 transition-all hover:translate-y-[-2px] active:translate-y-0 disabled:opacity-50"
                         >
                             {isSubmitting || isUploading ? (
                                 <Loader2 className="h-5 w-5 animate-spin" />
                             ) : (
                                 <>
-                                    {isLastTask ? "Завершить сессию" : "Подтвердить и далее"}
+                                    {isLastTask ? "Завершить" : "Подтвердить и далее"}
                                     {isLastTask ? <CheckCircle2 className="ml-2 h-5 w-5" /> : <ChevronRight className="ml-2 h-5 w-5" />}
                                 </>
                             )}

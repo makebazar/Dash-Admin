@@ -48,6 +48,7 @@ export async function GET(
                 mt.completed_at,
                 mt.completed_by,
                 mt.notes,
+                mt.photos,
                 mt.created_at,
                 mt.updated_at,
                 COALESCE(mt.assigned_user_id, e.assigned_user_id) as assigned_user_id,
