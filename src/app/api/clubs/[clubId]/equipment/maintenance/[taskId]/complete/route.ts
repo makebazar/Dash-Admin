@@ -11,6 +11,14 @@ export async function POST(
     try {
         const userId = (await cookies()).get('session_user_id')?.value;
         const { clubId, taskId } = await params;
+        let photos: string[] | null = null;
+        
+        try {
+            const body = await request.json();
+            photos = body.photos || null;
+        } catch (e) {
+            // Body might be empty if no photos sent
+        }
 
         if (!userId) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -33,10 +41,11 @@ export async function POST(
             `UPDATE equipment_maintenance_tasks
              SET status = 'COMPLETED',
                  completed_at = CURRENT_TIMESTAMP,
-                 completed_by = $2
+                 completed_by = $2,
+                 photos = $3
              WHERE id = $1
              RETURNING equipment_id`,
-            [taskId, userId]
+            [taskId, userId, photos]
         );
 
         if ((completeTask.rowCount || 0) === 0) {

@@ -15,7 +15,7 @@ import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { Loader2, AlertTriangle, CheckCircle2, ChevronRight, ChevronLeft } from "lucide-react"
+import { Loader2, AlertTriangle, CheckCircle2, ChevronRight, ChevronLeft, Image as ImageIcon, X } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 
@@ -48,6 +48,10 @@ export function MaintenanceSessionWizard({ isOpen, onClose, tasks, onComplete }:
     const [hasIssue, setHasIssue] = useState(false)
     const [issueTitle, setIssueTitle] = useState("")
     const [issueDescription, setIssueDescription] = useState("")
+    
+    // Photo upload state
+    const [photos, setPhotos] = useState<File[]>([])
+    const [isUploading, setIsUploading] = useState(false)
 
     const currentTask = tasks[currentIndex]
     const isLastTask = currentIndex === tasks.length - 1
@@ -84,16 +88,43 @@ export function MaintenanceSessionWizard({ isOpen, onClose, tasks, onComplete }:
         setHasIssue(false)
         setIssueTitle("")
         setIssueDescription("")
+        setPhotos([])
     }
 
     const handleCompleteTask = async () => {
         if (!currentTask) return
         
         setIsSubmitting(true)
+        setIsUploading(true)
         try {
+            // 0. Upload photos if any
+            const photoUrls: string[] = []
+            if (photos.length > 0) {
+                for (const file of photos) {
+                    const formData = new FormData()
+                    formData.append('file', file)
+                    
+                    try {
+                        const res = await fetch('/api/upload', {
+                            method: 'POST',
+                            body: formData
+                        })
+                        if (res.ok) {
+                            const data = await res.json()
+                            if (data.url) photoUrls.push(data.url)
+                        }
+                    } catch (e) {
+                        console.error("Failed to upload photo", e)
+                    }
+                }
+            }
+            setIsUploading(false)
+
             // 1. Complete the task
             await fetch(`/api/clubs/${clubId}/equipment/maintenance/${currentTask.id}/complete`, {
-                method: "POST"
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ photos: photoUrls })
             })
 
             // 2. Report issue if any
@@ -236,6 +267,38 @@ export function MaintenanceSessionWizard({ isOpen, onClose, tasks, onComplete }:
                                 </div>
                             </div>
 
+                            <div className="space-y-4 pt-4 border-t border-slate-100">
+                                <Label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Фотоотчет</Label>
+                                <div className="flex flex-wrap gap-2">
+                                    {photos.map((file, idx) => (
+                                        <div key={idx} className="relative h-16 w-16 rounded border overflow-hidden group">
+                                            <img src={URL.createObjectURL(file)} alt="preview" className="h-full w-full object-cover" />
+                                            <button 
+                                                onClick={() => setPhotos(prev => prev.filter((_, i) => i !== idx))}
+                                                className="absolute top-0 right-0 bg-black/50 text-white p-0.5 opacity-0 group-hover:opacity-100 transition-opacity rounded-bl"
+                                            >
+                                                <X className="h-3 w-3" />
+                                            </button>
+                                        </div>
+                                    ))}
+                                    <label className="h-16 w-16 border-2 border-dashed border-slate-200 rounded flex flex-col items-center justify-center cursor-pointer hover:border-indigo-200 hover:bg-indigo-50 transition-colors">
+                                        <ImageIcon className="h-4 w-4 text-slate-400" />
+                                        <span className="text-[8px] text-slate-400 mt-1">Фото</span>
+                                        <input 
+                                            type="file" 
+                                            className="hidden" 
+                                            accept="image/*" 
+                                            multiple 
+                                            onChange={(e) => {
+                                                if (e.target.files) {
+                                                    setPhotos(prev => [...prev, ...Array.from(e.target.files!)])
+                                                }
+                                            }} 
+                                        />
+                                    </label>
+                                </div>
+                            </div>
+
                             {hasIssue && (
                                 <div className="space-y-4 animate-in fade-in slide-in-from-top-4 duration-300">
                                     <div className="space-y-2">
@@ -272,10 +335,10 @@ export function MaintenanceSessionWizard({ isOpen, onClose, tasks, onComplete }:
                     <div className="flex gap-3 w-full sm:w-auto order-1 sm:order-2">
                         <Button 
                             onClick={handleCompleteTask} 
-                            disabled={isSubmitting || (hasIssue && !issueTitle)}
+                            disabled={isSubmitting || isUploading || (hasIssue && !issueTitle)}
                             className="w-full sm:w-auto h-12 px-8 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold shadow-lg shadow-indigo-200 transition-all hover:translate-y-[-2px] active:translate-y-0 disabled:opacity-50"
                         >
-                            {isSubmitting ? (
+                            {isSubmitting || isUploading ? (
                                 <Loader2 className="h-5 w-5 animate-spin" />
                             ) : (
                                 <>
