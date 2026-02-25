@@ -229,7 +229,10 @@ export async function POST(
                 e.workstation_id, 
                 e.assigned_user_id
             FROM equipment e
-            WHERE e.club_id = $1 AND e.is_active = TRUE AND (e.maintenance_enabled IS NULL OR e.maintenance_enabled = TRUE)
+            WHERE e.club_id = $1
+              AND e.is_active = TRUE
+              AND e.assigned_user_id IS NOT NULL
+              AND (e.maintenance_enabled IS NULL OR e.maintenance_enabled = TRUE)
         `;
         const eqParams: any[] = [clubId];
 

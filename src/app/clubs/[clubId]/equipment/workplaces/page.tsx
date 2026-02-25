@@ -161,7 +161,10 @@ export default function WorkplacesPage() {
             }
 
             if (wsRes.ok && eqRes.ok) {
-                const allEquipment = eqData.equipment || []
+                const allEquipment = (eqData.equipment || []).map((e: any) => ({
+                    ...e,
+                    maintenance_enabled: !!e.assigned_user_id
+                }))
                 setEquipment(allEquipment)
                 
                 const enhancedWs = wsData.map((ws: Workstation) => ({
