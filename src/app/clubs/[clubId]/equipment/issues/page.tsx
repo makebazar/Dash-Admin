@@ -50,8 +50,8 @@ interface Issue {
     equipment_name: string
     equipment_type_name: string
     workstation_name: string | null
-    reporter_id: string
-    reporter_name: string
+    reported_by: string
+    reported_by_name: string
     title: string
     description: string
     severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
@@ -208,32 +208,47 @@ export default function IssuesBoard() {
                                     className="group shadow-sm hover:shadow-md transition-all cursor-pointer border-none"
                                     onClick={() => setSelectedIssue(issue)}
                                 >
-                                    <CardContent className="p-4 space-y-4">
-                                        <div className="flex items-start justify-between gap-2">
-                                            <div className="space-y-1">
-                                                <div className="flex items-center gap-2">
-                                                    {getSeverityBadge(issue.severity)}
-                                                    <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-tight">{issue.equipment_type_name}</span>
-                                                </div>
-                                                <h4 className="font-bold text-sm leading-tight group-hover:text-primary transition-colors">{issue.title}</h4>
+                                    <CardContent className="p-3 space-y-3">
+                                        {/* Header: Severity & Equipment Type */}
+                                        <div className="flex flex-wrap items-center justify-between gap-2">
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                {getSeverityBadge(issue.severity)}
+                                                <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-tight truncate max-w-[120px]" title={issue.equipment_type_name}>
+                                                    {issue.equipment_type_name}
+                                                </span>
                                             </div>
-                                            <div className="h-8 w-8 bg-slate-50 rounded-lg flex items-center justify-center shrink-0 group-hover:bg-primary/5 transition-colors">
-                                                <Monitor className="h-4 w-4 text-slate-400 group-hover:text-primary" />
+                                            {/* Equipment Icon */}
+                                            <div className="h-6 w-6 bg-slate-50 rounded flex items-center justify-center shrink-0">
+                                                <Monitor className="h-3 w-3 text-slate-400" />
                                             </div>
                                         </div>
 
-                                        <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed italic">
+                                        {/* Title & Location */}
+                                        <div className="space-y-1">
+                                            <h4 className="font-bold text-sm leading-tight group-hover:text-primary transition-colors line-clamp-2" title={issue.title}>
+                                                {issue.title}
+                                            </h4>
+                                            <p className="text-[10px] text-slate-500 font-medium">
+                                                {issue.workstation_name ? `📍 ${issue.workstation_name}` : "📦 Склад"}
+                                            </p>
+                                        </div>
+
+                                        {/* Description */}
+                                        <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed italic bg-slate-50/50 p-2 rounded">
                                             "{issue.description}"
                                         </p>
 
-                                        <div className="pt-2 border-t border-slate-50 flex items-center justify-between">
-                                            <div className="flex items-center gap-2">
-                                                <div className="h-6 w-6 rounded-full bg-slate-100 flex items-center justify-center">
+                                        {/* Footer: Reporter & Date */}
+                                        <div className="pt-2 border-t border-slate-50 flex items-center justify-between gap-2">
+                                            <div className="flex items-center gap-1.5 min-w-0">
+                                                <div className="h-5 w-5 rounded-full bg-slate-100 flex items-center justify-center shrink-0">
                                                     <User className="h-3 w-3 text-slate-400" />
                                                 </div>
-                                                <span className="text-[10px] font-medium text-slate-500">{issue.workstation_name || "Склад"}</span>
+                                                <span className="text-[10px] font-medium text-slate-600 truncate" title={issue.reported_by_name}>
+                                                    {issue.reported_by_name || "Неизвестно"}
+                                                </span>
                                             </div>
-                                            <span className="text-[10px] text-slate-400">
+                                            <span className="text-[10px] text-slate-400 shrink-0 whitespace-nowrap">
                                                 {new Date(issue.created_at).toLocaleDateString("ru-RU", { day: 'numeric', month: 'short' })}
                                             </span>
                                         </div>
@@ -407,7 +422,7 @@ export default function IssuesBoard() {
                             </div>
 
                             <div className="p-4 bg-slate-50 border-t flex justify-between items-center text-[10px] text-muted-foreground">
-                                <span className="flex items-center gap-1"><User className="h-3 w-3" /> Автор: {selectedIssue.reporter_name}</span>
+                                <span className="flex items-center gap-1"><User className="h-3 w-3" /> Автор: {selectedIssue.reported_by_name}</span>
                                 <span>Создано: {new Date(selectedIssue.created_at).toLocaleDateString()}</span>
                             </div>
                         </div>
