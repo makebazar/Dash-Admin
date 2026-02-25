@@ -539,6 +539,7 @@ export default function IssuesBoard() {
                                                             type="file" 
                                                             className="hidden" 
                                                             accept="image/*" 
+                                                            capture="environment"
                                                             multiple 
                                                             onChange={(e) => {
                                                                 if (e.target.files) {

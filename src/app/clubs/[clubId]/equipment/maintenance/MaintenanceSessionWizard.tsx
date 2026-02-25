@@ -293,6 +293,7 @@ export function MaintenanceSessionWizard({ isOpen, onClose, tasks, onComplete }:
                                             type="file" 
                                             className="hidden" 
                                             accept="image/*" 
+                                            capture="environment"
                                             multiple 
                                             onChange={(e) => {
                                                 if (e.target.files) {
