@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import {
     Clock, Loader2, LogIn, LogOut, Wallet, Activity, Calendar,
-    TrendingUp, Target, Zap, ChevronRight, Trophy, Brush, ClipboardCheck
+    TrendingUp, Target, Zap, ChevronRight, Trophy, Brush, ClipboardCheck, Monitor
 } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -564,6 +564,26 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                                                 "h-6 w-6",
                                                 pendingTasksCount > 0 ? "text-white" : "text-amber-500"
                                             )} />
+                                        </div>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        </Link>
+
+                        {/* Equipment Management */}
+                        <Link href={`/employee/clubs/${clubId}/equipment`} className="block">
+                            <Card className="border-0 shadow-lg transition-all hover:scale-[1.02] active:scale-[0.98] bg-white dark:bg-slate-800/50 backdrop-blur">
+                                <CardContent className="pt-6">
+                                    <div className="flex items-start justify-between">
+                                        <div>
+                                            <p className="text-sm font-medium text-muted-foreground">Оборудование</p>
+                                            <p className="text-xl font-bold mt-1">Перемещение</p>
+                                            <p className="text-sm text-muted-foreground mt-1">
+                                                Управление и замена
+                                            </p>
+                                        </div>
+                                        <div className="p-3 rounded-xl bg-blue-500/10">
+                                            <Monitor className="h-6 w-6 text-blue-500" />
                                         </div>
                                     </div>
                                 </CardContent>
