@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import {
     Clock, Loader2, LogIn, LogOut, Wallet, Activity, Calendar,
     TrendingUp, Target, Zap, ChevronRight, Trophy, Brush, ClipboardCheck, Monitor
