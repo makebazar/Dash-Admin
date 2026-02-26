@@ -144,26 +144,32 @@ export async function PATCH(
                     if (eqRes.rowCount && eqRes.rowCount > 0) {
                         const eq = eqRes.rows[0];
                         if (eq.maintenance_enabled !== false) {
-                            const intervalDays = Math.max(1, eq.cleaning_interval_days || 30);
+                            const rawInterval = eq.cleaning_interval_days;
+                            const intervalDays = Math.max(1, rawInterval || 30);
+                            
+                            console.log(`[Maintenance] Completing task ${taskId}. Equipment ${task.equipment_id}. Raw Interval: ${rawInterval}, Used: ${intervalDays}`);
+                            
                             const nextDue = new Date(); // Start from completion time (now)
                             nextDue.setDate(nextDue.getDate() + intervalDays);
                             
-                            // Ensure nextDue is at least tomorrow to avoid creating tasks for today immediately again
+                            console.log(`[Maintenance] Next Due Initial: ${nextDue.toISOString()}`);
+
+                            // Ensure nextDue is at least tomorrow
                             const tomorrow = new Date();
                             tomorrow.setDate(tomorrow.getDate() + 1);
                             if (nextDue < tomorrow && intervalDays > 0) {
-                                // If interval is small (e.g. 1 day) and it's late, nextDue might be tomorrow, which is fine.
-                                // But if nextDue ended up being today or past, force it to tomorrow + (interval-1)
-                                // Actually, standard logic is fine: today + 3 days = future.
+                                // Logic preserved from previous edit, though redundant if interval >= 1
                             }
 
                             const nextDueStr = nextDue.toISOString().split('T')[0];
+                            console.log(`[Maintenance] Next Due String: ${nextDueStr}`);
                             
                             // Find shift for assigned user if any
                             let finalDate = nextDueStr;
                             const assignedUserId = eq.assigned_user_id;
                             
                             if (assignedUserId) {
+                                console.log(`[Maintenance] Checking shifts for user ${assignedUserId} starting from ${nextDueStr}`);
                                 // Simple shift lookup - get next working day >= nextDueStr
                                 const shiftRes = await query(
                                     `SELECT date FROM work_schedules 
@@ -173,15 +179,20 @@ export async function PATCH(
                                 );
                                 if (shiftRes.rowCount && shiftRes.rowCount > 0) {
                                     finalDate = shiftRes.rows[0].date;
+                                    console.log(`[Maintenance] Found shift: ${finalDate}`);
+                                } else {
+                                    console.log(`[Maintenance] No shift found, keeping ${finalDate}`);
                                 }
                             }
 
-                            await query(
+                            const insertRes = await query(
                                 `INSERT INTO equipment_maintenance_tasks (equipment_id, task_type, due_date, assigned_user_id)
                                  VALUES ($1, $2, $3, $4)
-                                 ON CONFLICT (equipment_id, due_date, task_type) DO NOTHING`,
+                                 ON CONFLICT (equipment_id, due_date, task_type) DO NOTHING
+                                 RETURNING id`,
                                 [task.equipment_id, task.task_type, finalDate, assignedUserId]
                             );
+                            console.log(`[Maintenance] Created task: ${insertRes.rows[0]?.id || 'CONFLICT'}`);
                         }
                     }
                 }

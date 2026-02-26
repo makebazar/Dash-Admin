@@ -72,9 +72,9 @@ export function ImageViewer({ src, alt, isOpen, onClose }: ImageViewerProps) {
     }
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-sm animate-in fade-in duration-200" onClick={onClose}>
             {/* Toolbar */}
-            <div className="absolute top-4 left-1/2 -translate-x-1/2 flex items-center gap-2 p-2 bg-black/50 rounded-full backdrop-blur-md border border-white/10 z-50">
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 flex items-center gap-2 p-2 bg-black/50 rounded-full backdrop-blur-md border border-white/10 z-[101]" onClick={e => e.stopPropagation()}>
                 <Button variant="ghost" size="icon" onClick={handleZoomOut} className="text-white hover:bg-white/20 h-8 w-8">
                     <ZoomOut className="h-4 w-4" />
                 </Button>
@@ -100,7 +100,7 @@ export function ImageViewer({ src, alt, isOpen, onClose }: ImageViewerProps) {
                 variant="ghost" 
                 size="icon" 
                 onClick={onClose} 
-                className="absolute top-4 right-4 text-white hover:bg-white/20 rounded-full h-10 w-10 z-50"
+                className="absolute top-4 right-4 text-white hover:bg-white/20 rounded-full h-10 w-10 z-[101]"
             >
                 <X className="h-6 w-6" />
             </Button>
@@ -108,6 +108,7 @@ export function ImageViewer({ src, alt, isOpen, onClose }: ImageViewerProps) {
             {/* Image Container */}
             <div 
                 className="w-full h-full flex items-center justify-center overflow-hidden cursor-grab active:cursor-grabbing"
+                onClick={e => e.stopPropagation()}
                 onMouseDown={handleMouseDown}
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUp}
