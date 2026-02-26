@@ -233,16 +233,30 @@ export async function GET(
             }
 
             // Fetch maintenance bonuses for this month
-            const maintenanceRes = await query(
-                `SELECT COALESCE(SUM(bonus_earned), 0) as total_maintenance_bonus
-                 FROM equipment_maintenance_tasks mt
-                 JOIN equipment e ON mt.equipment_id = e.id
-                 WHERE e.club_id = $1 AND mt.completed_by = $2 
-                   AND mt.completed_at >= $3 AND mt.completed_at <= $4
-                   AND mt.status = 'COMPLETED'`,
-                [clubId, emp.id, startOfMonth.toISOString(), endOfMonth.toISOString()]
+            // 1. Efficiency Stats (Month Plan) - for calculating Multiplier
+            const efficiencyRes = await query(
+                `SELECT 
+                    COUNT(*) as total_tasks,
+                    COUNT(*) FILTER (WHERE status = 'COMPLETED') as completed_tasks
+                 FROM equipment_maintenance_tasks
+                 WHERE 
+                    (assigned_user_id = $1 OR completed_by = $1)
+                    AND due_date >= $2 AND due_date <= $3`,
+                [emp.id, startOfMonth, endOfMonth]
             );
-            const totalMaintenanceBonus = parseFloat(maintenanceRes.rows[0]?.total_maintenance_bonus || 0);
+            const monthTotalTasks = parseInt(efficiencyRes.rows[0]?.total_tasks || '0');
+            const monthCompletedTasks = parseInt(efficiencyRes.rows[0]?.completed_tasks || '0');
+
+            // 2. Completed Tasks for Payment (Accrual) - for distributing to shifts
+            const paymentTasksRes = await query(
+                `SELECT id, bonus_earned, completed_at
+                 FROM equipment_maintenance_tasks
+                 WHERE completed_by = $1 AND status = 'COMPLETED'
+                   AND completed_at >= $2 AND completed_at <= $3`,
+                [emp.id, startOfMonth.toISOString(), endOfMonth.toISOString()]
+            );
+            const paymentTasks = paymentTasksRes.rows;
+            const totalMaintenanceBonus = paymentTasks.reduce((sum: number, t: any) => sum + (parseFloat(t.bonus_earned) || 0), 0);
 
             const monthBonusRes = await query(
                 `SELECT COALESCE(SUM(bonus_amount), 0) as total_monthly_bonus
@@ -253,6 +267,9 @@ export async function GET(
             const totalMonthlyBonus = parseFloat(monthBonusRes.rows[0]?.total_monthly_bonus || 0);
 
             monthlyMetrics['maintenance_bonus'] = totalMaintenanceBonus + totalMonthlyBonus;
+            // Also pass efficiency metrics so period bonuses can use them if needed (though unlikely)
+            monthlyMetrics['maintenance_tasks_completed'] = monthCompletedTasks;
+            monthlyMetrics['maintenance_tasks_assigned'] = monthTotalTasks;
 
             const shifts_count = finishedShifts.length;
             const planned_shifts = empPlannedShifts?.planned_shifts || 20;
@@ -354,6 +371,21 @@ export async function GET(
                     reportMetricsForShift['evaluation_score'] = empEval.avg;
                     reportMetricsForShift['evaluation_count'] = empEval.count;
                 }
+
+                // Inject maintenance metrics for this shift
+                const shiftStart = new Date(s.check_in);
+                const shiftEnd = s.check_out ? new Date(s.check_out) : new Date();
+                
+                const shiftTasks = paymentTasks.filter((t: any) => {
+                    const d = new Date(t.completed_at);
+                    return d >= shiftStart && (s.check_out ? d <= shiftEnd : true);
+                });
+                
+                const shiftRawSum = shiftTasks.reduce((sum: number, t: any) => sum + (parseFloat(t.bonus_earned) || 0), 0);
+                
+                reportMetricsForShift['maintenance_raw_sum'] = shiftRawSum;
+                reportMetricsForShift['maintenance_tasks_completed'] = monthCompletedTasks;
+                reportMetricsForShift['maintenance_tasks_assigned'] = monthTotalTasks;
 
                 // Pass the scheme WITH calculated bonuses reward levels
                 const schemeWithRewards = { ...emp, period_bonuses: bonuses_status };
