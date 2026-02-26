@@ -229,7 +229,9 @@ export async function POST(
             const dates = scheduleMap[userId];
             if (!dates || dates.length === 0) return null;
             for (const d of dates) {
-                if (d >= fromDate) return d;
+                // Ensure date string comparison works correctly by handling Date objects
+                const dStr = d instanceof Date ? (d as Date).toISOString().split('T')[0] : d;
+                if (dStr >= fromDate) return dStr;
             }
             return null;
         };

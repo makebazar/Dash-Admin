@@ -160,10 +160,20 @@ export async function POST(
                          [clubId, assignedUserId, nextDueDateStr]
                      );
                      if (shiftRes.rowCount && shiftRes.rowCount > 0) {
-                         finalDate = shiftRes.rows[0].date;
+                         // Ensure we have a string YYYY-MM-DD
+                         const d = shiftRes.rows[0].date;
+                         finalDate = d instanceof Date ? d.toISOString().split('T')[0] : d;
                      }
                  }
              }
+
+             // CLEANUP: Delete any other PENDING tasks for this equipment to ensure "Smart Horizon"
+             // This removes "ghost" tasks that might have incorrect dates (like 31.01)
+             await query(
+                 `DELETE FROM equipment_maintenance_tasks 
+                  WHERE equipment_id = $1 AND status = 'PENDING' AND id != $2`,
+                 [equipmentId, taskId]
+             );
 
              await query(
                  `INSERT INTO equipment_maintenance_tasks (
