@@ -12,7 +12,8 @@ import {
     Check,
     MapPin,
     Search,
-    List
+    List,
+    Trash2
 } from "lucide-react"
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, isToday, addMonths, subMonths, startOfWeek, endOfWeek } from "date-fns"
 import { ru } from "date-fns/locale"
@@ -193,6 +194,27 @@ export default function EmployeeTasksPage() {
         const overdue = tasks.filter(t => new Date(t.due_date) < new Date()).length
         return { total, in_progress, overdue }
     }, [tasks])
+
+    const handleResetAll = async () => {
+        if (!confirm("ВНИМАНИЕ: Это полностью удалит ВСЕ записи о чистке и сбросит даты последнего обслуживания для всего оборудования в клубе. Это действие необратимо! Вы уверены?")) return
+
+        setIsLoading(true)
+        try {
+            const res = await fetch(`/api/clubs/${clubId}/equipment/maintenance/reset`, {
+                method: "POST"
+            })
+            if (res.ok) {
+                alert("Все записи удалены. Сейчас будут сгенерированы новые задачи.")
+                // Force reload to regenerate
+                window.location.reload()
+            }
+        } catch (error) {
+            console.error("Error resetting tasks:", error)
+            alert("Ошибка при сбросе")
+        } finally {
+            setIsLoading(false)
+        }
+    }
 
     const renderTaskCard = (task: MaintenanceTask, isFree: boolean = false, hideLocation: boolean = false) => {
         const todayStr = format(new Date(), 'yyyy-MM-dd')
@@ -415,6 +437,19 @@ export default function EmployeeTasksPage() {
                     </div>
                 </div>
             )}
+
+            {/* DEBUG: Reset Button */}
+            <div className="pt-12 pb-6 border-t border-slate-200 dark:border-slate-800 flex justify-center opacity-50 hover:opacity-100 transition-opacity">
+                <Button 
+                    variant="destructive" 
+                    size="sm" 
+                    onClick={handleResetAll}
+                    className="bg-red-100 text-red-600 hover:bg-red-200 border-none shadow-none"
+                >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    [DEBUG] Удалить ВСЕ записи и сбросить даты
+                </Button>
+            </div>
 
             <MaintenanceSessionWizard
                 isOpen={isSessionOpen}
