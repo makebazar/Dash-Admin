@@ -123,26 +123,58 @@ export async function POST(
 
         // 3. Get equipment details for next task scheduling
         const equipmentRes = await query(
-            `SELECT cleaning_interval_days, workstation_id FROM equipment WHERE id = $1`,
+            `SELECT cleaning_interval_days, workstation_id, assigned_user_id, maintenance_enabled FROM equipment WHERE id = $1`,
             [equipmentId]
         );
         
         const equipment = equipmentRes.rows[0];
         
         // 4. Create next task if interval is set
-        if (equipment && equipment.cleaning_interval_days > 0) {
-             const nextDueDate = new Date();
-             nextDueDate.setDate(nextDueDate.getDate() + equipment.cleaning_interval_days);
+        if (equipment && equipment.maintenance_enabled !== false) {
+             const rawInterval = equipment.cleaning_interval_days;
+             const intervalDays = Math.max(1, rawInterval || 30);
              
+             const nextDueDate = new Date();
+             nextDueDate.setDate(nextDueDate.getDate() + intervalDays);
+             const nextDueDateStr = nextDueDate.toISOString().split('T')[0];
+             
+             // Find shift for assigned user if any AND user is active
+             let finalDate = nextDueDateStr;
+             const assignedUserId = equipment.assigned_user_id;
+             
+             if (assignedUserId) {
+                 // Check if user is active first
+                 const userActiveRes = await query(
+                     `SELECT is_active FROM club_employees WHERE club_id = $1 AND user_id = $2`,
+                     [clubId, assignedUserId]
+                 );
+                 
+                 const isActive = userActiveRes.rows[0]?.is_active !== false;
+
+                 if (isActive) {
+                     // Simple shift lookup - get next working day >= nextDueDateStr
+                     const shiftRes = await query(
+                         `SELECT date FROM work_schedules 
+                          WHERE club_id = $1 AND user_id = $2 AND date >= $3
+                          ORDER BY date ASC LIMIT 1`,
+                         [clubId, assignedUserId, nextDueDateStr]
+                     );
+                     if (shiftRes.rowCount && shiftRes.rowCount > 0) {
+                         finalDate = shiftRes.rows[0].date;
+                     }
+                 }
+             }
+
              await query(
                  `INSERT INTO equipment_maintenance_tasks (
                      equipment_id, 
                      status, 
                      due_date,
-                     task_type
-                 ) VALUES ($1, 'PENDING', $2, 'CLEANING')
+                     task_type,
+                     assigned_user_id
+                 ) VALUES ($1, 'PENDING', $2, 'CLEANING', $3)
                  ON CONFLICT (equipment_id, due_date, task_type) DO NOTHING`,
-                 [equipmentId, nextDueDate]
+                 [equipmentId, finalDate, assignedUserId]
              );
         }
 
