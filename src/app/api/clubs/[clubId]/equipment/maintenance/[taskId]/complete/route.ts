@@ -53,7 +53,9 @@ export async function POST(
         ]);
         
         const schemeFormula = schemeRes.rows[0]?.formula || {};
-        const kpiConfig = schemeFormula.maintenance_kpi || null;
+        const bonuses = schemeFormula.bonuses || [];
+        // Find the maintenance KPI bonus config
+        const kpiBonus = bonuses.find((b: any) => b.type === 'maintenance_kpi');
         const task = taskRes.rows[0];
 
         if (!task) {
@@ -62,16 +64,12 @@ export async function POST(
 
         // 1. Calculate Bonus & Check Smart Deadline
         let bonusEarned = 0;
-        let kpiPoints = 1;
+        let kpiPoints = 1; // Default to 1 point per task (internal counter)
         let appliedMultiplier = 1.0;
 
-        if (kpiConfig && kpiConfig.enabled) {
-            // Base points
-            kpiPoints = task.task_type === 'REPAIR' 
-                ? (kpiConfig.points_per_issue_resolved || 3)
-                : (kpiConfig.points_per_cleaning || 1);
-            
-            const baseValue = kpiPoints * (Number(kpiConfig.bonus_per_point) || 0);
+        if (kpiBonus) {
+            // Price per task is defined in the bonus amount
+            const baseValue = Number(kpiBonus.amount) || 0;
 
             // Check deadline
             const now = new Date();
@@ -79,19 +77,17 @@ export async function POST(
             const diffTime = now.getTime() - dueDate.getTime();
             const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
             
-            // Allow tolerance (Smart Deadline logic part 1: Tolerance Window)
-            const tolerance = kpiConfig.overdue_tolerance_days || 3;
+            // Allow tolerance
+            const tolerance = Number(kpiBonus.overdue_tolerance_days) || 3;
             
             if (diffDays > tolerance) {
                 // Late
-                appliedMultiplier = Number(kpiConfig.late_penalty_multiplier) || 0.5;
+                appliedMultiplier = Number(kpiBonus.late_penalty_multiplier) || 0.5;
             } else {
                 // On Time (or within tolerance)
-                appliedMultiplier = Number(kpiConfig.on_time_multiplier) || 1.0;
+                // Default on time multiplier is 1.0, unless we want to add an "early bird" bonus later
+                appliedMultiplier = 1.0;
             }
-
-            // TODO: In future, add Shift-Aware logic here (check work_schedules)
-            // If user had no shifts between due_date and now, appliedMultiplier = 1.0
 
             bonusEarned = baseValue * appliedMultiplier;
         }

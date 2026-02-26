@@ -130,9 +130,59 @@ export async function calculateSalary(
                         }
                     }
                 }
+            } else if (bonus.type === 'maintenance_kpi') {
+                // Handle maintenance bonus
+                // 1. Get raw task counts and sums from reportMetrics
+                // reportMetrics['maintenance_tasks_completed'] should be passed by caller
+                // reportMetrics['maintenance_tasks_assigned'] should be passed by caller
+                // reportMetrics['maintenance_raw_sum'] should be passed by caller (sum of bonuses calculated at completion time)
+
+                const rawSum = reportMetrics['maintenance_raw_sum'] || 0;
+                
+                if (rawSum > 0) {
+                    let finalAmount = rawSum;
+                    let efficiencyMultiplier = 1.0;
+
+                    // Calculate efficiency if thresholds exist
+                    if (bonus.efficiency_thresholds && bonus.efficiency_thresholds.length > 0) {
+                        const completed = reportMetrics['maintenance_tasks_completed'] || 0;
+                        const assigned = reportMetrics['maintenance_tasks_assigned'] || 0;
+                        
+                        // If assigned is 0 but we completed tasks (e.g. from free pool), efficiency is effectively 100%+
+                        let efficiencyPercent = 100;
+                        if (assigned > 0) {
+                            efficiencyPercent = (completed / assigned) * 100;
+                        }
+
+                        // Find matching threshold
+                        // Sort descending by percent
+                        const sortedThresholds = [...bonus.efficiency_thresholds].sort((a, b) => b.from_percent - a.from_percent);
+                        
+                        for (const t of sortedThresholds) {
+                            if (efficiencyPercent >= t.from_percent) {
+                                efficiencyMultiplier = Number(t.multiplier);
+                                break;
+                            }
+                        }
+                    }
+
+                    finalAmount = rawSum * efficiencyMultiplier;
+
+                    if (finalAmount > 0) {
+                        breakdown.bonuses.push({
+                            name: bonus.name || 'KPI Обслуживания',
+                            type: 'MAINTENANCE_KPI',
+                            amount: parseFloat(finalAmount.toFixed(2)),
+                            source_key: 'maintenance_tasks',
+                            source_value: rawSum,
+                            multiplier: efficiencyMultiplier
+                        });
+                        total += finalAmount;
+                    }
+                }
             }
 
-            if (bonus.type !== 'checklist') {
+            if (bonus.type !== 'checklist' && bonus.type !== 'maintenance_kpi') {
                 breakdown.bonuses.push({
                     name: bonus.name || bonus.type,
                     type: 'SHIFT_BONUS',
@@ -181,10 +231,11 @@ export async function calculateSalary(
     }
 
     // 4. Equipment Maintenance & Issue Bonuses
-    // This logic handles bonuses earned directly in the shift (if configured to pay per shift)
-    // or accumulates them if paid monthly (though calculation here is per-shift context)
-    // The caller (route.ts) is responsible for summing up bonuses for the shift period
-    if (reportMetrics['maintenance_bonus'] && reportMetrics['maintenance_bonus'] > 0) {
+    // Legacy support: if 'maintenance_bonus' is passed directly but NO maintenance_kpi bonus is configured in the scheme
+    // This prevents double counting if we switched to the new system
+    const hasNewKpiBonus = scheme.bonuses?.some(b => b.type === 'maintenance_kpi');
+    
+    if (!hasNewKpiBonus && reportMetrics['maintenance_bonus'] && reportMetrics['maintenance_bonus'] > 0) {
         // Apply Maintenance KPI Multipliers if present in scheme config
         let amount = reportMetrics['maintenance_bonus'];
         

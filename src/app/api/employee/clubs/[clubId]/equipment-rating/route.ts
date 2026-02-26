@@ -29,9 +29,10 @@ export async function GET(
         );
         
         const schemeFormula = schemeRes.rows[0]?.formula || {};
-        const kpiConfig = schemeFormula.maintenance_kpi || null;
+        const bonuses = schemeFormula.bonuses || [];
+        const kpiBonus = bonuses.find((b: any) => b.type === 'maintenance_kpi');
 
-        if (!kpiConfig || !kpiConfig.enabled) {
+        if (!kpiBonus) {
             return NextResponse.json(null);
         }
 
@@ -60,19 +61,35 @@ export async function GET(
         const completed = Number(stats.completed_tasks) || 0;
         const rawBonus = Number(stats.raw_bonus) || 0;
         
-        let efficiencyPercent = total > 0 ? (completed / total) * 100 : 100;
+        let efficiencyPercent = 100;
+        if (total > 0) {
+            efficiencyPercent = (completed / total) * 100;
+        } else if (completed > 0) {
+            // Completed tasks but no assigned tasks (e.g. only free pool)
+            efficiencyPercent = 100;
+        } else {
+            // No tasks at all
+            efficiencyPercent = 0;
+        }
         
-        // Determine Rating Multiplier based on efficiency
+        // Determine Rating Multiplier based on efficiency thresholds from bonus config
         let ratingMultiplier = 1.0;
-        const target = kpiConfig.target_efficiency_percent || 90;
-        const min = kpiConfig.min_efficiency_percent || 50;
-
-        if (efficiencyPercent >= target) {
-            ratingMultiplier = 1.2; // Super Bonus
-        } else if (efficiencyPercent < min) {
-            ratingMultiplier = 0.0; // Penalty
-        } else if (efficiencyPercent < 80) {
-            ratingMultiplier = 0.8; // Lower
+        const thresholds = kpiBonus.efficiency_thresholds || [];
+        
+        if (thresholds.length > 0) {
+            // Sort descending by percent
+            const sorted = [...thresholds].sort((a: any, b: any) => b.from_percent - a.from_percent);
+            for (const t of sorted) {
+                if (efficiencyPercent >= t.from_percent) {
+                    ratingMultiplier = Number(t.multiplier);
+                    break;
+                }
+            }
+        } else {
+            // Fallback default logic if no thresholds defined
+            if (efficiencyPercent >= 90) ratingMultiplier = 1.2;
+            else if (efficiencyPercent < 50) ratingMultiplier = 0.0;
+            else if (efficiencyPercent < 80) ratingMultiplier = 0.8;
         }
 
         const projectedBonus = rawBonus * ratingMultiplier;

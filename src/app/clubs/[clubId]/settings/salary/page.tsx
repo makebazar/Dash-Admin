@@ -22,26 +22,15 @@ interface Formula {
         shift_type: 'day' | 'night' | 'any'
         min_hours?: number
     }
-    maintenance_kpi?: {
-        enabled: boolean
-        points_per_cleaning: number
-        points_per_issue_resolved: number
-        bonus_per_point: number
-        overdue_tolerance_days: number
-        on_time_multiplier: number
-        late_penalty_multiplier: number
-        min_efficiency_percent: number
-        target_efficiency_percent: number
-    }
 }
 
 interface Bonus {
-    type: 'percent_revenue' | 'fixed' | 'tiered' | 'progressive_percent' | 'penalty' | 'checklist'
+    type: 'percent_revenue' | 'fixed' | 'tiered' | 'progressive_percent' | 'penalty' | 'checklist' | 'maintenance_kpi'
     name?: string
     // For percent_revenue and progressive_percent
     source?: 'cash' | 'card' | 'total'
     percent?: number
-    // For fixed and penalty
+    // For fixed, penalty, and maintenance_kpi (price per task)
     amount?: number
     // For tiered bonuses (KPI steps)
     tiers?: {
@@ -61,6 +50,13 @@ interface Bonus {
     checklist_template_id?: number
     min_score?: number
     mode?: 'SHIFT' | 'MONTH'
+    // For maintenance_kpi
+    overdue_tolerance_days?: number
+    late_penalty_multiplier?: number
+    efficiency_thresholds?: {
+        from_percent: number
+        multiplier: number
+    }[]
 }
 
 interface PeriodBonus {
@@ -99,18 +95,7 @@ interface SalaryScheme {
 const defaultFormula: Formula = {
     base: { type: 'hourly', amount: 500 },
     bonuses: [],
-    conditions: { shift_type: 'any' },
-    maintenance_kpi: {
-        enabled: false,
-        points_per_cleaning: 1,
-        points_per_issue_resolved: 3,
-        bonus_per_point: 50,
-        overdue_tolerance_days: 3,
-        on_time_multiplier: 1.0,
-        late_penalty_multiplier: 0.5,
-        min_efficiency_percent: 50,
-        target_efficiency_percent: 90
-    }
+    conditions: { shift_type: 'any' }
 }
 
 interface ReportMetric {
@@ -342,6 +327,21 @@ export default function SalarySettingsPage({ params }: { params: Promise<{ clubI
                     mode: 'SHIFT'
                 }
                 break
+            case 'maintenance_kpi':
+                newBonus = {
+                    type: 'maintenance_kpi',
+                    name: 'KPI Обслуживания',
+                    amount: 50, // Price per task
+                    overdue_tolerance_days: 3,
+                    late_penalty_multiplier: 0.5,
+                    efficiency_thresholds: [
+                        { from_percent: 0, multiplier: 0 },
+                        { from_percent: 50, multiplier: 0.8 },
+                        { from_percent: 80, multiplier: 1.0 },
+                        { from_percent: 90, multiplier: 1.2 }
+                    ]
+                }
+                break
             default:
                 newBonus = { type: 'fixed', name: 'Бонус', amount: 500 }
         }
@@ -479,12 +479,10 @@ export default function SalarySettingsPage({ params }: { params: Promise<{ clubI
                 parts.push(`-${b.amount}₽ штраф`)
             } else if (b.type === 'checklist') {
                 parts.push(`+${b.amount}₽ за чек-лист ${b.mode === 'MONTH' ? '(мес)' : ''} (> ${b.min_score}%)`)
+            } else if (b.type === 'maintenance_kpi') {
+                parts.push(`KPI Обслуживания (${b.amount}₽/задача)`)
             }
         })
-
-        if (f.maintenance_kpi?.enabled) {
-            parts.push(`KPI Обслуживания (${f.maintenance_kpi.bonus_per_point}₽/балл)`)
-        }
 
         return parts.join(' • ') || 'Не настроено'
     }
@@ -821,6 +819,9 @@ export default function SalarySettingsPage({ params }: { params: Promise<{ clubI
                                     </Button>
                                     <Button type="button" variant="outline" size="sm" onClick={() => addBonus('checklist')}>
                                         + Чек-лист
+                                    </Button>
+                                    <Button type="button" variant="outline" size="sm" onClick={() => addBonus('maintenance_kpi')}>
+                                        + KPI Обслуживания
                                     </Button>
                                     <Button type="button" variant="outline" size="sm" className="text-red-500 hover:text-red-600" onClick={() => addBonus('penalty')}>
                                         + Штраф
@@ -1170,6 +1171,117 @@ export default function SalarySettingsPage({ params }: { params: Promise<{ clubI
                                                         </div>
                                                     </div>
                                                 )}
+                                                {/* Maintenance KPI Bonus */}
+                                                {bonus.type === 'maintenance_kpi' && (
+                                                    <div className="space-y-4">
+                                                        <div className="flex items-center gap-3">
+                                                            <span className="text-sm text-indigo-500 font-medium">+</span>
+                                                            <Input
+                                                                type="number"
+                                                                value={bonus.amount}
+                                                                onChange={e => updateBonus(index, 'amount', parseFloat(e.target.value) || 0)}
+                                                                className="w-24"
+                                                            />
+                                                            <span className="text-sm">₽ за задачу (чистка/ремонт)</span>
+                                                        </div>
+
+                                                        <div className="grid grid-cols-2 gap-4">
+                                                            <div className="space-y-1">
+                                                                <Label className="text-xs text-muted-foreground">Допуск (дни)</Label>
+                                                                <div className="relative">
+                                                                    <Input
+                                                                        type="number"
+                                                                        value={bonus.overdue_tolerance_days}
+                                                                        onChange={e => updateBonus(index, 'overdue_tolerance_days', parseInt(e.target.value) || 0)}
+                                                                        className="pr-12"
+                                                                    />
+                                                                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">дней</span>
+                                                                </div>
+                                                            </div>
+                                                            <div className="space-y-1">
+                                                                <Label className="text-xs text-muted-foreground">Штраф за опоздание</Label>
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="text-xs text-muted-foreground">x</span>
+                                                                    <Input
+                                                                        type="number"
+                                                                        step="0.1"
+                                                                        value={bonus.late_penalty_multiplier}
+                                                                        onChange={e => updateBonus(index, 'late_penalty_multiplier', parseFloat(e.target.value) || 0)}
+                                                                    />
+                                                                </div>
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="space-y-2">
+                                                            <div className="flex items-center justify-between">
+                                                                <Label className="text-xs text-muted-foreground">Таблица эффективности (Месяц)</Label>
+                                                                <Button
+                                                                    type="button"
+                                                                    variant="ghost"
+                                                                    size="sm"
+                                                                    className="h-6 text-[10px]"
+                                                                    onClick={() => {
+                                                                        const thresholds = bonus.efficiency_thresholds || []
+                                                                        const last = thresholds[thresholds.length - 1]
+                                                                        updateBonus(index, 'efficiency_thresholds', [
+                                                                            ...thresholds,
+                                                                            { from_percent: (last?.from_percent || 0) + 10, multiplier: (last?.multiplier || 1.0) }
+                                                                        ])
+                                                                    }}
+                                                                >
+                                                                    + Порог
+                                                                </Button>
+                                                            </div>
+                                                            
+                                                            <div className="space-y-2">
+                                                                {(bonus.efficiency_thresholds || []).map((t, ti) => (
+                                                                    <div key={ti} className="flex items-center gap-2 text-sm">
+                                                                        <span>От</span>
+                                                                        <Input
+                                                                            type="number"
+                                                                            value={t.from_percent}
+                                                                            onChange={e => {
+                                                                                const newThresholds = [...(bonus.efficiency_thresholds || [])]
+                                                                                newThresholds[ti] = { ...t, from_percent: parseFloat(e.target.value) || 0 }
+                                                                                updateBonus(index, 'efficiency_thresholds', newThresholds)
+                                                                            }}
+                                                                            className="w-16 h-8"
+                                                                        />
+                                                                        <span>% → x</span>
+                                                                        <Input
+                                                                            type="number"
+                                                                            step="0.1"
+                                                                            value={t.multiplier}
+                                                                            onChange={e => {
+                                                                                const newThresholds = [...(bonus.efficiency_thresholds || [])]
+                                                                                newThresholds[ti] = { ...t, multiplier: parseFloat(e.target.value) || 0 }
+                                                                                updateBonus(index, 'efficiency_thresholds', newThresholds)
+                                                                            }}
+                                                                            className="w-16 h-8"
+                                                                        />
+                                                                        {bonus.efficiency_thresholds!.length > 1 && (
+                                                                            <Button
+                                                                                type="button"
+                                                                                variant="ghost"
+                                                                                size="icon"
+                                                                                className="h-6 w-6 hover:text-red-500 ml-auto"
+                                                                                onClick={() => {
+                                                                                    const newThresholds = bonus.efficiency_thresholds!.filter((_, i) => i !== ti)
+                                                                                    updateBonus(index, 'efficiency_thresholds', newThresholds)
+                                                                                }}
+                                                                            >
+                                                                                <Trash2 className="h-3 w-3" />
+                                                                            </Button>
+                                                                        )}
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                            <p className="text-[10px] text-muted-foreground">
+                                                                Пример: От 90% -> x1.2 (Премия). От 0% -> x0 (Нет бонуса).
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                )}
                                             </div>
                                         ))}
                                         {periodBonuses.map((bonus, index) => (
@@ -1384,129 +1496,6 @@ export default function SalarySettingsPage({ params }: { params: Promise<{ clubI
                         </Card>
 
 
-
-                        {/* Maintenance KPI Section */}
-                        <Card className="border-indigo-500/20 bg-indigo-500/5">
-                            <CardHeader className="pb-3">
-                                <div className="flex items-center justify-between">
-                                    <CardTitle className="text-base flex items-center gap-2">
-                                        <Wrench className="h-4 w-4 text-indigo-500" />
-                                        KPI Обслуживания оборудования
-                                    </CardTitle>
-                                    <div className="flex items-center gap-2">
-                                        <Label htmlFor="kpi-enabled" className="text-sm cursor-pointer">Включить</Label>
-                                        <input
-                                            type="checkbox"
-                                            id="kpi-enabled"
-                                            checked={formula.maintenance_kpi?.enabled ?? false}
-                                            onChange={(e) => updateKpi('enabled', e.target.checked)}
-                                            className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                                        />
-                                    </div>
-                                </div>
-                                <CardDescription>
-                                    Начисление бонусов за чистку и ремонт оборудования
-                                </CardDescription>
-                            </CardHeader>
-                            {(formula.maintenance_kpi?.enabled) && (
-                                <CardContent className="space-y-6">
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                        <div className="space-y-4">
-                                            <h4 className="text-sm font-medium text-indigo-700">Стоимость действий</h4>
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <div className="space-y-2">
-                                                    <Label className="text-xs">Цена 1 балла</Label>
-                                                    <div className="relative">
-                                                        <Input
-                                                            type="number"
-                                                            value={formula.maintenance_kpi?.bonus_per_point}
-                                                            onChange={e => updateKpi('bonus_per_point', parseFloat(e.target.value) || 0)}
-                                                            className="pr-8"
-                                                        />
-                                                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">₽</span>
-                                                    </div>
-                                                </div>
-                                                <div className="space-y-2">
-                                                    <Label className="text-xs">Баллов за чистку</Label>
-                                                    <Input
-                                                        type="number"
-                                                        value={formula.maintenance_kpi?.points_per_cleaning}
-                                                        onChange={e => updateKpi('points_per_cleaning', parseFloat(e.target.value) || 0)}
-                                                    />
-                                                </div>
-                                                <div className="space-y-2">
-                                                    <Label className="text-xs">Баллов за ремонт</Label>
-                                                    <Input
-                                                        type="number"
-                                                        value={formula.maintenance_kpi?.points_per_issue_resolved}
-                                                        onChange={e => updateKpi('points_per_issue_resolved', parseFloat(e.target.value) || 0)}
-                                                    />
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <div className="space-y-4">
-                                            <h4 className="text-sm font-medium text-indigo-700">Сроки и штрафы</h4>
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <div className="space-y-2">
-                                                    <Label className="text-xs">Допуск просрочки</Label>
-                                                    <div className="relative">
-                                                        <Input
-                                                            type="number"
-                                                            value={formula.maintenance_kpi?.overdue_tolerance_days}
-                                                            onChange={e => updateKpi('overdue_tolerance_days', parseInt(e.target.value) || 0)}
-                                                            className="pr-12"
-                                                        />
-                                                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">дней</span>
-                                                    </div>
-                                                </div>
-                                                <div className="space-y-2">
-                                                    <Label className="text-xs">Множитель (Опоздание)</Label>
-                                                    <Input
-                                                        type="number"
-                                                        step="0.1"
-                                                        value={formula.maintenance_kpi?.late_penalty_multiplier}
-                                                        onChange={e => updateKpi('late_penalty_multiplier', parseFloat(e.target.value) || 0)}
-                                                    />
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    
-                                    <div className="pt-4 border-t border-indigo-200">
-                                        <h4 className="text-sm font-medium text-indigo-700 mb-3">Рейтинг эффективности (за месяц)</h4>
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div className="space-y-2">
-                                                <Label className="text-xs">Мин. порог (%)</Label>
-                                                <div className="relative">
-                                                    <Input
-                                                        type="number"
-                                                        value={formula.maintenance_kpi?.min_efficiency_percent}
-                                                        onChange={e => updateKpi('min_efficiency_percent', parseFloat(e.target.value) || 0)}
-                                                        className="pr-8"
-                                                    />
-                                                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">%</span>
-                                                </div>
-                                                <p className="text-[10px] text-muted-foreground">Ниже этого — 0 бонусов</p>
-                                            </div>
-                                            <div className="space-y-2">
-                                                <Label className="text-xs">Цель (%)</Label>
-                                                <div className="relative">
-                                                    <Input
-                                                        type="number"
-                                                        value={formula.maintenance_kpi?.target_efficiency_percent}
-                                                        onChange={e => updateKpi('target_efficiency_percent', parseFloat(e.target.value) || 0)}
-                                                        className="pr-8"
-                                                    />
-                                                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">%</span>
-                                                </div>
-                                                <p className="text-[10px] text-muted-foreground">Выше этого — x1.2 бонус</p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </CardContent>
-                            )}
-                        </Card>
 
                         {/* Preview */}
                         <div className="bg-gradient-to-r from-purple-500/10 to-blue-500/10 rounded-lg p-4">
