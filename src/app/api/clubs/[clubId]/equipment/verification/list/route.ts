@@ -29,7 +29,7 @@ export async function GET(
                 t.verification_status,
                 t.due_date,
                 t.completed_at,
-                u.name as completed_by_name,
+                u.full_name as completed_by_name,
                 t.photos,
                 t.notes,
                 t.bonus_earned,

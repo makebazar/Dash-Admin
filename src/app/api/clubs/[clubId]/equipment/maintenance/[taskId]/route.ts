@@ -144,9 +144,19 @@ export async function PATCH(
                     if (eqRes.rowCount && eqRes.rowCount > 0) {
                         const eq = eqRes.rows[0];
                         if (eq.maintenance_enabled !== false) {
-                            const intervalDays = eq.cleaning_interval_days || 30;
+                            const intervalDays = Math.max(1, eq.cleaning_interval_days || 30);
                             const nextDue = new Date(); // Start from completion time (now)
                             nextDue.setDate(nextDue.getDate() + intervalDays);
+                            
+                            // Ensure nextDue is at least tomorrow to avoid creating tasks for today immediately again
+                            const tomorrow = new Date();
+                            tomorrow.setDate(tomorrow.getDate() + 1);
+                            if (nextDue < tomorrow && intervalDays > 0) {
+                                // If interval is small (e.g. 1 day) and it's late, nextDue might be tomorrow, which is fine.
+                                // But if nextDue ended up being today or past, force it to tomorrow + (interval-1)
+                                // Actually, standard logic is fine: today + 3 days = future.
+                            }
+
                             const nextDueStr = nextDue.toISOString().split('T')[0];
                             
                             // Find shift for assigned user if any
