@@ -205,13 +205,16 @@ export default function EmployeeEquipmentPage() {
                 })
             })
 
-            if (!res.ok) throw new Error("Не удалось создать инцидент")
+            if (!res.ok) {
+                const data = await res.json()
+                throw new Error(data.error || "Не удалось создать инцидент")
+            }
 
             alert("Проблема зарегистрирована")
             setIsReportIssueOpen(false)
-        } catch (error) {
+        } catch (error: any) {
             console.error(error)
-            alert("Ошибка при создании инцидента")
+            alert(error.message || "Ошибка при создании инцидента")
         } finally {
             setIsSubmitting(false)
         }
@@ -238,7 +241,7 @@ export default function EmployeeEquipmentPage() {
                     equipment_id: selectedEquipment.id,
                     target_workstation_id: moveAction === 'SWAP' ? targetWorkstationId : null,
                     action: moveAction,
-                    reason: moveReason
+                    reason: moveReason + (isMoveWithIssue ? " (Создан инцидент)" : "")
                 })
             })
 
@@ -250,7 +253,7 @@ export default function EmployeeEquipmentPage() {
 
             // 2. Create Issue if requested
             if (isMoveWithIssue) {
-                await fetch(`/api/clubs/${clubId}/equipment/issues`, {
+                const issueRes = await fetch(`/api/clubs/${clubId}/equipment/issues`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
@@ -260,6 +263,12 @@ export default function EmployeeEquipmentPage() {
                         severity: 'MEDIUM'
                     })
                 })
+
+                if (!issueRes.ok) {
+                    const issueData = await issueRes.json()
+                    console.error("Failed to create issue:", issueData)
+                    alert(`Оборудование перемещено, но не удалось создать инцидент: ${issueData.error || 'Unknown error'}`)
+                }
             }
 
             alert(moveAction === 'SWAP' ? "Оборудование перемещено" : "Оборудование отправлено на склад")
