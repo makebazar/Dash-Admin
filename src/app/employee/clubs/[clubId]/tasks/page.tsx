@@ -39,6 +39,8 @@ interface MaintenanceTask {
     status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'SKIPPED'
     kpi_points: number
     last_cleaned_at?: string
+    verification_status?: string
+    rejection_reason?: string
 }
 
 export default function EmployeeTasksPage() {
@@ -222,6 +224,7 @@ export default function EmployeeTasksPage() {
         const isOverdue = task.status === 'PENDING' && task.due_date < todayStr
         const isInProgress = task.status === 'IN_PROGRESS'
         const isCompleted = task.status === 'COMPLETED'
+        const isRejected = task.verification_status === 'REJECTED' && task.status === 'IN_PROGRESS'
         const showAsCompleted = isCompleted || isFuture
 
         return (
@@ -229,46 +232,58 @@ export default function EmployeeTasksPage() {
                 "transition-all duration-300 border-none shadow-sm overflow-hidden",
                 isInProgress ? "ring-1 ring-indigo-500 bg-indigo-50/5" : "bg-white dark:bg-slate-800/80 hover:shadow-md",
                 (isFree || showAsCompleted) && "opacity-80 hover:opacity-100",
-                showAsCompleted && "bg-slate-50 dark:bg-slate-900/50"
+                showAsCompleted && "bg-slate-50 dark:bg-slate-900/50",
+                isRejected && "ring-1 ring-red-500 bg-red-50/10"
             )}>
                 <CardContent className="p-0">
-                    <div className="flex items-stretch h-16">
+                    <div className="flex items-stretch min-h-16">
                         <div className={cn(
                             "w-1 transition-all shrink-0",
-                            isCompleted ? "bg-emerald-500" : isFuture ? "bg-blue-400" : isFree ? "bg-slate-300 dark:bg-slate-600" : isOverdue ? "bg-rose-500" : isInProgress ? "bg-indigo-500" : "bg-slate-200 dark:bg-slate-700"
+                            isRejected ? "bg-red-500" : isCompleted ? "bg-emerald-500" : isFuture ? "bg-blue-400" : isFree ? "bg-slate-300 dark:bg-slate-600" : isOverdue ? "bg-rose-500" : isInProgress ? "bg-indigo-500" : "bg-slate-200 dark:bg-slate-700"
                         )} />
-                        <div className="px-4 flex-1 grid grid-cols-[1fr_auto] items-center gap-3 min-w-0">
-                            <div className="flex items-center gap-3 min-w-0">
-                                <div className={cn(
-                                    "h-9 w-9 rounded-xl flex items-center justify-center transition-colors shrink-0",
-                                    isInProgress ? "bg-indigo-500 text-white" : showAsCompleted ? "bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400" : "bg-slate-100 dark:bg-slate-700 text-slate-400"
-                                )}>
-                                    {showAsCompleted ? <CheckCircle2 className="h-5 w-5" /> : <Monitor className="h-5 w-5" />}
-                                </div>
-                                <div className="min-w-0 flex flex-col justify-center">
-                                    <div className="flex items-center gap-2 mb-0.5">
-                                        <h4 className={cn("font-bold text-sm truncate", showAsCompleted && "text-muted-foreground")}>{task.equipment_name}</h4>
-                                        {!isFree && isOverdue && !showAsCompleted && (
-                                            <div className="h-2 w-2 rounded-full bg-rose-500 animate-pulse shrink-0" title="Просрочено" />
-                                        )}
+                        <div className="px-4 py-3 flex-1 grid grid-cols-[1fr_auto] items-center gap-3 min-w-0">
+                            <div className="flex flex-col gap-2 min-w-0">
+                                <div className="flex items-center gap-3 min-w-0">
+                                    <div className={cn(
+                                        "h-9 w-9 rounded-xl flex items-center justify-center transition-colors shrink-0",
+                                        isRejected ? "bg-red-100 text-red-600" : isInProgress ? "bg-indigo-500 text-white" : showAsCompleted ? "bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400" : "bg-slate-100 dark:bg-slate-700 text-slate-400"
+                                    )}>
+                                        {isRejected ? <AlertCircle className="h-5 w-5" /> : showAsCompleted ? <CheckCircle2 className="h-5 w-5" /> : <Monitor className="h-5 w-5" />}
                                     </div>
-                                    <div className="flex items-center gap-2 text-[10px] text-muted-foreground font-bold uppercase tracking-wider">
-                                        <span className="bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded leading-none shrink-0">{task.equipment_type_name}</span>
-                                        {!hideLocation && (
-                                            <span className="truncate opacity-60">{task.workstation_name || "Склад"}</span>
-                                        )}
-                                        {isFree && <span className="text-indigo-500 opacity-100">СВОБОДНО</span>}
-                                        {task.last_cleaned_at && (
-                                            <span className="text-emerald-600/70 dark:text-emerald-400/70 flex items-center gap-1">
-                                                <Check className="h-3 w-3" />
-                                                {format(new Date(task.last_cleaned_at), 'dd.MM')}
-                                            </span>
-                                        )}
+                                    <div className="min-w-0 flex flex-col justify-center">
+                                        <div className="flex items-center gap-2 mb-0.5">
+                                            <h4 className={cn("font-bold text-sm truncate", showAsCompleted && "text-muted-foreground")}>{task.equipment_name}</h4>
+                                            {!isFree && isOverdue && !showAsCompleted && (
+                                                <div className="h-2 w-2 rounded-full bg-rose-500 animate-pulse shrink-0" title="Просрочено" />
+                                            )}
+                                            {isRejected && (
+                                                <Badge variant="destructive" className="h-5 px-1.5 text-[10px]">На доработку</Badge>
+                                            )}
+                                        </div>
+                                        <div className="flex items-center gap-2 text-[10px] text-muted-foreground font-bold uppercase tracking-wider">
+                                            <span className="bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded leading-none shrink-0">{task.equipment_type_name}</span>
+                                            {!hideLocation && (
+                                                <span className="truncate opacity-60">{task.workstation_name || "Склад"}</span>
+                                            )}
+                                            {isFree && <span className="text-indigo-500 opacity-100">СВОБОДНО</span>}
+                                            {task.last_cleaned_at && (
+                                                <span className="text-emerald-600/70 dark:text-emerald-400/70 flex items-center gap-1">
+                                                    <Check className="h-3 w-3" />
+                                                    {format(new Date(task.last_cleaned_at), 'dd.MM')}
+                                                </span>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
+                                
+                                {isRejected && task.rejection_reason && (
+                                    <div className="text-xs bg-red-50 text-red-800 p-2 rounded-md border border-red-100 mt-1">
+                                        <span className="font-bold">Комментарий:</span> {task.rejection_reason}
+                                    </div>
+                                )}
                             </div>
 
-                            <div className="shrink-0">
+                            <div className="shrink-0 self-center">
                                 {isFree ? (
                                     <Button
                                         size="sm"
@@ -289,11 +304,16 @@ export default function EmployeeTasksPage() {
                                 ) : isInProgress ? (
                                     <Button
                                         size="sm"
-                                        className="bg-emerald-600 hover:bg-emerald-700 h-9 w-24 rounded-lg font-bold text-xs shadow-sm shadow-emerald-200 dark:shadow-none transition-all"
+                                        className={cn(
+                                            "h-9 w-24 rounded-lg font-bold text-xs shadow-sm transition-all",
+                                            isRejected 
+                                                ? "bg-red-600 hover:bg-red-700 shadow-red-200 text-white" 
+                                                : "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200 text-white dark:shadow-none"
+                                        )}
                                         onClick={() => handleAction(task.id, 'COMPLETE')}
                                         disabled={isUpdating === task.id}
                                     >
-                                        {isUpdating === task.id ? <Loader2 className="h-3 w-3 animate-spin text-white" /> : "Завершить"}
+                                        {isUpdating === task.id ? <Loader2 className="h-3 w-3 animate-spin text-white" /> : (isRejected ? "Исправить" : "Завершить")}
                                     </Button>
                                 ) : (
                                     <Button

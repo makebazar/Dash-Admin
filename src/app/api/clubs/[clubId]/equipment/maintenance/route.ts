@@ -53,6 +53,7 @@ export async function GET(
                 mt.updated_at,
                 mt.verification_status,
                 mt.verified_at,
+                mt.rejection_reason,
                 COALESCE(mt.assigned_user_id, e.assigned_user_id) as assigned_user_id,
                 e.name as equipment_name,
                 e.type as equipment_type,
