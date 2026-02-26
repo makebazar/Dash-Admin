@@ -39,7 +39,7 @@ export async function GET(
         }
 
         let sql = `
-            SELECT 
+            SELECT DISTINCT ON (mt.equipment_id)
                 mt.id,
                 mt.equipment_id,
                 mt.task_type,
@@ -51,6 +51,8 @@ export async function GET(
                 mt.photos,
                 mt.created_at,
                 mt.updated_at,
+                mt.verification_status,
+                mt.verified_at,
                 COALESCE(mt.assigned_user_id, e.assigned_user_id) as assigned_user_id,
                 e.name as equipment_name,
                 e.type as equipment_type,
@@ -60,7 +62,8 @@ export async function GET(
                 w.name as workstation_name,
                 w.zone as workstation_zone,
                 COALESCE(u.full_name, eu.full_name) as assigned_to_name,
-                cu.full_name as completed_by_name
+                cu.full_name as completed_by_name,
+                cu_v.full_name as verified_by_name
             FROM equipment_maintenance_tasks mt
             JOIN equipment e ON mt.equipment_id = e.id
             LEFT JOIN equipment_types et ON e.type = et.code
@@ -68,6 +71,7 @@ export async function GET(
             LEFT JOIN users u ON mt.assigned_user_id = u.id
             LEFT JOIN users eu ON e.assigned_user_id = eu.id
             LEFT JOIN users cu ON mt.completed_by = cu.id
+            LEFT JOIN users cu_v ON mt.verified_by = cu_v.id
             WHERE e.club_id = $1 
               AND (e.maintenance_enabled IS NULL OR e.maintenance_enabled = TRUE)
         `;
@@ -88,16 +92,18 @@ export async function GET(
             }
         }
 
+        // Removed explicit status filter to allow "Smart Horizon" view (Active OR Latest Completed)
+        // If specific status is requested, we can still filter, but for the main view we want the mix
         if (status) {
-            const statusList = status.split(',');
-            if (statusList.length > 1) {
-                sql += ` AND mt.status = ANY($${paramIndex})`;
-                queryParams.push(statusList);
-            } else {
-                sql += ` AND mt.status = $${paramIndex}`;
-                queryParams.push(status);
-            }
-            paramIndex++;
+             const statusList = status.split(',');
+             if (statusList.length > 1) {
+                 sql += ` AND mt.status = ANY($${paramIndex})`;
+                 queryParams.push(statusList);
+             } else {
+                 sql += ` AND mt.status = $${paramIndex}`;
+                 queryParams.push(status);
+             }
+             paramIndex++;
         }
 
         if (equipmentId) {
@@ -106,6 +112,10 @@ export async function GET(
             paramIndex++;
         }
 
+        // Date filters apply primarily to DUE DATE for pending tasks
+        // For completed tasks in the "Smart Horizon", we might want to ignore date filters or be careful
+        // But if user filters by date, they probably expect tasks in that range.
+        
         if (dateFrom) {
             if (includeOverdue) {
                 sql += ` AND (mt.due_date >= $${paramIndex} OR (mt.status = 'PENDING' AND mt.due_date < $${paramIndex}))`;
@@ -124,15 +134,21 @@ export async function GET(
             paramIndex++;
         }
 
-        if (sortBy === 'completed_at') {
-            sql += ` ORDER BY mt.completed_at ${order === 'desc' ? 'DESC' : 'ASC'} NULLS LAST`;
-        } else {
-            sql += ` ORDER BY 
-                CASE mt.status WHEN 'PENDING' THEN 1 WHEN 'IN_PROGRESS' THEN 2 ELSE 3 END,
-                mt.due_date ASC`;
-        }
+        // IMPORTANT: Order by equipment_id to make DISTINCT ON work, 
+        // then by status priority (PENDING/IN_PROGRESS first) to ensure we pick the active task if exists
+        sql += ` ORDER BY mt.equipment_id, 
+                 CASE mt.status WHEN 'IN_PROGRESS' THEN 1 WHEN 'PENDING' THEN 2 ELSE 3 END,
+                 mt.due_date ASC`;
 
-        const result = await query(sql, queryParams);
+        // Wrap in subquery to apply final sort
+        const finalSql = `
+            SELECT * FROM (${sql}) as distinct_tasks
+            ORDER BY 
+                CASE status WHEN 'IN_PROGRESS' THEN 1 WHEN 'PENDING' THEN 2 ELSE 3 END,
+                due_date ASC
+        `;
+
+        const result = await query(finalSql, queryParams);
 
         // Get stats
         const today = new Date().toISOString().split('T')[0];

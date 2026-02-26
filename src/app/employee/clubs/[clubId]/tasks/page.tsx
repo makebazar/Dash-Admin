@@ -78,7 +78,7 @@ export default function EmployeeTasksPage() {
             await ensurePlan(new Date())
             
             const [assignedRes, freeRes] = await Promise.all([
-                fetch(`/api/clubs/${clubId}/equipment/maintenance?assigned=me&status=PENDING,IN_PROGRESS`),
+                fetch(`/api/clubs/${clubId}/equipment/maintenance?assigned=me`), // Removed status filter to get all tasks (Smart Horizon)
                 fetch(`/api/clubs/${clubId}/equipment/maintenance?assigned=unassigned&status=PENDING&date_to=${today}`)
             ])
 
@@ -196,31 +196,33 @@ export default function EmployeeTasksPage() {
     const renderTaskCard = (task: MaintenanceTask, isFree: boolean = false, hideLocation: boolean = false) => {
         const isOverdue = new Date(task.due_date) < new Date()
         const isInProgress = task.status === 'IN_PROGRESS'
+        const isCompleted = task.status === 'COMPLETED'
 
         return (
             <Card key={task.id} className={cn(
                 "transition-all duration-300 border-none shadow-sm overflow-hidden",
                 isInProgress ? "ring-1 ring-indigo-500 bg-indigo-50/5" : "bg-white dark:bg-slate-800/80 hover:shadow-md",
-                isFree && "opacity-80 hover:opacity-100"
+                (isFree || isCompleted) && "opacity-80 hover:opacity-100",
+                isCompleted && "bg-slate-50 dark:bg-slate-900/50"
             )}>
                 <CardContent className="p-0">
                     <div className="flex items-stretch h-16">
                         <div className={cn(
                             "w-1 transition-all shrink-0",
-                            isFree ? "bg-slate-300 dark:bg-slate-600" : isOverdue ? "bg-rose-500" : isInProgress ? "bg-indigo-500" : "bg-slate-200 dark:bg-slate-700"
+                            isCompleted ? "bg-emerald-500" : isFree ? "bg-slate-300 dark:bg-slate-600" : isOverdue ? "bg-rose-500" : isInProgress ? "bg-indigo-500" : "bg-slate-200 dark:bg-slate-700"
                         )} />
                         <div className="px-4 flex-1 grid grid-cols-[1fr_auto] items-center gap-3 min-w-0">
                             <div className="flex items-center gap-3 min-w-0">
                                 <div className={cn(
                                     "h-9 w-9 rounded-xl flex items-center justify-center transition-colors shrink-0",
-                                    isInProgress ? "bg-indigo-500 text-white" : "bg-slate-100 dark:bg-slate-700 text-slate-400"
+                                    isInProgress ? "bg-indigo-500 text-white" : isCompleted ? "bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400" : "bg-slate-100 dark:bg-slate-700 text-slate-400"
                                 )}>
-                                    <Monitor className="h-5 w-5" />
+                                    {isCompleted ? <CheckCircle2 className="h-5 w-5" /> : <Monitor className="h-5 w-5" />}
                                 </div>
                                 <div className="min-w-0 flex flex-col justify-center">
                                     <div className="flex items-center gap-2 mb-0.5">
-                                        <h4 className="font-bold text-sm truncate">{task.equipment_name}</h4>
-                                        {!isFree && isOverdue && (
+                                        <h4 className={cn("font-bold text-sm truncate", isCompleted && "line-through text-muted-foreground")}>{task.equipment_name}</h4>
+                                        {!isFree && isOverdue && !isCompleted && (
                                             <div className="h-2 w-2 rounded-full bg-rose-500 animate-pulse shrink-0" title="Просрочено" />
                                         )}
                                     </div>
@@ -245,6 +247,13 @@ export default function EmployeeTasksPage() {
                                     >
                                         {isUpdating === task.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Взять"}
                                     </Button>
+                                ) : isCompleted ? (
+                                    <div className="flex flex-col items-end justify-center h-9 w-24">
+                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">След.</span>
+                                        <span className="text-xs font-black text-slate-600 dark:text-slate-300">
+                                            {format(new Date(task.due_date), 'dd.MM')}
+                                        </span>
+                                    </div>
                                 ) : isInProgress ? (
                                     <Button
                                         size="sm"

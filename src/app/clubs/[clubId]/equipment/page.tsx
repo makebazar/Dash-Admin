@@ -14,7 +14,8 @@ import {
     History,
     ChevronRight,
     ArrowUpRight,
-    Search
+    Search,
+    CheckSquare
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -106,6 +107,14 @@ export default function EquipmentDashboard() {
             icon: <Settings className="h-6 w-6" />,
             color: "text-violet-500",
             bg: "bg-violet-50"
+        },
+        {
+            title: "Проверка отчетов",
+            description: "Верификация выполненных работ и фотоотчетов",
+            href: `/clubs/${clubId}/equipment/verification`,
+            icon: <CheckSquare className="h-6 w-6" />,
+            color: "text-rose-500",
+            bg: "bg-rose-50"
         },
         {
             title: "История",

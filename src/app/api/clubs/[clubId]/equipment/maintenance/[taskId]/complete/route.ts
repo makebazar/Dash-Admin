@@ -95,6 +95,7 @@ export async function POST(
         const completeTask = await query(
             `UPDATE equipment_maintenance_tasks
              SET status = 'COMPLETED',
+                 verification_status = 'PENDING',
                  completed_at = CURRENT_TIMESTAMP,
                  completed_by = $2,
                  photos = $3,

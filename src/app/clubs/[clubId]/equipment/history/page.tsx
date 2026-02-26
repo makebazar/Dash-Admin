@@ -12,7 +12,9 @@ import {
     Camera,
     X,
     ArrowRight,
-    Move
+    Move,
+    CheckCircle2,
+    XCircle
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -55,6 +57,8 @@ interface MaintenanceTask {
     completed_by_name: string | null
     task_type: string
     photos: string[] | null
+    verification_status?: string
+    verified_by_name?: string
 }
 
 interface Movement {
@@ -187,6 +191,7 @@ export default function MaintenanceHistory() {
                                     <TableHead>Дата выполнения</TableHead>
                                     <TableHead>Оборудование</TableHead>
                                     <TableHead>Тип работ</TableHead>
+                                    <TableHead>Статус</TableHead>
                                     <TableHead>Фото</TableHead>
                                     <TableHead>Исполнитель</TableHead>
                                     <TableHead>Местоположение</TableHead>
@@ -237,6 +242,23 @@ export default function MaintenanceHistory() {
                                                 <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
                                                     {task.task_type === 'CLEANING' ? 'Чистка' : task.task_type}
                                                 </Badge>
+                                            </TableCell>
+                                            <TableCell>
+                                                {task.verification_status === 'APPROVED' ? (
+                                                    <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-none flex items-center gap-1 w-fit shadow-none">
+                                                        <CheckCircle2 className="h-3 w-3" /> Одобрено
+                                                    </Badge>
+                                                ) : task.verification_status === 'REJECTED' ? (
+                                                    <Badge className="bg-rose-100 text-rose-700 hover:bg-rose-100 border-none flex items-center gap-1 w-fit shadow-none">
+                                                        <XCircle className="h-3 w-3" /> Отклонено
+                                                    </Badge>
+                                                ) : task.verification_status === 'PENDING' ? (
+                                                    <Badge variant="outline" className="text-amber-600 border-amber-200 bg-amber-50 w-fit">
+                                                        На проверке
+                                                    </Badge>
+                                                ) : (
+                                                    <span className="text-xs text-muted-foreground">-</span>
+                                                )}
                                             </TableCell>
                                             <TableCell>
                                                 {task.photos && task.photos.length > 0 ? (
