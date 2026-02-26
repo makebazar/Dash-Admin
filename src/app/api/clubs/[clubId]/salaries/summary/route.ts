@@ -394,6 +394,7 @@ export async function GET(
                 reportMetricsForShift['maintenance_raw_sum'] = shiftRawSum;
                 reportMetricsForShift['maintenance_tasks_completed'] = monthCompletedTasks;
                 reportMetricsForShift['maintenance_tasks_assigned'] = monthTotalTasks;
+                reportMetricsForShift['maintenance_month_base'] = monthlyMetrics['maintenance_bonus'] || 0;
 
                 // Pass the scheme WITH calculated bonuses reward levels
                 const schemeWithRewards = { ...emp, period_bonuses: bonuses_status };

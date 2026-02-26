@@ -53,9 +53,11 @@ interface Bonus {
     // For maintenance_kpi
     overdue_tolerance_days?: number
     late_penalty_multiplier?: number
+    reward_type?: 'MULTIPLIER' | 'FIXED'
     efficiency_thresholds?: {
         from_percent: number
-        multiplier: number
+        multiplier?: number
+        amount?: number
     }[]
 }
 
@@ -334,6 +336,7 @@ export default function SalarySettingsPage({ params }: { params: Promise<{ clubI
                     amount: 50, // Price per task
                     overdue_tolerance_days: 3,
                     late_penalty_multiplier: 0.5,
+                    reward_type: 'MULTIPLIER',
                     efficiency_thresholds: [
                         { from_percent: 0, multiplier: 0 },
                         { from_percent: 50, multiplier: 0.8 },
@@ -480,7 +483,7 @@ export default function SalarySettingsPage({ params }: { params: Promise<{ clubI
             } else if (b.type === 'checklist') {
                 parts.push(`+${b.amount}₽ за чек-лист ${b.mode === 'MONTH' ? '(мес)' : ''} (> ${b.min_score}%)`)
             } else if (b.type === 'maintenance_kpi') {
-                parts.push(`KPI Обслуживания (${b.amount}₽/задача)`)
+                parts.push(`KPI Обслуживания (${b.amount}₽/задача${b.reward_type === 'FIXED' ? ', фикс. бонусы' : ''})`)
             }
         })
 

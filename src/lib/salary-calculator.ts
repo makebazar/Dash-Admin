@@ -158,15 +158,36 @@ export async function calculateSalary(
                         // Sort descending by percent
                         const sortedThresholds = [...bonus.efficiency_thresholds].sort((a, b) => b.from_percent - a.from_percent);
                         
+                        let matchedThreshold = null;
                         for (const t of sortedThresholds) {
                             if (efficiencyPercent >= t.from_percent) {
+                                matchedThreshold = t;
                                 efficiencyMultiplier = Number(t.multiplier);
                                 break;
                             }
                         }
-                    }
 
-                    finalAmount = rawSum * efficiencyMultiplier;
+                        if (bonus.reward_type === 'FIXED' && matchedThreshold) {
+                            const fixedAmount = Number(matchedThreshold.amount) || 0;
+                            const monthBase = reportMetrics['maintenance_month_base'] || rawSum;
+                            
+                            // Distribute fixed amount proportional to this shift's raw contribution
+                            if (monthBase > 0) {
+                                finalAmount = fixedAmount * (rawSum / monthBase);
+                            } else {
+                                finalAmount = 0;
+                            }
+                            
+                            // For fixed rewards, we don't really use multiplier, but we can store it for debug
+                            efficiencyMultiplier = 0; 
+                        } else {
+                            // Default Multiplier Logic
+                            finalAmount = rawSum * efficiencyMultiplier;
+                        }
+                    } else {
+                         // No thresholds, just base (x1.0)
+                         finalAmount = rawSum * 1.0;
+                    }
 
                     if (finalAmount > 0) {
                         breakdown.bonuses.push({
@@ -175,7 +196,8 @@ export async function calculateSalary(
                             amount: parseFloat(finalAmount.toFixed(2)),
                             source_key: 'maintenance_tasks',
                             source_value: rawSum,
-                            multiplier: efficiencyMultiplier
+                            multiplier: bonus.reward_type === 'FIXED' ? undefined : efficiencyMultiplier,
+                            reward_type: bonus.reward_type // Add this for UI
                         });
                         total += finalAmount;
                     }
