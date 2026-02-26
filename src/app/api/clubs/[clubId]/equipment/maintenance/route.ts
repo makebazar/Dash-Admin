@@ -79,14 +79,16 @@ export async function GET(
         let paramIndex = 2;
 
         if (myTasks) {
-            sql += ` AND mt.assigned_user_id = $${paramIndex}`;
+            // Filter by assigned_user_id (explicitly assigned OR fallback to equipment assignee)
+            sql += ` AND COALESCE(mt.assigned_user_id, e.assigned_user_id) = $${paramIndex}`;
             queryParams.push(userId);
             paramIndex++;
         } else if (assignedTo) {
             if (assignedTo === 'unassigned') {
-                sql += ` AND mt.assigned_user_id IS NULL`;
+                // Task is unassigned ONLY if neither task nor equipment has an assignee
+                sql += ` AND mt.assigned_user_id IS NULL AND e.assigned_user_id IS NULL`;
             } else {
-                sql += ` AND mt.assigned_user_id = $${paramIndex}`;
+                sql += ` AND COALESCE(mt.assigned_user_id, e.assigned_user_id) = $${paramIndex}`;
                 queryParams.push(assignedTo);
                 paramIndex++;
             }
@@ -359,11 +361,26 @@ export async function POST(
             let dueDateStr = originalDue;
             
             // Shift logic
-            const assignedUserId = eq.assigned_user_id || null;
-            if (assignedUserId) {
-                const shiftDate = findNextShiftDate(assignedUserId, originalDue);
-                if (shiftDate) {
-                    dueDateStr = shiftDate;
+            // Use assigned_user_id from equipment for the shift calculation, but ensure we use it for the task too
+            let taskAssignedUserId = eq.assigned_user_id || null;
+            
+            if (taskAssignedUserId) {
+                // Check if user is active first to avoid assigning to fired employees
+                const userActiveRes = await query(
+                    `SELECT is_active FROM club_employees WHERE club_id = $1 AND user_id = $2`,
+                    [clubId, taskAssignedUserId]
+                );
+                
+                const isActive = userActiveRes.rows[0]?.is_active !== false;
+                
+                if (isActive) {
+                    const shiftDate = findNextShiftDate(taskAssignedUserId, originalDue);
+                    if (shiftDate) {
+                        dueDateStr = shiftDate;
+                    }
+                } else {
+                    // User is inactive, do not assign task to them
+                    taskAssignedUserId = null;
                 }
             }
 
@@ -372,7 +389,7 @@ export async function POST(
                  VALUES ($1, $2, $3, $4)
                  ON CONFLICT (equipment_id, due_date, task_type) DO NOTHING
                  RETURNING id`,
-                [eq.id, task_type, dueDateStr, assignedUserId]
+                [eq.id, task_type, dueDateStr, taskAssignedUserId]
             );
 
             if (insertResult.rowCount && insertResult.rowCount > 0) {
