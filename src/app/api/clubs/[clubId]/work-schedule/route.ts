@@ -171,12 +171,75 @@ export async function PATCH(
 
         if (shiftType === null) {
             await query(`DELETE FROM work_schedules WHERE club_id = $1 AND user_id = $2 AND date = $3`, [clubId, userId, date]);
+            
+            // --- RESCHEDULE LOGIC START ---
+            // If a shift is removed, we must check if any PENDING maintenance tasks were assigned to this user on this date.
+            // If so, we need to move them to the NEXT available shift for this user.
+            
+            // 1. Find affected tasks
+            const affectedTasks = await query(
+                `SELECT id, equipment_id, due_date FROM equipment_maintenance_tasks 
+                 WHERE assigned_user_id = $1 AND due_date = $2 AND status = 'PENDING'`,
+                [userId, date]
+            );
+
+            if (affectedTasks.rowCount && affectedTasks.rowCount > 0) {
+                // 2. Find next available shift for this user starting from tomorrow relative to the deleted date
+                const deletedDate = new Date(date);
+                const nextDay = new Date(deletedDate);
+                nextDay.setDate(nextDay.getDate() + 1);
+                const nextDayStr = nextDay.toISOString().split('T')[0];
+
+                const nextShiftRes = await query(
+                    `SELECT date FROM work_schedules 
+                     WHERE club_id = $1 AND user_id = $2 AND date >= $3
+                     ORDER BY date ASC LIMIT 1`,
+                    [clubId, userId, nextDayStr]
+                );
+
+                if (nextShiftRes.rowCount && nextShiftRes.rowCount > 0) {
+                    // Found a new date, move tasks there
+                    const newDate = nextShiftRes.rows[0].date;
+                    const newDateStr = newDate instanceof Date ? newDate.toISOString().split('T')[0] : newDate;
+                    
+                    const taskIds = affectedTasks.rows.map((t: any) => t.id);
+                    
+                    await query(
+                        `UPDATE equipment_maintenance_tasks 
+                         SET due_date = $1 
+                         WHERE id = ANY($2)`,
+                        [newDateStr, taskIds]
+                    );
+                    console.log(`[Schedule] Rescheduled ${taskIds.length} tasks from ${date} to ${newDateStr} for user ${userId}`);
+                } else {
+                    // No future shifts found! 
+                    // Unassign user so tasks become free for others
+                    const taskIds = affectedTasks.rows.map((t: any) => t.id);
+                    
+                    // We need to pass the IDs array directly as a parameter for ANY($1)
+                    await query(
+                        `UPDATE equipment_maintenance_tasks 
+                         SET assigned_user_id = NULL 
+                         WHERE id = ANY($1)`,
+                        [taskIds]
+                    );
+                    console.log(`[Schedule] Unassigned ${taskIds.length} tasks from ${date} for user ${userId} (no future shifts)`);
+                }
+            }
+            // --- RESCHEDULE LOGIC END ---
+
         } else {
             await query(
                 `INSERT INTO work_schedules (club_id, user_id, date, shift_type) VALUES ($1, $2, $3, $4)
                  ON CONFLICT (club_id, user_id, date) DO UPDATE SET shift_type = EXCLUDED.shift_type`,
                 [clubId, userId, date, shiftType]
             );
+            
+            // --- OPTIMIZATION LOGIC START ---
+            // If a shift is ADDED, we might want to pull overdue tasks or tasks from far future to this new earlier date?
+            // For now, let's keep it simple and only handle the "removal" case which breaks the schedule.
+            // Adding a shift usually doesn't break anything, just gives more capacity.
+            // --- OPTIMIZATION LOGIC END ---
         }
 
         const d = new Date(date);
