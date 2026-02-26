@@ -54,8 +54,8 @@ export async function POST(
         
         const schemeFormula = schemeRes.rows[0]?.formula || {};
         const bonuses = schemeFormula.bonuses || [];
-        // Find the maintenance KPI bonus config
-        const kpiBonus = bonuses.find((b: any) => b.type === 'maintenance_kpi');
+        // Find the maintenance KPI bonus config (handle potential case sensitivity)
+        const kpiBonus = bonuses.find((b: any) => b.type === 'maintenance_kpi' || b.type === 'MAINTENANCE_KPI');
         const task = taskRes.rows[0];
 
         if (!task) {

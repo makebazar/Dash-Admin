@@ -405,12 +405,16 @@ export async function GET(
             const total_with_kpi = total_accrued; // KPI is now included in individual shifts if percentage-based
 
             // If any period bonus is FIXED-type and not yet in shifts, we add it back (but for now we assume they are handled)
-            const kpi_bonus_amount = bonuses_status
+            let kpi_bonus_amount = bonuses_status
                 .filter((b: any) => b.is_met && b.current_reward_type === 'PERCENT')
                 .reduce((sum: number, b: any) => {
                     const bonusAmount = b.current_value * (b.current_reward_value / 100);
                     return sum + bonusAmount;
                 }, 0);
+
+            // Add Maintenance KPI Bonus to the total KPI amount
+            const maintBonus = monthlyMetrics['maintenance_bonus'] || 0;
+            kpi_bonus_amount += maintBonus;
 
             const total_revenue = monthlyMetrics.total_revenue;
             const total_hours = monthlyMetrics.total_hours;

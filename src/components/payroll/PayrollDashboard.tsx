@@ -462,6 +462,28 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                                     })()}
                                                                 </span>
                                                             </div>
+                                                            {/* Maintenance Efficiency Small Card */}
+                                                            {(() => {
+                                                                const mCompleted = (employee.metrics as any)?.maintenance_tasks_completed || 0;
+                                                                const mAssigned = (employee.metrics as any)?.maintenance_tasks_assigned || 0;
+                                                                const mBonus = (employee.metrics as any)?.maintenance_bonus || 0;
+                                                                const hasM = employee.bonuses?.some((b: any) => b.type === 'maintenance_kpi' || b.type === 'MAINTENANCE_KPI');
+                                                                
+                                                                if (!hasM && mAssigned === 0 && mCompleted === 0) return null;
+
+                                                                const eff = mAssigned > 0 ? (mCompleted / mAssigned) * 100 : (mCompleted > 0 ? 100 : 0);
+                                                                
+                                                                return (
+                                                                    <div className="bg-indigo-50 p-3 rounded-xl border border-indigo-100 flex flex-col items-center">
+                                                                        <span className="text-[10px] text-indigo-600 uppercase font-bold mb-1">Обслуживание</span>
+                                                                        <span className="font-bold text-sm flex items-center gap-1.5 text-indigo-700">
+                                                                            <Wrench className="h-3.5 w-3.5" />
+                                                                            {eff.toFixed(0)}%
+                                                                        </span>
+                                                                        {mBonus > 0 && <span className="text-[9px] text-indigo-500 font-medium">+{formatCurrency(mBonus)}</span>}
+                                                                    </div>
+                                                                );
+                                                            })()}
                                                             </div>
                                                         </div>
                                                     );
@@ -541,7 +563,7 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                     const mAssigned = (employee.metrics as any)?.maintenance_tasks_assigned || 0;
                                                     
                                                     // Check if maintenance KPI is configured in bonuses
-                                                    const hasMaintenanceBonus = employee.bonuses?.some((b: any) => b.type === 'MAINTENANCE_KPI');
+                                                    const hasMaintenanceBonus = employee.bonuses?.some((b: any) => b.type === 'maintenance_kpi' || b.type === 'MAINTENANCE_KPI');
                                                     
                                                     // Only show if there is relevant activity OR configuration
                                                     if (mAssigned === 0 && mCompleted === 0 && mBonus === 0 && !hasMaintenanceBonus) return null;
