@@ -197,7 +197,7 @@ export default function EmployeeTasksPage() {
     const renderTaskCard = (task: MaintenanceTask, isFree: boolean = false, hideLocation: boolean = false) => {
         const todayStr = format(new Date(), 'yyyy-MM-dd')
         const isFuture = task.status === 'PENDING' && task.due_date > todayStr
-        const isOverdue = !isFuture && new Date(task.due_date) < new Date(todayStr)
+        const isOverdue = task.status === 'PENDING' && task.due_date < todayStr
         const isInProgress = task.status === 'IN_PROGRESS'
         const isCompleted = task.status === 'COMPLETED'
         const showAsCompleted = isCompleted || isFuture

@@ -315,6 +315,13 @@ export async function DELETE(
             );
         }
 
+        // CLEANUP: Delete any other PENDING tasks for this equipment to remove ghosts
+        await query(
+            `DELETE FROM equipment_maintenance_tasks 
+             WHERE equipment_id = $1 AND status = 'PENDING' AND id != $2`,
+            [task.equipment_id, taskId]
+        );
+
         return NextResponse.json({ success: true });
     } catch (error) {
         console.error('Delete Maintenance Task Error:', error);

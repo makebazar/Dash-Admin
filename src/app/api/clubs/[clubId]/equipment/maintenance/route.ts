@@ -324,7 +324,21 @@ export async function POST(
             );
 
             if ((pendingRes.rowCount || 0) > 0) {
-                continue;
+                // Check if the pending task is very old (ghost task) - older than 60 days
+                // If so, delete it and allow creating a new one
+                const ghostCheck = await query(
+                    `DELETE FROM equipment_maintenance_tasks 
+                     WHERE equipment_id = $1 
+                       AND status = 'PENDING' 
+                       AND due_date < CURRENT_DATE - INTERVAL '60 days'
+                     RETURNING id`,
+                    [eq.id]
+                );
+                
+                if ((ghostCheck.rowCount || 0) === 0) {
+                     // Real active task exists, skip creation
+                     continue;
+                }
             }
 
             const intervalDays = eq.cleaning_interval_days || 30;
