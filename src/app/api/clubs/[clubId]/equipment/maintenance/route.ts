@@ -225,80 +225,146 @@ export async function POST(
                 e.cleaning_interval_days, 
                 e.last_cleaned_at, 
                 e.workstation_id, 
-                e.assigned_user_id
+                e.assigned_user_id,
+                (
+                    SELECT MAX(due_date) 
+                    FROM equipment_maintenance_tasks 
+                    WHERE equipment_id = e.id 
+                      AND task_type = $3
+                ) as last_task_due_date
             FROM equipment e
             WHERE e.club_id = $1
               AND e.is_active = TRUE
               AND (e.maintenance_enabled IS NULL OR e.maintenance_enabled = TRUE)
         `;
-        const eqParams: any[] = [clubId];
+        const eqParams: any[] = [clubId, equipment_ids, task_type];
 
         if (equipment_ids && equipment_ids.length > 0) {
-            equipmentSql += ` AND e.id = ANY($2)`;
-            eqParams.push(equipment_ids);
+            // Adjust parameter index for equipment_ids since we added task_type at $3
+            // Actually, we need to be careful with parameter indices.
+            // Let's rewrite the query construction slightly to be safer.
+            equipmentSql = `
+                SELECT 
+                    e.id, 
+                    e.name, 
+                    e.cleaning_interval_days, 
+                    e.last_cleaned_at, 
+                    e.workstation_id, 
+                    e.assigned_user_id,
+                    (
+                        SELECT MAX(due_date) 
+                        FROM equipment_maintenance_tasks 
+                        WHERE equipment_id = e.id 
+                          AND task_type = $2
+                    ) as last_task_due_date
+                FROM equipment e
+                WHERE e.club_id = $1
+                  AND e.is_active = TRUE
+                  AND (e.maintenance_enabled IS NULL OR e.maintenance_enabled = TRUE)
+            `;
+            // Reset params to match the new base query
+        }
+        
+        // Re-construct params correctly
+        const baseParams = [clubId, task_type];
+        let queryStr = `
+            SELECT 
+                e.id, 
+                e.name, 
+                e.cleaning_interval_days, 
+                e.last_cleaned_at, 
+                e.workstation_id, 
+                e.assigned_user_id,
+                (
+                    SELECT MAX(due_date) 
+                    FROM equipment_maintenance_tasks 
+                    WHERE equipment_id = e.id 
+                      AND task_type = $2
+                ) as last_task_due_date
+            FROM equipment e
+            WHERE e.club_id = $1
+              AND e.is_active = TRUE
+              AND (e.maintenance_enabled IS NULL OR e.maintenance_enabled = TRUE)
+        `;
+        
+        if (equipment_ids && equipment_ids.length > 0) {
+            queryStr += ` AND e.id = ANY($3)`;
+            baseParams.push(equipment_ids);
         }
 
-        const equipmentResult = await query(equipmentSql, eqParams);
+        const equipmentResult = await query(queryStr, baseParams);
 
         let createdCount = 0;
 
         for (const eq of equipmentResult.rows) {
-            // Check if ANY active task (PENDING or IN_PROGRESS) exists for this equipment
-            const pendingRes = await query(
-                `SELECT 1 FROM equipment_maintenance_tasks 
-                 WHERE equipment_id = $1 AND status IN ('PENDING', 'IN_PROGRESS')
-                 LIMIT 1`,
-                [eq.id]
-            );
-
-            if ((pendingRes.rowCount || 0) > 0) {
-                continue;
-            }
-
             const intervalDays = eq.cleaning_interval_days || 30;
             const startDate = new Date(date_from);
             const endDate = new Date(date_to);
-
-            let nextDue: Date;
-            if (eq.last_cleaned_at) {
-                const lastCleaned = new Date(eq.last_cleaned_at);
-                nextDue = new Date(lastCleaned);
-                nextDue.setDate(nextDue.getDate() + intervalDays);
-            } else {
-                // If never cleaned, due date defaults to the start of the requested period
-                nextDue = new Date(startDate);
-            }
-
-            // If the calculated due date is beyond the current view range, skip it.
-            if (nextDue > endDate) {
-                continue;
-            }
-
-            const originalDue = nextDue.toISOString().split('T')[0];
-            let dueDateStr = originalDue;
             
-            const assignedUserId = eq.assigned_user_id || null;
+            // Determine the anchor date to start calculating intervals from
+            let anchorDate: Date;
+            
+            const lastCleaned = eq.last_cleaned_at ? new Date(eq.last_cleaned_at) : null;
+            const lastDue = eq.last_task_due_date ? new Date(eq.last_task_due_date) : null;
 
-            // Only attempt to align with shift if the task falls within the current view range.
-            // If it's overdue (date < startDate), we keep the original date to show "Overdue by X days".
-            if (assignedUserId && nextDue >= startDate) {
-                const shiftDate = findNextShiftDate(assignedUserId, originalDue);
-                if (shiftDate) {
-                    dueDateStr = shiftDate;
-                }
-                // If no shift found, fall back to original date (ensure task is created)
+            if (lastDue && lastCleaned) {
+                // Use the later of the two to handle late cleanings shifting the schedule
+                // OR sticking to schedule if cleaned early/on-time
+                anchorDate = lastDue > lastCleaned ? lastDue : lastCleaned;
+            } else if (lastDue) {
+                anchorDate = lastDue;
+            } else if (lastCleaned) {
+                anchorDate = lastCleaned;
+            } else {
+                // If never cleaned and no tasks, start from today (or start of period if it's in future)
+                // But to ensure we fill the requested period, let's treat "Start Date" as the anchor base
+                // effectively scheduling the first task at startDate
+                anchorDate = new Date(startDate);
+                anchorDate.setDate(anchorDate.getDate() - intervalDays); // Subtract so first loop adds it back
             }
 
-            const insertResult = await query(
-                `INSERT INTO equipment_maintenance_tasks (equipment_id, task_type, due_date, assigned_user_id)
-                 VALUES ($1, $2, $3, $4)
-                 ON CONFLICT (equipment_id, due_date, task_type) DO NOTHING
-                 RETURNING id`,
-                [eq.id, task_type, dueDateStr, assignedUserId]
-            );
+            let cursor = new Date(anchorDate);
+            
+            // Safety break to prevent infinite loops
+            let iterations = 0;
+            const MAX_ITERATIONS = 365; 
 
-            if (insertResult.rowCount && insertResult.rowCount > 0) {
-                createdCount++;
+            while (iterations < MAX_ITERATIONS) {
+                iterations++;
+                
+                // Advance cursor by interval
+                cursor.setDate(cursor.getDate() + intervalDays);
+                
+                // If we went past the end of the requested period, stop
+                if (cursor > endDate) break;
+                
+                // If cursor is before the start of the requested period, keep skipping
+                if (cursor < startDate) continue;
+                
+                // Now cursor is within [startDate, endDate]
+                const dueStr = cursor.toISOString().split('T')[0];
+                let finalDueDateStr = dueStr;
+                
+                // Shift logic
+                const assignedUserId = eq.assigned_user_id || null;
+                if (assignedUserId) {
+                    const shiftDate = findNextShiftDate(assignedUserId, dueStr);
+                    if (shiftDate) {
+                        finalDueDateStr = shiftDate;
+                    }
+                }
+
+                const insertResult = await query(
+                    `INSERT INTO equipment_maintenance_tasks (equipment_id, task_type, due_date, assigned_user_id)
+                     VALUES ($1, $2, $3, $4)
+                     ON CONFLICT (equipment_id, due_date, task_type) DO NOTHING
+                     RETURNING id`,
+                    [eq.id, task_type, finalDueDateStr, assignedUserId]
+                );
+
+                if (insertResult.rowCount && insertResult.rowCount > 0) {
+                    createdCount++;
+                }
             }
         }
 
