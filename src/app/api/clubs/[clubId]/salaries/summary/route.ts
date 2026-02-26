@@ -463,7 +463,11 @@ export async function GET(
                     avg_revenue_per_shift: shifts_count > 0 ? total_revenue / finishedShifts.length : 0,
                     total_hours,
                     avg_hours_per_shift: shifts_count > 0 ? total_hours / finishedShifts.length : 0,
-                    revenue_by_metric
+                    revenue_by_metric,
+                    // Explicitly pass maintenance metrics
+                    maintenance_bonus: monthlyMetrics['maintenance_bonus'] || 0,
+                    maintenance_tasks_completed: monthlyMetrics['maintenance_tasks_completed'] || 0,
+                    maintenance_tasks_assigned: monthlyMetrics['maintenance_tasks_assigned'] || 0
                 },
                 payment_history: empPaymentHistory.map((p: any) => ({
                     id: p.id,
