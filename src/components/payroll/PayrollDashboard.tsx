@@ -19,7 +19,8 @@ import {
     Plus,
     Percent,
     TrendingUp,
-    Wallet
+    Wallet,
+    Wrench
 } from 'lucide-react';
 
 interface PayrollStats {
@@ -526,6 +527,74 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
 
                                         {activeTabs[employee.id] === 'kpi' && (
                                             <div className="space-y-6 animate-in slide-in-from-left-2 duration-300">
+                                                {/* Maintenance KPI Card */}
+                                                {(() => {
+                                                    const mBonus = employee.metrics?.revenue_by_metric?.['maintenance_bonus']?.total 
+                                                        || (employee.metrics as any)?.maintenance_bonus 
+                                                        || 0;
+                                                    const mCompleted = (employee.metrics as any)?.maintenance_tasks_completed || 0;
+                                                    const mAssigned = (employee.metrics as any)?.maintenance_tasks_assigned || 0;
+                                                    
+                                                    // Only show if there is relevant activity or configuration
+                                                    if (mAssigned === 0 && mCompleted === 0 && mBonus === 0) return null;
+
+                                                    const efficiency = mAssigned > 0 ? (mCompleted / mAssigned) * 100 : (mCompleted > 0 ? 100 : 0);
+                                                    
+                                                    return (
+                                                        <div className="bg-background border rounded-xl p-4 space-y-4 shadow-sm">
+                                                            <div className="flex justify-between items-center">
+                                                                <div className="flex items-center gap-2">
+                                                                    <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg">
+                                                                        <Wrench className="h-5 w-5" />
+                                                                    </div>
+                                                                    <div>
+                                                                        <span className="font-bold text-sm">KPI Обслуживания</span>
+                                                                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Эффективность</p>
+                                                                    </div>
+                                                                </div>
+                                                                <div className="text-right">
+                                                                    <span className="font-bold text-lg text-emerald-600">+{formatCurrency(mBonus)}</span>
+                                                                    <p className="text-[10px] text-muted-foreground">Бонус за период</p>
+                                                                </div>
+                                                            </div>
+
+                                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                                                {/* Progress Bar */}
+                                                                <div className="md:col-span-2 space-y-2">
+                                                                    <div className="flex justify-between text-xs font-medium">
+                                                                        <span>Выполнено задач</span>
+                                                                        <span className={efficiency >= 90 ? "text-emerald-600" : efficiency >= 50 ? "text-amber-600" : "text-red-600"}>
+                                                                            {mCompleted} / {mAssigned} ({efficiency.toFixed(0)}%)
+                                                                        </span>
+                                                                    </div>
+                                                                    <div className="h-2.5 w-full bg-muted rounded-full overflow-hidden">
+                                                                        <div 
+                                                                            className={`h-full transition-all duration-500 rounded-full ${
+                                                                                efficiency >= 90 ? 'bg-emerald-500' : 
+                                                                                efficiency >= 50 ? 'bg-amber-500' : 'bg-red-500'
+                                                                            }`} 
+                                                                            style={{ width: `${Math.min(100, efficiency)}%` }} 
+                                                                        />
+                                                                    </div>
+                                                                    <p className="text-[10px] text-muted-foreground">
+                                                                        {efficiency >= 90 ? '🚀 Отличный результат! Повышенный коэффициент.' : 
+                                                                         efficiency >= 50 ? '⚠️ Нормальный результат. Есть куда расти.' : 
+                                                                         '❌ Низкая эффективность. Бонусы могут быть снижены.'}
+                                                                    </p>
+                                                                </div>
+
+                                                                {/* Stats */}
+                                                                <div className="bg-muted/30 rounded-lg p-2 flex flex-col justify-center items-center text-center">
+                                                                    <span className="text-[10px] text-muted-foreground uppercase">Ср. бонус за задачу</span>
+                                                                    <span className="font-bold text-indigo-600">
+                                                                        {mCompleted > 0 ? formatCurrency(mBonus / mCompleted) : '0 ₽'}
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })()}
+
                                                 {(() => {
                                                     const shiftsCompletedForCalc = employee.shifts_count || 0;
                                                     const standardShifts = employee.planned_shifts || employee.standard_monthly_shifts || 15;
