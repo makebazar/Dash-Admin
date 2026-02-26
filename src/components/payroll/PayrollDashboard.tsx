@@ -494,6 +494,68 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                     <div className="space-y-3">
                                                         <h4 className="text-sm font-semibold flex items-center gap-2">🎯 Статус по KPI</h4>
                                                         <div className="space-y-4">
+                                                            {/* Maintenance KPI Card (New Detailed View) */}
+                                                            {(() => {
+                                                                const mCompleted = (employee.metrics as any)?.maintenance_tasks_completed || 0;
+                                                                const mAssigned = (employee.metrics as any)?.maintenance_tasks_assigned || 0;
+                                                                const mBonus = (employee.metrics as any)?.maintenance_bonus || 0;
+                                                                const hasM = employee.bonuses?.some((b: any) => b.type === 'maintenance_kpi' || b.type === 'MAINTENANCE_KPI');
+                                                                
+                                                                if (!hasM && mAssigned === 0 && mCompleted === 0) return null;
+
+                                                                const efficiency = mAssigned > 0 ? (mCompleted / mAssigned) * 100 : (mCompleted > 0 ? 100 : 0);
+                                                                const isCompleted = efficiency >= 90;
+                                                                const isCurrentTarget = !isCompleted && efficiency >= 50;
+
+                                                                return (
+                                                                    <div className="bg-background border rounded-xl p-4 space-y-4">
+                                                                        <div className="flex justify-between items-center">
+                                                                            <div className="flex items-center gap-2">
+                                                                                <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg">
+                                                                                    <Wrench className="h-5 w-5" />
+                                                                                </div>
+                                                                                <div>
+                                                                                    <span className="font-bold text-sm">KPI Обслуживания</span>
+                                                                                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">ПРОГРЕСС</p>
+                                                                                </div>
+                                                                            </div>
+                                                                            <div className="text-right">
+                                                                                <span className="font-bold text-lg text-emerald-600">+{formatCurrency(mBonus)}</span>
+                                                                                <p className="text-[10px] text-muted-foreground">Бонус</p>
+                                                                            </div>
+                                                                        </div>
+
+                                                                        <div className={`relative p-3 rounded-xl border-2 transition-all duration-300 ${isCompleted ? 'bg-green-50/50 border-green-200 dark:bg-green-900/10 dark:border-green-900/30' : isCurrentTarget ? 'bg-blue-50 border-blue-400 shadow-sm shadow-blue-100 dark:bg-blue-900/20 dark:border-blue-500' : 'bg-muted/10 border-muted/30 opacity-60'}`}>
+                                                                            <div className="flex justify-between items-start mb-2">
+                                                                                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase ${isCompleted ? 'bg-green-100 text-green-700' : isCurrentTarget ? 'bg-blue-100 text-blue-700 animate-pulse' : 'bg-muted text-muted-foreground'}`}>
+                                                                                    {isCompleted ? '✓ ОТЛИЧНО' : isCurrentTarget ? '🛠 В ПРОЦЕССЕ' : '⚠️ ТРЕБУЕТ ВНИМАНИЯ'}
+                                                                                </span>
+                                                                                <span className="text-sm font-black text-primary">{efficiency.toFixed(0)}%</span>
+                                                                            </div>
+                                                                            <div className="space-y-2">
+                                                                                <div>
+                                                                                    <p className="text-[9px] text-muted-foreground uppercase leading-none mb-1">Задачи</p>
+                                                                                    <p className="text-xs font-bold leading-none mb-1">{mCompleted} / {mAssigned}</p>
+                                                                                    <p className="text-[9px] text-muted-foreground">
+                                                                                        (План месяца + Закрытые долги)
+                                                                                    </p>
+                                                                                </div>
+                                                                                <div className="space-y-1">
+                                                                                    <div className="flex justify-between items-center text-[9px] font-bold uppercase tracking-tighter">
+                                                                                        <span className={isCompleted ? 'text-green-600' : isCurrentTarget ? 'text-blue-600' : 'text-muted-foreground'}>Выполнение</span>
+                                                                                        <span>{efficiency.toFixed(0)}%</span>
+                                                                                    </div>
+                                                                                    <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
+                                                                                        <div className={`h-full transition-all duration-700 rounded-full ${isCompleted ? 'bg-green-500' : efficiency >= 50 ? 'bg-amber-500' : 'bg-red-500'}`} style={{ width: `${Math.min(100, efficiency)}%` }} />
+                                                                                    </div>
+                                                                                </div>
+                                                                                {!isCompleted && <p className="text-[10px] font-medium text-blue-600">Осталось задач: {mAssigned - mCompleted}</p>}
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                );
+                                                            })()}
+
                                                             {Array.isArray(employee.period_bonuses) && employee.period_bonuses.map((kpi: any) => (
                                                                 <div key={kpi.id} className="bg-background border rounded-xl p-4 space-y-4">
                                                                     <div className="flex justify-between items-center">

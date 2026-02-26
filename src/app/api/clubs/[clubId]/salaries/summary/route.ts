@@ -233,15 +233,23 @@ export async function GET(
             }
 
             // Fetch maintenance bonuses for this month
-            // 1. Efficiency Stats (Month Plan) - for calculating Multiplier
+            // 1. Efficiency Stats (Month Plan + Completed Old Tasks)
+            // We count as "Assigned/Plan" for this month:
+            // - Tasks originally due this month (AND assigned to user OR completed by user)
+            // - Tasks from past months that were COMPLETED by user IN THIS MONTH (cleared backlog)
             const efficiencyRes = await query(
                 `SELECT 
                     COUNT(*) as total_tasks,
-                    COUNT(*) FILTER (WHERE status = 'COMPLETED') as completed_tasks
+                    COUNT(*) FILTER (WHERE status = 'COMPLETED' AND completed_at >= $2 AND completed_at <= $3) as completed_tasks
                  FROM equipment_maintenance_tasks
                  WHERE 
-                    (assigned_user_id = $1 OR completed_by = $1)
-                    AND due_date >= $2 AND due_date <= $3`,
+                    (
+                        -- 1. Tasks due this month (Assigned or Completed by user)
+                        ((assigned_user_id = $1 OR completed_by = $1) AND due_date >= $2 AND due_date <= $3)
+                        OR
+                        -- 2. Backlog tasks completed this month by user
+                        (completed_by = $1 AND status = 'COMPLETED' AND completed_at >= $2 AND completed_at <= $3 AND due_date < $2)
+                    )`,
                 [emp.id, startOfMonth, endOfMonth]
             );
             const monthTotalTasks = parseInt(efficiencyRes.rows[0]?.total_tasks || '0');
