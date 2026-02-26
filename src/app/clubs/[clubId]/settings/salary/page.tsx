@@ -1218,24 +1218,38 @@ export default function SalarySettingsPage({ params }: { params: Promise<{ clubI
                                                         <div className="space-y-2">
                                                             <div className="flex items-center justify-between">
                                                                 <Label className="text-xs text-muted-foreground">Таблица эффективности (Месяц)</Label>
-                                                                <Button
-                                                                    type="button"
-                                                                    variant="ghost"
-                                                                    size="sm"
-                                                                    className="h-6 text-[10px]"
-                                                                    onClick={() => {
-                                                                        const thresholds = bonus.efficiency_thresholds || []
-                                                                        const last = thresholds[thresholds.length - 1]
-                                                                        updateBonus(index, 'efficiency_thresholds', [
-                                                                            ...thresholds,
-                                                                            { from_percent: (last?.from_percent || 0) + 10, multiplier: (last?.multiplier || 1.0) }
-                                                                        ])
-                                                                    }}
-                                                                >
-                                                                    + Порог
-                                                                </Button>
+                                                                <div className="flex gap-2">
+                                                                    <select
+                                                                        value={bonus.reward_type || 'MULTIPLIER'}
+                                                                        onChange={e => updateBonus(index, 'reward_type', e.target.value)}
+                                                                        className="h-6 text-[10px] px-1 rounded border border-input bg-background"
+                                                                    >
+                                                                        <option value="MULTIPLIER">Множитель</option>
+                                                                        <option value="FIXED">Фикс. сумма</option>
+                                                                    </select>
+                                                                    <Button
+                                                                        type="button"
+                                                                        variant="ghost"
+                                                                        size="sm"
+                                                                        className="h-6 text-[10px]"
+                                                                        onClick={() => {
+                                                                            const thresholds = bonus.efficiency_thresholds || []
+                                                                            const last = thresholds[thresholds.length - 1]
+                                                                            updateBonus(index, 'efficiency_thresholds', [
+                                                                                ...thresholds,
+                                                                                {
+                                                                                    from_percent: (last?.from_percent || 0) + 10,
+                                                                                    multiplier: (last?.multiplier || 1.0),
+                                                                                    amount: (last?.amount || 0)
+                                                                                }
+                                                                            ])
+                                                                        }}
+                                                                    >
+                                                                        + Порог
+                                                                    </Button>
+                                                                </div>
                                                             </div>
-                                                            
+
                                                             <div className="space-y-2">
                                                                 {(bonus.efficiency_thresholds || []).map((t, ti) => (
                                                                     <div key={ti} className="flex items-center gap-2 text-sm">
@@ -1250,18 +1264,38 @@ export default function SalarySettingsPage({ params }: { params: Promise<{ clubI
                                                                             }}
                                                                             className="w-16 h-8"
                                                                         />
-                                                                        <span>% → x</span>
-                                                                        <Input
-                                                                            type="number"
-                                                                            step="0.1"
-                                                                            value={t.multiplier}
-                                                                            onChange={e => {
-                                                                                const newThresholds = [...(bonus.efficiency_thresholds || [])]
-                                                                                newThresholds[ti] = { ...t, multiplier: parseFloat(e.target.value) || 0 }
-                                                                                updateBonus(index, 'efficiency_thresholds', newThresholds)
-                                                                            }}
-                                                                            className="w-16 h-8"
-                                                                        />
+                                                                        <span>% →</span>
+                                                                        {bonus.reward_type === 'FIXED' ? (
+                                                                            <>
+                                                                                <Input
+                                                                                    type="number"
+                                                                                    value={t.amount}
+                                                                                    onChange={e => {
+                                                                                        const newThresholds = [...(bonus.efficiency_thresholds || [])]
+                                                                                        newThresholds[ti] = { ...t, amount: parseFloat(e.target.value) || 0 }
+                                                                                        updateBonus(index, 'efficiency_thresholds', newThresholds)
+                                                                                    }}
+                                                                                    className="w-20 h-8"
+                                                                                />
+                                                                                <span>₽</span>
+                                                                            </>
+                                                                        ) : (
+                                                                            <>
+                                                                                <span>x</span>
+                                                                                <Input
+                                                                                    type="number"
+                                                                                    step="0.1"
+                                                                                    value={t.multiplier}
+                                                                                    onChange={e => {
+                                                                                        const newThresholds = [...(bonus.efficiency_thresholds || [])]
+                                                                                        newThresholds[ti] = { ...t, multiplier: parseFloat(e.target.value) || 0 }
+                                                                                        updateBonus(index, 'efficiency_thresholds', newThresholds)
+                                                                                    }}
+                                                                                    className="w-16 h-8"
+                                                                                />
+                                                                            </>
+                                                                        )}
+
                                                                         {bonus.efficiency_thresholds!.length > 1 && (
                                                                             <Button
                                                                                 type="button"
@@ -1280,7 +1314,9 @@ export default function SalarySettingsPage({ params }: { params: Promise<{ clubI
                                                                 ))}
                                                             </div>
                                                             <p className="text-[10px] text-muted-foreground">
-                                                                Пример: От 90% &rarr; x1.2 (Премия). От 0% &rarr; x0 (Нет бонуса).
+                                                                {bonus.reward_type === 'FIXED'
+                                                                    ? 'Пример: От 90% → 5000₽ (Фикс). От 0% → 0₽.'
+                                                                    : 'Пример: От 90% → x1.2 (Премия). От 0% → x0 (Нет бонуса).'}
                                                             </p>
                                                         </div>
                                                     </div>
