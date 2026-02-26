@@ -164,24 +164,36 @@ export async function PATCH(
                             const nextDueStr = nextDue.toISOString().split('T')[0];
                             console.log(`[Maintenance] Next Due String: ${nextDueStr}`);
                             
-                            // Find shift for assigned user if any
+                            // Find shift for assigned user if any AND user is active
                             let finalDate = nextDueStr;
                             const assignedUserId = eq.assigned_user_id;
                             
                             if (assignedUserId) {
-                                console.log(`[Maintenance] Checking shifts for user ${assignedUserId} starting from ${nextDueStr}`);
-                                // Simple shift lookup - get next working day >= nextDueStr
-                                const shiftRes = await query(
-                                    `SELECT date FROM work_schedules 
-                                     WHERE club_id = $1 AND user_id = $2 AND date >= $3
-                                     ORDER BY date ASC LIMIT 1`,
-                                    [clubId, assignedUserId, nextDueStr]
+                                // Check if user is active first
+                                const userActiveRes = await query(
+                                    `SELECT is_active FROM club_employees WHERE club_id = $1 AND user_id = $2`,
+                                    [clubId, assignedUserId]
                                 );
-                                if (shiftRes.rowCount && shiftRes.rowCount > 0) {
-                                    finalDate = shiftRes.rows[0].date;
-                                    console.log(`[Maintenance] Found shift: ${finalDate}`);
+                                
+                                const isActive = userActiveRes.rows[0]?.is_active !== false; // Default true if not found? Or false? Usually true if employee exists.
+
+                                if (isActive) {
+                                    console.log(`[Maintenance] Checking shifts for active user ${assignedUserId} starting from ${nextDueStr}`);
+                                    // Simple shift lookup - get next working day >= nextDueStr
+                                    const shiftRes = await query(
+                                        `SELECT date FROM work_schedules 
+                                         WHERE club_id = $1 AND user_id = $2 AND date >= $3
+                                         ORDER BY date ASC LIMIT 1`,
+                                        [clubId, assignedUserId, nextDueStr]
+                                    );
+                                    if (shiftRes.rowCount && shiftRes.rowCount > 0) {
+                                        finalDate = shiftRes.rows[0].date;
+                                        console.log(`[Maintenance] Found shift: ${finalDate}`);
+                                    } else {
+                                        console.log(`[Maintenance] No shift found, keeping ${finalDate}`);
+                                    }
                                 } else {
-                                    console.log(`[Maintenance] No shift found, keeping ${finalDate}`);
+                                    console.log(`[Maintenance] User ${assignedUserId} is inactive, skipping shift check`);
                                 }
                             }
 
