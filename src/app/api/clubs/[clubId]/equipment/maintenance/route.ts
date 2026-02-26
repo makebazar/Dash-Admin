@@ -297,74 +297,54 @@ export async function POST(
         let createdCount = 0;
 
         for (const eq of equipmentResult.rows) {
-            const intervalDays = eq.cleaning_interval_days || 30;
-            const startDate = new Date(date_from);
-            const endDate = new Date(date_to);
-            
-            // Determine the anchor date to start calculating intervals from
-            let anchorDate: Date;
-            
-            const lastCleaned = eq.last_cleaned_at ? new Date(eq.last_cleaned_at) : null;
-            const lastDue = eq.last_task_due_date ? new Date(eq.last_task_due_date) : null;
+            // Check if ANY active task (PENDING or IN_PROGRESS) exists for this equipment
+            const pendingRes = await query(
+                `SELECT 1 FROM equipment_maintenance_tasks 
+                 WHERE equipment_id = $1 AND status IN ('PENDING', 'IN_PROGRESS')
+                 LIMIT 1`,
+                [eq.id]
+            );
 
-            if (lastDue && lastCleaned) {
-                // Use the later of the two to handle late cleanings shifting the schedule
-                // OR sticking to schedule if cleaned early/on-time
-                anchorDate = lastDue > lastCleaned ? lastDue : lastCleaned;
-            } else if (lastDue) {
-                anchorDate = lastDue;
-            } else if (lastCleaned) {
-                anchorDate = lastCleaned;
-            } else {
-                // If never cleaned and no tasks, start from today (or start of period if it's in future)
-                // But to ensure we fill the requested period, let's treat "Start Date" as the anchor base
-                // effectively scheduling the first task at startDate
-                anchorDate = new Date(startDate);
-                anchorDate.setDate(anchorDate.getDate() - intervalDays); // Subtract so first loop adds it back
+            if ((pendingRes.rowCount || 0) > 0) {
+                continue;
             }
 
-            let cursor = new Date(anchorDate);
+            const intervalDays = eq.cleaning_interval_days || 30;
+            const startDate = new Date(date_from);
             
-            // Safety break to prevent infinite loops
-            let iterations = 0;
-            const MAX_ITERATIONS = 365; 
+            // Calculate next due date
+            let nextDue: Date;
+            if (eq.last_cleaned_at) {
+                const lastCleaned = new Date(eq.last_cleaned_at);
+                nextDue = new Date(lastCleaned);
+                nextDue.setDate(nextDue.getDate() + intervalDays);
+            } else {
+                // If never cleaned, due date defaults to the start of the requested period (usually today)
+                nextDue = new Date(startDate);
+            }
 
-            while (iterations < MAX_ITERATIONS) {
-                iterations++;
-                
-                // Advance cursor by interval
-                cursor.setDate(cursor.getDate() + intervalDays);
-                
-                // If we went past the end of the requested period, stop
-                if (cursor > endDate) break;
-                
-                // If cursor is before the start of the requested period, keep skipping
-                if (cursor < startDate) continue;
-                
-                // Now cursor is within [startDate, endDate]
-                const dueStr = cursor.toISOString().split('T')[0];
-                let finalDueDateStr = dueStr;
-                
-                // Shift logic
-                const assignedUserId = eq.assigned_user_id || null;
-                if (assignedUserId) {
-                    const shiftDate = findNextShiftDate(assignedUserId, dueStr);
-                    if (shiftDate) {
-                        finalDueDateStr = shiftDate;
-                    }
+            const originalDue = nextDue.toISOString().split('T')[0];
+            let dueDateStr = originalDue;
+            
+            // Shift logic
+            const assignedUserId = eq.assigned_user_id || null;
+            if (assignedUserId) {
+                const shiftDate = findNextShiftDate(assignedUserId, originalDue);
+                if (shiftDate) {
+                    dueDateStr = shiftDate;
                 }
+            }
 
-                const insertResult = await query(
-                    `INSERT INTO equipment_maintenance_tasks (equipment_id, task_type, due_date, assigned_user_id)
-                     VALUES ($1, $2, $3, $4)
-                     ON CONFLICT (equipment_id, due_date, task_type) DO NOTHING
-                     RETURNING id`,
-                    [eq.id, task_type, finalDueDateStr, assignedUserId]
-                );
+            const insertResult = await query(
+                `INSERT INTO equipment_maintenance_tasks (equipment_id, task_type, due_date, assigned_user_id)
+                 VALUES ($1, $2, $3, $4)
+                 ON CONFLICT (equipment_id, due_date, task_type) DO NOTHING
+                 RETURNING id`,
+                [eq.id, task_type, dueDateStr, assignedUserId]
+            );
 
-                if (insertResult.rowCount && insertResult.rowCount > 0) {
-                    createdCount++;
-                }
+            if (insertResult.rowCount && insertResult.rowCount > 0) {
+                createdCount++;
             }
         }
 

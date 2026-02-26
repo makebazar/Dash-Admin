@@ -132,6 +132,48 @@ export async function PATCH(
                             }
                         }
                     }
+
+                    // AUTO-SCHEDULE NEXT TASK
+                    // Find equipment and calculate next due date
+                    const eqRes = await query(
+                        `SELECT cleaning_interval_days, assigned_user_id, workstation_id, maintenance_enabled
+                         FROM equipment WHERE id = $1`,
+                        [task.equipment_id]
+                    );
+                    
+                    if (eqRes.rowCount && eqRes.rowCount > 0) {
+                        const eq = eqRes.rows[0];
+                        if (eq.maintenance_enabled !== false) {
+                            const intervalDays = eq.cleaning_interval_days || 30;
+                            const nextDue = new Date(); // Start from completion time (now)
+                            nextDue.setDate(nextDue.getDate() + intervalDays);
+                            const nextDueStr = nextDue.toISOString().split('T')[0];
+                            
+                            // Find shift for assigned user if any
+                            let finalDate = nextDueStr;
+                            const assignedUserId = eq.assigned_user_id;
+                            
+                            if (assignedUserId) {
+                                // Simple shift lookup - get next working day >= nextDueStr
+                                const shiftRes = await query(
+                                    `SELECT date FROM work_schedules 
+                                     WHERE club_id = $1 AND user_id = $2 AND date >= $3
+                                     ORDER BY date ASC LIMIT 1`,
+                                    [clubId, assignedUserId, nextDueStr]
+                                );
+                                if (shiftRes.rowCount && shiftRes.rowCount > 0) {
+                                    finalDate = shiftRes.rows[0].date;
+                                }
+                            }
+
+                            await query(
+                                `INSERT INTO equipment_maintenance_tasks (equipment_id, task_type, due_date, assigned_user_id)
+                                 VALUES ($1, $2, $3, $4)
+                                 ON CONFLICT (equipment_id, due_date, task_type) DO NOTHING`,
+                                [task.equipment_id, task.task_type, finalDate, assignedUserId]
+                            );
+                        }
+                    }
                 }
             }
 
