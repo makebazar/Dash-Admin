@@ -221,7 +221,7 @@ export default function EmployeeTasksPage() {
                                 </div>
                                 <div className="min-w-0 flex flex-col justify-center">
                                     <div className="flex items-center gap-2 mb-0.5">
-                                        <h4 className={cn("font-bold text-sm truncate", isCompleted && "line-through text-muted-foreground")}>{task.equipment_name}</h4>
+                                        <h4 className={cn("font-bold text-sm truncate", isCompleted && "text-muted-foreground")}>{task.equipment_name}</h4>
                                         {!isFree && isOverdue && !isCompleted && (
                                             <div className="h-2 w-2 rounded-full bg-rose-500 animate-pulse shrink-0" title="Просрочено" />
                                         )}
