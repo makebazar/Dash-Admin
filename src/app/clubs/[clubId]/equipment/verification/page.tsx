@@ -18,7 +18,8 @@ import {
     Headphones,
     Gamepad2,
     Tv,
-    Box
+    Box,
+    Trash2
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -130,6 +131,30 @@ export default function VerificationPage() {
             }
         } catch (error) {
             console.error("Error verifying task:", error)
+            alert("Произошла ошибка")
+        } finally {
+            setIsSubmitting(false)
+        }
+    }
+
+    const handleDelete = async () => {
+        if (!selectedTask) return
+        if (!confirm("Вы уверены, что хотите удалить этот отчет? Это действие нельзя отменить.")) return
+
+        setIsSubmitting(true)
+        try {
+            const res = await fetch(`/api/clubs/${clubId}/equipment/maintenance/${selectedTask.id}`, {
+                method: 'DELETE'
+            })
+
+            if (res.ok) {
+                setTasks(prev => prev.filter(t => t.id !== selectedTask.id))
+                setSelectedTask(null)
+            } else {
+                alert("Ошибка при удалении")
+            }
+        } catch (error) {
+            console.error("Error deleting task:", error)
             alert("Произошла ошибка")
         } finally {
             setIsSubmitting(false)
@@ -305,6 +330,18 @@ export default function VerificationPage() {
                                         >
                                             <CheckCircle2 className="mr-2 h-4 w-4" />
                                             Одобрить
+                                        </Button>
+                                    </div>
+                                    <div className="flex justify-center pt-2">
+                                        <Button 
+                                            variant="ghost" 
+                                            size="sm" 
+                                            className="text-slate-400 hover:text-red-500 hover:bg-red-50 w-full"
+                                            onClick={handleDelete}
+                                            disabled={isSubmitting}
+                                        >
+                                            <Trash2 className="mr-2 h-4 w-4" />
+                                            Удалить отчет навсегда
                                         </Button>
                                     </div>
                                 </div>
