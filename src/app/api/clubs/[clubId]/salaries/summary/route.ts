@@ -467,7 +467,10 @@ export async function GET(
                     // Explicitly pass maintenance metrics
                     maintenance_bonus: monthlyMetrics['maintenance_bonus'] || 0,
                     maintenance_tasks_completed: monthlyMetrics['maintenance_tasks_completed'] || 0,
-                    maintenance_tasks_assigned: monthlyMetrics['maintenance_tasks_assigned'] || 0
+                    maintenance_tasks_assigned: monthlyMetrics['maintenance_tasks_assigned'] || 0,
+                    // Explicitly pass evaluation metrics
+                    evaluation_score: monthlyMetrics['evaluation_score'] || 0,
+                    evaluation_count: monthlyMetrics['evaluation_count'] || 0
                 },
                 payment_history: empPaymentHistory.map((p: any) => ({
                     id: p.id,
