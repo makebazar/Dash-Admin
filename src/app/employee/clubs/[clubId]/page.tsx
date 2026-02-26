@@ -220,6 +220,13 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                 setPendingTasksCount(tasksData.total || 0)
             }
 
+            // Fetch My KPI Rating
+            const ratingRes = await fetch(`/api/employee/clubs/${id}/equipment-rating`)
+            if (ratingRes.ok) {
+                const ratingData = await ratingRes.json()
+                setKpiData((prev: any) => ({ ...prev, equipment_rating: ratingData }))
+            }
+
         } catch (error) {
             console.error('Error fetching data:', error)
         } finally {
@@ -589,6 +596,57 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                                 </CardContent>
                             </Card>
                         </Link>
+
+                        {/* Equipment KPI Rating */}
+                        {kpiData?.equipment_rating && (
+                            <Link href={`/employee/clubs/${clubId}/tasks`} className="block">
+                                <Card className={cn(
+                                    "border-0 shadow-lg transition-all hover:scale-[1.02] active:scale-[0.98]",
+                                    (kpiData.equipment_rating.rating_multiplier || 1) > 1 
+                                        ? "bg-gradient-to-br from-emerald-500 to-green-600 text-white"
+                                        : (kpiData.equipment_rating.rating_multiplier || 1) < 1
+                                            ? "bg-gradient-to-br from-rose-500 to-red-600 text-white"
+                                            : "bg-white dark:bg-slate-800/50 backdrop-blur"
+                                )}>
+                                    <CardContent className="pt-6">
+                                        <div className="flex items-start justify-between">
+                                            <div>
+                                                <p className={cn(
+                                                    "text-sm font-medium",
+                                                    (kpiData.equipment_rating.rating_multiplier || 1) !== 1 ? "text-white/80" : "text-muted-foreground"
+                                                )}>Качество обслуживания</p>
+                                                <p className="text-3xl font-bold mt-1">
+                                                    {(kpiData.equipment_rating.efficiency_percent || 0).toFixed(0)}%
+                                                </p>
+                                                <div className="flex items-center gap-2 mt-1">
+                                                    <Badge variant="secondary" className={cn(
+                                                        "h-5 text-[10px]", 
+                                                        (kpiData.equipment_rating.rating_multiplier || 1) !== 1 ? "bg-white/20 text-white" : "bg-slate-100"
+                                                    )}>
+                                                        x{kpiData.equipment_rating.rating_multiplier || 1.0}
+                                                    </Badge>
+                                                    <p className={cn(
+                                                        "text-xs",
+                                                        (kpiData.equipment_rating.rating_multiplier || 1) !== 1 ? "text-white/80" : "text-muted-foreground"
+                                                    )}>
+                                                        {formatCurrency(kpiData.equipment_rating.projected_bonus || 0)}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <div className={cn(
+                                                "p-3 rounded-xl",
+                                                (kpiData.equipment_rating.rating_multiplier || 1) !== 1 ? "bg-white/20" : "bg-purple-500/10"
+                                            )}>
+                                                <Trophy className={cn(
+                                                    "h-6 w-6",
+                                                    (kpiData.equipment_rating.rating_multiplier || 1) !== 1 ? "text-white" : "text-purple-500"
+                                                )} />
+                                            </div>
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            </Link>
+                        )}
 
                         {/* Evaluations */}
                         <Link href={`/employee/clubs/${clubId}/evaluations`} className="block">

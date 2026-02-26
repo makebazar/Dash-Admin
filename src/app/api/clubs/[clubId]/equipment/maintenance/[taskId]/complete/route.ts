@@ -11,14 +11,14 @@ export async function POST(
     try {
         const userId = (await cookies()).get('session_user_id')?.value;
         const { clubId, taskId } = await params;
-        let photos: string[] | null = null;
         
+        let body;
         try {
-            const body = await request.json();
-            photos = body.photos || null;
+            body = await request.json();
         } catch (e) {
-            // Body might be empty if no photos sent
+            body = {};
         }
+        const photos = body.photos || null;
 
         if (!userId) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -36,16 +36,67 @@ export async function POST(
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
-        // 1. Mark task as COMPLETED
+        // 0. Get KPI Config & Current Task Info (to know due_date for penalty)
+        const [kpiConfigRes, taskRes] = await Promise.all([
+            query(`SELECT * FROM maintenance_kpi_config WHERE club_id = $1`, [clubId]),
+            query(`SELECT due_date, task_type FROM equipment_maintenance_tasks WHERE id = $1`, [taskId])
+        ]);
+        
+        const kpiConfig = kpiConfigRes.rows[0];
+        const task = taskRes.rows[0];
+
+        if (!task) {
+            return NextResponse.json({ error: 'Task not found' }, { status: 404 });
+        }
+
+        // 1. Calculate Bonus & Check Smart Deadline
+        let bonusEarned = 0;
+        let kpiPoints = 1;
+        let appliedMultiplier = 1.0;
+
+        if (kpiConfig && kpiConfig.enabled) {
+            // Base points
+            kpiPoints = task.task_type === 'REPAIR' 
+                ? (kpiConfig.points_per_issue_resolved || 3)
+                : (kpiConfig.points_per_cleaning || 1);
+            
+            const baseValue = kpiPoints * (Number(kpiConfig.bonus_per_point) || 0);
+
+            // Check deadline
+            const now = new Date();
+            const dueDate = new Date(task.due_date);
+            const diffTime = now.getTime() - dueDate.getTime();
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+            
+            // Allow tolerance (Smart Deadline logic part 1: Tolerance Window)
+            const tolerance = kpiConfig.overdue_tolerance_days || 3;
+            
+            if (diffDays > tolerance) {
+                // Late
+                appliedMultiplier = Number(kpiConfig.late_penalty_multiplier) || 0.5;
+            } else {
+                // On Time (or within tolerance)
+                appliedMultiplier = Number(kpiConfig.on_time_multiplier) || 1.0;
+            }
+
+            // TODO: In future, add Shift-Aware logic here (check work_schedules)
+            // If user had no shifts between due_date and now, appliedMultiplier = 1.0
+
+            bonusEarned = baseValue * appliedMultiplier;
+        }
+
         const completeTask = await query(
             `UPDATE equipment_maintenance_tasks
              SET status = 'COMPLETED',
                  completed_at = CURRENT_TIMESTAMP,
                  completed_by = $2,
-                 photos = $3
+                 photos = $3,
+                 bonus_earned = $4,
+                 kpi_points = $5,
+                 applied_kpi_multiplier = $6
              WHERE id = $1
              RETURNING equipment_id`,
-            [taskId, userId, photos]
+            [taskId, userId, photos, bonusEarned, kpiPoints, appliedMultiplier]
         );
 
         if ((completeTask.rowCount || 0) === 0) {

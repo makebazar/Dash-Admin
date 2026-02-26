@@ -155,10 +155,10 @@ export async function POST(
         }
 
         const result = await query(
-            `INSERT INTO equipment_issues (equipment_id, reported_by, title, description, severity)
-             VALUES ($1, $2, $3, $4, $5)
+            `INSERT INTO equipment_issues (club_id, equipment_id, reported_by, title, description, severity)
+             VALUES ($1, $2, $3, $4, $5, $6)
              RETURNING *`,
-            [equipment_id, userId, title, description || null, severity || 'MEDIUM']
+            [clubId, equipment_id, userId, title, description || null, severity || 'MEDIUM']
         );
 
         return NextResponse.json(result.rows[0], { status: 201 });

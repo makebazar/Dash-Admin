@@ -40,6 +40,9 @@ interface KPIConfig {
     bonus_per_point: number
     on_time_multiplier: number
     late_penalty_multiplier: number
+    overdue_tolerance_days: number
+    min_efficiency_percent: number
+    target_efficiency_percent: number
     include_in_salary: boolean
 }
 
@@ -243,25 +246,38 @@ export default function EquipmentSettings() {
                     </CardHeader>
                     <CardContent className="space-y-6">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                            <div className="space-y-2">
-                                <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Множитель вовремя</Label>
-                                <Input
-                                    type="number"
-                                    step="0.1"
-                                    value={config?.on_time_multiplier}
-                                    onChange={(e) => setConfig(prev => prev ? ({ ...prev, on_time_multiplier: parseFloat(e.target.value) }) : null)}
-                                />
-                                <p className="text-[10px] text-muted-foreground">Коэффициент если задача выполнена до дедлайна (обычно 1.0).</p>
+                            <div className="space-y-4">
+                                <div className="space-y-2">
+                                    <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Допустимая задержка (дней)</Label>
+                                    <Input
+                                        type="number"
+                                        value={config?.overdue_tolerance_days}
+                                        onChange={(e) => setConfig(prev => prev ? ({ ...prev, overdue_tolerance_days: parseInt(e.target.value) }) : null)}
+                                    />
+                                    <p className="text-[10px] text-muted-foreground">Сколько дней после дедлайна задача считается выполненной "вовремя" (с учетом выходных).</p>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Множитель вовремя</Label>
+                                    <Input
+                                        type="number"
+                                        step="0.1"
+                                        value={config?.on_time_multiplier}
+                                        onChange={(e) => setConfig(prev => prev ? ({ ...prev, on_time_multiplier: parseFloat(e.target.value) }) : null)}
+                                    />
+                                    <p className="text-[10px] text-muted-foreground">Коэффициент если задача выполнена до дедлайна (обычно 1.0).</p>
+                                </div>
                             </div>
-                            <div className="space-y-2">
-                                <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Множитель за задержку</Label>
-                                <Input
-                                    type="number"
-                                    step="0.1"
-                                    value={config?.late_penalty_multiplier}
-                                    onChange={(e) => setConfig(prev => prev ? ({ ...prev, late_penalty_multiplier: parseFloat(e.target.value) }) : null)}
-                                />
-                                <p className="text-[10px] text-muted-foreground">Коэффициент если задача выполнена позже срока (например, 0.5).</p>
+                            <div className="space-y-4">
+                                <div className="space-y-2">
+                                    <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">Множитель за задержку</Label>
+                                    <Input
+                                        type="number"
+                                        step="0.1"
+                                        value={config?.late_penalty_multiplier}
+                                        onChange={(e) => setConfig(prev => prev ? ({ ...prev, late_penalty_multiplier: parseFloat(e.target.value) }) : null)}
+                                    />
+                                    <p className="text-[10px] text-muted-foreground">Коэффициент если задача выполнена позже срока (например, 0.5).</p>
+                                </div>
                             </div>
                         </div>
                     </CardContent>
