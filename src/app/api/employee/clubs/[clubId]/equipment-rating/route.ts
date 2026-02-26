@@ -16,12 +16,20 @@ export async function GET(
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        // 1. Get KPI Config
-        const kpiConfigRes = await query(
-            `SELECT * FROM maintenance_kpi_config WHERE club_id = $1`,
-            [clubId]
+        // 1. Get KPI Config from Active Salary Scheme
+        const schemeRes = await query(
+            `SELECT sv.formula
+             FROM employee_salary_assignments esa
+             JOIN salary_schemes ss ON esa.scheme_id = ss.id
+             JOIN salary_scheme_versions sv ON sv.scheme_id = ss.id
+             WHERE esa.user_id = $1 AND esa.club_id = $2
+             ORDER BY sv.version DESC
+             LIMIT 1`,
+            [userId, clubId]
         );
-        const kpiConfig = kpiConfigRes.rows[0];
+        
+        const schemeFormula = schemeRes.rows[0]?.formula || {};
+        const kpiConfig = schemeFormula.maintenance_kpi || null;
 
         if (!kpiConfig || !kpiConfig.enabled) {
             return NextResponse.json(null);

@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
-import { Loader2, Plus, Wallet, Sun, Moon, Percent, Clock, DollarSign, Edit, Trash2, Users } from "lucide-react"
+import { Loader2, Plus, Wallet, Sun, Moon, Percent, Clock, DollarSign, Edit, Trash2, Users, Wrench } from "lucide-react"
 
 interface Formula {
     base: {
@@ -21,6 +21,17 @@ interface Formula {
     conditions: {
         shift_type: 'day' | 'night' | 'any'
         min_hours?: number
+    }
+    maintenance_kpi?: {
+        enabled: boolean
+        points_per_cleaning: number
+        points_per_issue_resolved: number
+        bonus_per_point: number
+        overdue_tolerance_days: number
+        on_time_multiplier: number
+        late_penalty_multiplier: number
+        min_efficiency_percent: number
+        target_efficiency_percent: number
     }
 }
 
@@ -88,7 +99,18 @@ interface SalaryScheme {
 const defaultFormula: Formula = {
     base: { type: 'hourly', amount: 500 },
     bonuses: [],
-    conditions: { shift_type: 'any' }
+    conditions: { shift_type: 'any' },
+    maintenance_kpi: {
+        enabled: false,
+        points_per_cleaning: 1,
+        points_per_issue_resolved: 3,
+        bonus_per_point: 50,
+        overdue_tolerance_days: 3,
+        on_time_multiplier: 1.0,
+        late_penalty_multiplier: 0.5,
+        min_efficiency_percent: 50,
+        target_efficiency_percent: 90
+    }
 }
 
 interface ReportMetric {
@@ -404,6 +426,25 @@ export default function SalarySettingsPage({ params }: { params: Promise<{ clubI
         return bonuses.map(b => `${b.name}: цель ${b.target_per_shift}/смена -> ${b.reward_type === 'PERCENT' ? `${b.reward_value}%` : `${b.reward_value}₽`}`).join('; ')
     }
 
+    const updateKpi = (field: string, value: any) => {
+        setFormula(prev => ({
+            ...prev,
+            maintenance_kpi: {
+                enabled: prev.maintenance_kpi?.enabled ?? false,
+                points_per_cleaning: prev.maintenance_kpi?.points_per_cleaning ?? 1,
+                points_per_issue_resolved: prev.maintenance_kpi?.points_per_issue_resolved ?? 3,
+                bonus_per_point: prev.maintenance_kpi?.bonus_per_point ?? 50,
+                overdue_tolerance_days: prev.maintenance_kpi?.overdue_tolerance_days ?? 3,
+                on_time_multiplier: prev.maintenance_kpi?.on_time_multiplier ?? 1.0,
+                late_penalty_multiplier: prev.maintenance_kpi?.late_penalty_multiplier ?? 0.5,
+                min_efficiency_percent: prev.maintenance_kpi?.min_efficiency_percent ?? 50,
+                target_efficiency_percent: prev.maintenance_kpi?.target_efficiency_percent ?? 90,
+                ...prev.maintenance_kpi,
+                [field]: value
+            }
+        }))
+    }
+
     const formatFormulaSummary = (f: Formula) => {
         const parts: string[] = []
 
@@ -440,6 +481,10 @@ export default function SalarySettingsPage({ params }: { params: Promise<{ clubI
                 parts.push(`+${b.amount}₽ за чек-лист ${b.mode === 'MONTH' ? '(мес)' : ''} (> ${b.min_score}%)`)
             }
         })
+
+        if (f.maintenance_kpi?.enabled) {
+            parts.push(`KPI Обслуживания (${f.maintenance_kpi.bonus_per_point}₽/балл)`)
+        }
 
         return parts.join(' • ') || 'Не настроено'
     }
@@ -1339,6 +1384,129 @@ export default function SalarySettingsPage({ params }: { params: Promise<{ clubI
                         </Card>
 
 
+
+                        {/* Maintenance KPI Section */}
+                        <Card className="border-indigo-500/20 bg-indigo-500/5">
+                            <CardHeader className="pb-3">
+                                <div className="flex items-center justify-between">
+                                    <CardTitle className="text-base flex items-center gap-2">
+                                        <Wrench className="h-4 w-4 text-indigo-500" />
+                                        KPI Обслуживания оборудования
+                                    </CardTitle>
+                                    <div className="flex items-center gap-2">
+                                        <Label htmlFor="kpi-enabled" className="text-sm cursor-pointer">Включить</Label>
+                                        <input
+                                            type="checkbox"
+                                            id="kpi-enabled"
+                                            checked={formula.maintenance_kpi?.enabled ?? false}
+                                            onChange={(e) => updateKpi('enabled', e.target.checked)}
+                                            className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                        />
+                                    </div>
+                                </div>
+                                <CardDescription>
+                                    Начисление бонусов за чистку и ремонт оборудования
+                                </CardDescription>
+                            </CardHeader>
+                            {(formula.maintenance_kpi?.enabled) && (
+                                <CardContent className="space-y-6">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        <div className="space-y-4">
+                                            <h4 className="text-sm font-medium text-indigo-700">Стоимость действий</h4>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div className="space-y-2">
+                                                    <Label className="text-xs">Цена 1 балла</Label>
+                                                    <div className="relative">
+                                                        <Input
+                                                            type="number"
+                                                            value={formula.maintenance_kpi?.bonus_per_point}
+                                                            onChange={e => updateKpi('bonus_per_point', parseFloat(e.target.value) || 0)}
+                                                            className="pr-8"
+                                                        />
+                                                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">₽</span>
+                                                    </div>
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <Label className="text-xs">Баллов за чистку</Label>
+                                                    <Input
+                                                        type="number"
+                                                        value={formula.maintenance_kpi?.points_per_cleaning}
+                                                        onChange={e => updateKpi('points_per_cleaning', parseFloat(e.target.value) || 0)}
+                                                    />
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <Label className="text-xs">Баллов за ремонт</Label>
+                                                    <Input
+                                                        type="number"
+                                                        value={formula.maintenance_kpi?.points_per_issue_resolved}
+                                                        onChange={e => updateKpi('points_per_issue_resolved', parseFloat(e.target.value) || 0)}
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-4">
+                                            <h4 className="text-sm font-medium text-indigo-700">Сроки и штрафы</h4>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div className="space-y-2">
+                                                    <Label className="text-xs">Допуск просрочки</Label>
+                                                    <div className="relative">
+                                                        <Input
+                                                            type="number"
+                                                            value={formula.maintenance_kpi?.overdue_tolerance_days}
+                                                            onChange={e => updateKpi('overdue_tolerance_days', parseInt(e.target.value) || 0)}
+                                                            className="pr-12"
+                                                        />
+                                                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">дней</span>
+                                                    </div>
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <Label className="text-xs">Множитель (Опоздание)</Label>
+                                                    <Input
+                                                        type="number"
+                                                        step="0.1"
+                                                        value={formula.maintenance_kpi?.late_penalty_multiplier}
+                                                        onChange={e => updateKpi('late_penalty_multiplier', parseFloat(e.target.value) || 0)}
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="pt-4 border-t border-indigo-200">
+                                        <h4 className="text-sm font-medium text-indigo-700 mb-3">Рейтинг эффективности (за месяц)</h4>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div className="space-y-2">
+                                                <Label className="text-xs">Мин. порог (%)</Label>
+                                                <div className="relative">
+                                                    <Input
+                                                        type="number"
+                                                        value={formula.maintenance_kpi?.min_efficiency_percent}
+                                                        onChange={e => updateKpi('min_efficiency_percent', parseFloat(e.target.value) || 0)}
+                                                        className="pr-8"
+                                                    />
+                                                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">%</span>
+                                                </div>
+                                                <p className="text-[10px] text-muted-foreground">Ниже этого — 0 бонусов</p>
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label className="text-xs">Цель (%)</Label>
+                                                <div className="relative">
+                                                    <Input
+                                                        type="number"
+                                                        value={formula.maintenance_kpi?.target_efficiency_percent}
+                                                        onChange={e => updateKpi('target_efficiency_percent', parseFloat(e.target.value) || 0)}
+                                                        className="pr-8"
+                                                    />
+                                                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">%</span>
+                                                </div>
+                                                <p className="text-[10px] text-muted-foreground">Выше этого — x1.2 бонус</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </CardContent>
+                            )}
+                        </Card>
 
                         {/* Preview */}
                         <div className="bg-gradient-to-r from-purple-500/10 to-blue-500/10 rounded-lg p-4">

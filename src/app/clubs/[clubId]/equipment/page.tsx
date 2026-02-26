@@ -126,12 +126,6 @@ export default function EquipmentDashboard() {
                     <p className="text-muted-foreground">Комплексный контроль техники, периферии и её состояния</p>
                 </div>
                 <div className="flex items-center gap-3">
-                    <Link href={`/clubs/${clubId}/settings/equipment`}>
-                        <Button variant="outline">
-                            <Settings className="mr-2 h-4 w-4" />
-                            Настройки KPI
-                        </Button>
-                    </Link>
                     <Link href={`/clubs/${clubId}/equipment/inventory?action=new`}>
                         <Button className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700">
                             <Plus className="mr-2 h-4 w-4" />

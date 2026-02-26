@@ -181,14 +181,36 @@ export async function calculateSalary(
     }
 
     // 4. Equipment Maintenance & Issue Bonuses
+    // This logic handles bonuses earned directly in the shift (if configured to pay per shift)
+    // or accumulates them if paid monthly (though calculation here is per-shift context)
+    // The caller (route.ts) is responsible for summing up bonuses for the shift period
     if (reportMetrics['maintenance_bonus'] && reportMetrics['maintenance_bonus'] > 0) {
-        const amount = parseFloat(reportMetrics['maintenance_bonus'].toFixed(2));
+        // Apply Maintenance KPI Multipliers if present in scheme config
+        let amount = reportMetrics['maintenance_bonus'];
+        
+        // If the scheme has maintenance_kpi config, we might want to apply efficiency multipliers here
+        // However, usually efficiency is calculated over a MONTH.
+        // For PER-SHIFT payment, we just pay what was earned.
+        // For MONTHLY payment, this amount is just a record, and the multiplier is applied at month end.
+        
+        // Check if we need to apply a daily efficiency multiplier?
+        // Current logic: The bonus passed in 'maintenance_bonus' is already (Base Points * Price).
+        // If we want to penalize daily performance, we could do it here, but typically KPI is monthly.
+        // So we just add it as is.
+        
+        amount = parseFloat(amount.toFixed(2));
+        
         breakdown.bonuses.push({
             name: 'Обслуживание оборудования',
             type: 'EQUIPMENT_MAINTENANCE',
             amount: amount,
             source_key: 'maintenance_bonus'
         });
+        
+        // Only add to total if it's NOT a monthly KPI that will be paid separately
+        // But for now, let's assume if it's in the shift calculation, it should be paid.
+        // If scheme.maintenance_kpi.mode === 'MONTHLY', maybe we shouldn't add it to shift total?
+        // Let's keep it simple: It adds to the shift "earned" amount.
         total += amount;
     }
 
