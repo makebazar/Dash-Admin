@@ -1277,7 +1277,7 @@ export default function SalarySettingsPage({ params }: { params: Promise<{ clubI
                                                                 ))}
                                                             </div>
                                                             <p className="text-[10px] text-muted-foreground">
-                                                                Пример: От 90% -> x1.2 (Премия). От 0% -> x0 (Нет бонуса).
+                                                                Пример: От 90% &rarr; x1.2 (Премия). От 0% &rarr; x0 (Нет бонуса).
                                                             </p>
                                                         </div>
                                                     </div>
