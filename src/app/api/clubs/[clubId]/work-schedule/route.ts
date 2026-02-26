@@ -236,9 +236,63 @@ export async function PATCH(
             );
             
             // --- OPTIMIZATION LOGIC START ---
-            // If a shift is ADDED, we might want to pull overdue tasks or tasks from far future to this new earlier date?
-            // For now, let's keep it simple and only handle the "removal" case which breaks the schedule.
-            // Adding a shift usually doesn't break anything, just gives more capacity.
+            // If a shift is ADDED (or restored), check if there are any PENDING tasks scheduled for FUTURE dates
+            // that could be pulled back to this new earlier date.
+            
+            // 1. Find tasks assigned to this user that are scheduled AFTER this new shift date
+            const futureTasks = await query(
+                `SELECT t.id, t.equipment_id, t.due_date, e.cleaning_interval_days, e.last_cleaned_at 
+                 FROM equipment_maintenance_tasks t
+                 JOIN equipment e ON t.equipment_id = e.id
+                 WHERE t.assigned_user_id = $1 
+                   AND t.due_date > $2 
+                   AND t.status = 'PENDING'
+                 ORDER BY t.due_date ASC`,
+                [userId, date]
+            );
+
+            if (futureTasks.rowCount && futureTasks.rowCount > 0) {
+                const newShiftDate = new Date(date);
+                newShiftDate.setHours(0,0,0,0);
+                
+                const tasksToMove = [];
+
+                for (const task of futureTasks.rows) {
+                    // Check if moving to this new date respects the cleaning interval
+                    let canMove = true;
+                    
+                    if (task.last_cleaned_at) {
+                        const lastCleaned = new Date(task.last_cleaned_at);
+                        const intervalDays = task.cleaning_interval_days || 30;
+                        
+                        // Calculate minimum allowed date (Last Cleaned + Interval)
+                        const minDate = new Date(lastCleaned);
+                        minDate.setDate(minDate.getDate() + intervalDays);
+                        
+                        // Reset time components for comparison
+                        minDate.setHours(0,0,0,0);
+                        
+                        // If new shift date is too early (before allowed interval), skip
+                        if (newShiftDate < minDate) {
+                            canMove = false;
+                        }
+                    }
+
+                    if (canMove) {
+                        tasksToMove.push(task.id);
+                    }
+                }
+
+                if (tasksToMove.length > 0) {
+                    await query(
+                        `UPDATE equipment_maintenance_tasks 
+                         SET due_date = $1 
+                         WHERE id = ANY($2)`,
+                        [date, tasksToMove]
+                    );
+                    console.log(`[Schedule] Pulled back ${tasksToMove.length} tasks to new shift on ${date} for user ${userId}`);
+                }
+            }
             // --- OPTIMIZATION LOGIC END ---
         }
 
