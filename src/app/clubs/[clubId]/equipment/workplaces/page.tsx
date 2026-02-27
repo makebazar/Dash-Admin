@@ -759,7 +759,7 @@ export default function WorkplacesPage() {
                     if (!open) setDetailsWorkstationId(null)
                 }}
             >
-                <DialogContent className="sm:max-w-[900px]">
+                <DialogContent className="sm:max-w-[900px] max-h-[90vh] overflow-y-auto">
                     <DialogHeader>
                         <DialogTitle>{activeWorkstation ? `Место ${activeWorkstation.name}` : "Место"}</DialogTitle>
                         <DialogDescription>
