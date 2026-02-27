@@ -73,6 +73,16 @@ const getEquipmentIcon = (type: string) => {
     }
 }
 
+const getTaskTypeLabel = (type: string) => {
+    switch (type) {
+        case 'CLEANING': return 'ЧИСТКА';
+        case 'MAINTENANCE': return 'ОБСЛУЖИВАНИЕ';
+        case 'REPAIR': return 'РЕМОНТ';
+        case 'CHECK': return 'ПРОВЕРКА';
+        default: return type;
+    }
+}
+
 export default function VerificationPage() {
     const { clubId } = useParams()
     const router = useRouter()
@@ -337,7 +347,7 @@ export default function VerificationPage() {
                                                                 </span>
                                                             )}
                                                             <Badge variant="outline" className="text-[10px] h-5 px-1.5 font-normal ml-auto sm:ml-0">
-                                                                {task.task_type}
+                                                                {getTaskTypeLabel(task.task_type)}
                                                             </Badge>
                                                         </div>
                                                         <div className="flex items-center gap-4 text-xs text-muted-foreground">

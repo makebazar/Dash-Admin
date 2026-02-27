@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { Loader2, Clock, DollarSign, FileText, Eye, TrendingUp, Wallet, Edit, CheckCircle, CalendarDays, Sun, Moon, Trash2, ArrowUpDown, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react"
 import { ShiftExcelImport } from "@/components/payroll/ShiftExcelImport"
+import { ShiftDetailsSheet } from "./ShiftDetailsSheet"
 
 
 interface Shift {
