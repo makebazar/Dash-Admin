@@ -27,12 +27,15 @@ export async function GET(
         }
 
         const result = await query(
-            `SELECT c.*, u.full_name as author_name, u.role as author_role
+            `SELECT c.*, u.full_name as author_name, 
+                    COALESCE(ce.role, r.name, 'User') as author_role
              FROM equipment_issue_comments c
              LEFT JOIN users u ON c.user_id = u.id
+             LEFT JOIN club_employees ce ON u.id = ce.user_id AND ce.club_id = $2
+             LEFT JOIN roles r ON u.role_id = r.id
              WHERE c.issue_id = $1
              ORDER BY c.created_at ASC`,
-            [issueId]
+            [issueId, clubId]
         );
 
         return NextResponse.json({ comments: result.rows });
@@ -82,8 +85,14 @@ export async function POST(
 
         // Fetch user details for response
         const userResult = await query(
-            `SELECT full_name, role FROM users WHERE id = $1`,
-            [userId]
+            `SELECT 
+                u.full_name, 
+                COALESCE(ce.role, r.name, 'User') as role
+             FROM users u
+             LEFT JOIN club_employees ce ON u.id = ce.user_id AND ce.club_id = $2
+             LEFT JOIN roles r ON u.role_id = r.id
+             WHERE u.id = $1`,
+            [userId, clubId]
         );
 
         const newComment = {

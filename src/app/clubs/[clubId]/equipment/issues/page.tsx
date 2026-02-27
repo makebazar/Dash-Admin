@@ -76,6 +76,7 @@ import {
     PopoverTrigger,
 } from "@/components/ui/popover"
 import { Label } from "@/components/ui/label"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
 
@@ -155,7 +156,7 @@ export default function IssuesBoard() {
 
     // Filter states
     const [searchTerm, setSearchTerm] = useState("")
-    const [statusFilter, setStatusFilter] = useState<Issue['status'] | 'ALL'>('ALL')
+    const [activeTab, setActiveTab] = useState("OPEN")
     const [assigneeFilter, setAssigneeFilter] = useState<'ALL' | 'ME' | 'UNASSIGNED'>('ALL')
 
     const filteredIssues = useMemo(() => {
@@ -165,7 +166,14 @@ export default function IssuesBoard() {
                 issue.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 issue.equipment_name.toLowerCase().includes(searchTerm.toLowerCase())
             
-            const matchesStatus = statusFilter === 'ALL' || issue.status === statusFilter
+            let matchesTab = true
+            if (activeTab === 'OPEN') {
+                matchesTab = issue.status === 'OPEN'
+            } else if (activeTab === 'IN_PROGRESS') {
+                matchesTab = issue.status === 'IN_PROGRESS'
+            } else if (activeTab === 'CLOSED') {
+                matchesTab = issue.status === 'RESOLVED' || issue.status === 'CLOSED'
+            }
 
             let matchesAssignee = true
             // Note: In a real app we'd need current user ID to filter by "ME"
@@ -175,9 +183,9 @@ export default function IssuesBoard() {
             }
             // 'ME' logic would require current user context, skipping for simplicity or need to fetch "me"
 
-            return matchesSearch && matchesStatus && matchesAssignee
+            return matchesSearch && matchesTab && matchesAssignee
         }).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-    }, [issues, searchTerm, statusFilter, assigneeFilter])
+    }, [issues, searchTerm, activeTab, assigneeFilter])
 
     const fetchData = useCallback(async () => {
         setIsLoading(true)
@@ -329,6 +337,35 @@ export default function IssuesBoard() {
         }
     }
 
+    const handleChangeSeverity = async (issueId: string, severity: string) => {
+        try {
+            const res = await fetch(`/api/clubs/${clubId}/equipment/issues/${issueId}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ severity })
+            })
+            if (res.ok) {
+                const updatedIssue = await res.json()
+                setIssues(prev => prev.map(i => i.id === issueId ? { ...i, ...updatedIssue } : i))
+                if (selectedIssue?.id === issueId) {
+                    setSelectedIssue(prev => prev ? { ...prev, ...updatedIssue } : null)
+                }
+
+                // Add system comment
+                await fetch(`/api/clubs/${clubId}/equipment/issues/${issueId}/comments`, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        content: `Приоритет изменен на: ${severity}`,
+                        is_system_message: true
+                    })
+                })
+                fetchComments(issueId)
+            }
+        } catch (error) {
+            console.error("Error updating severity:", error)
+        }
+    }
+
     const handleAddComment = async (e: React.FormEvent) => {
         e.preventDefault()
         if (!selectedIssue || !newComment.trim()) return
@@ -426,18 +463,6 @@ export default function IssuesBoard() {
                             onChange={(e) => setSearchTerm(e.target.value)}
                         />
                     </div>
-                    <Select value={statusFilter} onValueChange={(val) => setStatusFilter(val as any)}>
-                        <SelectTrigger className="w-full sm:w-[200px] bg-slate-50 border-slate-200">
-                            <SelectValue placeholder="Статус" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="ALL">Все статусы</SelectItem>
-                            <SelectItem value="OPEN">Открыто</SelectItem>
-                            <SelectItem value="IN_PROGRESS">В работе</SelectItem>
-                            <SelectItem value="RESOLVED">Решено</SelectItem>
-                            <SelectItem value="CLOSED">Закрыто</SelectItem>
-                        </SelectContent>
-                    </Select>
                     <Select value={assigneeFilter} onValueChange={(val) => setAssigneeFilter(val as any)}>
                         <SelectTrigger className="w-full sm:w-[200px] bg-slate-50 border-slate-200">
                             <SelectValue placeholder="Ответственный" />
@@ -450,6 +475,15 @@ export default function IssuesBoard() {
                     </Select>
                 </div>
             </div>
+
+            {/* Tabs */}
+            <Tabs defaultValue="OPEN" value={activeTab} onValueChange={setActiveTab} className="w-full">
+                <TabsList className="grid w-full grid-cols-3 lg:w-[400px]">
+                    <TabsTrigger value="OPEN">Открытые</TabsTrigger>
+                    <TabsTrigger value="IN_PROGRESS">В работе</TabsTrigger>
+                    <TabsTrigger value="CLOSED">Закрытые</TabsTrigger>
+                </TabsList>
+            </Tabs>
 
             {/* Issues Table */}
             <div className="rounded-md border bg-white shadow-sm overflow-hidden">
@@ -477,12 +511,16 @@ export default function IssuesBoard() {
                         ) : filteredIssues.length === 0 ? (
                             <TableRow>
                                 <TableCell colSpan={7} className="h-32 text-center text-muted-foreground">
-                                    Нет инцидентов, соответствующих фильтрам
+                                    Нет инцидентов в этой категории
                                 </TableCell>
                             </TableRow>
                         ) : (
                             filteredIssues.map((issue) => (
-                                <TableRow key={issue.id} className="hover:bg-slate-50/50">
+                                <TableRow 
+                                    key={issue.id} 
+                                    className="hover:bg-slate-50/50 cursor-pointer"
+                                    onClick={() => setSelectedIssue(issue)}
+                                >
                                     <TableCell>{getStatusBadge(issue.status)}</TableCell>
                                     <TableCell>{getSeverityBadge(issue.severity)}</TableCell>
                                     <TableCell>
@@ -519,7 +557,10 @@ export default function IssuesBoard() {
                                         <div className="text-[10px]">{new Date(issue.created_at).toLocaleTimeString("ru-RU", { hour: '2-digit', minute: '2-digit' })}</div>
                                     </TableCell>
                                     <TableCell className="text-right">
-                                        <Button variant="ghost" size="sm" onClick={() => setSelectedIssue(issue)}>
+                                        <Button variant="ghost" size="sm" onClick={(e) => {
+                                            e.stopPropagation() // Prevent row click
+                                            setSelectedIssue(issue)
+                                        }}>
                                             <MoreHorizontal className="h-4 w-4" />
                                         </Button>
                                     </TableCell>
@@ -638,9 +679,25 @@ export default function IssuesBoard() {
                             {/* Left Side: Details & Actions */}
                             <div className="w-1/2 flex flex-col border-r bg-slate-50/50">
                                 <div className="p-6 border-b bg-white">
-                                    <div className="flex items-center gap-3 mb-2">
-                                        {getSeverityBadge(selectedIssue.severity)}
-                                        <Badge variant="outline">{selectedIssue.status}</Badge>
+                                    <div className="flex items-center justify-between mb-4">
+                                        <div className="flex items-center gap-3">
+                                            <Badge variant="outline">{selectedIssue.status}</Badge>
+                                        </div>
+                                        {/* Severity Selector */}
+                                        <Select 
+                                            value={selectedIssue.severity} 
+                                            onValueChange={(val) => handleChangeSeverity(selectedIssue.id, val)}
+                                        >
+                                            <SelectTrigger className="w-[140px] h-8 text-xs">
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="LOW">Низкий</SelectItem>
+                                                <SelectItem value="MEDIUM">Средний</SelectItem>
+                                                <SelectItem value="HIGH">Высокий</SelectItem>
+                                                <SelectItem value="CRITICAL">Критический</SelectItem>
+                                            </SelectContent>
+                                        </Select>
                                     </div>
                                     <h2 className="text-xl font-bold">{selectedIssue.title}</h2>
                                     <p className="text-sm text-muted-foreground mt-1">
