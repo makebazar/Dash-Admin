@@ -659,28 +659,50 @@ export default function WorkplacesPage() {
                                                     </div>
                                                 ) : (
                                                     <div className="space-y-2">
-                                                        {wsEquipment.map(item => (
-                                                            <div key={item.id} className="flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-100 group/item hover:border-primary/20 hover:bg-primary/5 transition-colors">
-                                                                <div className="flex items-center gap-3 overflow-hidden">
-                                                                    <div className="h-8 w-8 rounded-md bg-white border flex items-center justify-center text-slate-500 shrink-0">
-                                                                        {getEquipmentIcon(item.type)}
+                                                        {wsEquipment.map(item => {
+                                                            const itemIssues = activeIssues.filter(i => i.equipment_id === item.id)
+                                                            return (
+                                                                <div key={item.id} className={cn(
+                                                                    "flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-100 group/item hover:border-primary/20 hover:bg-primary/5 transition-colors",
+                                                                    itemIssues.length > 0 && "bg-rose-50 border-rose-200"
+                                                                )}>
+                                                                    <div className="flex items-center gap-3 overflow-hidden">
+                                                                        <div className={cn(
+                                                                            "h-8 w-8 rounded-md bg-white border flex items-center justify-center text-slate-500 shrink-0 relative",
+                                                                            itemIssues.length > 0 && "border-rose-200 text-rose-500"
+                                                                        )}>
+                                                                            {getEquipmentIcon(item.type)}
+                                                                            {itemIssues.length > 0 && (
+                                                                                <div className="absolute -top-1 -right-1 h-2.5 w-2.5 bg-rose-500 rounded-full border border-white" />
+                                                                            )}
+                                                                        </div>
+                                                                        <div className="min-w-0">
+                                                                            <p className={cn(
+                                                                                "text-xs font-semibold truncate text-slate-700 group-hover/item:text-primary",
+                                                                                itemIssues.length > 0 && "text-rose-700"
+                                                                            )}>{item.name}</p>
+                                                                            <div className="flex items-center gap-1.5">
+                                                                                <p className="text-[10px] text-muted-foreground truncate">{item.brand} {item.model}</p>
+                                                                                {itemIssues.length > 0 && (
+                                                                                    <Badge variant="destructive" className="h-3.5 px-1 text-[9px] bg-rose-500">
+                                                                                        {itemIssues.length} {itemIssues.length === 1 ? 'проблема' : 'проблемы'}
+                                                                                    </Badge>
+                                                                                )}
+                                                                            </div>
+                                                                        </div>
                                                                     </div>
-                                                                    <div className="min-w-0">
-                                                                        <p className="text-xs font-semibold truncate text-slate-700 group-hover/item:text-primary">{item.name}</p>
-                                                                        <p className="text-[10px] text-muted-foreground truncate">{item.brand} {item.model}</p>
-                                                                    </div>
+                                                                    <Button 
+                                                                        variant="ghost" 
+                                                                        size="icon" 
+                                                                        className="h-6 w-6 opacity-0 group-hover/item:opacity-100 text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-all"
+                                                                        title="Убрать с места (на склад)"
+                                                                        onClick={(e) => { e.stopPropagation(); handleUnassignEquipment(item.id) }}
+                                                                    >
+                                                                        <X className="h-3 w-3" />
+                                                                    </Button>
                                                                 </div>
-                                                                <Button 
-                                                                    variant="ghost" 
-                                                                    size="icon" 
-                                                                    className="h-6 w-6 opacity-0 group-hover/item:opacity-100 text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-all"
-                                                                    title="Убрать с места (на склад)"
-                                                                    onClick={(e) => { e.stopPropagation(); handleUnassignEquipment(item.id) }}
-                                                                >
-                                                                    <X className="h-3 w-3" />
-                                                                </Button>
-                                                            </div>
-                                                        ))}
+                                                            )
+                                                        })}
                                                     </div>
                                                 )}
                                             </CardContent>
