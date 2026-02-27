@@ -507,7 +507,7 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                                 const mBonus = (employee.metrics as any)?.maintenance_bonus || 0;
                                                                 const hasM = employee.bonuses?.some((b: any) => b.type === 'maintenance_kpi' || b.type === 'MAINTENANCE_KPI');
                                                                 
-                                                                if (!hasM && mAssigned === 0 && mCompleted === 0) return null;
+                                                                if (!hasM) return null;
 
                                                                 const efficiency = mAssigned > 0 ? (mCompleted / mAssigned) * 100 : (mCompleted > 0 ? 100 : 0);
                                                                 const isCompleted = efficiency >= 90;
