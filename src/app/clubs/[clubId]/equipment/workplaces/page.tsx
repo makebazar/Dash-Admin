@@ -140,6 +140,7 @@ export default function WorkplacesPage() {
     const [savingThermalId, setSavingThermalId] = useState<string | null>(null)
     const [isAssigningWorkstationId, setIsAssigningWorkstationId] = useState<string | null>(null)
     const [activeIssues, setActiveIssues] = useState<any[]>([])
+    const [allIssues, setAllIssues] = useState<any[]>([])
 
     const fetchData = useCallback(async () => {
         setIsLoading(true)
@@ -160,8 +161,11 @@ export default function WorkplacesPage() {
 
             if (issuesRes.ok) {
                 const issuesData = await issuesRes.json()
+                const issues = issuesData.issues || []
+                setAllIssues(issues)
+                
                 // Filter only active issues
-                const active = (issuesData.issues || []).filter((i: any) => i.status !== 'CLOSED' && i.status !== 'RESOLVED')
+                const active = issues.filter((i: any) => i.status !== 'CLOSED' && i.status !== 'RESOLVED')
                 setActiveIssues(active)
             }
 
@@ -512,6 +516,16 @@ export default function WorkplacesPage() {
             case 'MOUSEPAD': return <Square className="h-4 w-4" />
             case 'CHAIR': return <Sofa className="h-4 w-4" />
             default: return <Wrench className="h-4 w-4" />
+        }
+    }
+
+    const getIssueStatusBadge = (status: string) => {
+        switch (status) {
+            case 'OPEN': return <Badge variant="secondary" className="bg-slate-200 text-slate-700 hover:bg-slate-300">Открыто</Badge>
+            case 'IN_PROGRESS': return <Badge className="bg-blue-500 hover:bg-blue-600">В работе</Badge>
+            case 'RESOLVED': return <Badge className="bg-green-500 hover:bg-green-600">Решено</Badge>
+            case 'CLOSED': return <Badge variant="outline" className="text-slate-500 border-slate-300">Закрыто</Badge>
+            default: return null
         }
     }
 
@@ -969,6 +983,98 @@ export default function WorkplacesPage() {
                                         </div>
                                     ))
                                 )}
+                            </CardContent>
+                        </Card>
+
+                        <Card className="border-slate-200 lg:col-span-3">
+                            <CardHeader className="pb-2">
+                                <CardTitle className="text-base flex items-center gap-2">
+                                    <AlertTriangle className="h-4 w-4 text-slate-500" />
+                                    История инцидентов
+                                </CardTitle>
+                                <CardDescription>Список всех проблем с оборудованием на этом месте</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                {(() => {
+                                    const workplaceIssues = allIssues.filter(issue => 
+                                        activeEquipment.some(e => e.id === issue.equipment_id)
+                                    ).sort((a, b) => {
+                                        // Sort active first, then by date
+                                        const aActive = a.status === 'OPEN' || a.status === 'IN_PROGRESS'
+                                        const bActive = b.status === 'OPEN' || b.status === 'IN_PROGRESS'
+                                        if (aActive && !bActive) return -1
+                                        if (!aActive && bActive) return 1
+                                        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+                                    })
+
+                                    if (workplaceIssues.length === 0) {
+                                        return (
+                                            <div className="text-center py-8 text-muted-foreground border-2 border-dashed border-slate-100 rounded-lg">
+                                                <div className="h-10 w-10 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-2">
+                                                    <Check className="h-5 w-5 text-green-500" />
+                                                </div>
+                                                <p className="text-sm">Инцидентов не зафиксировано</p>
+                                            </div>
+                                        )
+                                    }
+
+                                    return (
+                                        <div className="space-y-3">
+                                            {workplaceIssues.map(issue => {
+                                                const equipment = activeEquipment.find(e => e.id === issue.equipment_id)
+                                                return (
+                                                    <div key={issue.id} className={cn(
+                                                        "flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-3 rounded-lg border",
+                                                        (issue.status === 'OPEN' || issue.status === 'IN_PROGRESS') 
+                                                            ? "bg-rose-50 border-rose-100" 
+                                                            : "bg-white border-slate-100"
+                                                    )}>
+                                                        <div className="flex items-start gap-3 min-w-0">
+                                                            <div className={cn(
+                                                                "h-9 w-9 rounded-lg border flex items-center justify-center shrink-0 mt-0.5",
+                                                                (issue.status === 'OPEN' || issue.status === 'IN_PROGRESS') 
+                                                                    ? "bg-white border-rose-200 text-rose-500" 
+                                                                    : "bg-slate-50 border-slate-200 text-slate-400"
+                                                            )}>
+                                                                {equipment ? getEquipmentIcon(equipment.type) : <Wrench className="h-4 w-4" />}
+                                                            </div>
+                                                            <div className="min-w-0 space-y-1">
+                                                                <div className="flex items-center gap-2 flex-wrap">
+                                                                    <p className="text-sm font-semibold truncate text-slate-900">{issue.title}</p>
+                                                                    {getIssueStatusBadge(issue.status)}
+                                                                </div>
+                                                                <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
+                                                                    <span className="font-medium text-slate-600">{equipment?.name}</span>
+                                                                    <span>•</span>
+                                                                    <span>{new Date(issue.created_at).toLocaleDateString('ru-RU')}</span>
+                                                                    <span>•</span>
+                                                                    <span className="flex items-center gap-1">
+                                                                        <User className="h-3 w-3" />
+                                                                        {issue.reported_by_name}
+                                                                    </span>
+                                                                </div>
+                                                                {(issue.status === 'OPEN' || issue.status === 'IN_PROGRESS') && (
+                                                                    <p className="text-xs text-rose-700 line-clamp-1">{issue.description}</p>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex items-center gap-2 shrink-0">
+                                                            {issue.assigned_to_name && (issue.status === 'OPEN' || issue.status === 'IN_PROGRESS') && (
+                                                                <Badge variant="outline" className="bg-white text-slate-600 font-normal">
+                                                                    <User className="h-3 w-3 mr-1" />
+                                                                    {issue.assigned_to_name}
+                                                                </Badge>
+                                                            )}
+                                                            <Link href={`/clubs/${clubId}/equipment/issues`} className="text-xs font-medium text-primary hover:underline">
+                                                                Перейти
+                                                            </Link>
+                                                        </div>
+                                                    </div>
+                                                )
+                                            })}
+                                        </div>
+                                    )
+                                })()}
                             </CardContent>
                         </Card>
                     </div>
