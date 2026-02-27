@@ -42,7 +42,9 @@ export async function GET(
                 bonus_per_point: 50,
                 on_time_multiplier: 1.0,
                 late_penalty_multiplier: 0.5,
-                include_in_salary: true
+                include_in_salary: true,
+                calculation_mode: 'PER_TASK',
+                monthly_tiers: []
             });
         }
 
@@ -85,14 +87,17 @@ export async function PUT(
             bonus_per_point,
             on_time_multiplier,
             late_penalty_multiplier,
-            include_in_salary
+            include_in_salary,
+            calculation_mode,
+            monthly_tiers
         } = body;
 
         const result = await query(
             `INSERT INTO maintenance_kpi_config (
                 club_id, enabled, assignment_mode, points_per_cleaning, points_per_issue_resolved,
-                bonus_per_point, on_time_multiplier, late_penalty_multiplier, include_in_salary
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                bonus_per_point, on_time_multiplier, late_penalty_multiplier, include_in_salary,
+                calculation_mode, monthly_tiers
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
             ON CONFLICT (club_id) DO UPDATE SET
                 enabled = EXCLUDED.enabled,
                 assignment_mode = EXCLUDED.assignment_mode,
@@ -102,6 +107,8 @@ export async function PUT(
                 on_time_multiplier = EXCLUDED.on_time_multiplier,
                 late_penalty_multiplier = EXCLUDED.late_penalty_multiplier,
                 include_in_salary = EXCLUDED.include_in_salary,
+                calculation_mode = EXCLUDED.calculation_mode,
+                monthly_tiers = EXCLUDED.monthly_tiers,
                 updated_at = CURRENT_TIMESTAMP
             RETURNING *`,
             [
@@ -113,7 +120,9 @@ export async function PUT(
                 bonus_per_point ?? 50,
                 on_time_multiplier ?? 1.0,
                 late_penalty_multiplier ?? 0.5,
-                include_in_salary ?? true
+                include_in_salary ?? true,
+                calculation_mode ?? 'PER_TASK',
+                monthly_tiers || []
             ]
         );
 

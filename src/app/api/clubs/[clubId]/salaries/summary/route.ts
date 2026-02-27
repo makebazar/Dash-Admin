@@ -186,6 +186,10 @@ export async function GET(
             [clubId, month, year]
         );
 
+        // Fetch KPI Config
+        const kpiConfigRes = await query(`SELECT * FROM maintenance_kpi_config WHERE club_id = $1`, [clubId]);
+        const kpiConfig = kpiConfigRes.rows[0];
+
         // Get evaluation averages for the period
         const evaluationsRes = await query(
             `SELECT employee_id, AVG(total_score) as avg_score, COUNT(id) as count
@@ -274,7 +278,32 @@ export async function GET(
             );
             const totalMonthlyBonus = parseFloat(monthBonusRes.rows[0]?.total_monthly_bonus || 0);
 
-            monthlyMetrics['maintenance_bonus'] = totalMaintenanceBonus + totalMonthlyBonus;
+            // Find Maintenance KPI bonus in employee's scheme
+            const schemeBonuses = emp.bonuses || [];
+            const maintenanceBonusConfig = schemeBonuses.find((b: any) => b.type === 'maintenance_kpi');
+
+            // Calculate Maintenance Bonus based on Scheme Mode
+            let finalMaintenanceBonus = 0;
+
+            if (maintenanceBonusConfig && maintenanceBonusConfig.calculation_mode === 'MONTHLY') {
+                // Mode: Monthly Tiers (ignore per-task accrued bonuses)
+                const efficiency = monthTotalTasks > 0 ? (monthCompletedTasks / monthTotalTasks) * 100 : 0;
+                const thresholds = maintenanceBonusConfig.efficiency_thresholds || [];
+                
+                // Sort by threshold desc
+                const sortedTiers = [...thresholds].sort((a: any, b: any) => (b.from_percent || 0) - (a.from_percent || 0));
+                const achievedTier = sortedTiers.find((t: any) => efficiency >= (t.from_percent || 0));
+                
+                if (achievedTier) {
+                    finalMaintenanceBonus = parseFloat(achievedTier.amount || '0');
+                }
+            } else {
+                // Mode: Per Task (default) - use accrued bonuses from DB
+                // This includes both per-task bonuses and legacy monthly bonuses stored in DB
+                finalMaintenanceBonus = totalMaintenanceBonus + totalMonthlyBonus;
+            }
+
+            monthlyMetrics['maintenance_bonus'] = finalMaintenanceBonus;
             // Also pass efficiency metrics so period bonuses can use them if needed (though unlikely)
             monthlyMetrics['maintenance_tasks_completed'] = monthCompletedTasks;
             monthlyMetrics['maintenance_tasks_assigned'] = monthTotalTasks;
