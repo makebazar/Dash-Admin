@@ -505,18 +505,22 @@ export default function IssuesBoard() {
                 <Table>
                     <TableHeader className="bg-slate-50">
                         <TableRow>
+                            <TableHead className="w-[120px]">Дата</TableHead>
                             <TableHead className="w-[100px]">Статус</TableHead>
                             <TableHead className="w-[100px]">Приоритет</TableHead>
                             <TableHead>Оборудование</TableHead>
-                            <TableHead className="w-[30%]">Проблема</TableHead>
+                            <TableHead>Тип</TableHead>
+                            <TableHead>Зона</TableHead>
+                            <TableHead>Место</TableHead>
+                            <TableHead className="w-[25%]">Проблема</TableHead>
+                            <TableHead>Автор</TableHead>
                             <TableHead>Ответственный</TableHead>
-                            <TableHead>Дата</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
                         {isLoading ? (
                             <TableRow>
-                                <TableCell colSpan={6} className="h-24 text-center">
+                                <TableCell colSpan={10} className="h-24 text-center">
                                     <div className="flex items-center justify-center text-muted-foreground">
                                         <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Загрузка...
                                     </div>
@@ -524,7 +528,7 @@ export default function IssuesBoard() {
                             </TableRow>
                         ) : filteredIssues.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={6} className="h-32 text-center text-muted-foreground">
+                                <TableCell colSpan={10} className="h-32 text-center text-muted-foreground">
                                     Нет инцидентов в этой категории
                                 </TableCell>
                             </TableRow>
@@ -535,25 +539,46 @@ export default function IssuesBoard() {
                                     className="hover:bg-slate-50/50 cursor-pointer"
                                     onClick={() => setSelectedIssue(issue)}
                                 >
+                                    <TableCell className="text-sm text-muted-foreground">
+                                        {new Date(issue.created_at).toLocaleDateString("ru-RU")}
+                                        <div className="text-[10px]">{new Date(issue.created_at).toLocaleTimeString("ru-RU", { hour: '2-digit', minute: '2-digit' })}</div>
+                                    </TableCell>
                                     <TableCell>{getStatusBadge(issue.status)}</TableCell>
                                     <TableCell>{getSeverityBadge(issue.severity)}</TableCell>
                                     <TableCell>
                                         <div className="flex flex-col">
                                             <span className="font-medium">{issue.equipment_name}</span>
-                                            <span className="text-xs text-muted-foreground">{issue.equipment_type_name}</span>
-                                            {(issue.workstation_name || issue.workstation_zone) && (
-                                                <span className="text-[10px] text-slate-500 mt-0.5 flex items-center gap-1">
-                                                    📍 {issue.workstation_zone ? `Зона ${issue.workstation_zone}` : ''}
-                                                    {issue.workstation_zone && issue.workstation_name ? ' • ' : ''}
-                                                    {issue.workstation_name}
+                                            {issue.equipment_identifier && (
+                                                <span className="text-[10px] text-muted-foreground font-mono">
+                                                    ID: {issue.equipment_identifier}
                                                 </span>
                                             )}
                                         </div>
+                                    </TableCell>
+                                    <TableCell className="text-sm">{issue.equipment_type_name}</TableCell>
+                                    <TableCell className="text-sm text-muted-foreground">
+                                        {issue.workstation_zone ? (
+                                            <div className="flex items-center gap-1">
+                                                <MapPin className="h-3 w-3" />
+                                                {issue.workstation_zone}
+                                            </div>
+                                        ) : '—'}
+                                    </TableCell>
+                                    <TableCell className="text-sm text-muted-foreground">
+                                        {issue.workstation_name ? issue.workstation_name : '—'}
                                     </TableCell>
                                     <TableCell>
                                         <div className="flex flex-col gap-1">
                                             <span className="font-medium">{issue.title}</span>
                                             <span className="text-xs text-muted-foreground line-clamp-1" title={issue.description}>{issue.description}</span>
+                                        </div>
+                                    </TableCell>
+                                    <TableCell>
+                                        <div className="flex items-center gap-2">
+                                            <div className="h-6 w-6 rounded-full bg-slate-100 text-slate-700 flex items-center justify-center shrink-0 text-xs font-bold border border-slate-200">
+                                                {issue.reported_by_name?.charAt(0) || '?'}
+                                            </div>
+                                            <span className="text-sm">{issue.reported_by_name}</span>
                                         </div>
                                     </TableCell>
                                     <TableCell>
@@ -567,10 +592,6 @@ export default function IssuesBoard() {
                                         ) : (
                                             <span className="text-sm text-slate-400 italic">Не назначен</span>
                                         )}
-                                    </TableCell>
-                                    <TableCell className="text-sm text-muted-foreground">
-                                        {new Date(issue.created_at).toLocaleDateString("ru-RU")}
-                                        <div className="text-[10px]">{new Date(issue.created_at).toLocaleTimeString("ru-RU", { hour: '2-digit', minute: '2-digit' })}</div>
                                     </TableCell>
                                 </TableRow>
                             ))
