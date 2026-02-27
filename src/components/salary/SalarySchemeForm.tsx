@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
-import { Loader2, Plus, Wallet, Sun, Moon, Percent, Clock, DollarSign, Edit, Trash2, Save, ArrowLeft } from "lucide-react"
+import { Loader2, Plus, Wallet, Sun, Moon, Percent, Clock, DollarSign, Edit, Trash2, Save, ArrowLeft, HelpCircle } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 export interface Formula {
@@ -89,7 +89,7 @@ export interface SalaryScheme {
 }
 
 const defaultFormula: Formula = {
-    base: { type: 'hourly', amount: 500 },
+    base: { type: 'hourly', amount: 0 },
     bonuses: [],
     conditions: { shift_type: 'any' }
 }
@@ -238,7 +238,7 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
             base: {
                 ...prev.base,
                 type,
-                amount: type !== 'none' ? (prev.base.amount || (type === 'per_shift' ? 2000 : 500)) : undefined,
+                amount: type !== 'none' ? (prev.base.amount || (type === 'per_shift' ? 2000 : 0)) : undefined,
                 full_shift_hours: type === 'per_shift' ? (prev.base.full_shift_hours || 12) : undefined
             }
         }))
@@ -533,6 +533,16 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                             <CardTitle className="text-base flex items-center gap-2">
                                 <DollarSign className="h-4 w-4" />
                                 Базовая ставка
+                                <div className="group relative ml-1">
+                                    <HelpCircle className="h-4 w-4 text-muted-foreground/50 cursor-help" />
+                                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-2.5 bg-slate-800 text-white text-xs rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 leading-relaxed">
+                                        <p className="font-semibold mb-1">Как это работает?</p>
+                                        <ul className="list-disc pl-3 space-y-1">
+                                            <li><b>Почасовая:</b> Ставка * Часы. (500₽ * 10ч = 5000₽)</li>
+                                            <li><b>За смену:</b> Фикс за выход. (2000₽ за смену, даже если отработал 12ч)</li>
+                                        </ul>
+                                    </div>
+                                </div>
                             </CardTitle>
                         </CardHeader>
                         <CardContent className="space-y-4">
@@ -679,13 +689,26 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                     {/* Bonuses */}
                     <Card>
                         <CardHeader className="pb-3">
-                            <div className="flex items-center justify-between">
+                            <div className="flex flex-col gap-1 mb-3">
                                 <CardTitle className="text-base flex items-center gap-2">
                                     <Percent className="h-4 w-4" />
                                     Бонусы и штрафы за смену
                                 </CardTitle>
+                                <p className="text-xs text-muted-foreground">
+                                    Начисляются ежедневно. Зависят от показателей конкретной смены (выручка дня, чеклист).
+                                </p>
                             </div>
                             <div className="flex flex-wrap gap-2 mt-2">
+                                <div className="w-full flex flex-wrap gap-2 mb-2 pb-2 border-b border-dashed">
+                                    <span className="text-xs font-medium text-muted-foreground w-full uppercase tracking-wider">Рекомендуемые</span>
+                                    <Button type="button" variant="outline" size="sm" className="border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 hover:text-blue-800" onClick={() => addBonus('progressive_percent')}>
+                                        + Прогрессия %
+                                    </Button>
+                                    <Button type="button" variant="outline" size="sm" className="border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 hover:text-indigo-800" onClick={() => addBonus('maintenance_kpi')}>
+                                        + KPI Обслуживания
+                                    </Button>
+                                </div>
+                                <span className="text-xs font-medium text-muted-foreground w-full uppercase tracking-wider mt-2">Остальные</span>
                                 <Button type="button" variant="outline" size="sm" onClick={() => addBonus('percent_revenue')}>
                                     + % от выручки
                                 </Button>
@@ -695,14 +718,8 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                                 <Button type="button" variant="outline" size="sm" onClick={() => addBonus('tiered')}>
                                     + KPI-ступени
                                 </Button>
-                                <Button type="button" variant="outline" size="sm" onClick={() => addBonus('progressive_percent')}>
-                                    + Прогрессия %
-                                </Button>
                                 <Button type="button" variant="outline" size="sm" onClick={() => addBonus('checklist')}>
                                     + Чек-лист
-                                </Button>
-                                <Button type="button" variant="outline" size="sm" onClick={() => addBonus('maintenance_kpi')}>
-                                    + KPI Обслуживания
                                 </Button>
                                 <Button type="button" variant="outline" size="sm" className="text-red-500 hover:text-red-600 border-red-200 hover:bg-red-50" onClick={() => addBonus('penalty')}>
                                     + Штраф
@@ -798,7 +815,15 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                                                 {bonus.type === 'tiered' && bonus.tiers && (
                                                     <div className="space-y-2">
                                                         <div className="flex items-center gap-2 mb-2">
-                                                            <span className="text-sm">Источник:</span>
+                                                            <div className="flex items-center gap-1">
+                                                                <span className="text-sm">Источник:</span>
+                                                                <div className="group relative">
+                                                                    <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
+                                                                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-slate-800 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                                                                        Какой показатель использовать для расчета ступеней (например, Общая выручка)
+                                                                    </div>
+                                                                </div>
+                                                            </div>
                                                             <select
                                                                 value={bonus.source}
                                                                 onChange={e => updateBonus(index, 'source', e.target.value)}
@@ -871,7 +896,15 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                                                 {bonus.type === 'progressive_percent' && bonus.thresholds && (
                                                     <div className="space-y-2">
                                                         <div className="flex items-center gap-2 mb-2">
-                                                            <span className="text-sm">Источник:</span>
+                                                            <div className="flex items-center gap-1">
+                                                                <span className="text-sm">Источник:</span>
+                                                                <div className="group relative">
+                                                                    <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
+                                                                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-slate-800 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                                                                        От какой суммы считать процент (обычно Общая выручка)
+                                                                    </div>
+                                                                </div>
+                                                            </div>
                                                             <select
                                                                 value={bonus.source}
                                                                 onChange={e => updateBonus(index, 'source', e.target.value)}
@@ -890,8 +923,15 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                                                                 )}
                                                             </select>
                                                         </div>
-                                                        <p className="text-xs text-muted-foreground mb-2">
+                                                        <p className="text-xs text-muted-foreground mb-2 flex items-center gap-1">
                                                             Процент начисляется от суммы сверх порога
+                                                            <div className="group relative inline-block">
+                                                                <HelpCircle className="h-3 w-3 cursor-help" />
+                                                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 p-2 bg-slate-800 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                                                                    Пример: Порог 30,000₽, Процент 3%.<br/>
+                                                                    Если выручка 40,000₽, то (40к - 30к) * 3% = 300₽ бонуса.
+                                                                </div>
+                                                            </div>
                                                         </p>
                                                         {bonus.thresholds.map((threshold, tIndex) => (
                                                             <div key={tIndex} className="flex items-center gap-2 text-sm">
@@ -1095,7 +1135,15 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
 
                                                         <div className="grid grid-cols-2 gap-4">
                                                             <div className="space-y-1">
-                                                                <Label className="text-xs text-muted-foreground">Допуск (дни)</Label>
+                                                                <Label className="text-xs text-muted-foreground flex items-center gap-1">
+                                                                    Допуск (дни)
+                                                                    <div className="group relative">
+                                                                        <HelpCircle className="h-3 w-3 cursor-help" />
+                                                                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-slate-800 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                                                                            Сколько дней задача может висеть просроченной без штрафа.
+                                                                        </div>
+                                                                    </div>
+                                                                </Label>
                                                                 <div className="relative">
                                                                     <Input
                                                                         type="number"
@@ -1107,7 +1155,15 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                                                                 </div>
                                                             </div>
                                                             <div className="space-y-1">
-                                                                <Label className="text-xs text-muted-foreground">Штраф за опоздание</Label>
+                                                                <Label className="text-xs text-muted-foreground flex items-center gap-1">
+                                                                    Штраф за опоздание
+                                                                    <div className="group relative">
+                                                                        <HelpCircle className="h-3 w-3 cursor-help" />
+                                                                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-slate-800 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                                                                            Коэффициент снижения цены. 0.5 = оплата 50% от стоимости задачи.
+                                                                        </div>
+                                                                    </div>
+                                                                </Label>
                                                                 <div className="flex items-center gap-2">
                                                                     <span className="text-xs text-muted-foreground">x</span>
                                                                     <Input
@@ -1210,11 +1266,14 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                     {/* Period Bonuses */}
                     <Card>
                         <CardHeader className="pb-3">
-                            <div className="flex items-center justify-between">
+                            <div className="flex flex-col gap-1 mb-3">
                                 <CardTitle className="text-base flex items-center gap-2">
                                     <Wallet className="h-4 w-4" />
                                     KPI за Период (Месяц)
                                 </CardTitle>
+                                <p className="text-xs text-muted-foreground">
+                                    Начисляются в конце месяца. Зависят от выполнения общего плана или суммарных показателей за весь период.
+                                </p>
                             </div>
                             <div className="flex flex-wrap gap-2 mt-2">
                                 <Button type="button" variant="outline" size="sm" onClick={() => addPeriodBonus('TARGET')}>
@@ -1446,17 +1505,6 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                     </Card>
                 </TabsContent>
             </Tabs>
-
-            {/* Summary Preview */}
-            <div className="mt-6 bg-gradient-to-r from-purple-50 to-blue-50 border border-blue-100 rounded-xl p-4 shadow-sm">
-                <h4 className="font-medium mb-2 text-sm flex items-center gap-2 text-slate-700">
-                    <Edit className="h-4 w-4" />
-                    Итоговая формула
-                </h4>
-                <p className="text-sm text-slate-600 leading-relaxed">
-                    {formatFormulaSummary(formula)}
-                </p>
-            </div>
         </div>
     )
 }

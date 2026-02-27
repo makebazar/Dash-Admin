@@ -633,8 +633,8 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                     // Check if maintenance KPI is configured in bonuses
                                                     const hasMaintenanceBonus = employee.bonuses?.some((b: any) => b.type === 'maintenance_kpi' || b.type === 'MAINTENANCE_KPI');
                                                     
-                                                    // Only show if there is relevant activity OR configuration
-                                                    if (mAssigned === 0 && mCompleted === 0 && mBonus === 0 && !hasMaintenanceBonus) return null;
+                                                    // Only show if explicitly configured in the salary scheme
+                                                    if (!hasMaintenanceBonus) return null;
 
                                                     const efficiency = mAssigned > 0 ? (mCompleted / mAssigned) * 100 : (mCompleted > 0 ? 100 : 0);
                                                     
