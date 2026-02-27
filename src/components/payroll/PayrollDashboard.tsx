@@ -63,7 +63,11 @@ interface Employee {
             total: number;
             avg_per_shift: number;
         }>;
+        maintenance_tasks_completed?: number;
+        maintenance_tasks_assigned?: number;
+        maintenance_bonus?: number;
     };
+    bonuses?: Array<{ type: string; amount?: number; calculation_mode?: string }>;
     payment_history?: Array<{
         id?: number;
         date: string;
@@ -464,13 +468,15 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                             </div>
                                                             {/* Maintenance Efficiency Small Card */}
                                                             {(() => {
+                                                                // Check if maintenance KPI is configured in bonuses
+                                                                const hasMaintenanceBonus = employee.bonuses?.some((b: any) => b.type === 'maintenance_kpi' || b.type === 'MAINTENANCE_KPI');
+                                                                
+                                                                if (!hasMaintenanceBonus) return null;
+
                                                                 const mCompleted = (employee.metrics as any)?.maintenance_tasks_completed || 0;
                                                                 const mAssigned = (employee.metrics as any)?.maintenance_tasks_assigned || 0;
                                                                 const mBonus = (employee.metrics as any)?.maintenance_bonus || 0;
-                                                                const hasM = employee.bonuses?.some((b: any) => b.type === 'maintenance_kpi' || b.type === 'MAINTENANCE_KPI');
                                                                 
-                                                                if (!hasM && mAssigned === 0 && mCompleted === 0) return null;
-
                                                                 const eff = mAssigned > 0 ? (mCompleted / mAssigned) * 100 : (mCompleted > 0 ? 100 : 0);
                                                                 
                                                                 return (
