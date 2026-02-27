@@ -24,7 +24,9 @@ import {
     FileText,
     Send,
     UserPlus,
-    Check
+    Check,
+    MapPin,
+    PlayCircle
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -85,7 +87,9 @@ interface Issue {
     equipment_id: string
     equipment_name: string
     equipment_type_name: string
+    equipment_identifier?: string
     workstation_name: string | null
+    workstation_zone: string | null
     reported_by: string
     reported_by_name: string
     title: string
@@ -248,6 +252,16 @@ export default function IssuesBoard() {
         }
     }
 
+    const getStatusLabel = (status: Issue['status']) => {
+        switch (status) {
+            case 'OPEN': return 'Открыто'
+            case 'IN_PROGRESS': return 'В работе'
+            case 'RESOLVED': return 'Решено'
+            case 'CLOSED': return 'Закрыто'
+            default: return status
+        }
+    }
+
     const handleCreateIssue = async (e: React.FormEvent) => {
         e.preventDefault()
         setIsSaving(true)
@@ -288,7 +302,7 @@ export default function IssuesBoard() {
                 await fetch(`/api/clubs/${clubId}/equipment/issues/${issueId}/comments`, {
                     method: 'POST',
                     body: JSON.stringify({
-                        content: `Статус изменен на: ${status}`,
+                        content: `Статус изменен на: ${getStatusLabel(status as Issue['status'])}`,
                         is_system_message: true
                     })
                 })
@@ -352,10 +366,11 @@ export default function IssuesBoard() {
                 }
 
                 // Add system comment
+                const sevLabel = severity === 'LOW' ? 'Низкий' : severity === 'MEDIUM' ? 'Средний' : severity === 'HIGH' ? 'Высокий' : 'Критический';
                 await fetch(`/api/clubs/${clubId}/equipment/issues/${issueId}/comments`, {
                     method: 'POST',
                     body: JSON.stringify({
-                        content: `Приоритет изменен на: ${severity}`,
+                        content: `Приоритет изменен на: ${sevLabel}`,
                         is_system_message: true
                     })
                 })
@@ -678,11 +693,11 @@ export default function IssuesBoard() {
                         <div className="flex flex-1 h-full overflow-hidden">
                             {/* Left Side: Details & Actions */}
                             <div className="w-1/2 flex flex-col border-r bg-slate-50/50">
-                                <div className="p-6 border-b bg-white">
-                                    <div className="flex items-center justify-between mb-4">
-                                        <div className="flex items-center gap-3">
-                                            <Badge variant="outline">{selectedIssue.status}</Badge>
-                                        </div>
+                                <div className="p-6 border-b bg-white space-y-4">
+                                    <div className="flex items-center justify-between">
+                                        <Badge variant={selectedIssue.status === 'OPEN' ? 'secondary' : selectedIssue.status === 'IN_PROGRESS' ? 'default' : 'outline'} className="text-sm px-3 py-1">
+                                            {getStatusLabel(selectedIssue.status)}
+                                        </Badge>
                                         {/* Severity Selector */}
                                         <Select 
                                             value={selectedIssue.severity} 
@@ -699,21 +714,50 @@ export default function IssuesBoard() {
                                             </SelectContent>
                                         </Select>
                                     </div>
-                                    <h2 className="text-xl font-bold">{selectedIssue.title}</h2>
-                                    <p className="text-sm text-muted-foreground mt-1">
-                                        {selectedIssue.equipment_name} — {selectedIssue.workstation_name || "Не назначено"}
-                                    </p>
+
+                                    <h2 className="text-2xl font-bold leading-tight">{selectedIssue.title}</h2>
+                                    
+                                    {/* Equipment Card */}
+                                    <div className="bg-slate-50 border rounded-lg p-3 flex items-start gap-3">
+                                        <div className="p-2 bg-white rounded-md border text-slate-500">
+                                            <Monitor className="h-5 w-5" />
+                                        </div>
+                                        <div className="flex-1 space-y-1">
+                                            <div className="font-semibold text-sm flex items-center gap-2">
+                                                {selectedIssue.equipment_name}
+                                                <Badge variant="outline" className="text-[10px] font-normal text-slate-500">
+                                                    {selectedIssue.equipment_type_name}
+                                                </Badge>
+                                            </div>
+                                            {selectedIssue.equipment_identifier && (
+                                                <div className="text-xs text-slate-500 font-mono">
+                                                    ID: {selectedIssue.equipment_identifier}
+                                                </div>
+                                            )}
+                                            <div className="text-xs text-slate-500 flex items-center gap-1">
+                                                <MapPin className="h-3 w-3" />
+                                                {selectedIssue.workstation_zone ? `Зона: ${selectedIssue.workstation_zone}` : 'Зона не указана'}
+                                                {selectedIssue.workstation_name && ` • ${selectedIssue.workstation_name}`}
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
 
                                 <div className="p-6 flex-1 overflow-auto space-y-6">
                                     <section className="space-y-2">
                                         <div className="flex items-center justify-between">
                                             <h4 className="text-xs font-black uppercase tracking-widest text-slate-400">Описание</h4>
-                                            <div className="text-xs text-muted-foreground">
-                                                Автор: {selectedIssue.reported_by_name}
+                                            {/* Author Info */}
+                                            <div className="flex items-center gap-2 text-xs text-slate-500">
+                                                <User className="h-3 w-3" />
+                                                <span className="font-medium text-slate-700">{selectedIssue.reported_by_name}</span>
+                                                <span className="text-slate-300">•</span>
+                                                <span>{new Date(selectedIssue.created_at).toLocaleString('ru-RU')}</span>
                                             </div>
                                         </div>
-                                        <p className="text-sm leading-relaxed bg-white p-3 rounded-md border">{selectedIssue.description || "Нет описания"}</p>
+                                        <div className="text-sm leading-relaxed bg-white p-4 rounded-lg border shadow-sm">
+                                            {selectedIssue.description || "Нет описания"}
+                                        </div>
                                     </section>
 
                                     <section className="space-y-2">
@@ -740,43 +784,65 @@ export default function IssuesBoard() {
 
                                     <section className="space-y-4">
                                         <h4 className="text-xs font-black uppercase tracking-widest text-slate-400">Управление статусом</h4>
-                                        <div className="grid grid-cols-2 gap-3">
-                                            {selectedIssue.status === 'OPEN' && (
-                                                <Button className="w-full bg-blue-600" onClick={() => handleUpdateStatus(selectedIssue.id, 'IN_PROGRESS')}>
-                                                    <Clock className="mr-2 h-4 w-4" /> Принять в работу
-                                                </Button>
-                                            )}
-                                            {(selectedIssue.status === 'OPEN' || selectedIssue.status === 'IN_PROGRESS') && (
-                                                <DialogTrigger asChild>
-                                                    <Button variant="outline" className="w-full border-green-200 text-green-700 hover:bg-green-50" onClick={() => { }}>
-                                                        <CheckCircle2 className="mr-2 h-4 w-4" /> Решить проблему
-                                                    </Button>
-                                                </DialogTrigger>
-                                            )}
-                                            {selectedIssue.status === 'RESOLVED' && (
-                                                <Button className="w-full bg-slate-700 col-span-2" onClick={() => handleUpdateStatus(selectedIssue.id, 'CLOSED')}>
-                                                    <ShieldCheck className="mr-2 h-4 w-4" /> Закрыть тикет
-                                                </Button>
-                                            )}
-                                        </div>
+                                        
+                                        {/* Dynamic Action Buttons */}
+                                        {selectedIssue.status === 'OPEN' && (
+                                            <Button className="w-full h-12 text-base bg-blue-600 hover:bg-blue-700 shadow-sm" onClick={() => handleUpdateStatus(selectedIssue.id, 'IN_PROGRESS')}>
+                                                <PlayCircle className="mr-2 h-5 w-5" />
+                                                Взять в работу
+                                            </Button>
+                                        )}
 
-                                        {/* Resolution Form */}
-                                        {(selectedIssue.status === 'OPEN' || selectedIssue.status === 'IN_PROGRESS') && (
-                                            <div className="pt-4 space-y-3">
-                                                <Label className="text-xs">Заметки о решении</Label>
-                                                <textarea
-                                                    className="w-full h-24 rounded-lg border p-3 text-sm"
-                                                    placeholder="Опишите, что было сделано..."
-                                                    value={resolutionNotes}
-                                                    onChange={(e) => setResolutionNotes(e.target.value)}
-                                                />
-                                                <Button
-                                                    className="w-full bg-green-600"
-                                                    disabled={!resolutionNotes || isUploading}
-                                                    onClick={handleResolveWithPhotos}
-                                                >
-                                                    {isUploading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                                    Завершить ремонт
+                                        {selectedIssue.status === 'IN_PROGRESS' && (
+                                            <div className="space-y-4">
+                                                <div className="bg-green-50/50 border border-green-100 rounded-lg p-4 space-y-3">
+                                                    <Label className="text-green-800 font-medium">Решение проблемы</Label>
+                                                    <textarea
+                                                        className="w-full h-24 rounded-lg border p-3 text-sm focus:ring-2 focus:ring-green-500/20 outline-none"
+                                                        placeholder="Опишите выполненные работы..."
+                                                        value={resolutionNotes}
+                                                        onChange={(e) => setResolutionNotes(e.target.value)}
+                                                    />
+                                                    <Button
+                                                        className="w-full bg-green-600 hover:bg-green-700"
+                                                        disabled={!resolutionNotes || isUploading}
+                                                        onClick={handleResolveWithPhotos}
+                                                    >
+                                                        {isUploading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                                        <CheckCircle2 className="mr-2 h-4 w-4" />
+                                                        Завершить ремонт
+                                                    </Button>
+                                                </div>
+                                                <Button variant="outline" className="w-full text-slate-500" onClick={() => handleUpdateStatus(selectedIssue.id, 'OPEN')}>
+                                                    Вернуть статус "Открыто"
+                                                </Button>
+                                            </div>
+                                        )}
+
+                                        {selectedIssue.status === 'RESOLVED' && (
+                                            <div className="p-4 bg-green-50 border border-green-200 rounded-lg text-center space-y-3">
+                                                <div className="flex items-center justify-center text-green-700 gap-2 font-medium">
+                                                    <CheckCircle2 className="h-5 w-5" />
+                                                    Проблема решена
+                                                </div>
+                                                <Button variant="outline" className="w-full bg-white" onClick={() => handleUpdateStatus(selectedIssue.id, 'CLOSED')}>
+                                                    <ShieldCheck className="mr-2 h-4 w-4" />
+                                                    Закрыть тикет (Архив)
+                                                </Button>
+                                                <Button variant="ghost" size="sm" className="text-slate-500 hover:text-slate-700" onClick={() => handleUpdateStatus(selectedIssue.id, 'IN_PROGRESS')}>
+                                                    Вернуть в работу
+                                                </Button>
+                                            </div>
+                                        )}
+
+                                        {selectedIssue.status === 'CLOSED' && (
+                                            <div className="p-4 bg-slate-50 border rounded-lg text-center">
+                                                <div className="flex items-center justify-center text-slate-500 gap-2 font-medium mb-3">
+                                                    <ShieldCheck className="h-5 w-5" />
+                                                    Тикет закрыт
+                                                </div>
+                                                <Button variant="outline" size="sm" onClick={() => handleUpdateStatus(selectedIssue.id, 'OPEN')}>
+                                                    Переоткрыть
                                                 </Button>
                                             </div>
                                         )}
@@ -799,7 +865,7 @@ export default function IssuesBoard() {
                                     <h3 className="font-semibold flex items-center gap-2">
                                         <MessageSquare className="h-4 w-4" /> Обсуждение
                                     </h3>
-                                    <Badge variant="secondary">{comments.length}</Badge>
+                                    {/* Removed Badge Counter as requested */}
                                 </div>
                                 
                                 <div className="flex-1 overflow-y-auto p-4 space-y-4">

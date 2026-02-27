@@ -37,6 +37,7 @@ export async function GET(
                 i.*,
                 e.name as equipment_name,
                 e.type as equipment_type,
+                e.identifier as equipment_identifier,
                 et.name_ru as equipment_type_name,
                 w.name as workstation_name,
                 w.zone as workstation_zone,
