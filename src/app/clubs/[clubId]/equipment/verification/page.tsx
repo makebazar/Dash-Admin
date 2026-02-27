@@ -20,7 +20,8 @@ import {
     Trash2,
     Layers,
     ChevronDown,
-    ChevronUp
+    ChevronUp,
+    Calendar
 } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -67,6 +68,7 @@ const getEquipmentIcon = (type: string) => {
         case 'HEADSET': return <Headphones className="h-4 w-4" />;
         case 'CONSOLE': return <Gamepad2 className="h-4 w-4" />;
         case 'TV': return <Tv className="h-4 w-4" />;
+        case 'CLEANING': return <div className="inline-flex items-center rounded-full border py-0.5 transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 text-foreground text-[10px] h-5 px-1.5 font-normal ml-auto sm:ml-0 bg-blue-50 text-blue-700 border-blue-200">Уборка</div>;
         default: return <Box className="h-4 w-4" />;
     }
 }
@@ -87,6 +89,7 @@ export default function VerificationPage() {
     // Image Viewer State
     const [viewerOpen, setViewerOpen] = useState(false)
     const [viewerImage, setViewerImage] = useState("")
+    const [currentTaskPhotos, setCurrentTaskPhotos] = useState<string[]>([])
 
     useEffect(() => {
         fetchTasks()
@@ -167,10 +170,25 @@ export default function VerificationPage() {
         }
     }
 
-    const openImage = (src: string, e: React.MouseEvent) => {
+    const openImage = (src: string, photos: string[], e: React.MouseEvent) => {
         e.stopPropagation()
         setViewerImage(src)
+        setCurrentTaskPhotos(photos)
         setViewerOpen(true)
+    }
+
+    const handleNextImage = () => {
+        const currentIndex = currentTaskPhotos.indexOf(viewerImage)
+        if (currentIndex < currentTaskPhotos.length - 1) {
+            setViewerImage(currentTaskPhotos[currentIndex + 1])
+        }
+    }
+
+    const handlePrevImage = () => {
+        const currentIndex = currentTaskPhotos.indexOf(viewerImage)
+        if (currentIndex > 0) {
+            setViewerImage(currentTaskPhotos[currentIndex - 1])
+        }
     }
 
     const toggleExpand = (taskId: string) => {
@@ -216,26 +234,26 @@ export default function VerificationPage() {
     return (
         <div className="p-8 space-y-8 max-w-5xl mx-auto">
             {/* Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="bg-white border rounded-xl shadow-sm p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="flex items-center gap-4">
                     <Link href={`/clubs/${clubId}/equipment`}>
-                        <Button variant="ghost" size="icon">
-                            <ArrowLeft className="h-5 w-5" />
+                        <Button variant="ghost" size="icon" className="h-10 w-10 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-full">
+                            <ArrowLeft className="h-6 w-6" />
                         </Button>
                     </Link>
                     <div>
-                        <h1 className="text-3xl font-bold tracking-tight">Проверка отчетов</h1>
-                        <p className="text-muted-foreground">Верификация выполненных работ и фотоотчетов</p>
+                        <h1 className="text-xl font-bold tracking-tight text-slate-900">Проверка отчетов</h1>
+                        <p className="text-sm text-muted-foreground">Верификация выполненных работ</p>
                     </div>
                 </div>
 
                 {/* Filters */}
                 {tasks.length > 0 && (
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                         <Select value={filterZone} onValueChange={setFilterZone}>
-                            <SelectTrigger className="w-[180px]">
-                                <Layers className="mr-2 h-4 w-4 text-muted-foreground" />
-                                <SelectValue placeholder="Все зоны" />
+                            <SelectTrigger className="w-[160px] h-9 text-sm bg-slate-50 border-slate-200">
+                                <Layers className="mr-2 h-3.5 w-3.5 text-slate-400" />
+                                <SelectValue placeholder="Зона" />
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="all">Все зоны</SelectItem>
@@ -244,9 +262,9 @@ export default function VerificationPage() {
                         </Select>
 
                         <Select value={filterEmployee} onValueChange={setFilterEmployee}>
-                            <SelectTrigger className="w-[180px]">
-                                <User className="mr-2 h-4 w-4 text-muted-foreground" />
-                                <SelectValue placeholder="Все сотрудники" />
+                            <SelectTrigger className="w-[160px] h-9 text-sm bg-slate-50 border-slate-200">
+                                <User className="mr-2 h-3.5 w-3.5 text-slate-400" />
+                                <SelectValue placeholder="Сотрудник" />
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="all">Все сотрудники</SelectItem>
@@ -304,7 +322,8 @@ export default function VerificationPage() {
                                                 <div className="flex items-center gap-4 flex-1 min-w-0">
                                                     <div className={cn(
                                                         "h-10 w-10 rounded-lg flex items-center justify-center shrink-0 transition-colors",
-                                                        isExpanded ? "bg-primary/10 text-primary" : "bg-slate-100 text-slate-500"
+                                                        isExpanded ? "bg-primary/10 text-primary" : "bg-slate-100 text-slate-500",
+                                                        task.equipment_type === 'CLEANING' && "w-auto px-0 bg-transparent"
                                                     )}>
                                                         {getEquipmentIcon(task.equipment_type)}
                                                     </div>
@@ -325,6 +344,10 @@ export default function VerificationPage() {
                                                             <div className="flex items-center gap-1">
                                                                 <User className="h-3 w-3" />
                                                                 {task.completed_by_name?.split(' ')[0]}
+                                                            </div>
+                                                            <div className="flex items-center gap-1">
+                                                                <Calendar className="h-3 w-3" />
+                                                                {task.completed_at ? format(new Date(task.completed_at), 'dd.MM', { locale: ru }) : '-'}
                                                             </div>
                                                             <div className="flex items-center gap-1">
                                                                 <Clock className="h-3 w-3" />
@@ -358,15 +381,15 @@ export default function VerificationPage() {
                                                                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                                                                     {task.photos.map((photo, i) => (
                                                                         <div 
-                                                                            key={i} 
-                                                                            className="group relative aspect-video bg-white rounded-lg overflow-hidden border shadow-sm cursor-zoom-in hover:ring-2 ring-primary/50 transition-all"
-                                                                            onClick={(e) => openImage(photo, e)}
-                                                                        >
-                                                                            <img 
-                                                                                src={photo} 
-                                                                                alt={`Фото ${i+1}`} 
-                                                                                className="w-full h-full object-cover" 
-                                                                            />
+                                                                                key={i} 
+                                                                                className="group relative aspect-video bg-white rounded-lg overflow-hidden border shadow-sm cursor-zoom-in hover:ring-2 ring-primary/50 transition-all"
+                                                                                onClick={(e) => openImage(photo, task.photos || [], e)}
+                                                                            >
+                                                                                <img 
+                                                                                    src={photo} 
+                                                                                    alt={`Фото ${i+1}`} 
+                                                                                    className="w-full h-full object-cover" 
+                                                                                />
                                                                             <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
                                                                                 <Eye className="text-white drop-shadow-md h-6 w-6" />
                                                                             </div>
@@ -446,6 +469,9 @@ export default function VerificationPage() {
                 src={viewerImage} 
                 isOpen={viewerOpen} 
                 onClose={() => setViewerOpen(false)} 
+                images={currentTaskPhotos}
+                onNext={handleNextImage}
+                onPrev={handlePrevImage}
             />
         </div>
     )

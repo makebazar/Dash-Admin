@@ -1,7 +1,8 @@
+
 "use client"
 
 import * as React from "react"
-import { X, ZoomIn, ZoomOut, RotateCw, RotateCcw, Maximize2 } from "lucide-react"
+import { X, ZoomIn, ZoomOut, RotateCw, RotateCcw, Maximize2, ChevronLeft, ChevronRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
@@ -10,14 +11,39 @@ interface ImageViewerProps {
     alt?: string
     isOpen: boolean
     onClose: () => void
+    images?: string[] // Optional array of images for navigation
+    onNext?: () => void
+    onPrev?: () => void
+    hasNext?: boolean
+    hasPrev?: boolean
 }
 
-export function ImageViewer({ src, alt, isOpen, onClose }: ImageViewerProps) {
+export function ImageViewer({ src, alt, isOpen, onClose, images, onNext, onPrev, hasNext, hasPrev }: ImageViewerProps) {
     const [scale, setScale] = React.useState(1)
     const [rotation, setRotation] = React.useState(0)
     const [position, setPosition] = React.useState({ x: 0, y: 0 })
     const [isDragging, setIsDragging] = React.useState(false)
     const [startPos, setStartPos] = React.useState({ x: 0, y: 0 })
+
+    // Determine navigation availability
+    const showPrev = hasPrev || (images && images.indexOf(src) > 0)
+    const showNext = hasNext || (images && images.indexOf(src) < images.length - 1)
+
+    // Internal handlers for array-based navigation
+    const handleNext = () => {
+        if (onNext) {
+            onNext()
+        } else if (images) {
+            const currentIndex = images.indexOf(src)
+            if (currentIndex < images.length - 1) {
+                // We rely on the parent updating the 'src' prop, but we can't trigger it directly without a callback that accepts the new src
+                // So we assume the parent handles logic via onNext, OR we need a way to notify parent.
+                // Since the current interface is controlled, we really need the parent to handle the state change.
+                // If onNext is provided, we use it. If not, this internal logic won't work unless we change the component to be uncontrolled or accept onIndexChange.
+                // For now, let's assume onNext/onPrev are passed if navigation is desired.
+            }
+        }
+    }
 
     React.useEffect(() => {
         if (isOpen) {
@@ -38,6 +64,20 @@ export function ImageViewer({ src, alt, isOpen, onClose }: ImageViewerProps) {
             setPosition({ x: 0, y: 0 })
         }
     }, [src, isOpen])
+
+    // Keyboard navigation
+    React.useEffect(() => {
+        if (!isOpen) return
+
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'ArrowRight' && showNext && onNext) onNext()
+            if (e.key === 'ArrowLeft' && showPrev && onPrev) onPrev()
+            if (e.key === 'Escape') onClose()
+        }
+
+        window.addEventListener('keydown', handleKeyDown)
+        return () => window.removeEventListener('keydown', handleKeyDown)
+    }, [isOpen, showNext, showPrev, onNext, onPrev, onClose])
 
     if (!isOpen) return null
 
@@ -94,6 +134,29 @@ export function ImageViewer({ src, alt, isOpen, onClose }: ImageViewerProps) {
                     <Maximize2 className="h-4 w-4" />
                 </Button>
             </div>
+
+            {/* Navigation Buttons */}
+            {showPrev && onPrev && (
+                <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    onClick={(e) => { e.stopPropagation(); onPrev() }} 
+                    className="absolute left-4 top-1/2 -translate-y-1/2 text-white hover:bg-white/20 rounded-full h-12 w-12 z-[151]"
+                >
+                    <ChevronLeft className="h-8 w-8" />
+                </Button>
+            )}
+            
+            {showNext && onNext && (
+                <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    onClick={(e) => { e.stopPropagation(); onNext() }} 
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-white hover:bg-white/20 rounded-full h-12 w-12 z-[151]"
+                >
+                    <ChevronRight className="h-8 w-8" />
+                </Button>
+            )}
 
             {/* Close button */}
             <Button 
