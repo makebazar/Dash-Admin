@@ -6,11 +6,8 @@ import { useParams, useRouter } from "next/navigation"
 import { 
     CheckCircle2, 
     XCircle, 
-    AlertTriangle, 
     Clock, 
-    Search,
     User,
-    Calendar,
     ArrowLeft,
     Eye,
     Monitor,
@@ -21,22 +18,14 @@ import {
     Tv,
     Box,
     Trash2,
-    Filter,
-    Layers
+    Layers,
+    ChevronDown,
+    ChevronUp
 } from "lucide-react"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import {
-    Sheet,
-    SheetContent,
-    SheetDescription,
-    SheetFooter,
-    SheetHeader,
-    SheetTitle,
-} from "@/components/ui/sheet"
 import {
     Select,
     SelectContent,
@@ -48,6 +37,7 @@ import { format } from "date-fns"
 import { ru } from "date-fns/locale"
 import { ImageViewer } from "@/components/ui/image-viewer"
 import Link from "next/link"
+import { cn } from "@/lib/utils"
 
 interface VerificationTask {
     id: string
@@ -70,14 +60,14 @@ interface VerificationTask {
 
 const getEquipmentIcon = (type: string) => {
     switch (type) {
-        case 'PC': return <Monitor className="h-5 w-5" />;
-        case 'MONITOR': return <Monitor className="h-5 w-5" />;
-        case 'KEYBOARD': return <Keyboard className="h-5 w-5" />;
-        case 'MOUSE': return <Mouse className="h-5 w-5" />;
-        case 'HEADSET': return <Headphones className="h-5 w-5" />;
-        case 'CONSOLE': return <Gamepad2 className="h-5 w-5" />;
-        case 'TV': return <Tv className="h-5 w-5" />;
-        default: return <Box className="h-5 w-5" />;
+        case 'PC': return <Monitor className="h-4 w-4" />;
+        case 'MONITOR': return <Monitor className="h-4 w-4" />;
+        case 'KEYBOARD': return <Keyboard className="h-4 w-4" />;
+        case 'MOUSE': return <Mouse className="h-4 w-4" />;
+        case 'HEADSET': return <Headphones className="h-4 w-4" />;
+        case 'CONSOLE': return <Gamepad2 className="h-4 w-4" />;
+        case 'TV': return <Tv className="h-4 w-4" />;
+        default: return <Box className="h-4 w-4" />;
     }
 }
 
@@ -86,7 +76,7 @@ export default function VerificationPage() {
     const router = useRouter()
     const [tasks, setTasks] = useState<VerificationTask[]>([])
     const [isLoading, setIsLoading] = useState(true)
-    const [selectedTask, setSelectedTask] = useState<VerificationTask | null>(null)
+    const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null)
     const [comment, setComment] = useState("")
     const [isSubmitting, setIsSubmitting] = useState(false)
     
@@ -117,8 +107,7 @@ export default function VerificationPage() {
         }
     }
 
-    const handleVerify = async (action: 'APPROVE' | 'REJECT') => {
-        if (!selectedTask) return
+    const handleVerify = async (task: VerificationTask, action: 'APPROVE' | 'REJECT') => {
         if (action === 'REJECT' && !comment.trim()) {
             alert("Пожалуйста, укажите причину возврата на доработку")
             return
@@ -126,7 +115,7 @@ export default function VerificationPage() {
 
         setIsSubmitting(true)
         try {
-            const res = await fetch(`/api/clubs/${clubId}/equipment/maintenance/${selectedTask.id}/verify`, {
+            const res = await fetch(`/api/clubs/${clubId}/equipment/maintenance/${task.id}/verify`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -137,9 +126,11 @@ export default function VerificationPage() {
 
             if (res.ok) {
                 // Remove from list
-                setTasks(prev => prev.filter(t => t.id !== selectedTask.id))
-                setSelectedTask(null)
-                setComment("")
+                setTasks(prev => prev.filter(t => t.id !== task.id))
+                if (expandedTaskId === task.id) {
+                    setExpandedTaskId(null)
+                    setComment("")
+                }
             } else {
                 alert("Ошибка при сохранении решения")
             }
@@ -151,19 +142,20 @@ export default function VerificationPage() {
         }
     }
 
-    const handleDelete = async () => {
-        if (!selectedTask) return
+    const handleDelete = async (task: VerificationTask) => {
         if (!confirm("Вы уверены, что хотите удалить этот отчет? Это действие нельзя отменить.")) return
 
         setIsSubmitting(true)
         try {
-            const res = await fetch(`/api/clubs/${clubId}/equipment/maintenance/${selectedTask.id}`, {
+            const res = await fetch(`/api/clubs/${clubId}/equipment/maintenance/${task.id}`, {
                 method: 'DELETE'
             })
 
             if (res.ok) {
-                setTasks(prev => prev.filter(t => t.id !== selectedTask.id))
-                setSelectedTask(null)
+                setTasks(prev => prev.filter(t => t.id !== task.id))
+                if (expandedTaskId === task.id) {
+                    setExpandedTaskId(null)
+                }
             } else {
                 alert("Ошибка при удалении")
             }
@@ -175,9 +167,20 @@ export default function VerificationPage() {
         }
     }
 
-    const openImage = (src: string) => {
+    const openImage = (src: string, e: React.MouseEvent) => {
+        e.stopPropagation()
         setViewerImage(src)
         setViewerOpen(true)
+    }
+
+    const toggleExpand = (taskId: string) => {
+        if (expandedTaskId === taskId) {
+            setExpandedTaskId(null)
+            setComment("")
+        } else {
+            setExpandedTaskId(taskId)
+            setComment("")
+        }
     }
 
     // Extract unique zones and employees for filters
@@ -211,7 +214,7 @@ export default function VerificationPage() {
     }, [tasks, filterZone, filterEmployee])
 
     return (
-        <div className="p-8 space-y-8 max-w-7xl mx-auto">
+        <div className="p-8 space-y-8 max-w-5xl mx-auto">
             {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="flex items-center gap-4">
@@ -275,235 +278,169 @@ export default function VerificationPage() {
             ) : (
                 <div className="space-y-8">
                     {groupedTasks.map(([zoneName, zoneTasks]) => (
-                        <div key={zoneName} className="space-y-4">
+                        <div key={zoneName} className="space-y-3">
                             <div className="flex items-center gap-2 pb-2 border-b">
                                 <Layers className="h-5 w-5 text-slate-500" />
                                 <h2 className="text-xl font-semibold text-slate-800">{zoneName}</h2>
                                 <Badge variant="secondary" className="ml-2">{zoneTasks.length}</Badge>
                             </div>
                             
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                                {zoneTasks.map((task) => (
-                                    <Card 
-                                        key={task.id} 
-                                        className="hover:shadow-md transition-all cursor-pointer border-l-4 border-l-amber-400 group" 
-                                        onClick={() => setSelectedTask(task)}
-                                    >
-                                        <CardHeader className="pb-3">
-                                            <div className="flex justify-between items-start">
-                                                <div className="flex items-center gap-2">
-                                                    <div className="p-2 bg-slate-100 rounded-lg group-hover:bg-amber-50 transition-colors">
+                            <div className="flex flex-col gap-3">
+                                {zoneTasks.map((task) => {
+                                    const isExpanded = expandedTaskId === task.id
+                                    return (
+                                        <div 
+                                            key={task.id} 
+                                            className={cn(
+                                                "bg-white border rounded-xl overflow-hidden transition-all shadow-sm",
+                                                isExpanded ? "ring-2 ring-primary/20 border-primary/30" : "hover:border-slate-300"
+                                            )}
+                                        >
+                                            {/* Summary Row */}
+                                            <div 
+                                                className="p-4 flex items-center justify-between cursor-pointer hover:bg-slate-50 transition-colors"
+                                                onClick={() => toggleExpand(task.id)}
+                                            >
+                                                <div className="flex items-center gap-4 flex-1 min-w-0">
+                                                    <div className={cn(
+                                                        "h-10 w-10 rounded-lg flex items-center justify-center shrink-0 transition-colors",
+                                                        isExpanded ? "bg-primary/10 text-primary" : "bg-slate-100 text-slate-500"
+                                                    )}>
                                                         {getEquipmentIcon(task.equipment_type)}
                                                     </div>
-                                                    <div className="overflow-hidden">
-                                                        <CardTitle className="text-base truncate" title={task.equipment_name}>{task.equipment_name}</CardTitle>
-                                                        <CardDescription className="text-xs truncate">
-                                                            {task.workstation_name || 'Общее оборудование'}
-                                                        </CardDescription>
+                                                    
+                                                    <div className="min-w-0 flex-1">
+                                                        <div className="flex items-center gap-2 mb-0.5">
+                                                            <span className="font-semibold text-sm truncate">{task.equipment_name}</span>
+                                                            {task.workstation_name && (
+                                                                <span className="text-xs text-muted-foreground bg-slate-100 px-1.5 py-0.5 rounded">
+                                                                    {task.workstation_name}
+                                                                </span>
+                                                            )}
+                                                            <Badge variant="outline" className="text-[10px] h-5 px-1.5 font-normal ml-auto sm:ml-0">
+                                                                {task.task_type}
+                                                            </Badge>
+                                                        </div>
+                                                        <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                                                            <div className="flex items-center gap-1">
+                                                                <User className="h-3 w-3" />
+                                                                {task.completed_by_name?.split(' ')[0]}
+                                                            </div>
+                                                            <div className="flex items-center gap-1">
+                                                                <Clock className="h-3 w-3" />
+                                                                {task.completed_at ? format(new Date(task.completed_at), 'HH:mm', { locale: ru }) : '-'}
+                                                            </div>
+                                                            {task.photos && task.photos.length > 0 && (
+                                                                <div className="flex items-center gap-1 text-blue-600 font-medium">
+                                                                    <Eye className="h-3 w-3" />
+                                                                    {task.photos.length} фото
+                                                                </div>
+                                                            )}
+                                                        </div>
                                                     </div>
                                                 </div>
-                                            </div>
-                                        </CardHeader>
-                                        <CardContent className="pb-3 text-sm space-y-3">
-                                            <div className="flex justify-between items-center text-xs text-muted-foreground bg-slate-50 p-2 rounded-md">
-                                                <div className="flex items-center gap-1.5">
-                                                    <User className="h-3 w-3" />
-                                                    <span className="truncate max-w-[80px]">{task.completed_by_name?.split(' ')[0] || '...'}</span>
-                                                </div>
-                                                <div className="flex items-center gap-1.5">
-                                                    <Clock className="h-3 w-3" />
-                                                    <span>
-                                                        {task.completed_at ? format(new Date(task.completed_at), 'HH:mm', { locale: ru }) : '-'}
-                                                    </span>
+
+                                                <div className="flex items-center gap-3 pl-4 border-l ml-4">
+                                                    {isExpanded ? <ChevronUp className="h-5 w-5 text-muted-foreground" /> : <ChevronDown className="h-5 w-5 text-muted-foreground" />}
                                                 </div>
                                             </div>
-                                            
-                                            {task.photos && task.photos.length > 0 ? (
-                                                <div className="grid grid-cols-3 gap-1 mt-2">
-                                                    {task.photos.slice(0, 3).map((photo, i) => (
-                                                        <div key={i} className="aspect-square rounded-md overflow-hidden relative border bg-slate-50">
-                                                            <img src={photo} className="h-full w-full object-cover" alt="" />
+
+                                            {/* Expanded Details */}
+                                            {isExpanded && (
+                                                <div className="border-t bg-slate-50/50 p-6 animate-in slide-in-from-top-2 duration-200">
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                                        {/* Photos */}
+                                                        <div>
+                                                            <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-2">
+                                                                <Eye className="h-3 w-3" /> Фотоотчет
+                                                            </h4>
+                                                            {task.photos && task.photos.length > 0 ? (
+                                                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                                                    {task.photos.map((photo, i) => (
+                                                                        <div 
+                                                                            key={i} 
+                                                                            className="group relative aspect-video bg-white rounded-lg overflow-hidden border shadow-sm cursor-zoom-in hover:ring-2 ring-primary/50 transition-all"
+                                                                            onClick={(e) => openImage(photo, e)}
+                                                                        >
+                                                                            <img 
+                                                                                src={photo} 
+                                                                                alt={`Фото ${i+1}`} 
+                                                                                className="w-full h-full object-cover" 
+                                                                            />
+                                                                            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+                                                                                <Eye className="text-white drop-shadow-md h-6 w-6" />
+                                                                            </div>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            ) : (
+                                                                <div className="h-24 flex items-center justify-center border-2 border-dashed border-slate-200 rounded-lg text-muted-foreground text-sm">
+                                                                    Нет фото
+                                                                </div>
+                                                            )}
                                                         </div>
-                                                    ))}
-                                                    {task.photos.length > 3 && (
-                                                        <div className="aspect-square rounded-md bg-slate-100 flex items-center justify-center text-xs font-medium text-slate-500 border">
-                                                            +{task.photos.length - 3}
+
+                                                        {/* Actions & Comments */}
+                                                        <div className="space-y-4">
+                                                            {task.notes && (
+                                                                <div className="bg-white p-3 rounded-lg border shadow-sm">
+                                                                    <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Комментарий сотрудника</div>
+                                                                    <p className="text-sm text-slate-700 italic">"{task.notes}"</p>
+                                                                </div>
+                                                            )}
+
+                                                            <div className="space-y-2">
+                                                                <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Ваше решение</div>
+                                                                <Textarea 
+                                                                    placeholder="Комментарий (обязательно для возврата)..." 
+                                                                    value={comment}
+                                                                    onChange={(e) => setComment(e.target.value)}
+                                                                    className="bg-white min-h-[80px] resize-none text-sm"
+                                                                />
+                                                            </div>
+
+                                                            <div className="flex gap-2 pt-2">
+                                                                <Button 
+                                                                    variant="outline" 
+                                                                    className="flex-1 border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
+                                                                    onClick={() => handleVerify(task, 'REJECT')}
+                                                                    disabled={isSubmitting || !comment.trim()}
+                                                                >
+                                                                    <XCircle className="mr-2 h-4 w-4" />
+                                                                    На доработку
+                                                                </Button>
+                                                                <Button 
+                                                                    className="flex-1 bg-green-600 hover:bg-green-700 text-white shadow-sm" 
+                                                                    onClick={() => handleVerify(task, 'APPROVE')}
+                                                                    disabled={isSubmitting}
+                                                                >
+                                                                    <CheckCircle2 className="mr-2 h-4 w-4" />
+                                                                    Одобрить
+                                                                </Button>
+                                                            </div>
+                                                            
+                                                            <div className="flex justify-center pt-2">
+                                                                <button 
+                                                                    onClick={() => handleDelete(task)}
+                                                                    className="text-xs text-slate-400 hover:text-red-500 flex items-center gap-1 transition-colors"
+                                                                    disabled={isSubmitting}
+                                                                >
+                                                                    <Trash2 className="h-3 w-3" />
+                                                                    Удалить отчет
+                                                                </button>
+                                                            </div>
                                                         </div>
-                                                    )}
-                                                </div>
-                                            ) : (
-                                                <div className="h-14 flex items-center justify-center text-xs text-muted-foreground bg-slate-50 rounded border border-dashed">
-                                                    Нет фото
+                                                    </div>
                                                 </div>
                                             )}
-                                        </CardContent>
-                                        <CardFooter className="pt-0">
-                                            <Button className="w-full group-hover:bg-amber-600 group-hover:text-white transition-colors" variant="secondary" size="sm">
-                                                Проверить
-                                            </Button>
-                                        </CardFooter>
-                                    </Card>
-                                ))}
+                                        </div>
+                                    )
+                                })}
                             </div>
                         </div>
                     ))}
                 </div>
             )}
-
-            {/* Verification Sheet (Side Panel) */}
-            <Sheet open={!!selectedTask} onOpenChange={(open) => !open && setSelectedTask(null)}>
-                <SheetContent className="w-full sm:max-w-2xl p-0 flex flex-col bg-slate-50/50">
-                    {selectedTask && (
-                        <>
-                            <SheetHeader className="px-6 py-4 bg-background border-b shadow-sm z-10">
-                                <SheetTitle className="flex items-center gap-2">
-                                    <div className="p-2 bg-amber-100 text-amber-700 rounded-lg">
-                                        {getEquipmentIcon(selectedTask.equipment_type)}
-                                    </div>
-                                    <div>
-                                        <div className="text-lg">{selectedTask.equipment_name}</div>
-                                        <div className="text-xs font-normal text-muted-foreground flex items-center gap-2">
-                                            <Badge variant="outline" className="text-[10px] h-5 px-1.5 font-normal bg-slate-50">
-                                                {selectedTask.task_type}
-                                            </Badge>
-                                            <span>•</span>
-                                            <span>{selectedTask.zone_name || 'Без зоны'}</span>
-                                        </div>
-                                    </div>
-                                </SheetTitle>
-                            </SheetHeader>
-
-                            <div className="flex-1 overflow-y-auto">
-                                <div className="p-6 space-y-6">
-                                    {/* Info Cards */}
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div className="bg-white p-3 rounded-xl border shadow-sm">
-                                            <div className="text-xs text-muted-foreground mb-1">Исполнитель</div>
-                                            <div className="font-medium flex items-center gap-2">
-                                                <div className="h-6 w-6 rounded-full bg-slate-100 flex items-center justify-center text-xs">
-                                                    <User className="h-3 w-3" />
-                                                </div>
-                                                {selectedTask.completed_by_name}
-                                            </div>
-                                        </div>
-                                        <div className="bg-white p-3 rounded-xl border shadow-sm">
-                                            <div className="text-xs text-muted-foreground mb-1">Время выполнения</div>
-                                            <div className="font-medium flex items-center gap-2">
-                                                <div className="h-6 w-6 rounded-full bg-slate-100 flex items-center justify-center text-xs">
-                                                    <Clock className="h-3 w-3" />
-                                                </div>
-                                                {selectedTask.completed_at ? format(new Date(selectedTask.completed_at), 'd MMM HH:mm', { locale: ru }) : '-'}
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* Photos Section */}
-                                    <div className="space-y-3">
-                                        <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-                                            <Eye className="h-4 w-4" /> Фотоотчет ({selectedTask.photos?.length || 0})
-                                        </h3>
-                                        
-                                        {selectedTask.photos && selectedTask.photos.length > 0 ? (
-                                            <div className="grid grid-cols-2 gap-3">
-                                                {selectedTask.photos.map((photo, i) => (
-                                                    <div 
-                                                        key={i} 
-                                                        className="group relative aspect-video bg-white rounded-xl overflow-hidden border shadow-sm cursor-zoom-in hover:ring-2 ring-primary/50 transition-all"
-                                                        onClick={() => openImage(photo)}
-                                                    >
-                                                        <img 
-                                                            src={photo} 
-                                                            alt={`Фото ${i+1}`} 
-                                                            className="w-full h-full object-cover" 
-                                                        />
-                                                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
-                                                            <div className="bg-white/90 p-2 rounded-full shadow-lg">
-                                                                <Eye className="text-slate-900 h-5 w-5" />
-                                                            </div>
-                                                        </div>
-                                                        <div className="absolute bottom-2 right-2 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity">
-                                                            Фото {i + 1}
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        ) : (
-                                            <div className="h-32 flex flex-col items-center justify-center border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/50 text-muted-foreground">
-                                                <Eye className="h-8 w-8 text-slate-300 mb-2" />
-                                                <p className="text-sm">Нет фото</p>
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    {/* Comments Section */}
-                                    <div className="space-y-3">
-                                        <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-                                            <User className="h-4 w-4" /> Комментарии
-                                        </h3>
-
-                                        {selectedTask.notes ? (
-                                            <div className="bg-white p-4 rounded-xl border shadow-sm relative">
-                                                <p className="text-slate-700 italic text-sm pl-2 border-l-2 border-amber-300">
-                                                    "{selectedTask.notes}"
-                                                </p>
-                                                <div className="mt-2 text-[10px] text-muted-foreground text-right">— Комментарий сотрудника</div>
-                                            </div>
-                                        ) : (
-                                            <div className="text-sm text-muted-foreground italic pl-2">
-                                                Комментарий отсутствует
-                                            </div>
-                                        )}
-
-                                        <div className="pt-4 border-t">
-                                            <label className="text-sm font-medium mb-2 block">Ваш комментарий (для доработки):</label>
-                                            <Textarea 
-                                                placeholder="Опишите, что нужно исправить..." 
-                                                value={comment}
-                                                onChange={(e) => setComment(e.target.value)}
-                                                className="resize-none bg-white min-h-[100px]"
-                                            />
-                                        </div>
-                                    </div>
-                                    
-                                    <div className="h-20" /> {/* Spacer for footer */}
-                                </div>
-                            </div>
-
-                            <SheetFooter className="p-6 bg-white border-t mt-auto z-10 flex-col gap-3 sm:flex-col sm:space-x-0">
-                                <div className="grid grid-cols-2 gap-3 w-full">
-                                    <Button 
-                                        variant="outline" 
-                                        className="w-full border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 h-12"
-                                        onClick={() => handleVerify('REJECT')}
-                                        disabled={isSubmitting || !comment.trim()}
-                                    >
-                                        <XCircle className="mr-2 h-5 w-5" />
-                                        На доработку
-                                    </Button>
-                                    <Button 
-                                        className="w-full bg-green-600 hover:bg-green-700 text-white shadow-lg shadow-green-200 h-12" 
-                                        onClick={() => handleVerify('APPROVE')}
-                                        disabled={isSubmitting}
-                                    >
-                                        <CheckCircle2 className="mr-2 h-5 w-5" />
-                                        Одобрить
-                                    </Button>
-                                </div>
-                                <Button 
-                                    variant="ghost" 
-                                    size="sm" 
-                                    className="text-slate-400 hover:text-red-500 hover:bg-red-50 w-full"
-                                    onClick={handleDelete}
-                                    disabled={isSubmitting}
-                                >
-                                    <Trash2 className="mr-2 h-4 w-4" />
-                                    Удалить отчет навсегда
-                                </Button>
-                            </SheetFooter>
-                        </>
-                    )}
-                </SheetContent>
-            </Sheet>
 
             <ImageViewer 
                 src={viewerImage} 
