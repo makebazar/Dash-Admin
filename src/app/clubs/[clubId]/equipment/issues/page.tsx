@@ -511,13 +511,12 @@ export default function IssuesBoard() {
                             <TableHead className="w-[30%]">Проблема</TableHead>
                             <TableHead>Ответственный</TableHead>
                             <TableHead>Дата</TableHead>
-                            <TableHead className="text-right">Действия</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
                         {isLoading ? (
                             <TableRow>
-                                <TableCell colSpan={7} className="h-24 text-center">
+                                <TableCell colSpan={6} className="h-24 text-center">
                                     <div className="flex items-center justify-center text-muted-foreground">
                                         <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Загрузка...
                                     </div>
@@ -525,7 +524,7 @@ export default function IssuesBoard() {
                             </TableRow>
                         ) : filteredIssues.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={7} className="h-32 text-center text-muted-foreground">
+                                <TableCell colSpan={6} className="h-32 text-center text-muted-foreground">
                                     Нет инцидентов в этой категории
                                 </TableCell>
                             </TableRow>
@@ -542,9 +541,11 @@ export default function IssuesBoard() {
                                         <div className="flex flex-col">
                                             <span className="font-medium">{issue.equipment_name}</span>
                                             <span className="text-xs text-muted-foreground">{issue.equipment_type_name}</span>
-                                            {issue.workstation_name && (
+                                            {(issue.workstation_name || issue.workstation_zone) && (
                                                 <span className="text-[10px] text-slate-500 mt-0.5 flex items-center gap-1">
-                                                    📍 {issue.workstation_name}
+                                                    📍 {issue.workstation_zone ? `Зона ${issue.workstation_zone}` : ''}
+                                                    {issue.workstation_zone && issue.workstation_name ? ' • ' : ''}
+                                                    {issue.workstation_name}
                                                 </span>
                                             )}
                                         </div>
@@ -570,14 +571,6 @@ export default function IssuesBoard() {
                                     <TableCell className="text-sm text-muted-foreground">
                                         {new Date(issue.created_at).toLocaleDateString("ru-RU")}
                                         <div className="text-[10px]">{new Date(issue.created_at).toLocaleTimeString("ru-RU", { hour: '2-digit', minute: '2-digit' })}</div>
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                        <Button variant="ghost" size="sm" onClick={(e) => {
-                                            e.stopPropagation() // Prevent row click
-                                            setSelectedIssue(issue)
-                                        }}>
-                                            <MoreHorizontal className="h-4 w-4" />
-                                        </Button>
                                     </TableCell>
                                 </TableRow>
                             ))
