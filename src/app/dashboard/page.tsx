@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
-import { Sidebar } from "@/components/layout/Sidebar"
+import { Sidebar, SidebarContent, useSidebarLogic } from "@/components/layout/Sidebar"
+import { MobileNav } from "@/components/layout/MobileNav"
 import { Building2, Plus, TrendingUp, TrendingDown, Loader2, Trash2, AlertTriangle } from "lucide-react"
 
 interface Club {
@@ -26,6 +27,9 @@ export default function DashboardPage() {
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
     const [clubToDelete, setClubToDelete] = useState<Club | null>(null)
     const [isDeleting, setIsDeleting] = useState(false)
+
+    // Sidebar Logic
+    const sidebarLogic = useSidebarLogic()
 
     // Form state
     const [clubName, setClubName] = useState('')
@@ -121,10 +125,24 @@ export default function DashboardPage() {
     }
 
     return (
-        <div className="flex min-h-screen bg-background">
-            <Sidebar clubs={clubs} />
+        <div className="flex min-h-screen bg-background flex-col md:flex-row">
+            <Sidebar 
+                clubs={clubs} 
+                hasEmployeeClubs={sidebarLogic.hasEmployeeClubs}
+                handleLogout={sidebarLogic.handleLogout}
+            />
 
-            <main className="ml-64 flex-1 p-8">
+            <div className="md:hidden">
+                <MobileNav>
+                    <SidebarContent 
+                        clubs={clubs}
+                        hasEmployeeClubs={sidebarLogic.hasEmployeeClubs}
+                        handleLogout={sidebarLogic.handleLogout}
+                    />
+                </MobileNav>
+            </div>
+
+            <main className="flex-1 p-4 md:p-8 md:ml-64 w-full max-w-full overflow-hidden">
                 <div className="mb-8 flex items-center justify-between">
                     <div>
                         <h1 className="text-3xl font-bold tracking-tight">Обзор</h1>
@@ -158,7 +176,7 @@ export default function DashboardPage() {
                 ) : (
                     <>
                         {/* Stats Cards */}
-                        <div className="mb-8 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                        <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                             <Card>
                                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                                     <CardTitle className="text-sm font-medium">
@@ -221,22 +239,22 @@ export default function DashboardPage() {
                                         <div
                                             key={club.id}
                                             onClick={() => router.push(`/clubs/${club.id}`)}
-                                            className="flex cursor-pointer items-center justify-between rounded-lg border border-border p-4 transition-colors hover:bg-accent group"
+                                            className="flex cursor-pointer items-center justify-between rounded-lg border border-border p-4 transition-colors hover:bg-accent group flex-col sm:flex-row sm:items-center gap-4"
                                         >
-                                            <div className="flex items-center gap-4">
-                                                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-to-tr from-purple-500 to-blue-500">
+                                            <div className="flex items-center gap-4 w-full sm:w-auto">
+                                                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-to-tr from-purple-500 to-blue-500 shrink-0">
                                                     <Building2 className="h-6 w-6 text-white" />
                                                 </div>
-                                                <div>
-                                                    <h3 className="font-semibold">{club.name}</h3>
+                                                <div className="min-w-0">
+                                                    <h3 className="font-semibold truncate">{club.name}</h3>
                                                     {club.address && (
-                                                        <p className="text-sm text-muted-foreground">
+                                                        <p className="text-sm text-muted-foreground truncate">
                                                             {club.address}
                                                         </p>
                                                     )}
                                                 </div>
                                             </div>
-                                            <div className="flex items-center gap-4">
+                                            <div className="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-end">
                                                 <div className="text-right">
                                                     <p className="text-sm text-muted-foreground">
                                                         Создан {new Date(club.created_at).toLocaleDateString('ru-RU')}
@@ -245,7 +263,7 @@ export default function DashboardPage() {
                                                 <Button
                                                     variant="ghost"
                                                     size="icon"
-                                                    className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20"
+                                                    className="opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20"
                                                     onClick={(e) => confirmDeleteClub(e, club)}
                                                     title="Удалить клуб"
                                                 >

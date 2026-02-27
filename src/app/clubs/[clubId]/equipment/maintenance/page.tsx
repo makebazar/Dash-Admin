@@ -525,7 +525,16 @@ export default function MaintenanceSchedule() {
             <MaintenanceSessionWizard
                 isOpen={isSessionOpen}
                 onClose={() => setIsSessionOpen(false)}
-                tasks={sessionTasks}
+                tasks={sessionTasks.map(t => ({ 
+                    ...t, 
+                    workstation_name: t.workstation_name ?? undefined,
+                    workstation_zone: t.workstation_zone ?? undefined,
+                    last_cleaned_at: t.last_cleaned_at ?? undefined,
+                    assigned_user_id: t.assigned_user_id ?? undefined,
+                    assigned_to_name: t.assigned_to_name ?? undefined,
+                    completed_at: t.completed_at ?? undefined,
+                    completed_by_name: t.completed_by_name ?? undefined,
+                }))}
                 onComplete={handleSessionComplete}
             />
         </div>
