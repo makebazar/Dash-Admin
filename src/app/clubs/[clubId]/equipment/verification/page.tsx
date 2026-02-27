@@ -1,6 +1,7 @@
+
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { 
     CheckCircle2, 
@@ -19,7 +20,9 @@ import {
     Gamepad2,
     Tv,
     Box,
-    Trash2
+    Trash2,
+    Filter,
+    Layers
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -27,13 +30,20 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from "@/components/ui/dialog"
+    Sheet,
+    SheetContent,
+    SheetDescription,
+    SheetFooter,
+    SheetHeader,
+    SheetTitle,
+} from "@/components/ui/sheet"
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
 import { format } from "date-fns"
 import { ru } from "date-fns/locale"
 import { ImageViewer } from "@/components/ui/image-viewer"
@@ -80,6 +90,10 @@ export default function VerificationPage() {
     const [comment, setComment] = useState("")
     const [isSubmitting, setIsSubmitting] = useState(false)
     
+    // Filters
+    const [filterZone, setFilterZone] = useState<string>("all")
+    const [filterEmployee, setFilterEmployee] = useState<string>("all")
+
     // Image Viewer State
     const [viewerOpen, setViewerOpen] = useState(false)
     const [viewerImage, setViewerImage] = useState("")
@@ -166,19 +180,78 @@ export default function VerificationPage() {
         setViewerOpen(true)
     }
 
+    // Extract unique zones and employees for filters
+    const zones = useMemo(() => {
+        const unique = new Set(tasks.map(t => t.zone_name || 'Без зоны'))
+        return Array.from(unique).sort()
+    }, [tasks])
+
+    const employees = useMemo(() => {
+        const unique = new Set(tasks.map(t => t.completed_by_name || 'Неизвестный'))
+        return Array.from(unique).sort()
+    }, [tasks])
+
+    // Group tasks by Zone
+    const groupedTasks = useMemo(() => {
+        const filtered = tasks.filter(t => {
+            if (filterZone !== "all" && (t.zone_name || 'Без зоны') !== filterZone) return false
+            if (filterEmployee !== "all" && (t.completed_by_name || 'Неизвестный') !== filterEmployee) return false
+            return true
+        })
+
+        const groups: Record<string, VerificationTask[]> = {}
+        
+        filtered.forEach(task => {
+            const zone = task.zone_name || 'Общая зона'
+            if (!groups[zone]) groups[zone] = []
+            groups[zone].push(task)
+        })
+
+        return Object.entries(groups).sort((a, b) => a[0].localeCompare(b[0]))
+    }, [tasks, filterZone, filterEmployee])
+
     return (
         <div className="p-8 space-y-8 max-w-7xl mx-auto">
             {/* Header */}
-            <div className="flex items-center gap-4">
-                <Link href={`/clubs/${clubId}/equipment`}>
-                    <Button variant="ghost" size="icon">
-                        <ArrowLeft className="h-5 w-5" />
-                    </Button>
-                </Link>
-                <div>
-                    <h1 className="text-3xl font-bold tracking-tight">Проверка отчетов</h1>
-                    <p className="text-muted-foreground">Верификация выполненных работ и фотоотчетов</p>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-4">
+                    <Link href={`/clubs/${clubId}/equipment`}>
+                        <Button variant="ghost" size="icon">
+                            <ArrowLeft className="h-5 w-5" />
+                        </Button>
+                    </Link>
+                    <div>
+                        <h1 className="text-3xl font-bold tracking-tight">Проверка отчетов</h1>
+                        <p className="text-muted-foreground">Верификация выполненных работ и фотоотчетов</p>
+                    </div>
                 </div>
+
+                {/* Filters */}
+                {tasks.length > 0 && (
+                    <div className="flex gap-2">
+                        <Select value={filterZone} onValueChange={setFilterZone}>
+                            <SelectTrigger className="w-[180px]">
+                                <Layers className="mr-2 h-4 w-4 text-muted-foreground" />
+                                <SelectValue placeholder="Все зоны" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">Все зоны</SelectItem>
+                                {zones.map(z => <SelectItem key={z} value={z}>{z}</SelectItem>)}
+                            </SelectContent>
+                        </Select>
+
+                        <Select value={filterEmployee} onValueChange={setFilterEmployee}>
+                            <SelectTrigger className="w-[180px]">
+                                <User className="mr-2 h-4 w-4 text-muted-foreground" />
+                                <SelectValue placeholder="Все сотрудники" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">Все сотрудники</SelectItem>
+                                {employees.map(e => <SelectItem key={e} value={e}>{e}</SelectItem>)}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                )}
             </div>
 
             {/* Content */}
@@ -200,192 +273,237 @@ export default function VerificationPage() {
                     </CardContent>
                 </Card>
             ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {tasks.map((task) => (
-                        <Card key={task.id} className="hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-amber-400" onClick={() => setSelectedTask(task)}>
-                            <CardHeader className="pb-3">
-                                <div className="flex justify-between items-start">
-                                    <div className="flex items-center gap-2">
-                                        <div className="p-2 bg-slate-100 rounded-lg">
-                                            {getEquipmentIcon(task.equipment_type)}
-                                        </div>
-                                        <div>
-                                            <CardTitle className="text-base">{task.equipment_name}</CardTitle>
-                                            <CardDescription className="text-xs">
-                                                {task.workstation_name ? `${task.workstation_name} • ` : ''}
-                                                {task.zone_name || 'Без зоны'}
-                                            </CardDescription>
-                                        </div>
-                                    </div>
-                                    <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">
-                                        Ожидает
-                                    </Badge>
-                                </div>
-                            </CardHeader>
-                            <CardContent className="pb-3 text-sm space-y-3">
-                                <div className="flex items-center gap-2 text-muted-foreground">
-                                    <User className="h-4 w-4" />
-                                    <span>{task.completed_by_name || 'Неизвестный'}</span>
-                                </div>
-                                <div className="flex items-center gap-2 text-muted-foreground">
-                                    <Clock className="h-4 w-4" />
-                                    <span>
-                                        {task.completed_at ? format(new Date(task.completed_at), 'd MMM HH:mm', { locale: ru }) : '-'}
-                                    </span>
-                                </div>
-                                {task.photos && task.photos.length > 0 && (
-                                    <div className="flex gap-1 mt-2">
-                                        {task.photos.slice(0, 3).map((photo, i) => (
-                                            <div key={i} className="h-12 w-12 rounded-md overflow-hidden relative border bg-slate-50">
-                                                <img src={photo} className="h-full w-full object-cover" alt="" />
+                <div className="space-y-8">
+                    {groupedTasks.map(([zoneName, zoneTasks]) => (
+                        <div key={zoneName} className="space-y-4">
+                            <div className="flex items-center gap-2 pb-2 border-b">
+                                <Layers className="h-5 w-5 text-slate-500" />
+                                <h2 className="text-xl font-semibold text-slate-800">{zoneName}</h2>
+                                <Badge variant="secondary" className="ml-2">{zoneTasks.length}</Badge>
+                            </div>
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                                {zoneTasks.map((task) => (
+                                    <Card 
+                                        key={task.id} 
+                                        className="hover:shadow-md transition-all cursor-pointer border-l-4 border-l-amber-400 group" 
+                                        onClick={() => setSelectedTask(task)}
+                                    >
+                                        <CardHeader className="pb-3">
+                                            <div className="flex justify-between items-start">
+                                                <div className="flex items-center gap-2">
+                                                    <div className="p-2 bg-slate-100 rounded-lg group-hover:bg-amber-50 transition-colors">
+                                                        {getEquipmentIcon(task.equipment_type)}
+                                                    </div>
+                                                    <div className="overflow-hidden">
+                                                        <CardTitle className="text-base truncate" title={task.equipment_name}>{task.equipment_name}</CardTitle>
+                                                        <CardDescription className="text-xs truncate">
+                                                            {task.workstation_name || 'Общее оборудование'}
+                                                        </CardDescription>
+                                                    </div>
+                                                </div>
                                             </div>
-                                        ))}
-                                        {task.photos.length > 3 && (
-                                            <div className="h-12 w-12 rounded-md bg-slate-100 flex items-center justify-center text-xs font-medium text-slate-500 border">
-                                                +{task.photos.length - 3}
+                                        </CardHeader>
+                                        <CardContent className="pb-3 text-sm space-y-3">
+                                            <div className="flex justify-between items-center text-xs text-muted-foreground bg-slate-50 p-2 rounded-md">
+                                                <div className="flex items-center gap-1.5">
+                                                    <User className="h-3 w-3" />
+                                                    <span className="truncate max-w-[80px]">{task.completed_by_name?.split(' ')[0] || '...'}</span>
+                                                </div>
+                                                <div className="flex items-center gap-1.5">
+                                                    <Clock className="h-3 w-3" />
+                                                    <span>
+                                                        {task.completed_at ? format(new Date(task.completed_at), 'HH:mm', { locale: ru }) : '-'}
+                                                    </span>
+                                                </div>
                                             </div>
-                                        )}
-                                    </div>
-                                )}
-                            </CardContent>
-                            <CardFooter className="pt-0">
-                                <Button className="w-full" variant="secondary" size="sm">
-                                    Проверить
-                                </Button>
-                            </CardFooter>
-                        </Card>
+                                            
+                                            {task.photos && task.photos.length > 0 ? (
+                                                <div className="grid grid-cols-3 gap-1 mt-2">
+                                                    {task.photos.slice(0, 3).map((photo, i) => (
+                                                        <div key={i} className="aspect-square rounded-md overflow-hidden relative border bg-slate-50">
+                                                            <img src={photo} className="h-full w-full object-cover" alt="" />
+                                                        </div>
+                                                    ))}
+                                                    {task.photos.length > 3 && (
+                                                        <div className="aspect-square rounded-md bg-slate-100 flex items-center justify-center text-xs font-medium text-slate-500 border">
+                                                            +{task.photos.length - 3}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ) : (
+                                                <div className="h-14 flex items-center justify-center text-xs text-muted-foreground bg-slate-50 rounded border border-dashed">
+                                                    Нет фото
+                                                </div>
+                                            )}
+                                        </CardContent>
+                                        <CardFooter className="pt-0">
+                                            <Button className="w-full group-hover:bg-amber-600 group-hover:text-white transition-colors" variant="secondary" size="sm">
+                                                Проверить
+                                            </Button>
+                                        </CardFooter>
+                                    </Card>
+                                ))}
+                            </div>
+                        </div>
                     ))}
                 </div>
             )}
 
-            {/* Verification Dialog */}
-            <Dialog open={!!selectedTask} onOpenChange={(open) => !open && setSelectedTask(null)}>
-                <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-                    <DialogHeader>
-                        <DialogTitle>Проверка задачи</DialogTitle>
-                        <DialogDescription>
-                            Проверьте выполненную работу и фотоотчет
-                        </DialogDescription>
-                    </DialogHeader>
-
+            {/* Verification Sheet (Side Panel) */}
+            <Sheet open={!!selectedTask} onOpenChange={(open) => !open && setSelectedTask(null)}>
+                <SheetContent className="w-full sm:max-w-2xl p-0 flex flex-col bg-slate-50/50">
                     {selectedTask && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-4">
-                            {/* Left: Details */}
-                            <div className="space-y-6">
-                                <div className="p-4 bg-slate-50 rounded-lg space-y-3 border">
-                                    <div className="grid grid-cols-2 gap-2 text-sm">
-                                        <span className="text-muted-foreground">Оборудование:</span>
-                                        <span className="font-medium text-right">{selectedTask.equipment_name}</span>
-                                        
-                                        <span className="text-muted-foreground">Место:</span>
-                                        <span className="font-medium text-right">{selectedTask.workstation_name || '-'}</span>
-                                        
-                                        <span className="text-muted-foreground">Тип работ:</span>
-                                        <span className="font-medium text-right translate-y-[2px]">
-                                            <Badge variant="secondary" className="text-xs">{selectedTask.task_type}</Badge>
-                                        </span>
-
-                                        <span className="text-muted-foreground">Исполнитель:</span>
-                                        <span className="font-medium text-right">{selectedTask.completed_by_name}</span>
-
-                                        <span className="text-muted-foreground">Выполнено:</span>
-                                        <span className="font-medium text-right">
-                                            {selectedTask.completed_at ? format(new Date(selectedTask.completed_at), 'd MMMM yyyy, HH:mm', { locale: ru }) : '-'}
-                                        </span>
+                        <>
+                            <SheetHeader className="px-6 py-4 bg-background border-b shadow-sm z-10">
+                                <SheetTitle className="flex items-center gap-2">
+                                    <div className="p-2 bg-amber-100 text-amber-700 rounded-lg">
+                                        {getEquipmentIcon(selectedTask.equipment_type)}
                                     </div>
-                                </div>
-
-                                {selectedTask.notes && (
                                     <div>
-                                        <h4 className="text-sm font-medium mb-2">Комментарий сотрудника:</h4>
-                                        <p className="text-sm text-muted-foreground bg-slate-50 p-3 rounded-md italic border">
-                                            "{selectedTask.notes}"
-                                        </p>
+                                        <div className="text-lg">{selectedTask.equipment_name}</div>
+                                        <div className="text-xs font-normal text-muted-foreground flex items-center gap-2">
+                                            <Badge variant="outline" className="text-[10px] h-5 px-1.5 font-normal bg-slate-50">
+                                                {selectedTask.task_type}
+                                            </Badge>
+                                            <span>•</span>
+                                            <span>{selectedTask.zone_name || 'Без зоны'}</span>
+                                        </div>
                                     </div>
-                                )}
+                                </SheetTitle>
+                            </SheetHeader>
 
-                                <div className="space-y-3 pt-4 border-t">
-                                    <h4 className="text-sm font-medium">Ваше решение:</h4>
-                                    <Textarea 
-                                        placeholder="Комментарий (обязательно при возврате на доработку)..." 
-                                        value={comment}
-                                        onChange={(e) => setComment(e.target.value)}
-                                        className="resize-none"
-                                        rows={3}
-                                    />
-                                    <div className="flex gap-3 pt-2">
-                                        <Button 
-                                            variant="destructive" 
-                                            className="flex-1" 
-                                            onClick={() => handleVerify('REJECT')}
-                                            disabled={isSubmitting || !comment.trim()}
-                                        >
-                                            <XCircle className="mr-2 h-4 w-4" />
-                                            На доработку
-                                        </Button>
-                                        <Button 
-                                            className="flex-1 bg-green-600 hover:bg-green-700" 
-                                            onClick={() => handleVerify('APPROVE')}
-                                            disabled={isSubmitting}
-                                        >
-                                            <CheckCircle2 className="mr-2 h-4 w-4" />
-                                            Одобрить
-                                        </Button>
+                            <div className="flex-1 overflow-y-auto">
+                                <div className="p-6 space-y-6">
+                                    {/* Info Cards */}
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="bg-white p-3 rounded-xl border shadow-sm">
+                                            <div className="text-xs text-muted-foreground mb-1">Исполнитель</div>
+                                            <div className="font-medium flex items-center gap-2">
+                                                <div className="h-6 w-6 rounded-full bg-slate-100 flex items-center justify-center text-xs">
+                                                    <User className="h-3 w-3" />
+                                                </div>
+                                                {selectedTask.completed_by_name}
+                                            </div>
+                                        </div>
+                                        <div className="bg-white p-3 rounded-xl border shadow-sm">
+                                            <div className="text-xs text-muted-foreground mb-1">Время выполнения</div>
+                                            <div className="font-medium flex items-center gap-2">
+                                                <div className="h-6 w-6 rounded-full bg-slate-100 flex items-center justify-center text-xs">
+                                                    <Clock className="h-3 w-3" />
+                                                </div>
+                                                {selectedTask.completed_at ? format(new Date(selectedTask.completed_at), 'd MMM HH:mm', { locale: ru }) : '-'}
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div className="flex justify-center pt-2">
-                                        <Button 
-                                            variant="ghost" 
-                                            size="sm" 
-                                            className="text-slate-400 hover:text-red-500 hover:bg-red-50 w-full"
-                                            onClick={handleDelete}
-                                            disabled={isSubmitting}
-                                        >
-                                            <Trash2 className="mr-2 h-4 w-4" />
-                                            Удалить отчет навсегда
-                                        </Button>
+
+                                    {/* Photos Section */}
+                                    <div className="space-y-3">
+                                        <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                                            <Eye className="h-4 w-4" /> Фотоотчет ({selectedTask.photos?.length || 0})
+                                        </h3>
+                                        
+                                        {selectedTask.photos && selectedTask.photos.length > 0 ? (
+                                            <div className="grid grid-cols-2 gap-3">
+                                                {selectedTask.photos.map((photo, i) => (
+                                                    <div 
+                                                        key={i} 
+                                                        className="group relative aspect-video bg-white rounded-xl overflow-hidden border shadow-sm cursor-zoom-in hover:ring-2 ring-primary/50 transition-all"
+                                                        onClick={() => openImage(photo)}
+                                                    >
+                                                        <img 
+                                                            src={photo} 
+                                                            alt={`Фото ${i+1}`} 
+                                                            className="w-full h-full object-cover" 
+                                                        />
+                                                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+                                                            <div className="bg-white/90 p-2 rounded-full shadow-lg">
+                                                                <Eye className="text-slate-900 h-5 w-5" />
+                                                            </div>
+                                                        </div>
+                                                        <div className="absolute bottom-2 right-2 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity">
+                                                            Фото {i + 1}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <div className="h-32 flex flex-col items-center justify-center border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/50 text-muted-foreground">
+                                                <Eye className="h-8 w-8 text-slate-300 mb-2" />
+                                                <p className="text-sm">Нет фото</p>
+                                            </div>
+                                        )}
                                     </div>
+
+                                    {/* Comments Section */}
+                                    <div className="space-y-3">
+                                        <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                                            <User className="h-4 w-4" /> Комментарии
+                                        </h3>
+
+                                        {selectedTask.notes ? (
+                                            <div className="bg-white p-4 rounded-xl border shadow-sm relative">
+                                                <p className="text-slate-700 italic text-sm pl-2 border-l-2 border-amber-300">
+                                                    "{selectedTask.notes}"
+                                                </p>
+                                                <div className="mt-2 text-[10px] text-muted-foreground text-right">— Комментарий сотрудника</div>
+                                            </div>
+                                        ) : (
+                                            <div className="text-sm text-muted-foreground italic pl-2">
+                                                Комментарий отсутствует
+                                            </div>
+                                        )}
+
+                                        <div className="pt-4 border-t">
+                                            <label className="text-sm font-medium mb-2 block">Ваш комментарий (для доработки):</label>
+                                            <Textarea 
+                                                placeholder="Опишите, что нужно исправить..." 
+                                                value={comment}
+                                                onChange={(e) => setComment(e.target.value)}
+                                                className="resize-none bg-white min-h-[100px]"
+                                            />
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="h-20" /> {/* Spacer for footer */}
                                 </div>
                             </div>
 
-                            {/* Right: Photos */}
-                            <div>
-                                <h4 className="text-sm font-medium mb-3 flex items-center justify-between">
-                                    <span>Фотоотчет ({selectedTask.photos?.length || 0})</span>
-                                    <span className="text-xs text-muted-foreground">Нажмите для просмотра</span>
-                                </h4>
-                                
-                                {selectedTask.photos && selectedTask.photos.length > 0 ? (
-                                    <div className="grid grid-cols-2 gap-3">
-                                        {selectedTask.photos.map((photo, i) => (
-                                            <div 
-                                                key={i} 
-                                                className="group relative aspect-video bg-slate-100 rounded-lg overflow-hidden border cursor-zoom-in hover:ring-2 ring-primary/50 transition-all"
-                                                onClick={() => openImage(photo)}
-                                            >
-                                                <img 
-                                                    src={photo} 
-                                                    alt={`Фото ${i+1}`} 
-                                                    className="w-full h-full object-cover" 
-                                                />
-                                                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
-                                                    <Eye className="text-white drop-shadow-md h-8 w-8" />
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                ) : (
-                                    <div className="h-64 flex flex-col items-center justify-center border-2 border-dashed rounded-lg bg-slate-50 text-muted-foreground">
-                                        <div className="p-4 bg-slate-100 rounded-full mb-3">
-                                            <Eye className="h-6 w-6 text-slate-400" />
-                                        </div>
-                                        <p className="text-sm">Нет прикрепленных фото</p>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
+                            <SheetFooter className="p-6 bg-white border-t mt-auto z-10 flex-col gap-3 sm:flex-col sm:space-x-0">
+                                <div className="grid grid-cols-2 gap-3 w-full">
+                                    <Button 
+                                        variant="outline" 
+                                        className="w-full border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 h-12"
+                                        onClick={() => handleVerify('REJECT')}
+                                        disabled={isSubmitting || !comment.trim()}
+                                    >
+                                        <XCircle className="mr-2 h-5 w-5" />
+                                        На доработку
+                                    </Button>
+                                    <Button 
+                                        className="w-full bg-green-600 hover:bg-green-700 text-white shadow-lg shadow-green-200 h-12" 
+                                        onClick={() => handleVerify('APPROVE')}
+                                        disabled={isSubmitting}
+                                    >
+                                        <CheckCircle2 className="mr-2 h-5 w-5" />
+                                        Одобрить
+                                    </Button>
+                                </div>
+                                <Button 
+                                    variant="ghost" 
+                                    size="sm" 
+                                    className="text-slate-400 hover:text-red-500 hover:bg-red-50 w-full"
+                                    onClick={handleDelete}
+                                    disabled={isSubmitting}
+                                >
+                                    <Trash2 className="mr-2 h-4 w-4" />
+                                    Удалить отчет навсегда
+                                </Button>
+                            </SheetFooter>
+                        </>
                     )}
-                </DialogContent>
-            </Dialog>
+                </SheetContent>
+            </Sheet>
 
             <ImageViewer 
                 src={viewerImage} 
