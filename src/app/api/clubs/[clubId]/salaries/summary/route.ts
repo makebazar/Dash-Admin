@@ -285,22 +285,27 @@ export async function GET(
             // Calculate Maintenance Bonus based on Scheme Mode
             let finalMaintenanceBonus = 0;
 
-            if (maintenanceBonusConfig && maintenanceBonusConfig.calculation_mode === 'MONTHLY') {
-                // Mode: Monthly Tiers (ignore per-task accrued bonuses)
-                const efficiency = monthTotalTasks > 0 ? (monthCompletedTasks / monthTotalTasks) * 100 : 0;
-                const thresholds = maintenanceBonusConfig.efficiency_thresholds || [];
-                
-                // Sort by threshold desc
-                const sortedTiers = [...thresholds].sort((a: any, b: any) => (b.from_percent || 0) - (a.from_percent || 0));
-                const achievedTier = sortedTiers.find((t: any) => efficiency >= (t.from_percent || 0));
-                
-                if (achievedTier) {
-                    finalMaintenanceBonus = parseFloat(achievedTier.amount || '0');
+            if (maintenanceBonusConfig) {
+                if (maintenanceBonusConfig.calculation_mode === 'MONTHLY') {
+                    // Mode: Monthly Tiers (ignore per-task accrued bonuses)
+                    const efficiency = monthTotalTasks > 0 ? (monthCompletedTasks / monthTotalTasks) * 100 : 0;
+                    const thresholds = maintenanceBonusConfig.efficiency_thresholds || [];
+                    
+                    // Sort by threshold desc
+                    const sortedTiers = [...thresholds].sort((a: any, b: any) => (b.from_percent || 0) - (a.from_percent || 0));
+                    const achievedTier = sortedTiers.find((t: any) => efficiency >= (t.from_percent || 0));
+                    
+                    if (achievedTier) {
+                        finalMaintenanceBonus = parseFloat(achievedTier.amount || '0');
+                    }
+                } else {
+                    // Mode: Per Task (default) - use accrued bonuses from DB
+                    // This includes both per-task bonuses and legacy monthly bonuses stored in DB
+                    finalMaintenanceBonus = totalMaintenanceBonus + totalMonthlyBonus;
                 }
             } else {
-                // Mode: Per Task (default) - use accrued bonuses from DB
-                // This includes both per-task bonuses and legacy monthly bonuses stored in DB
-                finalMaintenanceBonus = totalMaintenanceBonus + totalMonthlyBonus;
+                // If maintenance_kpi is NOT in scheme, force 0 even if tasks were completed
+                finalMaintenanceBonus = 0;
             }
 
             monthlyMetrics['maintenance_bonus'] = finalMaintenanceBonus;

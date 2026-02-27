@@ -673,14 +673,9 @@ export default function WorkplacesPage() {
                                                             const itemIssues = activeIssues.filter(i => i.equipment_id === item.id)
                                                             return (
                                                                 <div key={item.id} className={cn(
-                                                                    "flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-100 group/item hover:border-primary/20 hover:bg-primary/5 transition-colors relative overflow-hidden",
-                                                                    itemIssues.length > 0 && "bg-orange-50/50 border-orange-200"
+                                                                    "flex items-center justify-between p-2 pl-3 rounded-lg bg-slate-50 border border-slate-100 group/item hover:border-primary/20 hover:bg-primary/5 transition-all relative overflow-hidden",
+                                                                    itemIssues.length > 0 && "bg-orange-50/30 border-orange-200 border-l-[3px] border-l-orange-500 pl-2.5"
                                                                 )}>
-                                                                    {itemIssues.length > 0 && (
-                                                                        <div className="absolute top-0 right-0 w-3 h-3">
-                                                                            <div className="absolute top-[-3px] right-[-3px] w-6 h-6 bg-orange-500 rotate-45 transform origin-center" />
-                                                                        </div>
-                                                                    )}
                                                                     <div className="flex items-center gap-3 overflow-hidden relative z-10">
                                                                         <div className={cn(
                                                                             "h-8 w-8 rounded-md bg-white border flex items-center justify-center text-slate-500 shrink-0 relative",
