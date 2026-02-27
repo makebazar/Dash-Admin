@@ -44,8 +44,16 @@ export async function GET(
             [schemeId]
         );
 
+        // Use the latest version formula as the current scheme formula
+        const scheme = schemeResult.rows[0];
+        const latestVersion = versionsResult.rows[0];
+        
+        if (latestVersion && latestVersion.formula) {
+            scheme.formula = latestVersion.formula;
+        }
+
         return NextResponse.json({
-            scheme: schemeResult.rows[0],
+            scheme: scheme,
             versions: versionsResult.rows
         });
 
@@ -92,7 +100,7 @@ export async function PATCH(
         const { name, description, formula, is_active, period_bonuses, standard_monthly_shifts } = body;
 
         // Update scheme metadata if provided
-        if (name !== undefined || description !== undefined || is_active !== undefined || period_bonuses !== undefined || standard_monthly_shifts !== undefined) {
+        if (name !== undefined || description !== undefined || is_active !== undefined || period_bonuses !== undefined || standard_monthly_shifts !== undefined || formula !== undefined) {
             const updates: string[] = [];
             const values: any[] = [];
             let idx = 1;
@@ -116,6 +124,10 @@ export async function PATCH(
             if (standard_monthly_shifts !== undefined) {
                 updates.push(`standard_monthly_shifts = $${idx++}`);
                 values.push(standard_monthly_shifts);
+            }
+            if (formula !== undefined) {
+                updates.push(`formula = $${idx++}`);
+                values.push(JSON.stringify(formula));
             }
 
             if (updates.length > 0) {
