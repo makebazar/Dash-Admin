@@ -138,22 +138,31 @@ export default function WorkplacesPage() {
     const [thermalPasteNoteDrafts, setThermalPasteNoteDrafts] = useState<Record<string, string>>({})
     const [savingThermalId, setSavingThermalId] = useState<string | null>(null)
     const [isAssigningWorkstationId, setIsAssigningWorkstationId] = useState<string | null>(null)
+    const [activeIssues, setActiveIssues] = useState<any[]>([])
 
     const fetchData = useCallback(async () => {
         setIsLoading(true)
         try {
-            const [wsRes, eqRes, typesRes, empRes, zonesRes] = await Promise.all([
+            const [wsRes, eqRes, typesRes, empRes, zonesRes, issuesRes] = await Promise.all([
                 fetch(`/api/clubs/${clubId}/workstations`),
                 fetch(`/api/clubs/${clubId}/equipment?limit=1000`),
                 fetch(`/api/equipment-types`),
                 fetch(`/api/clubs/${clubId}/employees`),
-                fetch(`/api/clubs/${clubId}/zones`)
+                fetch(`/api/clubs/${clubId}/zones`),
+                fetch(`/api/clubs/${clubId}/equipment/issues`)
             ])
 
             const wsData = await wsRes.json()
             const eqData = await eqRes.json()
             const typesData = await typesRes.json()
             const empData = await empRes.json()
+
+            if (issuesRes.ok) {
+                const issuesData = await issuesRes.json()
+                // Filter only active issues
+                const active = (issuesData.issues || []).filter((i: any) => i.status !== 'CLOSED' && i.status !== 'RESOLVED')
+                setActiveIssues(active)
+            }
 
             if (zonesRes.ok) {
                 const zonesData = await zonesRes.json()
@@ -554,12 +563,20 @@ export default function WorkplacesPage() {
                                     {zone}
                                     <Badge variant="secondary" className="bg-slate-100 text-slate-600 border-none px-2">{workstations.filter(w => w.zone === zone).length}</Badge>
                                     {(() => {
-                                        const zoneInfo = zoneList.find(z => z.name === zone)
-                                        if (zoneInfo?.assigned_user_name) {
+                                        const zoneWorkstations = workstations.filter(w => w.zone === zone)
+                                        const zoneEquipmentIds = equipment
+                                            .filter(e => zoneWorkstations.some(w => w.id === e.workstation_id))
+                                            .map(e => e.id)
+                                        
+                                        const zoneIssuesCount = activeIssues.filter(issue => 
+                                            zoneEquipmentIds.includes(issue.equipment_id)
+                                        ).length
+
+                                        if (zoneIssuesCount > 0) {
                                             return (
-                                                <Badge variant="outline" className="ml-2 text-xs font-normal bg-green-50 text-green-700 border-green-200 gap-1 flex items-center">
-                                                    <User className="h-3 w-3" />
-                                                    {zoneInfo.assigned_user_name}
+                                                <Badge variant="destructive" className="ml-2 gap-1 flex items-center bg-rose-500 hover:bg-rose-600">
+                                                    <AlertTriangle className="h-3 w-3" />
+                                                    {zoneIssuesCount} проблем
                                                 </Badge>
                                             )
                                         }
@@ -571,16 +588,35 @@ export default function WorkplacesPage() {
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                                 {workstations.filter(w => w.zone === zone).map(ws => {
                                     const wsEquipment = equipment.filter(e => e.workstation_id === ws.id)
+                                    const wsIssueCount = activeIssues.filter(issue => 
+                                        wsEquipment.some(e => e.id === issue.equipment_id)
+                                    ).length
                                     
                                     return (
-                                        <Card key={ws.id} className="group hover:border-primary/50 transition-all border-slate-200 shadow-sm overflow-hidden flex flex-col h-full cursor-pointer" onClick={() => handleOpenDetails(ws.id)}>
+                                        <Card key={ws.id} className={cn(
+                                            "group hover:border-primary/50 transition-all border-slate-200 shadow-sm overflow-hidden flex flex-col h-full cursor-pointer",
+                                            wsIssueCount > 0 && "border-rose-200 bg-rose-50/10"
+                                        )} onClick={() => handleOpenDetails(ws.id)}>
                                             <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between space-y-0 bg-slate-50/50 border-b border-slate-100">
                                                 <div className="flex items-center gap-3">
-                                                    <div className="h-10 w-10 bg-white rounded-xl border flex items-center justify-center text-slate-400 font-bold shadow-sm">
+                                                    <div className={cn(
+                                                        "h-10 w-10 bg-white rounded-xl border flex items-center justify-center text-slate-400 font-bold shadow-sm relative",
+                                                        wsIssueCount > 0 && "border-rose-200 text-rose-500"
+                                                    )}>
                                                         {ws.name.replace(/[^0-9]/g, '') || <Monitor className="h-5 w-5" />}
+                                                        {wsIssueCount > 0 && (
+                                                            <div className="absolute -top-1 -right-1 h-3 w-3 bg-rose-500 rounded-full border-2 border-white" />
+                                                        )}
                                                     </div>
                                                     <div>
-                                                        <h4 className="font-bold text-slate-900 leading-tight">{ws.name}</h4>
+                                                        <h4 className="font-bold text-slate-900 leading-tight flex items-center gap-2">
+                                                            {ws.name}
+                                                            {wsIssueCount > 0 && (
+                                                                <Badge variant="destructive" className="h-4 px-1 text-[10px] bg-rose-500">
+                                                                    {wsIssueCount}
+                                                                </Badge>
+                                                            )}
+                                                        </h4>
                                                         <div className="flex flex-col gap-0.5 mt-0.5">
                                                             <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">{wsEquipment.length} устройств</p>
                                                             <div className="flex items-center gap-1.5" title={ws.assigned_user_name || "Не назначено"}>
