@@ -590,7 +590,7 @@ export default function WorkplacesPage() {
 
                                         if (zoneIssuesCount > 0) {
                                             return (
-                                                <Badge variant="destructive" className="ml-2 gap-1 flex items-center bg-rose-500 hover:bg-rose-600">
+                                                <Badge variant="outline" className="ml-2 gap-1 flex items-center bg-orange-50 text-orange-700 border-orange-200">
                                                     <AlertTriangle className="h-3 w-3" />
                                                     {zoneIssuesCount} проблем
                                                 </Badge>
@@ -611,27 +611,22 @@ export default function WorkplacesPage() {
                                     return (
                                         <Card key={ws.id} className={cn(
                                             "group hover:border-primary/50 transition-all border-slate-200 shadow-sm overflow-hidden flex flex-col h-full cursor-pointer",
-                                            wsIssueCount > 0 && "border-rose-200 bg-rose-50/10"
+                                            wsIssueCount > 0 && "border-orange-200 bg-orange-50/10"
                                         )} onClick={() => handleOpenDetails(ws.id)}>
                                             <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between space-y-0 bg-slate-50/50 border-b border-slate-100">
                                                 <div className="flex items-center gap-3">
                                                     <div className={cn(
                                                         "h-10 w-10 bg-white rounded-xl border flex items-center justify-center text-slate-400 font-bold shadow-sm relative",
-                                                        wsIssueCount > 0 && "border-rose-200 text-rose-500"
+                                                        wsIssueCount > 0 && "border-orange-200 text-orange-500"
                                                     )}>
                                                         {ws.name.replace(/[^0-9]/g, '') || <Monitor className="h-5 w-5" />}
                                                         {wsIssueCount > 0 && (
-                                                            <div className="absolute -top-1 -right-1 h-3 w-3 bg-rose-500 rounded-full border-2 border-white" />
+                                                            <div className="absolute -top-1 -right-1 h-2.5 w-2.5 bg-orange-500 rounded-full border-2 border-white animate-pulse" />
                                                         )}
                                                     </div>
                                                     <div>
                                                         <h4 className="font-bold text-slate-900 leading-tight flex items-center gap-2">
                                                             {ws.name}
-                                                            {wsIssueCount > 0 && (
-                                                                <Badge variant="destructive" className="h-4 px-1 text-[10px] bg-rose-500">
-                                                                    {wsIssueCount}
-                                                                </Badge>
-                                                            )}
                                                         </h4>
                                                         <div className="flex flex-col gap-0.5 mt-0.5">
                                                             <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">{wsEquipment.length} устройств</p>
@@ -678,31 +673,28 @@ export default function WorkplacesPage() {
                                                             const itemIssues = activeIssues.filter(i => i.equipment_id === item.id)
                                                             return (
                                                                 <div key={item.id} className={cn(
-                                                                    "flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-100 group/item hover:border-primary/20 hover:bg-primary/5 transition-colors",
-                                                                    itemIssues.length > 0 && "bg-rose-50 border-rose-200"
+                                                                    "flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-100 group/item hover:border-primary/20 hover:bg-primary/5 transition-colors relative overflow-hidden",
+                                                                    itemIssues.length > 0 && "bg-orange-50/50 border-orange-200"
                                                                 )}>
-                                                                    <div className="flex items-center gap-3 overflow-hidden">
+                                                                    {itemIssues.length > 0 && (
+                                                                        <div className="absolute top-0 right-0 w-3 h-3">
+                                                                            <div className="absolute top-[-3px] right-[-3px] w-6 h-6 bg-orange-500 rotate-45 transform origin-center" />
+                                                                        </div>
+                                                                    )}
+                                                                    <div className="flex items-center gap-3 overflow-hidden relative z-10">
                                                                         <div className={cn(
                                                                             "h-8 w-8 rounded-md bg-white border flex items-center justify-center text-slate-500 shrink-0 relative",
-                                                                            itemIssues.length > 0 && "border-rose-200 text-rose-500"
+                                                                            itemIssues.length > 0 && "border-orange-200 text-orange-500"
                                                                         )}>
                                                                             {getEquipmentIcon(item.type)}
-                                                                            {itemIssues.length > 0 && (
-                                                                                <div className="absolute -top-1 -right-1 h-2.5 w-2.5 bg-rose-500 rounded-full border border-white" />
-                                                                            )}
                                                                         </div>
                                                                         <div className="min-w-0">
                                                                             <p className={cn(
                                                                                 "text-xs font-semibold truncate text-slate-700 group-hover/item:text-primary",
-                                                                                itemIssues.length > 0 && "text-rose-700"
+                                                                                itemIssues.length > 0 && "text-orange-700"
                                                                             )}>{item.name}</p>
                                                                             <div className="flex items-center gap-1.5">
                                                                                 <p className="text-[10px] text-muted-foreground truncate">{item.brand} {item.model}</p>
-                                                                                {itemIssues.length > 0 && (
-                                                                                    <Badge variant="destructive" className="h-3.5 px-1 text-[9px] bg-rose-500">
-                                                                                        {itemIssues.length} {itemIssues.length === 1 ? 'проблема' : 'проблемы'}
-                                                                                    </Badge>
-                                                                                )}
                                                                             </div>
                                                                         </div>
                                                                     </div>
