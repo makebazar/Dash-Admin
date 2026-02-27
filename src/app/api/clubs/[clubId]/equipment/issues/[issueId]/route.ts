@@ -40,7 +40,7 @@ export async function PATCH(
             return NextResponse.json({ error: 'Issue not found' }, { status: 404 });
         }
 
-        const { status, resolution_notes } = body;
+        const { status, resolution_notes, assigned_to } = body;
 
         const updates: string[] = [];
         const values: any[] = [];
@@ -59,6 +59,12 @@ export async function PATCH(
 
                 updates.push(`resolved_at = CURRENT_TIMESTAMP`);
             }
+        }
+
+        if (assigned_to !== undefined) {
+            updates.push(`assigned_to = $${paramIndex}`);
+            values.push(assigned_to || null);
+            paramIndex++;
         }
 
         if (resolution_notes !== undefined) {

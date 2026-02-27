@@ -71,23 +71,8 @@ export async function POST(
             // Price per task is defined in the bonus amount
             const baseValue = Number(kpiBonus.amount) || 0;
 
-            // Check deadline
-            const now = new Date();
-            const dueDate = new Date(task.due_date);
-            const diffTime = now.getTime() - dueDate.getTime();
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
-            
-            // Allow tolerance
-            const tolerance = Number(kpiBonus.overdue_tolerance_days) || 3;
-            
-            if (diffDays > tolerance) {
-                // Late
-                appliedMultiplier = Number(kpiBonus.late_penalty_multiplier) || 0.5;
-            } else {
-                // On Time (or within tolerance)
-                // Default on time multiplier is 1.0, unless we want to add an "early bird" bonus later
-                appliedMultiplier = 1.0;
-            }
+            // Penalties removed as per request
+            appliedMultiplier = 1.0;
 
             bonusEarned = baseValue * appliedMultiplier;
         }

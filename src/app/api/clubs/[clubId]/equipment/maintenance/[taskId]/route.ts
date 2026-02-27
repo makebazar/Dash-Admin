@@ -85,14 +85,8 @@ export async function PATCH(
 
                     const config = kpiConfig.rows[0];
                     if (config?.enabled) {
-                        const dueDate = new Date(task.due_date);
-                        const today = new Date();
-                        today.setHours(0, 0, 0, 0);
-
-                        const isOnTime = today <= dueDate;
-                        const multiplier = isOnTime ?
-                            parseFloat(config.on_time_multiplier) :
-                            parseFloat(config.late_penalty_multiplier);
+                        // Penalties removed as per request
+                        const multiplier = 1.0;
 
                         const points = task.kpi_points || config.points_per_cleaning || 1;
                         let bonus = points * parseFloat(config.bonus_per_point) * multiplier;

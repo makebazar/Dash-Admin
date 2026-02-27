@@ -41,13 +41,15 @@ export async function GET(
                 w.name as workstation_name,
                 w.zone as workstation_zone,
                 ru.full_name as reported_by_name,
-                res.full_name as resolved_by_name
+                res.full_name as resolved_by_name,
+                au.full_name as assigned_to_name
             FROM equipment_issues i
             JOIN equipment e ON i.equipment_id = e.id
             LEFT JOIN equipment_types et ON e.type = et.code
             LEFT JOIN club_workstations w ON e.workstation_id = w.id
             LEFT JOIN users ru ON i.reported_by = ru.id
             LEFT JOIN users res ON i.resolved_by = res.id
+            LEFT JOIN users au ON i.assigned_to = au.id
             WHERE e.club_id = $1
         `;
         const queryParams: any[] = [clubId];
@@ -155,10 +157,10 @@ export async function POST(
         }
 
         const result = await query(
-            `INSERT INTO equipment_issues (club_id, equipment_id, reported_by, title, description, severity)
-             VALUES ($1, $2, $3, $4, $5, $6)
+            `INSERT INTO equipment_issues (equipment_id, reported_by, title, description, severity)
+             VALUES ($1, $2, $3, $4, $5)
              RETURNING *`,
-            [clubId, equipment_id, userId, title, description || null, severity || 'MEDIUM']
+            [equipment_id, userId, title, description || null, severity || 'MEDIUM']
         );
 
         return NextResponse.json(result.rows[0], { status: 201 });

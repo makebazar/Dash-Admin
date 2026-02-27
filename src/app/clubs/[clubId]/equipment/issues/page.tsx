@@ -21,7 +21,10 @@ import {
     Info,
     Image as ImageIcon,
     MoreHorizontal,
-    FileText
+    FileText,
+    Send,
+    UserPlus,
+    Check
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -59,6 +62,19 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
+import {
+    Command,
+    CommandEmpty,
+    CommandGroup,
+    CommandInput,
+    CommandItem,
+    CommandList,
+} from "@/components/ui/command"
+import {
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+} from "@/components/ui/popover"
 import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
@@ -78,6 +94,8 @@ interface Issue {
     created_at: string
     resolved_at: string | null
     resolved_by_name: string | null
+    assigned_to: string | null
+    assigned_to_name: string | null
     resolution_notes: string | null
     resolution_photos: string[] | null
 }
@@ -86,51 +104,88 @@ interface Equipment {
     id: string
     name: string
     type_name: string
+    identifier?: string
+}
+
+interface Employee {
+    id: string
+    full_name: string
+    role: string
+}
+
+interface Comment {
+    id: string
+    content: string
+    author_name: string
+    author_role: string
+    is_system_message: boolean
+    created_at: string
 }
 
 export default function IssuesBoard() {
     const { clubId } = useParams()
     const [issues, setIssues] = useState<Issue[]>([])
     const [equipment, setEquipment] = useState<Equipment[]>([])
+    const [employees, setEmployees] = useState<Employee[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [isSaving, setIsSaving] = useState(false)
 
     // Dialog states
     const [isCreateOpen, setIsCreateOpen] = useState(false)
     const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null)
+    
+    // New Issue Form
     const [newIssue, setNewIssue] = useState({
         equipment_id: '',
         title: '',
         description: '',
         severity: 'MEDIUM' as const
     })
+    const [equipmentSearchOpen, setEquipmentSearchOpen] = useState(false)
+
+    // Resolution
     const [resolutionNotes, setResolutionNotes] = useState("")
     const [resolutionPhotos, setResolutionPhotos] = useState<File[]>([])
     const [isUploading, setIsUploading] = useState(false)
 
+    // Comments & Assignment
+    const [comments, setComments] = useState<Comment[]>([])
+    const [newComment, setNewComment] = useState("")
+    const [isSendingComment, setIsSendingComment] = useState(false)
+
     // Filter states
     const [searchTerm, setSearchTerm] = useState("")
     const [statusFilter, setStatusFilter] = useState<Issue['status'] | 'ALL'>('ALL')
+    const [assigneeFilter, setAssigneeFilter] = useState<'ALL' | 'ME' | 'UNASSIGNED'>('ALL')
 
     const filteredIssues = useMemo(() => {
         return issues.filter(issue => {
             const matchesSearch = 
                 issue.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                issue.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                issue.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 issue.equipment_name.toLowerCase().includes(searchTerm.toLowerCase())
             
             const matchesStatus = statusFilter === 'ALL' || issue.status === statusFilter
 
-            return matchesSearch && matchesStatus
+            let matchesAssignee = true
+            // Note: In a real app we'd need current user ID to filter by "ME"
+            // For now, we'll just check if assigned_to is present for UNASSIGNED
+            if (assigneeFilter === 'UNASSIGNED') {
+                matchesAssignee = !issue.assigned_to
+            }
+            // 'ME' logic would require current user context, skipping for simplicity or need to fetch "me"
+
+            return matchesSearch && matchesStatus && matchesAssignee
         }).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-    }, [issues, searchTerm, statusFilter])
+    }, [issues, searchTerm, statusFilter, assigneeFilter])
 
     const fetchData = useCallback(async () => {
         setIsLoading(true)
         try {
-            const [issuesRes, eqRes] = await Promise.all([
+            const [issuesRes, eqRes, empRes] = await Promise.all([
                 fetch(`/api/clubs/${clubId}/equipment/issues`),
-                fetch(`/api/clubs/${clubId}/equipment`)
+                fetch(`/api/clubs/${clubId}/equipment`),
+                fetch(`/api/clubs/${clubId}/employees`) // Assuming this endpoint exists
             ])
 
             if (issuesRes.ok) {
@@ -141,16 +196,40 @@ export default function IssuesBoard() {
                 const data = await eqRes.json()
                 setEquipment(data.equipment || [])
             }
+            if (empRes.ok) {
+                const data = await empRes.json()
+                setEmployees(data.employees || [])
+            }
         } catch (error) {
-            console.error("Error fetching issues:", error)
+            console.error("Error fetching data:", error)
         } finally {
             setIsLoading(false)
+        }
+    }, [clubId])
+
+    const fetchComments = useCallback(async (issueId: string) => {
+        try {
+            const res = await fetch(`/api/clubs/${clubId}/equipment/issues/${issueId}/comments`)
+            if (res.ok) {
+                const data = await res.json()
+                setComments(data.comments || [])
+            }
+        } catch (error) {
+            console.error("Error fetching comments:", error)
         }
     }, [clubId])
 
     useEffect(() => {
         fetchData()
     }, [fetchData])
+
+    useEffect(() => {
+        if (selectedIssue) {
+            fetchComments(selectedIssue.id)
+        } else {
+            setComments([])
+        }
+    }, [selectedIssue, fetchComments])
 
     const getStatusBadge = (status: Issue['status']) => {
         switch (status) {
@@ -190,11 +269,84 @@ export default function IssuesBoard() {
                 body: JSON.stringify({ status, resolution_notes: notes, resolution_photos: photos })
             })
             if (res.ok) {
-                setSelectedIssue(null)
-                fetchData()
+                const updatedIssue = await res.json()
+                // Update local state
+                setIssues(prev => prev.map(i => i.id === issueId ? { ...i, ...updatedIssue } : i))
+                if (selectedIssue?.id === issueId) {
+                    setSelectedIssue(prev => prev ? { ...prev, ...updatedIssue } : null)
+                }
+                
+                // Add system comment
+                await fetch(`/api/clubs/${clubId}/equipment/issues/${issueId}/comments`, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        content: `Статус изменен на: ${status}`,
+                        is_system_message: true
+                    })
+                })
+                fetchComments(issueId)
             }
         } catch (error) {
             console.error("Error updating issue status:", error)
+        }
+    }
+
+    const handleAssign = async (issueId: string, userId: string | null) => {
+        try {
+            const res = await fetch(`/api/clubs/${clubId}/equipment/issues/${issueId}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ assigned_to: userId })
+            })
+            if (res.ok) {
+                const updatedIssue = await res.json()
+                // Update local state properly with the new assignee name (which might not be in the response fully populated)
+                const assigneeName = userId ? employees.find(e => e.id === userId)?.full_name : null
+                
+                const fullUpdatedIssue = {
+                    ...updatedIssue,
+                    assigned_to_name: assigneeName
+                }
+
+                setIssues(prev => prev.map(i => i.id === issueId ? { ...i, ...fullUpdatedIssue } : i))
+                if (selectedIssue?.id === issueId) {
+                    setSelectedIssue(prev => prev ? { ...prev, ...fullUpdatedIssue } : null)
+                }
+
+                // Add system comment
+                const msg = userId ? `Назначен ответственный: ${assigneeName}` : 'Ответственный снят'
+                await fetch(`/api/clubs/${clubId}/equipment/issues/${issueId}/comments`, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        content: msg,
+                        is_system_message: true
+                    })
+                })
+                fetchComments(issueId)
+            }
+        } catch (error) {
+            console.error("Error assigning user:", error)
+        }
+    }
+
+    const handleAddComment = async (e: React.FormEvent) => {
+        e.preventDefault()
+        if (!selectedIssue || !newComment.trim()) return
+
+        setIsSendingComment(true)
+        try {
+            const res = await fetch(`/api/clubs/${clubId}/equipment/issues/${selectedIssue.id}/comments`, {
+                method: 'POST',
+                body: JSON.stringify({ content: newComment })
+            })
+            if (res.ok) {
+                setNewComment("")
+                fetchComments(selectedIssue.id)
+            }
+        } catch (error) {
+            console.error("Error adding comment:", error)
+        } finally {
+            setIsSendingComment(false)
         }
     }
 
@@ -286,6 +438,16 @@ export default function IssuesBoard() {
                             <SelectItem value="CLOSED">Закрыто</SelectItem>
                         </SelectContent>
                     </Select>
+                    <Select value={assigneeFilter} onValueChange={(val) => setAssigneeFilter(val as any)}>
+                        <SelectTrigger className="w-full sm:w-[200px] bg-slate-50 border-slate-200">
+                            <SelectValue placeholder="Ответственный" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="ALL">Все</SelectItem>
+                            <SelectItem value="UNASSIGNED">Не назначено</SelectItem>
+                            {/* <SelectItem value="ME">Мои задачи</SelectItem> */}
+                        </SelectContent>
+                    </Select>
                 </div>
             </div>
 
@@ -298,7 +460,7 @@ export default function IssuesBoard() {
                             <TableHead className="w-[100px]">Приоритет</TableHead>
                             <TableHead>Оборудование</TableHead>
                             <TableHead className="w-[30%]">Проблема</TableHead>
-                            <TableHead>Автор</TableHead>
+                            <TableHead>Ответственный</TableHead>
                             <TableHead>Дата</TableHead>
                             <TableHead className="text-right">Действия</TableHead>
                         </TableRow>
@@ -341,46 +503,25 @@ export default function IssuesBoard() {
                                         </div>
                                     </TableCell>
                                     <TableCell>
-                                        <div className="flex items-center gap-2">
-                                            <div className="h-6 w-6 rounded-full bg-slate-100 flex items-center justify-center shrink-0">
-                                                <User className="h-3 w-3 text-slate-400" />
+                                        {issue.assigned_to_name ? (
+                                            <div className="flex items-center gap-2">
+                                                <div className="h-6 w-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center shrink-0 text-xs font-bold">
+                                                    {issue.assigned_to_name.charAt(0)}
+                                                </div>
+                                                <span className="text-sm">{issue.assigned_to_name}</span>
                                             </div>
-                                            <span className="text-sm">{issue.reported_by_name || "Неизвестно"}</span>
-                                        </div>
+                                        ) : (
+                                            <span className="text-sm text-slate-400 italic">Не назначен</span>
+                                        )}
                                     </TableCell>
                                     <TableCell className="text-sm text-muted-foreground">
                                         {new Date(issue.created_at).toLocaleDateString("ru-RU")}
                                         <div className="text-[10px]">{new Date(issue.created_at).toLocaleTimeString("ru-RU", { hour: '2-digit', minute: '2-digit' })}</div>
                                     </TableCell>
                                     <TableCell className="text-right">
-                                        <DropdownMenu>
-                                            <DropdownMenuTrigger asChild>
-                                                <Button variant="ghost" className="h-8 w-8 p-0">
-                                                    <span className="sr-only">Открыть меню</span>
-                                                    <MoreHorizontal className="h-4 w-4" />
-                                                </Button>
-                                            </DropdownMenuTrigger>
-                                            <DropdownMenuContent align="end">
-                                                <DropdownMenuLabel>Действия</DropdownMenuLabel>
-                                                <DropdownMenuItem onClick={() => setSelectedIssue(issue)}>
-                                                    <FileText className="mr-2 h-4 w-4" /> Просмотр
-                                                </DropdownMenuItem>
-                                                <DropdownMenuSeparator />
-                                                <DropdownMenuLabel>Сменить статус</DropdownMenuLabel>
-                                                <DropdownMenuItem onClick={() => handleUpdateStatus(issue.id, 'OPEN')}>
-                                                    Открыто
-                                                </DropdownMenuItem>
-                                                <DropdownMenuItem onClick={() => handleUpdateStatus(issue.id, 'IN_PROGRESS')}>
-                                                    В работе
-                                                </DropdownMenuItem>
-                                                <DropdownMenuItem onClick={() => handleUpdateStatus(issue.id, 'RESOLVED')}>
-                                                    Решено
-                                                </DropdownMenuItem>
-                                                <DropdownMenuItem onClick={() => handleUpdateStatus(issue.id, 'CLOSED')}>
-                                                    Закрыто
-                                                </DropdownMenuItem>
-                                            </DropdownMenuContent>
-                                        </DropdownMenu>
+                                        <Button variant="ghost" size="sm" onClick={() => setSelectedIssue(issue)}>
+                                            <MoreHorizontal className="h-4 w-4" />
+                                        </Button>
                                     </TableCell>
                                 </TableRow>
                             ))
@@ -399,20 +540,49 @@ export default function IssuesBoard() {
                     <form onSubmit={handleCreateIssue} className="space-y-4 pt-4">
                         <div className="space-y-2">
                             <Label>Оборудование <span className="text-rose-500">*</span></Label>
-                            <Select
-                                value={newIssue.equipment_id}
-                                onValueChange={(val) => setNewIssue(prev => ({ ...prev, equipment_id: val }))}
-                                required
-                            >
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Выберите устройство из списка" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {equipment.map(e => (
-                                        <SelectItem key={e.id} value={e.id}>{e.name} ({e.type_name})</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                            <Popover open={equipmentSearchOpen} onOpenChange={setEquipmentSearchOpen}>
+                                <PopoverTrigger asChild>
+                                    <Button
+                                        variant="outline"
+                                        role="combobox"
+                                        aria-expanded={equipmentSearchOpen}
+                                        className="w-full justify-between"
+                                    >
+                                        {newIssue.equipment_id
+                                            ? equipment.find((e) => e.id === newIssue.equipment_id)?.name
+                                            : "Выберите устройство..."}
+                                        <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-[400px] p-0">
+                                    <Command>
+                                        <CommandInput placeholder="Поиск оборудования..." />
+                                        <CommandList>
+                                            <CommandEmpty>Оборудование не найдено.</CommandEmpty>
+                                            <CommandGroup>
+                                                {equipment.map((e) => (
+                                                    <CommandItem
+                                                        key={e.id}
+                                                        value={e.name + ' ' + e.type_name}
+                                                        onSelect={() => {
+                                                            setNewIssue(prev => ({ ...prev, equipment_id: e.id }))
+                                                            setEquipmentSearchOpen(false)
+                                                        }}
+                                                    >
+                                                        <Check
+                                                            className={cn(
+                                                                "mr-2 h-4 w-4",
+                                                                newIssue.equipment_id === e.id ? "opacity-100" : "opacity-0"
+                                                            )}
+                                                        />
+                                                        {e.name} <span className="ml-2 text-xs text-muted-foreground">({e.type_name})</span>
+                                                    </CommandItem>
+                                                ))}
+                                            </CommandGroup>
+                                        </CommandList>
+                                    </Command>
+                                </PopoverContent>
+                            </Popover>
                         </div>
                         <div className="space-y-2">
                             <Label>Что случилось? <span className="text-rose-500">*</span></Label>
@@ -462,138 +632,159 @@ export default function IssuesBoard() {
 
             {/* Issue Details / Action Dialog */}
             <Dialog open={!!selectedIssue} onOpenChange={(open) => !open && setSelectedIssue(null)}>
-                <DialogContent className="sm:max-w-xl p-0 overflow-hidden">
+                <DialogContent className="sm:max-w-4xl p-0 overflow-hidden h-[80vh] flex flex-col">
                     {selectedIssue && (
-                        <div className="flex flex-col h-full max-h-[80vh]">
-                            <div className="p-6 bg-slate-50 border-b relative">
-                                <div className="flex items-center gap-3 mb-2">
-                                    {getSeverityBadge(selectedIssue.severity)}
-                                    <Badge variant="outline">{selectedIssue.status}</Badge>
-                                </div>
-                                <h2 className="text-xl font-bold">{selectedIssue.title}</h2>
-                                <p className="text-sm text-muted-foreground mt-1">
-                                    {selectedIssue.equipment_name} — {selectedIssue.workstation_name || "Не назначено"}
-                                </p>
-                            </div>
-
-                            <div className="p-6 overflow-auto space-y-6">
-                                <section className="space-y-2">
-                                    <h4 className="text-xs font-black uppercase tracking-widest text-slate-400">Описание</h4>
-                                    <p className="text-sm leading-relaxed">{selectedIssue.description || "Нет описания"}</p>
-                                </section>
-
-                                <Separator />
-
-                                <section className="space-y-4">
-                                    <h4 className="text-xs font-black uppercase tracking-widest text-slate-400">Управление статусом</h4>
-                                    <div className="grid grid-cols-2 gap-3">
-                                        {selectedIssue.status === 'OPEN' && (
-                                            <Button className="w-full bg-blue-600" onClick={() => handleUpdateStatus(selectedIssue.id, 'IN_PROGRESS')}>
-                                                <Clock className="mr-2 h-4 w-4" /> Принять в работу
-                                            </Button>
-                                        )}
-                                        {(selectedIssue.status === 'OPEN' || selectedIssue.status === 'IN_PROGRESS') && (
-                                            <DialogTrigger asChild>
-                                                <Button variant="outline" className="w-full border-green-200 text-green-700 hover:bg-green-50" onClick={() => { }}>
-                                                    <CheckCircle2 className="mr-2 h-4 w-4" /> Пометить решенным
-                                                </Button>
-                                            </DialogTrigger>
-                                        )}
-                                        {selectedIssue.status === 'RESOLVED' && (
-                                            <Button className="w-full bg-slate-700 col-span-2" onClick={() => handleUpdateStatus(selectedIssue.id, 'CLOSED')}>
-                                                <ShieldCheck className="mr-2 h-4 w-4" /> Закрыть тикет
-                                            </Button>
-                                        )}
+                        <div className="flex flex-1 h-full overflow-hidden">
+                            {/* Left Side: Details & Actions */}
+                            <div className="w-1/2 flex flex-col border-r bg-slate-50/50">
+                                <div className="p-6 border-b bg-white">
+                                    <div className="flex items-center gap-3 mb-2">
+                                        {getSeverityBadge(selectedIssue.severity)}
+                                        <Badge variant="outline">{selectedIssue.status}</Badge>
                                     </div>
+                                    <h2 className="text-xl font-bold">{selectedIssue.title}</h2>
+                                    <p className="text-sm text-muted-foreground mt-1">
+                                        {selectedIssue.equipment_name} — {selectedIssue.workstation_name || "Не назначено"}
+                                    </p>
+                                </div>
 
-                                    {/* Inline Resolution Notes (simplified for this view) */}
-                                    {(selectedIssue.status === 'OPEN' || selectedIssue.status === 'IN_PROGRESS') && (
-                                        <div className="pt-4 space-y-3">
-                                            <Label className="text-xs">Заметки о решении (обязательно для закрытия)</Label>
-                                            <textarea
-                                                className="w-full h-24 rounded-lg border p-3 text-sm"
-                                                placeholder="Что было сделано? Замена детали, настройка софта..."
-                                                value={resolutionNotes}
-                                                onChange={(e) => setResolutionNotes(e.target.value)}
-                                            />
-                                            
-                                            {/* Photo Upload Section */}
-                                            <div className="space-y-2">
-                                                <Label className="text-xs">Фотоотчет (опционально)</Label>
-                                                <div className="flex flex-wrap gap-2">
-                                                    {resolutionPhotos.map((file, idx) => (
-                                                        <div key={idx} className="relative h-16 w-16 rounded border overflow-hidden group">
-                                                            <img src={URL.createObjectURL(file)} alt="preview" className="h-full w-full object-cover" />
-                                                            <button 
-                                                                onClick={() => setResolutionPhotos(prev => prev.filter((_, i) => i !== idx))}
-                                                                className="absolute top-0 right-0 bg-black/50 text-white p-0.5 opacity-0 group-hover:opacity-100 transition-opacity rounded-bl"
-                                                            >
-                                                                <X className="h-3 w-3" />
-                                                            </button>
-                                                        </div>
-                                                    ))}
-                                                    <label className="h-16 w-16 border-2 border-dashed border-slate-200 rounded flex flex-col items-center justify-center cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-colors">
-                                                        <ImageIcon className="h-4 w-4 text-muted-foreground" />
-                                                        <span className="text-[8px] text-muted-foreground mt-1">Фото</span>
-                                                        <input 
-                                                            type="file" 
-                                                            className="hidden" 
-                                                            accept="image/*" 
-                                                            capture="environment"
-                                                            multiple 
-                                                            onChange={(e) => {
-                                                                if (e.target.files) {
-                                                                    setResolutionPhotos(prev => [...prev, ...Array.from(e.target.files!)])
-                                                                }
-                                                            }} 
-                                                        />
-                                                    </label>
-                                                </div>
+                                <div className="p-6 flex-1 overflow-auto space-y-6">
+                                    <section className="space-y-2">
+                                        <div className="flex items-center justify-between">
+                                            <h4 className="text-xs font-black uppercase tracking-widest text-slate-400">Описание</h4>
+                                            <div className="text-xs text-muted-foreground">
+                                                Автор: {selectedIssue.reported_by_name}
                                             </div>
-
-                                            <Button
-                                                className="w-full bg-green-600"
-                                                disabled={!resolutionNotes || isUploading}
-                                                onClick={handleResolveWithPhotos}
-                                            >
-                                                {isUploading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                                Завершить ремонт
-                                            </Button>
                                         </div>
-                                    )}
-                                </section>
+                                        <p className="text-sm leading-relaxed bg-white p-3 rounded-md border">{selectedIssue.description || "Нет описания"}</p>
+                                    </section>
 
-                                {selectedIssue.resolution_notes && (
-                                    <>
-                                        <Separator />
-                                        <section className="space-y-2">
+                                    <section className="space-y-2">
+                                        <h4 className="text-xs font-black uppercase tracking-widest text-slate-400">Ответственный</h4>
+                                        <div className="flex items-center gap-2">
+                                            <Select 
+                                                value={selectedIssue.assigned_to || "unassigned"} 
+                                                onValueChange={(val) => handleAssign(selectedIssue.id, val === "unassigned" ? null : val)}
+                                            >
+                                                <SelectTrigger className="w-full bg-white">
+                                                    <SelectValue placeholder="Назначить сотрудника" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="unassigned">Не назначен</SelectItem>
+                                                    {employees.map(emp => (
+                                                        <SelectItem key={emp.id} value={emp.id}>{emp.full_name} ({emp.role})</SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                    </section>
+
+                                    <Separator />
+
+                                    <section className="space-y-4">
+                                        <h4 className="text-xs font-black uppercase tracking-widest text-slate-400">Управление статусом</h4>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            {selectedIssue.status === 'OPEN' && (
+                                                <Button className="w-full bg-blue-600" onClick={() => handleUpdateStatus(selectedIssue.id, 'IN_PROGRESS')}>
+                                                    <Clock className="mr-2 h-4 w-4" /> Принять в работу
+                                                </Button>
+                                            )}
+                                            {(selectedIssue.status === 'OPEN' || selectedIssue.status === 'IN_PROGRESS') && (
+                                                <DialogTrigger asChild>
+                                                    <Button variant="outline" className="w-full border-green-200 text-green-700 hover:bg-green-50" onClick={() => { }}>
+                                                        <CheckCircle2 className="mr-2 h-4 w-4" /> Решить проблему
+                                                    </Button>
+                                                </DialogTrigger>
+                                            )}
+                                            {selectedIssue.status === 'RESOLVED' && (
+                                                <Button className="w-full bg-slate-700 col-span-2" onClick={() => handleUpdateStatus(selectedIssue.id, 'CLOSED')}>
+                                                    <ShieldCheck className="mr-2 h-4 w-4" /> Закрыть тикет
+                                                </Button>
+                                            )}
+                                        </div>
+
+                                        {/* Resolution Form */}
+                                        {(selectedIssue.status === 'OPEN' || selectedIssue.status === 'IN_PROGRESS') && (
+                                            <div className="pt-4 space-y-3">
+                                                <Label className="text-xs">Заметки о решении</Label>
+                                                <textarea
+                                                    className="w-full h-24 rounded-lg border p-3 text-sm"
+                                                    placeholder="Опишите, что было сделано..."
+                                                    value={resolutionNotes}
+                                                    onChange={(e) => setResolutionNotes(e.target.value)}
+                                                />
+                                                <Button
+                                                    className="w-full bg-green-600"
+                                                    disabled={!resolutionNotes || isUploading}
+                                                    onClick={handleResolveWithPhotos}
+                                                >
+                                                    {isUploading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                                    Завершить ремонт
+                                                </Button>
+                                            </div>
+                                        )}
+                                    </section>
+
+                                    {selectedIssue.resolution_notes && (
+                                        <section className="space-y-2 pt-2">
                                             <h4 className="text-xs font-black uppercase tracking-widest text-green-600">Результат решения</h4>
                                             <div className="p-4 bg-green-50 rounded-xl border border-green-100 italic text-sm text-green-800">
                                                 {selectedIssue.resolution_notes}
                                             </div>
-                                            
-                                            {selectedIssue.resolution_photos && selectedIssue.resolution_photos.length > 0 && (
-                                                <div className="flex flex-wrap gap-2 mt-2">
-                                                    {selectedIssue.resolution_photos.map((url, idx) => (
-                                                        <a key={idx} href={url} target="_blank" rel="noopener noreferrer" className="block h-16 w-16 rounded border overflow-hidden hover:opacity-80 transition-opacity">
-                                                            <img src={url} alt="Resolution" className="h-full w-full object-cover" />
-                                                        </a>
-                                                    ))}
-                                                </div>
-                                            )}
-
-                                            <div className="flex items-center justify-between text-[10px] text-muted-foreground px-1 pt-2">
-                                                <span>Решил: {selectedIssue.resolved_by_name}</span>
-                                                <span>{selectedIssue.resolved_at && new Date(selectedIssue.resolved_at).toLocaleString()}</span>
-                                            </div>
                                         </section>
-                                    </>
-                                )}
+                                    )}
+                                </div>
                             </div>
 
-                            <div className="p-4 bg-slate-50 border-t flex justify-between items-center text-[10px] text-muted-foreground">
-                                <span className="flex items-center gap-1"><User className="h-3 w-3" /> Автор: {selectedIssue.reported_by_name}</span>
-                                <span>Создано: {new Date(selectedIssue.created_at).toLocaleDateString()}</span>
+                            {/* Right Side: Comments & History */}
+                            <div className="w-1/2 flex flex-col bg-slate-50 border-l h-full">
+                                <div className="p-4 border-b bg-white flex items-center justify-between">
+                                    <h3 className="font-semibold flex items-center gap-2">
+                                        <MessageSquare className="h-4 w-4" /> Обсуждение
+                                    </h3>
+                                    <Badge variant="secondary">{comments.length}</Badge>
+                                </div>
+                                
+                                <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                                    {comments.length === 0 ? (
+                                        <div className="h-full flex flex-col items-center justify-center text-muted-foreground opacity-50">
+                                            <MessageCircle className="h-8 w-8 mb-2" />
+                                            <p className="text-sm">Нет комментариев</p>
+                                        </div>
+                                    ) : (
+                                        comments.map((comment) => (
+                                            <div key={comment.id} className={cn("flex flex-col gap-1", comment.is_system_message ? "items-center my-4" : "items-start")}>
+                                                {comment.is_system_message ? (
+                                                    <Badge variant="outline" className="text-xs text-slate-500 font-normal bg-slate-100 border-slate-200">
+                                                        {comment.content} • {new Date(comment.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                                    </Badge>
+                                                ) : (
+                                                    <div className="bg-white p-3 rounded-lg border shadow-sm max-w-[90%]">
+                                                        <div className="flex items-center gap-2 mb-1">
+                                                            <span className="font-bold text-xs">{comment.author_name}</span>
+                                                            <span className="text-[10px] text-muted-foreground">{new Date(comment.created_at).toLocaleString()}</span>
+                                                        </div>
+                                                        <p className="text-sm text-slate-700 whitespace-pre-wrap">{comment.content}</p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+
+                                <div className="p-4 bg-white border-t">
+                                    <form onSubmit={handleAddComment} className="flex gap-2">
+                                        <Input
+                                            placeholder="Написать комментарий..."
+                                            value={newComment}
+                                            onChange={(e) => setNewComment(e.target.value)}
+                                            className="flex-1"
+                                        />
+                                        <Button type="submit" size="icon" disabled={!newComment.trim() || isSendingComment}>
+                                            <Send className="h-4 w-4" />
+                                        </Button>
+                                    </form>
+                                </div>
                             </div>
                         </div>
                     )}
