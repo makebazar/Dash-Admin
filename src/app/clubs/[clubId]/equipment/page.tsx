@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
+import { PageShell, PageHeader } from "@/components/layout/PageShell"
 
 interface EquipmentStats {
     total: number
@@ -127,22 +128,18 @@ export default function EquipmentDashboard() {
     ]
 
     return (
-        <div className="p-8 space-y-8 max-w-7xl mx-auto">
-            {/* Header */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div>
-                    <h1 className="text-3xl font-bold tracking-tight">🖥 Управление оборудованием</h1>
-                    <p className="text-muted-foreground">Комплексный контроль техники, периферии и её состояния</p>
-                </div>
-                <div className="flex items-center gap-3">
-                    <Link href={`/clubs/${clubId}/equipment/inventory?action=new`}>
-                        <Button className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700">
-                            <Plus className="mr-2 h-4 w-4" />
-                            Добавить технику
-                        </Button>
-                    </Link>
-                </div>
-            </div>
+        <PageShell maxWidth="7xl">
+            <PageHeader
+                title="🖥 Управление оборудованием"
+                description="Комплексный контроль техники, периферии и её состояния"
+            >
+                <Link href={`/clubs/${clubId}/equipment/inventory?action=new`}>
+                    <Button className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700">
+                        <Plus className="mr-2 h-4 w-4" />
+                        Добавить технику
+                    </Button>
+                </Link>
+            </PageHeader>
 
             {/* Stats Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -300,6 +297,6 @@ export default function EquipmentDashboard() {
                     </CardContent>
                 </Card>
             </div>
-        </div>
+        </PageShell>
     )
 }

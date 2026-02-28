@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Loader2, Save, Globe, Building, MapPin, Sun, Moon, Package, Warehouse } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { PageShell, PageHeader } from "@/components/layout/PageShell"
 
 // Common Russian timezones
 const TIMEZONES = [
@@ -149,13 +150,13 @@ export default function GeneralSettingsPage({ params }: { params: Promise<{ club
     }
 
     return (
-        <div className="p-8 space-y-8">
-            <div>
-                <h1 className="text-3xl font-bold tracking-tight">Общие настройки</h1>
-                <p className="text-muted-foreground">Основная информация о клубе</p>
-            </div>
+        <PageShell maxWidth="2xl">
+            <PageHeader
+                title="Общие настройки"
+                description="Основная информация о клубе"
+            />
 
-            <div className="grid gap-6 max-w-2xl">
+            <div className="grid gap-6">
                 {/* Club Info Card */}
                 <Card>
                     <CardHeader>
@@ -384,6 +385,6 @@ export default function GeneralSettingsPage({ params }: { params: Promise<{ club
                     Сохранить настройки
                 </Button>
             </div>
-        </div>
+        </PageShell>
     )
 }

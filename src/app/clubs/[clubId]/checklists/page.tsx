@@ -17,6 +17,7 @@ import { format } from "date-fns"
 import { ru } from "date-fns/locale"
 import { ImageViewer } from "@/components/ui/image-viewer"
 import { cn } from "@/lib/utils"
+import { PageShell, PageHeader } from "@/components/layout/PageShell"
 
 interface Evaluation {
     id: number
@@ -381,20 +382,18 @@ export default function ChecklistsPage({ params }: { params: Promise<{ clubId: s
     const totalPending = pendingEvaluations + pendingTasks
 
     return (
-        <div className="min-h-screen bg-background p-8">
-            <div className="mx-auto max-w-6xl">
-                <div className="mb-8 flex items-center justify-between">
-                    <div>
-                        <h1 className="text-3xl font-bold">Центр проверок</h1>
-                        <p className="text-muted-foreground">Единый центр контроля качества и выполненных работ</p>
-                    </div>
-                    <div className="flex flex-col items-end px-4 py-2 bg-muted/30 rounded-lg border">
-                        <span className="text-xs text-muted-foreground uppercase font-bold">Ожидают проверки</span>
-                        <span className="text-xl font-bold text-yellow-600">{totalPending}</span>
-                    </div>
+        <PageShell maxWidth="6xl">
+            <PageHeader 
+                title="Центр проверок" 
+                description="Единый центр контроля качества и выполненных работ"
+            >
+                <div className="flex flex-col items-end px-4 py-2 bg-muted/30 rounded-lg border">
+                    <span className="text-xs text-muted-foreground uppercase font-bold">Ожидают проверки</span>
+                    <span className="text-xl font-bold text-yellow-600">{totalPending}</span>
                 </div>
+            </PageHeader>
 
-                <Tabs defaultValue="equipment" className="w-full">
+            <Tabs defaultValue="equipment" className="w-full">
                     <TabsList className="mb-6">
                         <TabsTrigger value="equipment" className="flex items-center gap-2">
                             <Monitor className="h-4 w-4" />
@@ -744,19 +743,17 @@ export default function ChecklistsPage({ params }: { params: Promise<{ clubId: s
                             </CardContent>
                         </Card>
                     </TabsContent>
-                </Tabs>
-
-                {/* DETAIL & REVIEW DIALOG */}
-                <Dialog
-                    open={!!selectedEvaluation}
-                    onOpenChange={(open) => {
-                        if (!open) {
-                            setSelectedEvaluation(null)
-                            setIsReviewMode(false)
-                        }
-                    }}
-                >
-                    <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+            {/* DETAIL & REVIEW DIALOG */}
+            <Dialog
+                open={!!selectedEvaluation}
+                onOpenChange={(open) => {
+                    if (!open) {
+                        setSelectedEvaluation(null)
+                        setIsReviewMode(false)
+                    }
+                }}
+            >
+                <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
                         <DialogHeader>
                             <div className="flex items-center justify-between mr-8">
                                 <DialogTitle>Результаты проверки</DialogTitle>
@@ -975,6 +972,6 @@ export default function ChecklistsPage({ params }: { params: Promise<{ clubId: s
                     </div>
                 )}
             </div>
-        </div>
+        </PageShell>
     )
 }
