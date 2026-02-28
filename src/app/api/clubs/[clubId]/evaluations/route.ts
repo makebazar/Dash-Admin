@@ -118,18 +118,19 @@ export async function POST(
         let maxPossiblePoints = 0;
 
         // Responses is an array of { item_id, score, comment }
-        // Assume score is 0-1 (Yes/No) or some scale. 
-        // Let's assume max score per item is 1 for now (binary check) or 5 if scale.
-        // Front-end should provide the score.
-        // For simplicity, let's assume binary (0/1) if not specified, but let's support up to 100 for percentage items.
+        // We calculate score based on the actual score provided (0 to weight)
+        // totalPoints = sum(score)
+        // maxPossiblePoints = sum(weight)
 
         for (const resp of responses) {
             const weight = Number(itemsMap.get(resp.item_id)) || 1;
-            totalPoints += (Number(resp.score) || 0) * weight;
-            maxPossiblePoints += 1 * weight; // Assuming 1 is the reference max per item
+            // The score is already in points (e.g. 5, 4, 3...)
+            totalPoints += (Number(resp.score) || 0);
+            maxPossiblePoints += weight;
         }
 
-        const totalScore = maxPossiblePoints > 0 ? (totalPoints / maxPossiblePoints) * 100 : 0;
+        // We store the RAW score, not percentage. Percentage is calculated on display.
+        const totalScore = totalPoints;
 
         await query('BEGIN');
 
@@ -137,7 +138,7 @@ export async function POST(
             `INSERT INTO evaluations (club_id, template_id, employee_id, evaluator_id, total_score, max_score, comments, shift_id)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
              RETURNING id`,
-            [clubId, template_id, targetUserId, userId, totalScore, 100, comments || '', shift_id || null]
+            [clubId, template_id, targetUserId, userId, totalScore, maxPossiblePoints, comments || '', shift_id || null]
         );
         const evaluationId = evalResult.rows[0].id;
 

@@ -58,7 +58,7 @@ export async function GET(
                 r.photo_urls,
                 i.content as item_content,
                 i.description,
-                i.weight
+                i.weight as max_score
             FROM evaluation_responses r
             JOIN evaluation_template_items i ON r.item_id = i.id
             WHERE r.evaluation_id = $1

@@ -113,35 +113,71 @@ export function ImageViewer({ src, alt, isOpen, onClose, images, onNext, onPrev,
 
     return (
         <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/90 backdrop-blur-sm animate-in fade-in duration-200" onClick={onClose}>
-            {/* Toolbar */}
-            <div className="absolute top-4 left-1/2 -translate-x-1/2 flex items-center gap-2 p-2 bg-black/50 rounded-full backdrop-blur-md border border-white/10 z-[151]" onClick={e => e.stopPropagation()}>
-                <Button variant="ghost" size="icon" onClick={handleZoomOut} className="text-white hover:bg-white/20 h-8 w-8">
+            {/* Toolbar - Top */}
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 flex items-center gap-2 p-2 bg-black/50 rounded-full backdrop-blur-md border border-white/10 z-[151] max-w-[90vw] overflow-x-auto no-scrollbar" onClick={e => e.stopPropagation()}>
+                <Button variant="ghost" size="icon" onClick={handleZoomOut} className="text-white hover:bg-white/20 h-8 w-8 shrink-0">
                     <ZoomOut className="h-4 w-4" />
                 </Button>
-                <span className="text-xs text-white/70 w-12 text-center">{Math.round(scale * 100)}%</span>
-                <Button variant="ghost" size="icon" onClick={handleZoomIn} className="text-white hover:bg-white/20 h-8 w-8">
+                <span className="text-xs text-white/70 w-12 text-center shrink-0">{Math.round(scale * 100)}%</span>
+                <Button variant="ghost" size="icon" onClick={handleZoomIn} className="text-white hover:bg-white/20 h-8 w-8 shrink-0">
                     <ZoomIn className="h-4 w-4" />
                 </Button>
-                <div className="w-px h-4 bg-white/20 mx-1" />
-                <Button variant="ghost" size="icon" onClick={handleRotateCcw} className="text-white hover:bg-white/20 h-8 w-8">
+                <div className="w-px h-4 bg-white/20 mx-1 shrink-0" />
+                <Button variant="ghost" size="icon" onClick={handleRotateCcw} className="text-white hover:bg-white/20 h-8 w-8 shrink-0">
                     <RotateCcw className="h-4 w-4" />
                 </Button>
-                <Button variant="ghost" size="icon" onClick={handleRotateCw} className="text-white hover:bg-white/20 h-8 w-8">
+                <Button variant="ghost" size="icon" onClick={handleRotateCw} className="text-white hover:bg-white/20 h-8 w-8 shrink-0">
                     <RotateCw className="h-4 w-4" />
                 </Button>
-                <div className="w-px h-4 bg-white/20 mx-1" />
-                <Button variant="ghost" size="icon" onClick={handleReset} className="text-white hover:bg-white/20 h-8 w-8" title="Сбросить">
+                <div className="w-px h-4 bg-white/20 mx-1 shrink-0" />
+                <Button variant="ghost" size="icon" onClick={handleReset} className="text-white hover:bg-white/20 h-8 w-8 shrink-0" title="Сбросить">
                     <Maximize2 className="h-4 w-4" />
+                </Button>
+                <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    onClick={onClose} 
+                    className="text-white hover:bg-white/20 h-8 w-8 ml-1 shrink-0 md:hidden"
+                >
+                    <X className="h-4 w-4" />
                 </Button>
             </div>
 
-            {/* Navigation Buttons */}
+            {/* Navigation Buttons - Mobile Bottom / Desktop Sides */}
+            <div className="absolute bottom-8 left-0 right-0 flex justify-center gap-8 z-[151] md:hidden pointer-events-none">
+                <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    disabled={!showPrev}
+                    onClick={(e) => { e.stopPropagation(); onPrev?.() }} 
+                    className={cn(
+                        "text-white bg-black/50 backdrop-blur-md border border-white/10 rounded-full h-12 w-12 pointer-events-auto",
+                        !showPrev && "opacity-30"
+                    )}
+                >
+                    <ChevronLeft className="h-6 w-6" />
+                </Button>
+                <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    disabled={!showNext}
+                    onClick={(e) => { e.stopPropagation(); onNext?.() }} 
+                    className={cn(
+                        "text-white bg-black/50 backdrop-blur-md border border-white/10 rounded-full h-12 w-12 pointer-events-auto",
+                        !showNext && "opacity-30"
+                    )}
+                >
+                    <ChevronRight className="h-6 w-6" />
+                </Button>
+            </div>
+
+            {/* Desktop Navigation */}
             {showPrev && onPrev && (
                 <Button 
                     variant="ghost" 
                     size="icon" 
                     onClick={(e) => { e.stopPropagation(); onPrev() }} 
-                    className="absolute left-4 top-1/2 -translate-y-1/2 text-white hover:bg-white/20 rounded-full h-12 w-12 z-[151]"
+                    className="hidden md:flex absolute left-4 top-1/2 -translate-y-1/2 text-white hover:bg-white/20 rounded-full h-12 w-12 z-[151]"
                 >
                     <ChevronLeft className="h-8 w-8" />
                 </Button>
@@ -152,18 +188,18 @@ export function ImageViewer({ src, alt, isOpen, onClose, images, onNext, onPrev,
                     variant="ghost" 
                     size="icon" 
                     onClick={(e) => { e.stopPropagation(); onNext() }} 
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-white hover:bg-white/20 rounded-full h-12 w-12 z-[151]"
+                    className="hidden md:flex absolute right-4 top-1/2 -translate-y-1/2 text-white hover:bg-white/20 rounded-full h-12 w-12 z-[151]"
                 >
                     <ChevronRight className="h-8 w-8" />
                 </Button>
             )}
 
-            {/* Close button */}
+            {/* Desktop Close button */}
             <Button 
                 variant="ghost" 
                 size="icon" 
                 onClick={onClose} 
-                className="absolute top-4 right-4 text-white hover:bg-white/20 rounded-full h-10 w-10 z-[151]"
+                className="hidden md:flex absolute top-4 right-4 text-white hover:bg-white/20 rounded-full h-10 w-10 z-[151]"
             >
                 <X className="h-6 w-6" />
             </Button>

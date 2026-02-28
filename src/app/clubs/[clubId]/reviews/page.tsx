@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Loader2, History, Camera, CheckCircle, XCircle, AlertTriangle, BarChart3, Search, Filter, Monitor, CheckCircle2, Eye, Clock, User, Layers, Calendar, ChevronDown, ChevronUp, Box, Keyboard, Mouse, Headphones, Gamepad2, Tv, Trash2 } from "lucide-react"
+import { Loader2, History, Camera, CheckCircle, XCircle, AlertTriangle, BarChart3, Search, Filter, Monitor, CheckCircle2, Eye, Clock, User, Layers, Calendar, ChevronDown, ChevronUp, Box, Keyboard, Mouse, Headphones, Gamepad2, Tv, Trash2, RotateCcw } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -46,6 +46,8 @@ interface EvaluationResponse {
 interface EvaluationDetail extends Evaluation {
     comments?: string
     responses: EvaluationResponse[]
+    reviewed_by?: string
+    reviewed_at?: string
 }
 
 interface VerificationTask {
@@ -61,8 +63,11 @@ interface VerificationTask {
     due_date: string
     completed_at: string
     completed_by_name: string | null
+    verified_by_name?: string | null
     photos: string[] | null
     notes: string | null
+    verification_note?: string | null
+    rejection_reason?: string | null
     bonus_earned: number
     kpi_points: number
 }
@@ -91,7 +96,7 @@ const getTaskTypeLabel = (type: string) => {
     }
 }
 
-export default function ChecklistsPage({ params }: { params: Promise<{ clubId: string }> }) {
+export default function ChecklistsPage({ params, searchParams }: { params: Promise<{ clubId: string }>, searchParams: Promise<{ tab?: string }> }) {
     const router = useRouter()
     const [clubId, setClubId] = useState('')
     
@@ -117,14 +122,31 @@ export default function ChecklistsPage({ params }: { params: Promise<{ clubId: s
     const [currentTaskPhotos, setCurrentTaskPhotos] = useState<string[]>([])
     const [filterZone, setFilterZone] = useState<string>("all")
     const [filterEmployee, setFilterEmployee] = useState<string>("all")
+    const [filterStatus, setFilterStatus] = useState<string>("all")
+    const [equipmentTab, setEquipmentTab] = useState<'active' | 'history'>('active')
+    
+    // Active Tab State (synced with URL)
+    const [activeTab, setActiveTab] = useState("equipment")
 
     useEffect(() => {
-        params.then(p => {
+        Promise.all([params, searchParams]).then(([p, sp]) => {
             setClubId(p.clubId)
             fetchHistory(p.clubId)
             fetchTasks(p.clubId)
+            
+            if (sp.tab) {
+                setActiveTab(sp.tab)
+            }
         })
-    }, [params])
+    }, [params, searchParams])
+
+    const handleTabChange = (value: string) => {
+        setActiveTab(value)
+        // Update URL without refreshing
+        const url = new URL(window.location.href)
+        url.searchParams.set('tab', value)
+        window.history.pushState({}, '', url.toString())
+    }
 
     const fetchHistory = async (id: string) => {
         setIsLoading(true)
@@ -141,10 +163,11 @@ export default function ChecklistsPage({ params }: { params: Promise<{ clubId: s
         }
     }
 
-    const fetchTasks = async (id: string) => {
+    const fetchTasks = async (id: string, status: 'active' | 'history' = 'active') => {
         setIsTasksLoading(true)
         try {
-            const res = await fetch(`/api/clubs/${id}/equipment/verification/list`)
+            const query = status === 'history' ? '?status=history' : ''
+            const res = await fetch(`/api/clubs/${id}/equipment/verification/list${query}`)
             if (res.ok) {
                 const data = await res.json()
                 setTasks(data)
@@ -156,43 +179,16 @@ export default function ChecklistsPage({ params }: { params: Promise<{ clubId: s
         }
     }
 
+    useEffect(() => {
+        if (clubId) {
+            fetchTasks(clubId, equipmentTab)
+        }
+    }, [equipmentTab, clubId])
+
     // --- Checklists Handlers ---
 
-    const handleViewEvaluation = async (evaluationId: number) => {
-        setIsReviewMode(false)
-        setReviewItems({})
-        setReviewerNote('')
-        setPhotoPreviewUrl(null)
-
-        const basicInfo = history.find(h => h.id === evaluationId)
-        if (basicInfo) {
-            // @ts-ignore
-            setSelectedEvaluation({ ...basicInfo, responses: [] })
-        }
-        
-        setIsDetailLoading(true)
-        try {
-            const res = await fetch(`/api/clubs/${clubId}/evaluations/${evaluationId}`)
-            const data = await res.json()
-            if (res.ok) {
-                setSelectedEvaluation(data)
-                const initialReviewState: Record<number, any> = {}
-                data.responses.forEach((r: EvaluationResponse) => {
-                    initialReviewState[r.id] = {
-                        is_accepted: r.is_accepted !== false,
-                        admin_comment: r.admin_comment || ''
-                    }
-                })
-                setReviewItems(initialReviewState)
-                setReviewerNote(data.reviewer_note || '')
-            } else {
-                alert('Не удалось загрузить детали')
-            }
-        } catch (error) {
-            console.error(error)
-        } finally {
-            setIsDetailLoading(false)
-        }
+    const handleViewEvaluation = (evaluationId: number) => {
+        router.push(`/clubs/${clubId}/reviews/${evaluationId}`)
     }
 
     const handleReviewItemChange = (responseId: number, field: 'is_accepted' | 'admin_comment', value: any) => {
@@ -361,6 +357,7 @@ export default function ChecklistsPage({ params }: { params: Promise<{ clubId: s
         const filtered = tasks.filter(t => {
             if (filterZone !== "all" && (t.zone_name || 'Без зоны') !== filterZone) return false
             if (filterEmployee !== "all" && (t.completed_by_name || 'Неизвестный') !== filterEmployee) return false
+            if (filterStatus !== "all" && t.verification_status !== filterStatus) return false
             return true
         })
 
@@ -373,7 +370,7 @@ export default function ChecklistsPage({ params }: { params: Promise<{ clubId: s
         })
 
         return Object.entries(groups).sort((a, b) => a[0].localeCompare(b[0]))
-    }, [tasks, filterZone, filterEmployee])
+    }, [tasks, filterZone, filterEmployee, filterStatus])
 
     // Stats
     const totalEvaluations = history.length
@@ -386,14 +383,9 @@ export default function ChecklistsPage({ params }: { params: Promise<{ clubId: s
             <PageHeader 
                 title="Центр проверок" 
                 description="Единый центр контроля качества и выполненных работ"
-            >
-                <div className="flex flex-col items-end px-4 py-2 bg-muted/30 rounded-lg border">
-                    <span className="text-xs text-muted-foreground uppercase font-bold">Ожидают проверки</span>
-                    <span className="text-xl font-bold text-yellow-600">{totalPending}</span>
-                </div>
-            </PageHeader>
+            />
 
-            <Tabs defaultValue="equipment" className="w-full">
+            <Tabs defaultValue="equipment" value={activeTab} onValueChange={handleTabChange} className="w-full">
                 <div className="border-b mb-6 overflow-x-auto">
                     <TabsList className="bg-transparent h-auto p-0 space-x-6 min-w-max">
                         <TabsTrigger value="equipment" variant="underline" className="pb-3 rounded-none">
@@ -401,9 +393,9 @@ export default function ChecklistsPage({ params }: { params: Promise<{ clubId: s
                             Оборудование
                             {pendingTasks > 0 && <Badge variant="secondary" className="ml-2 h-5 px-1.5 bg-slate-100">{pendingTasks}</Badge>}
                         </TabsTrigger>
-                        <TabsTrigger value="history" variant="underline" className="pb-3 rounded-none">
+                        <TabsTrigger value="checklists" variant="underline" className="pb-3 rounded-none">
                             <History className="h-4 w-4 mr-2" />
-                            Чеклисты персонала
+                            Чеклист
                             {pendingEvaluations > 0 && <Badge variant="secondary" className="ml-2 h-5 px-1.5 bg-slate-100">{pendingEvaluations}</Badge>}
                         </TabsTrigger>
                         <TabsTrigger value="stats" variant="underline" className="pb-3 rounded-none">
@@ -416,36 +408,74 @@ export default function ChecklistsPage({ params }: { params: Promise<{ clubId: s
                     {/* EQUIPMENT TAB */}
                     <TabsContent value="equipment">
                         <div className="space-y-6">
+                            <Tabs value={equipmentTab} onValueChange={(v) => setEquipmentTab(v as 'active' | 'history')} className="w-full">
+                                <TabsList className="w-full sm:w-auto grid grid-cols-2">
+                                    <TabsTrigger value="active">Входящие</TabsTrigger>
+                                    <TabsTrigger value="history">История</TabsTrigger>
+                                </TabsList>
+                            </Tabs>
+
                             {/* Filters */}
                             {tasks.length > 0 && (
                                 <PageToolbar>
-                                    <ToolbarGroup>
-                                        <Select value={filterZone} onValueChange={setFilterZone}>
-                                            <SelectTrigger className="w-[180px] h-9 text-sm">
-                                                <Layers className="mr-2 h-3.5 w-3.5 text-muted-foreground" />
-                                                <SelectValue placeholder="Зона" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="all">Все зоны</SelectItem>
-                                                {zones.map(z => <SelectItem key={z} value={z}>{z}</SelectItem>)}
-                                            </SelectContent>
-                                        </Select>
+                                    <ToolbarGroup className="w-full sm:w-auto">
+                                        <div className="flex items-center gap-2 w-full">
+                                            {equipmentTab === 'active' ? (
+                                                <Select value={filterZone} onValueChange={setFilterZone}>
+                                                    <SelectTrigger className="w-full sm:w-[180px] h-9 text-sm bg-muted/50 border-transparent hover:bg-muted transition-colors flex-1 min-w-0">
+                                                        <div className="flex items-center truncate">
+                                                            <Layers className="mr-2 h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                                            <SelectValue placeholder="Зона" />
+                                                        </div>
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="all">Все зоны</SelectItem>
+                                                        {zones.map(z => <SelectItem key={z} value={z}>{z}</SelectItem>)}
+                                                    </SelectContent>
+                                                </Select>
+                                            ) : (
+                                                <Select value={filterStatus} onValueChange={setFilterStatus}>
+                                                    <SelectTrigger className="w-full sm:w-[180px] h-9 text-sm bg-muted/50 border-transparent hover:bg-muted transition-colors flex-1 min-w-0">
+                                                        <div className="flex items-center truncate">
+                                                            <Filter className="mr-2 h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                                            <SelectValue placeholder="Статус" />
+                                                        </div>
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="all">Все статусы</SelectItem>
+                                                        <SelectItem value="APPROVED">Одобрено</SelectItem>
+                                                        <SelectItem value="REJECTED">Отклонено</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            )}
 
-                                        <Select value={filterEmployee} onValueChange={setFilterEmployee}>
-                                            <SelectTrigger className="w-[180px] h-9 text-sm">
-                                                <User className="mr-2 h-3.5 w-3.5 text-muted-foreground" />
-                                                <SelectValue placeholder="Сотрудник" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="all">Все сотрудники</SelectItem>
-                                                {employees.map(e => <SelectItem key={e} value={e}>{e}</SelectItem>)}
-                                            </SelectContent>
-                                        </Select>
-                                    </ToolbarGroup>
-                                    <ToolbarGroup align="end">
-                                        <div className="text-sm text-muted-foreground">
-                                            Показано: <span className="font-medium text-foreground">{Object.values(groupedTasks).reduce((acc, tasks) => acc + tasks.length, 0)}</span> задач
+                                            <Select value={filterEmployee} onValueChange={setFilterEmployee}>
+                                                <SelectTrigger className="w-full sm:w-[180px] h-9 text-sm bg-muted/50 border-transparent hover:bg-muted transition-colors flex-1 min-w-0">
+                                                    <div className="flex items-center truncate">
+                                                        <User className="mr-2 h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                                        <SelectValue placeholder="Сотрудник" />
+                                                    </div>
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="all">Все сотрудники</SelectItem>
+                                                    {employees.map(e => <SelectItem key={e} value={e}>{e}</SelectItem>)}
+                                                </SelectContent>
+                                            </Select>
                                         </div>
+                                    </ToolbarGroup>
+                                    <ToolbarGroup align="end" className="gap-2">
+                                        <div className="text-sm text-muted-foreground">
+                                            Показано: <span className="font-medium text-foreground">{groupedTasks.reduce((acc, [_, tasks]) => acc + tasks.length, 0)}</span> задач
+                                        </div>
+                                        <Button 
+                                            variant="ghost" 
+                                            size="icon" 
+                                            onClick={() => fetchTasks(clubId, equipmentTab)} 
+                                            disabled={isTasksLoading}
+                                            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                                        >
+                                            <RotateCcw className={cn("h-4 w-4", isTasksLoading && "animate-spin")} />
+                                        </Button>
                                     </ToolbarGroup>
                                 </PageToolbar>
                             )}
@@ -461,81 +491,98 @@ export default function ChecklistsPage({ params }: { params: Promise<{ clubId: s
                             ) : (
                                 <div className="space-y-8">
                                     {groupedTasks.map(([zoneName, zoneTasks]) => (
-                                        <div key={zoneName} className="space-y-3">
+                                        <div key={zoneName} className="space-y-3 pb-24">
                                             <div className="flex items-center gap-2 pb-2 border-b">
                                                 <Layers className="h-5 w-5 text-slate-500" />
                                                 <h2 className="text-xl font-semibold text-slate-800">{zoneName}</h2>
                                                 <Badge variant="secondary" className="ml-2">{zoneTasks.length}</Badge>
                                             </div>
                                             
-                                            <div className="flex flex-col gap-3">
+                                            <div className="flex flex-col gap-0 sm:gap-3 -mx-4 sm:mx-0">
                                                 {zoneTasks.map((task) => {
                                                     const isExpanded = expandedTaskId === task.id
                                                     return (
                                                         <div 
                                                             key={task.id} 
                                                             className={cn(
-                                                                "bg-white border rounded-xl overflow-hidden transition-all shadow-sm",
-                                                                isExpanded ? "ring-2 ring-primary/20 border-primary/30" : "hover:border-slate-300"
+                                                                "bg-white transition-all",
+                                                                // Mobile: flat list style
+                                                                "border-b last:border-0",
+                                                                // Desktop: card style
+                                                                "sm:border sm:rounded-xl sm:shadow-sm sm:overflow-hidden sm:mb-3",
+                                                                isExpanded ? "sm:ring-0 sm:border-slate-300" : "sm:hover:border-slate-300"
                                                             )}
                                                         >
                                                             {/* Summary Row */}
                                                             <div 
-                                                                className="p-4 flex items-center justify-between cursor-pointer hover:bg-slate-50 transition-colors"
+                                                                className="p-4 sm:px-5 flex flex-col sm:flex-row sm:items-center justify-between cursor-pointer hover:bg-slate-50 transition-colors gap-4"
                                                                 onClick={() => toggleExpand(task.id)}
                                                             >
                                                                 <div className="flex items-center gap-4 flex-1 min-w-0">
-                                                                    <div className={cn(
-                                                                        "h-10 w-10 rounded-lg flex items-center justify-center shrink-0 transition-colors",
-                                                                        isExpanded ? "bg-primary/10 text-primary" : "bg-slate-100 text-slate-500",
-                                                                        task.equipment_type === 'CLEANING' && "w-auto px-0 bg-transparent"
-                                                                    )}>
-                                                                        {getEquipmentIcon(task.equipment_type)}
-                                                                    </div>
                                                                     
                                                                     <div className="min-w-0 flex-1">
-                                                                        <div className="flex items-center gap-2 mb-0.5">
-                                                                            <span className="font-semibold text-sm truncate">{task.equipment_name}</span>
+                                                                        <div className="flex items-center gap-2 mb-1">
+                                                                            <span className="font-semibold text-base truncate">{task.equipment_name}</span>
+                                                                        </div>
+                                                                        <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
                                                                             {task.workstation_name && (
-                                                                                <span className="text-xs text-muted-foreground bg-slate-100 px-1.5 py-0.5 rounded">
+                                                                                <span className="text-xs text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded font-medium">
                                                                                     {task.workstation_name}
                                                                                 </span>
                                                                             )}
-                                                                            <Badge variant="outline" className="text-[10px] h-5 px-1.5 font-normal ml-auto sm:ml-0">
+                                                                            <span className="text-xs text-slate-400">•</span>
+                                                                            <span className="text-xs text-slate-500 uppercase tracking-wide font-medium">
                                                                                 {getTaskTypeLabel(task.task_type)}
-                                                                            </Badge>
-                                                                        </div>
-                                                                        <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                                                                            <div className="flex items-center gap-1">
-                                                                                <User className="h-3 w-3" />
-                                                                                {task.completed_by_name?.split(' ')[0]}
-                                                                            </div>
-                                                                            <div className="flex items-center gap-1">
-                                                                                <Calendar className="h-3 w-3" />
-                                                                                {task.completed_at ? format(new Date(task.completed_at), 'dd.MM', { locale: ru }) : '-'}
-                                                                            </div>
-                                                                            <div className="flex items-center gap-1">
-                                                                                <Clock className="h-3 w-3" />
-                                                                                {task.completed_at ? format(new Date(task.completed_at), 'HH:mm', { locale: ru }) : '-'}
-                                                                            </div>
-                                                                            {task.photos && task.photos.length > 0 && (
-                                                                                <div className="flex items-center gap-1 text-blue-600 font-medium">
-                                                                                    <Eye className="h-3 w-3" />
-                                                                                    {task.photos.length} фото
-                                                                                </div>
-                                                                            )}
+                                                                            </span>
                                                                         </div>
                                                                     </div>
                                                                 </div>
 
-                                                                <div className="flex items-center gap-3 pl-4 border-l ml-4">
+                                                                <div className="flex items-center justify-between sm:justify-end gap-6 sm:mr-4 w-full sm:w-auto border-t sm:border-t-0 pt-3 sm:pt-0 mt-1 sm:mt-0">
+                                                                    <div className="flex flex-row sm:flex-col items-center sm:items-end gap-3 sm:gap-0 text-left sm:text-right">
+                                                                        <div className="flex items-center gap-2 mb-0.5">
+                                                                            <span className="text-sm font-medium text-slate-700">{task.completed_by_name?.split(' ')[0]}</span>
+                                                                        </div>
+                                                                        <div className="flex items-center gap-2 text-xs text-slate-400">
+                                                                            <span>{task.completed_at ? format(new Date(task.completed_at), 'dd.MM в HH:mm', { locale: ru }) : '-'}</span>
+                                                                        </div>
+                                                                        {task.verification_status === 'APPROVED' && (
+                                                                            <div className="mt-1">
+                                                                                <Badge variant="default" className="bg-green-100 text-green-700 hover:bg-green-100 border-0 h-5 px-1.5 text-[10px]">
+                                                                                    <CheckCircle2 className="h-3 w-3 mr-1" /> Одобрено
+                                                                                </Badge>
+                                                                            </div>
+                                                                        )}
+                                                                        {task.verification_status === 'REJECTED' && (
+                                                                            <div className="mt-1">
+                                                                                <Badge variant="destructive" className="bg-red-100 text-red-700 hover:bg-red-100 border-0 h-5 px-1.5 text-[10px]">
+                                                                                    <XCircle className="h-3 w-3 mr-1" /> Отклонено
+                                                                                </Badge>
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                    
+                                                                    <div className="flex items-center gap-4">
+                                                                        {task.photos && task.photos.length > 0 && (
+                                                                        <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-blue-50 text-blue-600 border border-blue-100">
+                                                                            <Camera className="h-3.5 w-3.5" />
+                                                                            <span className="text-xs font-bold">{task.photos.length}</span>
+                                                                        </div>
+                                                                    )}
+                                                                        <div className="sm:hidden text-muted-foreground">
+                                                                            {isExpanded ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+
+                                                                <div className="hidden sm:flex items-center gap-3 pl-4 border-l">
                                                                     {isExpanded ? <ChevronUp className="h-5 w-5 text-muted-foreground" /> : <ChevronDown className="h-5 w-5 text-muted-foreground" />}
                                                                 </div>
                                                             </div>
 
                                                             {/* Expanded Details */}
                                                             {isExpanded && (
-                                                                <div className="border-t bg-slate-50/50 p-6 animate-in slide-in-from-top-2 duration-200">
+                                                                <div className="border-t bg-white p-6 sm:px-8 pb-8 animate-in slide-in-from-top-2 duration-200">
                                                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                                                         {/* Photos */}
                                                                         <div>
@@ -578,36 +625,47 @@ export default function ChecklistsPage({ params }: { params: Promise<{ clubId: s
                                                                             )}
 
                                                                             <div className="space-y-2">
-                                                                                <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Ваше решение</div>
+                                                                                <div className="flex items-center justify-between">
+                                                                                    <div className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                                                                                        {equipmentTab === 'active' ? 'Причина возврата' : 'Комментарий к решению'}
+                                                                                    </div>
+                                                                                    {task.verified_by_name && (
+                                                                                        <div className="flex items-center gap-1 text-[10px] text-muted-foreground bg-slate-50 px-1.5 py-0.5 rounded">
+                                                                                            <User className="h-3 w-3" />
+                                                                                            <span>{task.verified_by_name}</span>
+                                                                                        </div>
+                                                                                    )}
+                                                                                </div>
                                                                                 <Textarea 
-                                                                                    placeholder="Комментарий (обязательно для возврата)..." 
-                                                                                    value={comment}
+                                                                                    placeholder={equipmentTab === 'active' ? "Опишите, что нужно исправить..." : "Комментарий отсутствует"} 
+                                                                                    value={equipmentTab === 'active' ? comment : (task.rejection_reason || task.verification_note || '')}
                                                                                     onChange={(e) => setComment(e.target.value)}
                                                                                     className="bg-white min-h-[80px] resize-none text-sm"
+                                                                                    disabled={equipmentTab === 'history'}
                                                                                 />
                                                                             </div>
 
-                                                                            <div className="flex gap-2 pt-2">
-                                                                                <Button 
-                                                                                    variant="outline" 
-                                                                                    className="flex-1 border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
-                                                                                    onClick={() => handleVerifyTask(task, 'REJECT')}
-                                                                                    disabled={isSubmittingTask || !comment.trim()}
-                                                                                >
-                                                                                    <XCircle className="mr-2 h-4 w-4" />
-                                                                                    На доработку
-                                                                                </Button>
-                                                                                <Button 
-                                                                                    className="flex-1 bg-green-600 hover:bg-green-700 text-white shadow-sm" 
-                                                                                    onClick={() => handleVerifyTask(task, 'APPROVE')}
-                                                                                    disabled={isSubmittingTask}
-                                                                                >
-                                                                                    <CheckCircle2 className="mr-2 h-4 w-4" />
-                                                                                    Одобрить
-                                                                                </Button>
-                                                                            </div>
+                                                                            {equipmentTab === 'active' && (
+                                                                                <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                                                                                    <Button 
+                                                                                        variant="outline" 
+                                                                                        className="w-full sm:flex-1 border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 h-12 md:h-9 font-semibold"
+                                                                                        onClick={() => handleVerifyTask(task, 'REJECT')}
+                                                                                        disabled={isSubmittingTask || !comment.trim()}
+                                                                                    >
+                                                                                        На доработку
+                                                                                    </Button>
+                                                                                    <Button 
+                                                                                        className="w-full sm:flex-1 bg-green-600 hover:bg-green-700 text-white shadow-sm h-12 md:h-9 font-semibold" 
+                                                                                        onClick={() => handleVerifyTask(task, 'APPROVE')}
+                                                                                        disabled={isSubmittingTask}
+                                                                                    >
+                                                                                        Одобрить
+                                                                                    </Button>
+                                                                                </div>
+                                                                            )}
                                                                             
-                                                                            <div className="flex justify-center pt-2">
+                                                                            <div className="flex justify-center pt-2 pb-2">
                                                                                 <button 
                                                                                     onClick={() => handleDeleteTask(task)}
                                                                                     className="text-xs text-slate-400 hover:text-red-500 flex items-center gap-1 transition-colors"
@@ -633,12 +691,12 @@ export default function ChecklistsPage({ params }: { params: Promise<{ clubId: s
                     </TabsContent>
 
                     {/* HISTORY TAB (Original Checklists) */}
-                    <TabsContent value="history">
+                    <TabsContent value="checklists">
                         <Card>
                             <CardHeader className="flex flex-row items-center justify-between">
                                 <div>
-                                    <CardTitle>Все проверки</CardTitle>
-                                    <CardDescription>Список отчетов сотрудников</CardDescription>
+                                    <CardTitle>История проверок</CardTitle>
+                                    <CardDescription>Результаты чеклистов сотрудников</CardDescription>
                                 </div>
                                 <div className="flex gap-2">
                                     <Button variant="outline" size="sm" onClick={() => fetchHistory(clubId)}>
@@ -680,8 +738,8 @@ export default function ChecklistsPage({ params }: { params: Promise<{ clubId: s
                                                     <TableCell>{evaluation.employee_name}</TableCell>
                                                     <TableCell>{evaluation.evaluator_name || '—'}</TableCell>
                                                     <TableCell className="text-right">
-                                                        <span className={`font-bold ${evaluation.total_score >= 80 ? 'text-green-600' : evaluation.total_score >= 50 ? 'text-amber-600' : 'text-red-600'}`}>
-                                                            {Math.round(evaluation.total_score)}%
+                                                        <span className={`font-bold ${((evaluation.total_score / (evaluation.max_score || 100)) * 100) >= 80 ? 'text-green-600' : ((evaluation.total_score / (evaluation.max_score || 100)) * 100) >= 50 ? 'text-amber-600' : 'text-red-600'}`}>
+                                                            {Math.round((evaluation.total_score / (evaluation.max_score || 100)) * 100)}%
                                                         </span>
                                                     </TableCell>
                                                 </TableRow>
@@ -719,17 +777,19 @@ export default function ChecklistsPage({ params }: { params: Promise<{ clubId: s
                                             {(() => {
                                                 const stats = history.reduce((acc, curr) => {
                                                     if (!acc[curr.employee_name]) {
-                                                        acc[curr.employee_name] = { total: 0, count: 0, name: curr.employee_name };
+                                                        acc[curr.employee_name] = { totalPercent: 0, count: 0, name: curr.employee_name };
                                                     }
-                                                    acc[curr.employee_name].total += curr.total_score;
+                                                    // Calculate percentage for this evaluation
+                                                    const percent = (curr.total_score / (curr.max_score || 100)) * 100;
+                                                    acc[curr.employee_name].totalPercent += percent;
                                                     acc[curr.employee_name].count += 1;
                                                     return acc;
-                                                }, {} as Record<string, { total: number, count: number, name: string }>);
+                                                }, {} as Record<string, { totalPercent: number, count: number, name: string }>);
 
                                                 return Object.values(stats)
-                                                    .sort((a, b) => (b.total / b.count) - (a.total / a.count))
+                                                    .sort((a, b) => (b.totalPercent / b.count) - (a.totalPercent / a.count))
                                                     .map((stat, idx) => {
-                                                        const avg = stat.total / stat.count;
+                                                        const avg = stat.totalPercent / stat.count;
                                                         return (
                                                             <TableRow key={idx}>
                                                                 <TableCell className="font-medium">{stat.name}</TableCell>
@@ -797,9 +857,14 @@ export default function ChecklistsPage({ params }: { params: Promise<{ clubId: s
                                     </div>
                                     <div className="text-right">
                                         <p className="text-muted-foreground text-xs uppercase font-bold">Итоговый балл</p>
-                                        <span className={`text-xl font-black ${selectedEvaluation.total_score >= 80 ? 'text-green-600' : 'text-amber-600'}`}>
-                                            {Math.round(selectedEvaluation.total_score)}%
-                                        </span>
+                                        <div className="flex items-center justify-end gap-2">
+                                            <span className="text-lg text-muted-foreground">
+                                                {Math.round(selectedEvaluation.total_score)} <span className="text-sm">/ {Math.round(selectedEvaluation.max_score || 100)}</span>
+                                            </span>
+                                            <span className={`text-xl font-black ${((selectedEvaluation.total_score / (selectedEvaluation.max_score || 100)) * 100) >= 80 ? 'text-green-600' : 'text-amber-600'}`}>
+                                                {Math.round((selectedEvaluation.total_score / (selectedEvaluation.max_score || 100)) * 100)}%
+                                            </span>
+                                        </div>
                                     </div>
                                 </div>
 

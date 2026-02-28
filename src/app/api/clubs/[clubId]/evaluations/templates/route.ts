@@ -57,7 +57,8 @@ export async function GET(
                                'is_photo_required', ti.is_photo_required,
                                'min_photos', ti.min_photos,
                                'related_entity_type', ti.related_entity_type,
-                               'target_zone', ti.target_zone
+                               'target_zone', ti.target_zone,
+                               'options', ti.options
                            ) ORDER BY ti.sort_order
                        ) FILTER (WHERE ti.id IS NOT NULL), 
                        '[]'::json

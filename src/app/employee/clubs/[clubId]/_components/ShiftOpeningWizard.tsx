@@ -19,6 +19,11 @@ interface ShiftOpeningWizardProps {
     checklistTemplate: any
 }
 
+interface ChecklistOption {
+    label: string
+    score: number
+}
+
 export function ShiftOpeningWizard({
     isOpen,
     onClose,
@@ -292,8 +297,8 @@ export function ShiftOpeningWizard({
             return
         }
 
-        if (response?.score === 0 && !response.comment && !response.selected_workstations?.length) {
-            alert('При выборе "Нет" обязательно укажите комментарий или выберите проблемные места!')
+        if (response?.score < (currentItem.weight || 1) && !response.comment && !response.selected_workstations?.length) {
+            alert('При выборе "Есть замечания" обязательно укажите комментарий или выберите вариант проблемы!')
             return
         }
 
@@ -335,7 +340,7 @@ export function ShiftOpeningWizard({
             <DialogContent className="w-full h-full max-w-none m-0 rounded-none sm:rounded-lg sm:max-w-2xl sm:h-auto sm:max-h-[90vh] bg-slate-950 border-slate-800 text-white overflow-hidden flex flex-col p-0">
                 
                 {/* Header with Progress */}
-                <div className="p-4 border-b border-slate-800 bg-slate-900/50">
+                <div className="p-4 border-b border-slate-800 bg-slate-900/50 pr-12">
                     <div className="flex items-center justify-between mb-2">
                         <DialogTitle className="text-lg">
                             {currentStep === -1 ? 'Выбор смены' : 'Приемка смены'}
@@ -423,31 +428,72 @@ export function ShiftOpeningWizard({
 
                             <div className="grid grid-cols-2 gap-3">
                                 <button
-                                    onClick={() => handleChecklistChange(currentItem.id, 1)}
+                                    onClick={() => handleChecklistChange(currentItem.id, currentItem.weight || 1)}
                                     className={`
                                         flex flex-col items-center justify-center gap-2 p-4 rounded-xl border-2 transition-all
-                                        ${checklistResponses[currentItem.id]?.score === 1
+                                        ${checklistResponses[currentItem.id]?.score === (currentItem.weight || 1)
                                             ? 'bg-green-500/10 border-green-500 text-green-400'
                                             : 'bg-slate-900 border-slate-800 text-slate-400 hover:bg-slate-800'}
                                     `}
                                 >
                                     <CheckCircle2 className="h-8 w-8" />
                                     <span className="font-bold">Все отлично</span>
+                                    <span className="text-xs opacity-60">({currentItem.weight || 1} баллов)</span>
                                 </button>
 
                                 <button
-                                    onClick={() => handleChecklistChange(currentItem.id, 0)}
+                                    onClick={() => {
+                                        // If options exist, select first bad option or just set score to 0
+                                        // But this button now acts as a toggle to show "Issues" section
+                                        // Let's just set score to 0 for now to trigger "bad" state, user can refine
+                                        handleChecklistChange(currentItem.id, 0)
+                                    }}
                                     className={`
                                         flex flex-col items-center justify-center gap-2 p-4 rounded-xl border-2 transition-all
-                                        ${checklistResponses[currentItem.id]?.score === 0
+                                        ${checklistResponses[currentItem.id]?.score < (currentItem.weight || 1)
                                             ? 'bg-red-500/10 border-red-500 text-red-400'
                                             : 'bg-slate-900 border-slate-800 text-slate-400 hover:bg-slate-800'}
                                     `}
                                 >
-                                    <Trash2 className="h-8 w-8" /> {/* Using Trash icon as "Issues" metaphor or just XCircle */}
-                                    <span className="font-bold">Есть проблемы</span>
+                                    <Trash2 className="h-8 w-8" />
+                                    <span className="font-bold">Есть замечания</span>
                                 </button>
                             </div>
+
+                            {/* Options Selection (If "Issues" selected and options exist) */}
+                            {checklistResponses[currentItem.id]?.score < (currentItem.weight || 1) && currentItem.options && currentItem.options.length > 0 && (
+                                <div className="p-4 bg-slate-900/50 rounded-xl border border-slate-800 animate-in fade-in slide-in-from-top-2">
+                                    <p className="text-xs text-slate-400 mb-3 font-medium uppercase tracking-wider">Уточните состояние:</p>
+                                    <div className="grid gap-2">
+                                        {currentItem.options
+                                            .filter((option: ChecklistOption) => option.score < (currentItem.weight || 1)) // Filter out max score options
+                                            .map((option: ChecklistOption, idx: number) => (
+                                            <button
+                                                key={idx}
+                                                onClick={() => {
+                                                    handleChecklistChange(currentItem.id, option.score)
+                                                    setChecklistResponses(prev => ({
+                                                        ...prev,
+                                                        [currentItem.id]: { 
+                                                            ...prev[currentItem.id], 
+                                                            comment: option.label // Auto-fill comment with option label
+                                                        }
+                                                    }))
+                                                }}
+                                                className={`
+                                                    flex items-center justify-between p-3 rounded-lg border text-left transition-all
+                                                    ${checklistResponses[currentItem.id]?.score === option.score
+                                                        ? 'bg-red-500/20 border-red-500 text-white'
+                                                        : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'}
+                                                `}
+                                            >
+                                                <span>{option.label}</span>
+                                                <span className="text-xs font-mono bg-black/30 px-2 py-1 rounded">{option.score} баллов</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
 
                             {/* Workstation Selection Grid */}
                             {currentItem.related_entity_type === 'workstations' && (
@@ -539,11 +585,11 @@ export function ShiftOpeningWizard({
                             )}
 
                             {/* Comment Input */}
-                            {(checklistResponses[currentItem.id]?.score === 0 || checklistResponses[currentItem.id]?.comment) && (
+                            {(checklistResponses[currentItem.id]?.score < (currentItem.weight || 1) || checklistResponses[currentItem.id]?.comment) && (
                                 <div className="animate-in fade-in slide-in-from-bottom-2">
                                     <Label className="text-xs text-slate-400 mb-2 block">Комментарий</Label>
                                     <Input 
-                                        placeholder={checklistResponses[currentItem.id]?.score === 0 ? "Опишите проблему..." : "Комментарий (опционально)..."}
+                                        placeholder={checklistResponses[currentItem.id]?.score < (currentItem.weight || 1) ? "Опишите проблему..." : "Комментарий (опционально)..."}
                                         className="bg-slate-900 border-slate-700 focus-visible:ring-purple-500"
                                         value={checklistResponses[currentItem.id]?.comment || ''}
                                         onChange={(e) => setChecklistResponses(prev => ({

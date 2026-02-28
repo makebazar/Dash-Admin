@@ -2,6 +2,64 @@ import { NextResponse } from 'next/server'
 import { query } from '@/db'
 import { cookies } from 'next/headers'
 
+export async function GET(
+    request: Request,
+    { params }: { params: Promise<{ clubId: string, templateId: string }> }
+) {
+    try {
+        const userId = (await cookies()).get('session_user_id')?.value
+        const { clubId, templateId } = await params
+
+        if (!userId) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+        }
+
+        // Access check
+        const accessCheck = await query(
+            `
+            SELECT 1 FROM clubs WHERE id = $1 AND owner_id = $2
+            UNION
+            SELECT 1 FROM club_employees WHERE club_id = $1 AND user_id = $2
+            `,
+            [clubId, userId]
+        )
+
+        if ((accessCheck.rowCount || 0) === 0) {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+        }
+
+        // Get template
+        const templateRes = await query(
+            `SELECT * FROM evaluation_templates WHERE id = $1 AND club_id = $2`,
+            [templateId, clubId]
+        )
+
+        if (templateRes.rowCount === 0) {
+            return NextResponse.json({ error: 'Not Found' }, { status: 404 })
+        }
+
+        const template = templateRes.rows[0]
+
+        // Get active items
+        const itemsRes = await query(
+            `SELECT id, content, description, weight, sort_order, is_photo_required, related_entity_type, min_photos, target_zone, options 
+             FROM evaluation_template_items 
+             WHERE template_id = $1 AND is_active = TRUE 
+             ORDER BY sort_order ASC`,
+            [templateId]
+        )
+
+        return NextResponse.json({
+            ...template,
+            items: itemsRes.rows
+        })
+
+    } catch (error) {
+        console.error('Get Template Error:', error)
+        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
+    }
+}
+
 export async function PATCH(
     request: Request,
     { params }: { params: Promise<{ clubId: string, templateId: string }> }
@@ -52,17 +110,17 @@ export async function PATCH(
                     // Update existing
                     await query(
                         `UPDATE evaluation_template_items 
-                         SET content = $1, description = $2, weight = $3, sort_order = $4, is_photo_required = $5, related_entity_type = $6, min_photos = $7, target_zone = $8, is_active = TRUE
-                         WHERE id = $9 AND template_id = $10`,
-                        [item.content, item.description, item.weight || 1.0, i, item.is_photo_required || false, item.related_entity_type || null, item.min_photos || 0, item.target_zone || null, item.id, templateId]
+                         SET content = $1, description = $2, weight = $3, sort_order = $4, is_photo_required = $5, related_entity_type = $6, min_photos = $7, target_zone = $8, options = $9, is_active = TRUE
+                         WHERE id = $10 AND template_id = $11`,
+                        [item.content, item.description, item.weight || 1.0, i, item.is_photo_required || false, item.related_entity_type || null, item.min_photos || 0, item.target_zone || null, JSON.stringify(item.options || []), item.id, templateId]
                     )
                     updatedIds.add(item.id)
                 } else {
                     // Insert new
                     await query(
-                        `INSERT INTO evaluation_template_items (template_id, content, description, weight, sort_order, is_photo_required, related_entity_type, min_photos, target_zone, is_active)
-                         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, TRUE)`,
-                        [templateId, item.content, item.description, item.weight || 1.0, i, item.is_photo_required || false, item.related_entity_type || null, item.min_photos || 0, item.target_zone || null]
+                        `INSERT INTO evaluation_template_items (template_id, content, description, weight, sort_order, is_photo_required, related_entity_type, min_photos, target_zone, options, is_active)
+                         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, TRUE)`,
+                        [templateId, item.content, item.description, item.weight || 1.0, i, item.is_photo_required || false, item.related_entity_type || null, item.min_photos || 0, item.target_zone || null, JSON.stringify(item.options || [])]
                     )
                 }
             }

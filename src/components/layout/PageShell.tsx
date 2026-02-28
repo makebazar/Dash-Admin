@@ -60,8 +60,11 @@ interface PageToolbarProps extends React.HTMLAttributes<HTMLDivElement> {
 
 export function PageToolbar({ children, className, ...props }: PageToolbarProps) {
     return (
-        <div className={cn("flex flex-col gap-4 md:flex-row md:items-center md:justify-between", className)} {...props}>
-            {children}
+        <div className={cn("flex flex-col gap-4 mb-6", className)} {...props}>
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                {children}
+            </div>
+            <div className="h-px bg-border/40" />
         </div>
     )
 }

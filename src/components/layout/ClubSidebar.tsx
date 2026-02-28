@@ -51,7 +51,7 @@ export function ClubSidebarContent({ club, clubId, onLinkClick }: ClubSidebarCon
         { href: `/clubs/${clubId}/finance`, label: 'Финансы', icon: <DollarSign className="h-4 w-4" /> },
         { href: `/clubs/${clubId}/inventory`, label: 'Склад', icon: <Package className="h-4 w-4" /> },
         { href: `/clubs/${clubId}/equipment`, label: 'Оборудование', icon: <Monitor className="h-4 w-4" /> },
-        { href: `/clubs/${clubId}/checklists`, label: 'Центр проверок', icon: <ClipboardCheck className="h-4 w-4" /> },
+        { href: `/clubs/${clubId}/reviews`, label: 'Центр проверок', icon: <ClipboardCheck className="h-4 w-4" /> },
     ]
 
     const settingsLinks = [
