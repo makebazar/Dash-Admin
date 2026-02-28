@@ -1,10 +1,9 @@
 import { cn } from "@/lib/utils"
 import React from "react"
+import { Search } from "lucide-react"
+import { Input } from "@/components/ui/input"
 
-interface PageShellProps extends React.HTMLAttributes<HTMLDivElement> {
-    children: React.ReactNode
-    maxWidth?: "full" | "xl" | "2xl" | "3xl" | "4xl" | "5xl" | "6xl" | "7xl"
-}
+// ... (keep PageShell and PageHeader)
 
 export function PageShell({ children, className, maxWidth = "full", ...props }: PageShellProps) {
     const maxWidthClass = {
@@ -49,6 +48,57 @@ export function PageHeader({ title, description, children, className, ...props }
                     {children}
                 </div>
             )}
+        </div>
+    )
+}
+
+// --- NEW COMPONENTS ---
+
+interface PageToolbarProps extends React.HTMLAttributes<HTMLDivElement> {
+    children: React.ReactNode
+}
+
+export function PageToolbar({ children, className, ...props }: PageToolbarProps) {
+    return (
+        <div className={cn("flex flex-col gap-4 md:flex-row md:items-center md:justify-between", className)} {...props}>
+            {children}
+        </div>
+    )
+}
+
+interface ToolbarGroupProps extends React.HTMLAttributes<HTMLDivElement> {
+    children: React.ReactNode
+    align?: "start" | "end"
+}
+
+export function ToolbarGroup({ children, className, align = "start", ...props }: ToolbarGroupProps) {
+    return (
+        <div 
+            className={cn(
+                "flex flex-wrap items-center gap-2", 
+                align === "end" ? "sm:ml-auto" : "",
+                className
+            )} 
+            {...props}
+        >
+            {children}
+        </div>
+    )
+}
+
+interface SearchInputProps extends React.ComponentProps<typeof Input> {
+    placeholder?: string
+}
+
+export function SearchInput({ className, ...props }: SearchInputProps) {
+    return (
+        <div className="relative">
+            <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+                type="search"
+                className={cn("pl-8 h-9 w-[150px] lg:w-[250px]", className)}
+                {...props}
+            />
         </div>
     )
 }

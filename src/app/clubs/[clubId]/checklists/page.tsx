@@ -17,7 +17,7 @@ import { format } from "date-fns"
 import { ru } from "date-fns/locale"
 import { ImageViewer } from "@/components/ui/image-viewer"
 import { cn } from "@/lib/utils"
-import { PageShell, PageHeader } from "@/components/layout/PageShell"
+import { PageShell, PageHeader, PageToolbar, ToolbarGroup } from "@/components/layout/PageShell"
 
 interface Evaluation {
     id: number
@@ -394,51 +394,60 @@ export default function ChecklistsPage({ params }: { params: Promise<{ clubId: s
             </PageHeader>
 
             <Tabs defaultValue="equipment" className="w-full">
-                    <TabsList className="mb-6">
-                        <TabsTrigger value="equipment" className="flex items-center gap-2">
-                            <Monitor className="h-4 w-4" />
+                <div className="border-b mb-6 overflow-x-auto">
+                    <TabsList className="bg-transparent h-auto p-0 space-x-6 min-w-max">
+                        <TabsTrigger value="equipment" variant="underline" className="pb-3 rounded-none">
+                            <Monitor className="h-4 w-4 mr-2" />
                             Оборудование
-                            {pendingTasks > 0 && <Badge variant="secondary" className="ml-1 h-5 px-1.5">{pendingTasks}</Badge>}
+                            {pendingTasks > 0 && <Badge variant="secondary" className="ml-2 h-5 px-1.5 bg-slate-100">{pendingTasks}</Badge>}
                         </TabsTrigger>
-                        <TabsTrigger value="history" className="flex items-center gap-2">
-                            <History className="h-4 w-4" />
+                        <TabsTrigger value="history" variant="underline" className="pb-3 rounded-none">
+                            <History className="h-4 w-4 mr-2" />
                             Чеклисты персонала
-                            {pendingEvaluations > 0 && <Badge variant="secondary" className="ml-1 h-5 px-1.5">{pendingEvaluations}</Badge>}
+                            {pendingEvaluations > 0 && <Badge variant="secondary" className="ml-2 h-5 px-1.5 bg-slate-100">{pendingEvaluations}</Badge>}
                         </TabsTrigger>
-                        <TabsTrigger value="stats" className="flex items-center gap-2">
-                            <BarChart3 className="h-4 w-4" />
+                        <TabsTrigger value="stats" variant="underline" className="pb-3 rounded-none">
+                            <BarChart3 className="h-4 w-4 mr-2" />
                             Статистика
                         </TabsTrigger>
                     </TabsList>
+                </div>
 
                     {/* EQUIPMENT TAB */}
                     <TabsContent value="equipment">
                         <div className="space-y-6">
                             {/* Filters */}
                             {tasks.length > 0 && (
-                                <div className="flex flex-wrap gap-2 mb-4">
-                                    <Select value={filterZone} onValueChange={setFilterZone}>
-                                        <SelectTrigger className="w-[160px] h-9 text-sm bg-background border-input">
-                                            <Layers className="mr-2 h-3.5 w-3.5 text-muted-foreground" />
-                                            <SelectValue placeholder="Зона" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="all">Все зоны</SelectItem>
-                                            {zones.map(z => <SelectItem key={z} value={z}>{z}</SelectItem>)}
-                                        </SelectContent>
-                                    </Select>
+                                <PageToolbar>
+                                    <ToolbarGroup>
+                                        <Select value={filterZone} onValueChange={setFilterZone}>
+                                            <SelectTrigger className="w-[180px] h-9 text-sm">
+                                                <Layers className="mr-2 h-3.5 w-3.5 text-muted-foreground" />
+                                                <SelectValue placeholder="Зона" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="all">Все зоны</SelectItem>
+                                                {zones.map(z => <SelectItem key={z} value={z}>{z}</SelectItem>)}
+                                            </SelectContent>
+                                        </Select>
 
-                                    <Select value={filterEmployee} onValueChange={setFilterEmployee}>
-                                        <SelectTrigger className="w-[160px] h-9 text-sm bg-background border-input">
-                                            <User className="mr-2 h-3.5 w-3.5 text-muted-foreground" />
-                                            <SelectValue placeholder="Сотрудник" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="all">Все сотрудники</SelectItem>
-                                            {employees.map(e => <SelectItem key={e} value={e}>{e}</SelectItem>)}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
+                                        <Select value={filterEmployee} onValueChange={setFilterEmployee}>
+                                            <SelectTrigger className="w-[180px] h-9 text-sm">
+                                                <User className="mr-2 h-3.5 w-3.5 text-muted-foreground" />
+                                                <SelectValue placeholder="Сотрудник" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="all">Все сотрудники</SelectItem>
+                                                {employees.map(e => <SelectItem key={e} value={e}>{e}</SelectItem>)}
+                                            </SelectContent>
+                                        </Select>
+                                    </ToolbarGroup>
+                                    <ToolbarGroup align="end">
+                                        <div className="text-sm text-muted-foreground">
+                                            Показано: <span className="font-medium text-foreground">{Object.values(groupedTasks).reduce((acc, tasks) => acc + tasks.length, 0)}</span> задач
+                                        </div>
+                                    </ToolbarGroup>
+                                </PageToolbar>
                             )}
 
                             {isTasksLoading ? (
