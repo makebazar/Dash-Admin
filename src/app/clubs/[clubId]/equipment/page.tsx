@@ -111,7 +111,7 @@ export default function EquipmentDashboard() {
         {
             title: "Проверка отчетов",
             description: "Верификация выполненных работ и фотоотчетов",
-            href: `/clubs/${clubId}/equipment/verification`,
+            href: `/clubs/${clubId}/checklists`,
             icon: <CheckSquare className="h-6 w-6" />,
             color: "text-rose-500",
             bg: "bg-rose-50"
