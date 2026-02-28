@@ -743,6 +743,8 @@ export default function ChecklistsPage({ params }: { params: Promise<{ clubId: s
                             </CardContent>
                         </Card>
                     </TabsContent>
+                </Tabs>
+
             {/* DETAIL & REVIEW DIALOG */}
             <Dialog
                 open={!!selectedEvaluation}
@@ -971,7 +973,6 @@ export default function ChecklistsPage({ params }: { params: Promise<{ clubId: s
                         </button>
                     </div>
                 )}
-            </div>
         </PageShell>
     )
 }
