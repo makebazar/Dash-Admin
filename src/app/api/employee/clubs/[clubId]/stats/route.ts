@@ -123,10 +123,10 @@ export async function GET(
                     -- 1. Tasks assigned or completed this month
                     ((assigned_user_id = $1 OR completed_by = $1) AND due_date >= $2 AND due_date <= $3)
                     OR
-                    -- 2. Tasks completed or put in REWORK this month by user
+                    -- 2. Tasks completed or REJECTED this month by user
                     ((completed_by = $1 OR assigned_user_id = $1) AND (
                         (status = 'COMPLETED' AND completed_at >= $2 AND completed_at <= $3) OR
-                        (status = 'REWORK' AND updated_at >= $2 AND updated_at <= $3)
+                        (verification_status = 'REJECTED' AND verified_at >= $2 AND verified_at <= $3)
                     ))
                 )`,
             [userId, startOfMonth, endOfMonth]

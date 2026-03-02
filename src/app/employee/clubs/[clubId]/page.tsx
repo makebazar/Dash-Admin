@@ -250,7 +250,7 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
             }
 
             // Fetch rework maintenance tasks count
-            const reworkRes = await fetch(`/api/clubs/${id}/equipment/maintenance?assigned=me&status=REWORK`)
+            const reworkRes = await fetch(`/api/clubs/${id}/equipment/maintenance?assigned=me&verification_status=REJECTED`)
             const reworkData = await reworkRes.json()
             if (reworkRes.ok) {
                 setReworkTasksCount(reworkData.total || 0)
@@ -495,7 +495,7 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
             <div className="max-w-7xl mx-auto px-4 py-6 md:px-6 md:py-8 space-y-6">
                 {/* Rework Alert Notification */}
                 {reworkTasksCount > 0 && (
-                    <Link href={`/employee/clubs/${clubId}/tasks?status=REWORK`} className="block group">
+                    <Link href={`/employee/clubs/${clubId}/tasks?verification_status=REJECTED`} className="block group">
                         <div className="relative overflow-hidden rounded-2xl bg-rose-500 p-4 text-white shadow-lg shadow-rose-500/25 transition-all hover:scale-[1.01] active:scale-[0.99]">
                             <div className="absolute top-0 right-0 -mt-4 -mr-4 h-24 w-24 rounded-full bg-white/10 blur-2xl group-hover:bg-white/20 transition-colors" />
                             <div className="flex items-center justify-between relative z-10">
