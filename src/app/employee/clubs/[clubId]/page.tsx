@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {
     Clock, Loader2, LogIn, LogOut, Wallet, Activity, Calendar,
-    TrendingUp, Target, Zap, ChevronRight, Trophy, Brush, ClipboardCheck, Monitor
+    TrendingUp, Target, Zap, ChevronRight, Trophy, Brush, ClipboardCheck, Monitor, AlertCircle
 } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -92,6 +92,7 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
     const [isLoading, setIsLoading] = useState(true)
     const [isActionLoading, setIsActionLoading] = useState(false)
     const [pendingTasksCount, setPendingTasksCount] = useState(0)
+    const [reworkTasksCount, setReworkTasksCount] = useState(0)
     
     // Virtual Balance State
     const [virtualBalance, setVirtualBalance] = useState<{
@@ -246,6 +247,13 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
             const tasksData = await tasksRes.json()
             if (tasksRes.ok) {
                 setPendingTasksCount(tasksData.total || 0)
+            }
+
+            // Fetch rework maintenance tasks count
+            const reworkRes = await fetch(`/api/clubs/${id}/equipment/maintenance?assigned=me&status=REWORK`)
+            const reworkData = await reworkRes.json()
+            if (reworkRes.ok) {
+                setReworkTasksCount(reworkData.total || 0)
             }
 
             // Fetch My KPI Rating
@@ -485,6 +493,31 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
             </div>
 
             <div className="max-w-7xl mx-auto px-4 py-6 md:px-6 md:py-8 space-y-6">
+                {/* Rework Alert Notification */}
+                {reworkTasksCount > 0 && (
+                    <Link href={`/employee/clubs/${clubId}/tasks?status=REWORK`} className="block group">
+                        <div className="relative overflow-hidden rounded-2xl bg-rose-500 p-4 text-white shadow-lg shadow-rose-500/25 transition-all hover:scale-[1.01] active:scale-[0.99]">
+                            <div className="absolute top-0 right-0 -mt-4 -mr-4 h-24 w-24 rounded-full bg-white/10 blur-2xl group-hover:bg-white/20 transition-colors" />
+                            <div className="flex items-center justify-between relative z-10">
+                                <div className="flex items-center gap-4">
+                                    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/20 backdrop-blur-sm animate-pulse">
+                                        <AlertCircle className="h-6 w-6" />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-lg font-bold">Задачи на доработке!</h3>
+                                        <p className="text-sm text-white/80">
+                                            Администратор вернул <span className="font-bold underline">{reworkTasksCount} задач(и)</span>. Это снижает ваш KPI.
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-2 font-bold bg-white/20 px-4 py-2 rounded-xl backdrop-blur-sm">
+                                    Исправить
+                                    <ChevronRight className="h-4 w-4" />
+                                </div>
+                            </div>
+                        </div>
+                    </Link>
+                )}
 
                 {/* Main Grid */}
                 <div className="grid gap-4 lg:gap-6 lg:grid-cols-3">
@@ -596,33 +629,49 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                         <Link href={`/employee/clubs/${clubId}/tasks`} className="block">
                             <Card className={cn(
                                 "border-0 shadow-lg transition-all hover:scale-[1.02] active:scale-[0.98]",
-                                pendingTasksCount > 0
-                                    ? "bg-gradient-to-br from-amber-500 to-orange-600 text-white"
-                                    : "bg-white dark:bg-slate-800/50 backdrop-blur"
+                                reworkTasksCount > 0 
+                                    ? "bg-gradient-to-br from-rose-500 to-red-600 text-white animate-pulse shadow-rose-500/40"
+                                    : pendingTasksCount > 0
+                                        ? "bg-gradient-to-br from-amber-500 to-orange-600 text-white"
+                                        : "bg-white dark:bg-slate-800/50 backdrop-blur"
                             )}>
                                 <CardContent className="pt-6">
                                     <div className="flex items-start justify-between">
                                         <div>
                                             <p className={cn(
                                                 "text-sm font-medium",
-                                                pendingTasksCount > 0 ? "text-white/80" : "text-muted-foreground"
+                                                (pendingTasksCount > 0 || reworkTasksCount > 0) ? "text-white/80" : "text-muted-foreground"
                                             )}>Задачи по обслуживанию</p>
-                                            <p className="text-3xl font-bold mt-1">{pendingTasksCount} задач</p>
+                                            <p className="text-3xl font-bold mt-1">
+                                                {reworkTasksCount > 0 ? reworkTasksCount : pendingTasksCount} задач
+                                            </p>
                                             <p className={cn(
                                                 "text-sm mt-1",
-                                                pendingTasksCount > 0 ? "text-white/70" : "text-emerald-500 font-medium"
+                                                reworkTasksCount > 0 
+                                                    ? "text-white font-black underline underline-offset-4" 
+                                                    : pendingTasksCount > 0 
+                                                        ? "text-white/70" 
+                                                        : "text-emerald-500 font-medium"
                                             )}>
-                                                {pendingTasksCount > 0 ? "Требуют внимания" : "Все оборудование чистое"}
+                                                {reworkTasksCount > 0 
+                                                    ? "ЕСТЬ ДОРАБОТКА!" 
+                                                    : pendingTasksCount > 0 
+                                                        ? "Требуют внимания" 
+                                                        : "Все оборудование чистое"}
                                             </p>
                                         </div>
                                         <div className={cn(
                                             "p-3 rounded-xl",
-                                            pendingTasksCount > 0 ? "bg-white/20" : "bg-amber-500/10"
+                                            (pendingTasksCount > 0 || reworkTasksCount > 0) ? "bg-white/20" : "bg-amber-500/10"
                                         )}>
-                                            <Brush className={cn(
-                                                "h-6 w-6",
-                                                pendingTasksCount > 0 ? "text-white" : "text-amber-500"
-                                            )} />
+                                            {reworkTasksCount > 0 ? (
+                                                <AlertCircle className="h-6 w-6 text-white" />
+                                            ) : (
+                                                <Brush className={cn(
+                                                    "h-6 w-6",
+                                                    pendingTasksCount > 0 ? "text-white" : "text-amber-500"
+                                                )} />
+                                            )}
                                         </div>
                                     </div>
                                 </CardContent>
