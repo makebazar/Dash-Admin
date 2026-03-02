@@ -176,7 +176,7 @@ export function ShiftClosingWizard({
     const startInventory = () => {
         startTransition(async () => {
             try {
-                // Determine target metric key: use club settings if available, otherwise fallback to smart search
+                // 1. Determine target metric key
                 const targetMetric = inventorySettings?.employee_default_metric_key || 
                     reportTemplate?.schema?.find((f: any) => 
                         f.metric_key.toLowerCase().includes('bar') || 
@@ -185,13 +185,25 @@ export function ShiftClosingWizard({
                         f.custom_label.toLowerCase().includes('выручка')
                     )?.metric_key || 'total_revenue'
 
-                console.log('Starting inventory with metric:', targetMetric)
-                const newInvId = await createInventory(clubId, userId, targetMetric)
+                // 2. Determine which warehouse to use. 
+                // If multiple are allowed, we'll pick the first one for now (simplest for shift closing)
+                const allowedWarehouseId = inventorySettings?.employee_allowed_warehouse_ids?.[0] || null
+
+                console.log('Starting inventory:', { targetMetric, allowedWarehouseId })
+                
+                const newInvId = await createInventory(
+                    clubId, 
+                    userId, 
+                    targetMetric, 
+                    null, // categoryId
+                    allowedWarehouseId
+                )
+                
                 setInventoryId(newInvId)
                 const items = await getInventoryItems(newInvId)
                 setInventoryItems(items)
             } catch (e) {
-                console.error(e)
+                console.error('Failed to start inventory:', e)
                 alert("Ошибка запуска инвентаризации")
             }
         })
