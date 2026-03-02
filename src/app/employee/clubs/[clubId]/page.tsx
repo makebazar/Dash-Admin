@@ -48,6 +48,12 @@ interface Stats {
         checklist_bonuses: number
         maintenance_bonuses: number
         revenue_kpi_bonuses: number
+        virtual_bonuses?: {
+            checklist: number
+            maintenance: number
+            revenue: number
+            total: number
+        }
     }
 }
 
@@ -659,6 +665,30 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                                                     <div className="flex justify-between text-[11px] text-white/60">
                                                         <span>KPI Выручка:</span>
                                                         <span className="font-bold text-emerald-300">+{formatCurrency(stats.breakdown.revenue_kpi_bonuses)}</span>
+                                                    </div>
+                                                )}
+
+                                                {stats.breakdown.virtual_bonuses && stats.breakdown.virtual_bonuses.total > 0 && (
+                                                    <div className="mt-2 pt-2 border-t border-white/5 space-y-1">
+                                                        <p className="text-[9px] uppercase tracking-wider text-white/40 font-bold">На бонусный баланс</p>
+                                                        {stats.breakdown.virtual_bonuses.checklist > 0 && (
+                                                            <div className="flex justify-between text-[11px] text-white/60">
+                                                                <span>Чек-листы:</span>
+                                                                <span className="font-bold text-amber-300">+{stats.breakdown.virtual_bonuses.checklist} Б</span>
+                                                            </div>
+                                                        )}
+                                                        {stats.breakdown.virtual_bonuses.maintenance > 0 && (
+                                                            <div className="flex justify-between text-[11px] text-white/60">
+                                                                <span>Обслуживание:</span>
+                                                                <span className="font-bold text-amber-300">+{stats.breakdown.virtual_bonuses.maintenance} Б</span>
+                                                            </div>
+                                                        )}
+                                                        {stats.breakdown.virtual_bonuses.revenue > 0 && (
+                                                            <div className="flex justify-between text-[11px] text-white/60">
+                                                                <span>KPI Выручка:</span>
+                                                                <span className="font-bold text-amber-300">+{stats.breakdown.virtual_bonuses.revenue} Б</span>
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 )}
                                             </div>

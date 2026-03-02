@@ -207,6 +207,10 @@ export async function GET(
         let checklistMonthlyBonus = 0;
         let maintenanceBonus = 0;
         
+        let revenueKpiBonusVirtual = 0;
+        let checklistMonthlyBonusVirtual = 0;
+        let maintenanceBonusVirtual = 0;
+        
         // 4.1. Period Revenue Bonuses
         if (Array.isArray(period_bonuses)) {
             period_bonuses.forEach((bonus: any) => {
@@ -230,7 +234,12 @@ export async function GET(
                         }
                     }
                     if (metPercent > 0) {
-                        revenueKpiBonus += current_value * (metPercent / 100);
+                        const earned = current_value * (metPercent / 100);
+                        if (bonus.payout_type === 'VIRTUAL_BALANCE') {
+                            revenueKpiBonusVirtual += earned;
+                        } else {
+                            revenueKpiBonus += earned;
+                        }
                     }
                 }
             });
@@ -239,31 +248,50 @@ export async function GET(
         // 4.2. Checklist Bonuses (Monthly)
         const checklistBonuses = (scheme.bonuses || []).filter((b: any) => b.type === 'checklist' && b.mode === 'MONTH');
         checklistBonuses.forEach((b: any) => {
+            let earned = 0;
             if (b.use_thresholds && b.checklist_thresholds?.length) {
                 const sorted = [...b.checklist_thresholds].sort((x, y) => (Number(y.min_score) || 0) - (Number(x.min_score) || 0));
                 const met = sorted.find(t => avgScore >= (Number(t.min_score) || 0));
-                if (met) checklistMonthlyBonus += Number(met.amount) || 0;
+                if (met) earned = Number(met.amount) || 0;
             } else if (avgScore >= (Number(b.min_score) || 0)) {
-                checklistMonthlyBonus += Number(b.amount) || 0;
+                earned = Number(b.amount) || 0;
+            }
+
+            if (earned > 0) {
+                if (b.payout_type === 'VIRTUAL_BALANCE') {
+                    checklistMonthlyBonusVirtual += earned;
+                } else {
+                    checklistMonthlyBonus += earned;
+                }
             }
         });
 
         // 4.3. Maintenance Bonuses (Monthly)
         const maintConfig = (scheme.bonuses || []).find((b: any) => b.type === 'maintenance_kpi');
         if (maintConfig) {
+            let earned = 0;
             if (maintConfig.calculation_mode === 'MONTHLY' && maintConfig.efficiency_thresholds?.length) {
                 const sorted = [...maintConfig.efficiency_thresholds].sort((x, y) => (Number(y.from_percent) || 0) - (Number(x.from_percent) || 0));
                 const achievedTier = sorted.find((t: any) => maintEfficiency >= (Number(t.from_percent) || 0));
                 if (achievedTier) {
-                    maintenanceBonus = Number(achievedTier.amount) || 0;
+                    earned = Number(achievedTier.amount) || 0;
                 }
             } else {
-                maintenanceBonus = parseFloat(maintRes.rows[0]?.bonus || '0') + totalManualMaintBonus;
+                earned = parseFloat(maintRes.rows[0]?.bonus || '0') + totalManualMaintBonus;
+            }
+
+            if (earned > 0) {
+                if (maintConfig.payout_type === 'VIRTUAL_BALANCE') {
+                    maintenanceBonusVirtual += earned;
+                } else {
+                    maintenanceBonus += earned;
+                }
             }
         }
 
-        const totalKpiBonus = revenueKpiBonus + checklistMonthlyBonus + maintenanceBonus;
-        const monthEarnings = totalCalculatedSalary + totalKpiBonus;
+        const totalKpiBonusReal = revenueKpiBonus + checklistMonthlyBonus + maintenanceBonus;
+        const totalKpiBonusVirtual = revenueKpiBonusVirtual + checklistMonthlyBonusVirtual + maintenanceBonusVirtual;
+        const monthEarnings = totalCalculatedSalary + totalKpiBonusReal;
 
         // Calculate breakdown
         const breakdown = {
@@ -272,7 +300,13 @@ export async function GET(
             checklist_bonuses: checklistMonthlyBonus,
             maintenance_bonuses: maintenanceBonus,
             revenue_kpi_bonuses: revenueKpiBonus,
-            total_kpi_bonuses: totalKpiBonus
+            total_kpi_bonuses: totalKpiBonusReal,
+            virtual_bonuses: {
+                checklist: checklistMonthlyBonusVirtual,
+                maintenance: maintenanceBonusVirtual,
+                revenue: revenueKpiBonusVirtual,
+                total: totalKpiBonusVirtual
+            }
         };
 
         return NextResponse.json({
@@ -282,7 +316,7 @@ export async function GET(
             week_earnings: weekHours * hourlyRate, 
             month_earnings: monthEarnings,
             hourly_rate: hourlyRate,
-            kpi_bonus: totalKpiBonus,
+            kpi_bonus: totalKpiBonusReal,
             breakdown
         });
 
