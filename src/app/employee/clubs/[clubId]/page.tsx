@@ -475,44 +475,42 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
     const currentEarnings = stats ? (liveSeconds / 3600) * stats.hourly_rate : 0
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:via-purple-900/20 dark:to-slate-900">
+        <div className="w-full bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:via-purple-900/20 dark:to-slate-900">
             {/* Header */}
-            <div className="border-b bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl sticky top-0 z-30 transition-all duration-300">
-                <div className="max-w-7xl mx-auto px-4 py-4 md:px-6">
-                    <div className="flex flex-col md:flex-row gap-4 md:items-center justify-between">
-                        <div>
-                            <h1 className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-indigo-600 bg-clip-text text-transparent">
+            <div className="border-b bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl sticky top-0 md:static z-30 transition-all duration-300">
+                <div className="w-full max-w-7xl mx-auto px-4 py-4 md:px-6">
+                    <div className="flex flex-row items-center justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                            <h1 className="text-xl md:text-2xl font-bold bg-gradient-to-r from-purple-600 to-indigo-600 bg-clip-text text-transparent truncate">
                                 {club.name}
                             </h1>
-                            <p className="text-sm text-muted-foreground">Рабочее пространство</p>
-                        </div>
-                        <div className="flex items-center gap-3">
+                            <p className="text-[10px] md:text-sm text-muted-foreground">Рабочее пространство</p>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <div className="max-w-7xl mx-auto px-4 py-6 md:px-6 md:py-8 space-y-6">
+            <div className="w-full max-w-7xl mx-auto px-4 py-6 md:px-6 md:py-8 space-y-6 overflow-x-hidden">
                 {/* Rework Alert Notification */}
                 {reworkTasksCount > 0 && (
                     <Link href={`/employee/clubs/${clubId}/tasks?verification_status=REJECTED`} className="block group">
                         <div className="relative overflow-hidden rounded-2xl bg-rose-500 p-4 text-white shadow-lg shadow-rose-500/25 transition-all hover:scale-[1.01] active:scale-[0.99]">
                             <div className="absolute top-0 right-0 -mt-4 -mr-4 h-24 w-24 rounded-full bg-white/10 blur-2xl group-hover:bg-white/20 transition-colors" />
-                            <div className="flex items-center justify-between relative z-10">
-                                <div className="flex items-center gap-4">
-                                    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/20 backdrop-blur-sm animate-pulse">
-                                        <AlertCircle className="h-6 w-6" />
+                            <div className="flex flex-col gap-4 relative z-10">
+                                <div className="flex items-start gap-3">
+                                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/20 backdrop-blur-sm animate-pulse">
+                                        <AlertCircle className="h-6 w-6 text-white" />
                                     </div>
-                                    <div>
-                                        <h3 className="text-lg font-bold">Задачи на доработке!</h3>
-                                        <p className="text-sm text-white/80">
-                                            Администратор вернул <span className="font-bold underline">{reworkTasksCount} задач(и)</span>. Это снижает ваш KPI.
+                                    <div className="min-w-0 flex-1">
+                                        <h3 className="text-lg font-bold leading-tight">Доработка!</h3>
+                                        <p className="text-sm text-white/90 mt-1 leading-snug">
+                                            Админ вернул <span className="font-black underline decoration-2">{reworkTasksCount} задач(и)</span>. Исправьте их, чтобы не терять бонусы.
                                         </p>
                                     </div>
                                 </div>
-                                <div className="flex items-center gap-2 font-bold bg-white/20 px-4 py-2 rounded-xl backdrop-blur-sm">
-                                    Исправить
-                                    <ChevronRight className="h-4 w-4" />
+                                <div className="flex items-center justify-center gap-2 font-bold bg-white/20 hover:bg-white/30 px-6 py-3 rounded-xl backdrop-blur-sm transition-colors text-base">
+                                    Исправить сейчас
+                                    <ChevronRight className="h-5 w-5" />
                                 </div>
                             </div>
                         </div>

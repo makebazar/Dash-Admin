@@ -216,7 +216,8 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
 
             {/* Main Content */}
             <main className={cn(
-                "md:ml-64 flex-1 transition-all duration-300",
+                "w-full min-w-0 flex-1 transition-all duration-300",
+                "ml-0 md:ml-64",
                 showMobileHeader ? "pt-16 md:pt-0" : "pt-0"
             )}>
                 {children}
