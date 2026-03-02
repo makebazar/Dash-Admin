@@ -1,5 +1,5 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { getProducts, getCategories, getSupplies, getInventories, getWarehouses, getEmployees, getClubTasks, getProcurementLists, getSuppliersForSelect, getClubSettings } from "./actions"
+import { getProducts, getCategories, getSupplies, getInventories, getWarehouses, getEmployees, getClubTasks, getProcurementLists, getSuppliersForSelect, getClubSettings, manualTriggerReplenishment } from "./actions"
 import { ProductsTab } from "./_components/ProductsTab"
 import { SuppliesTab } from "./_components/SuppliesTab"
 import { InventoryTab } from "./_components/InventoryTab"
@@ -8,12 +8,21 @@ import { WarehousesTab } from "./_components/WarehousesTab"
 import { TasksTab } from "./_components/TasksTab"
 import { ProcurementTab } from "./_components/ProcurementTab"
 import { cookies } from "next/headers"
+import { Button } from "@/components/ui/button"
+import { RefreshCw } from "lucide-react"
+import { revalidatePath } from "next/cache"
 
 export default async function InventoryPage({ params }: { params: Promise<{ clubId: string }> }) {
     const { clubId } = await params
     const userId = (await cookies()).get("session_user_id")?.value
 
     if (!userId) return <div className="p-8 text-red-500">Доступ запрещен. Пожалуйста, авторизуйтесь.</div>
+
+    const handleManualTrigger = async () => {
+        "use server"
+        await manualTriggerReplenishment(clubId)
+        revalidatePath(`/clubs/${clubId}/inventory`)
+    }
 
     const [products, categories, supplies, inventories, warehouses, employees, tasks, procurementLists, suppliers, clubSettings] = await Promise.all([
         getProducts(clubId),
@@ -30,9 +39,17 @@ export default async function InventoryPage({ params }: { params: Promise<{ club
 
     return (
         <div className="p-4 md:p-8 max-w-[1600px] mx-auto space-y-4 md:space-y-6">
-            <div className="flex flex-col gap-1 md:gap-2">
-                <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Склад и учет</h1>
-                <p className="text-sm md:text-base text-muted-foreground">Управление товарными запасами, поставками, складами и проведение ревизий.</p>
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="flex flex-col gap-1 md:gap-2">
+                    <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Склад и учет</h1>
+                    <p className="text-sm md:text-base text-muted-foreground">Управление товарными запасами, поставками, складами и проведение ревизий.</p>
+                </div>
+                <form action={handleManualTrigger}>
+                    <Button variant="outline" className="gap-2">
+                        <RefreshCw className="h-4 w-4" />
+                        Проверить остатки
+                    </Button>
+                </form>
             </div>
             
             <Tabs defaultValue="stock" className="w-full">

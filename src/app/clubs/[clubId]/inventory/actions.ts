@@ -576,6 +576,17 @@ export async function getClubTasks(clubId: string) {
 
 // --- PRODUCTS ---
 
+export async function manualTriggerReplenishment(clubId: string) {
+    try {
+        await checkReplenishmentNeeds(clubId)
+        revalidatePath(`/clubs/${clubId}/inventory`)
+        return { success: true }
+    } catch (e) {
+        console.error('Manual trigger failed:', e)
+        throw e
+    }
+}
+
 export async function getProducts(clubId: string) {
     const client = await import("@/db").then(m => m.getClient())
     try {
@@ -1200,15 +1211,15 @@ export async function closeInventory(inventoryId: number, clubId: string, report
         `, [inventoryId])
 
         for (const item of diffItems.rows) {
-            const diff = item.actual_stock - item.expected_stock
+            const diffAmount = item.actual_stock - item.expected_stock
             
             await client.query(`
                 INSERT INTO warehouse_stock (warehouse_id, product_id, quantity)
                 VALUES ($1, $2, $3)
                 ON CONFLICT (warehouse_id, product_id) DO UPDATE SET quantity = warehouse_stock.quantity + $3
-            `, [warehouseId, item.product_id, diff])
+            `, [warehouseId, item.product_id, diffAmount])
 
-            await logStockMovement(client, clubId, null, item.product_id, diff, item.expected_stock, item.actual_stock, 'INVENTORY_ADJUSTMENT', `Inventory #${inventoryId}`, 'INVENTORY', inventoryId)
+            await logStockMovement(client, clubId, null, item.product_id, diffAmount, item.expected_stock, item.actual_stock, 'INVENTORY_ADJUSTMENT', `Inventory #${inventoryId}`, 'INVENTORY', inventoryId)
         }
 
         // Update Cache
@@ -1230,6 +1241,11 @@ export async function closeInventory(inventoryId: number, clubId: string, report
         `, [inventoryId, reportedRevenue, calculatedRevenue, diff])
 
         await client.query('COMMIT')
+
+        // --- TRIGGER REPLENISHMENT CHECK AFTER INVENTORY ---
+        // This will create tasks if stock levels dropped below minimums
+        await checkReplenishmentNeeds(clubId)
+
     } catch (e) {
         await client.query('ROLLBACK')
         throw e
