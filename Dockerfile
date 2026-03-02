@@ -1,5 +1,5 @@
 # Build stage for dependencies
-FROM node:20-alpine AS deps
+FROM public.ecr.aws/docker/library/node:20-alpine AS deps
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
@@ -11,7 +11,7 @@ COPY package.json package-lock.json ./
 RUN NODE_ENV=development npm ci
 
 # Build stage
-FROM node:20-alpine AS builder
+FROM public.ecr.aws/docker/library/node:20-alpine AS builder
 WORKDIR /app
 
 # Copy dependencies from deps stage
@@ -30,7 +30,7 @@ ENV NODE_ENV=production
 RUN NODE_OPTIONS='--max-old-space-size=4096' NEXT_TELEMETRY_DISABLED=1 NODE_ENV=production npm run build
 
 # Production stage
-FROM node:20-alpine AS runner
+FROM public.ecr.aws/docker/library/node:20-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
