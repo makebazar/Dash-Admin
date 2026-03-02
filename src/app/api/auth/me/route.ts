@@ -36,7 +36,7 @@ export async function GET() {
 
         // Get employee clubs with role
         const employeeClubsQuery = `
-            SELECT c.id, c.name, c.inventory_required, r.name as role_name, r.id as role_id
+            SELECT c.id, c.name, c.inventory_required, c.inventory_settings, r.name as role_name, r.id as role_id
             FROM clubs c
             JOIN club_employees ce ON c.id = ce.club_id
             LEFT JOIN users u ON ce.user_id = u.id
@@ -67,6 +67,7 @@ export async function GET() {
             id: row.id,
             name: row.name,
             inventory_required: row.inventory_required,
+            inventory_settings: row.inventory_settings,
             role: row.role_name || 'Сотрудник',
             role_id: row.role_id
         }));

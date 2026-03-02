@@ -1134,6 +1134,27 @@ export async function updateInventoryItem(itemId: number, actualStock: number | 
     revalidatePath(`/clubs/${clubId}/inventory`)
 }
 
+export async function bulkUpdateInventoryItems(items: { id: number, actual_stock: number | null }[], clubId: string) {
+    const client = await import("@/db").then(m => m.getClient())
+    try {
+        await client.query('BEGIN')
+        for (const item of items) {
+            await client.query(`
+                UPDATE warehouse_inventory_items
+                SET actual_stock = $1
+                WHERE id = $2
+            `, [item.actual_stock, item.id])
+        }
+        await client.query('COMMIT')
+    } catch (e) {
+        await client.query('ROLLBACK')
+        throw e
+    } finally {
+        client.release()
+    }
+    revalidatePath(`/clubs/${clubId}/inventory`)
+}
+
 export async function closeInventory(inventoryId: number, clubId: string, reportedRevenue: number) {
     const client = await import("@/db").then(m => m.getClient())
     try {

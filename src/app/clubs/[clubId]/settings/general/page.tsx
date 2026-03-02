@@ -31,6 +31,7 @@ const HOURS = Array.from({ length: 24 }, (_, i) => i)
 interface InventorySettings {
     employee_allowed_warehouse_ids?: number[]
     employee_default_metric_key?: string
+    blind_inventory_enabled?: boolean
 }
 
 interface ClubSettings {
@@ -370,6 +371,21 @@ export default function GeneralSettingsPage({ params }: { params: Promise<{ club
                                 <p className="text-xs text-muted-foreground">
                                     Эта метрика будет автоматически выбрана для сотрудников при старте инвентаризации.
                                 </p>
+                            </div>
+
+                            {/* Blind Inventory Toggle */}
+                            <div className="flex items-center justify-between space-x-2 pt-2">
+                                <Label htmlFor="blind-inventory" className="flex flex-col space-y-1">
+                                    <span>Слепая инвентаризация</span>
+                                    <span className="font-normal text-xs text-muted-foreground">
+                                        Если включено, сотрудники не будут видеть ожидаемые остатки при пересчете
+                                    </span>
+                                </Label>
+                                <Switch
+                                    id="blind-inventory"
+                                    checked={inventorySettings.blind_inventory_enabled ?? true}
+                                    onCheckedChange={(checked) => setInventorySettings(prev => ({ ...prev, blind_inventory_enabled: checked }))}
+                                />
                             </div>
                         </div>
                     </CardContent>

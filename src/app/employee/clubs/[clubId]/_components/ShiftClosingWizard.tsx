@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { createInventory, updateInventoryItem, closeInventory, getInventoryItems, getProducts, InventoryItem } from "@/app/clubs/[clubId]/inventory/actions"
+import { createInventory, closeInventory, getInventoryItems, getProducts, InventoryItem, bulkUpdateInventoryItems } from "@/app/clubs/[clubId]/inventory/actions"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
 interface ShiftClosingWizardProps {
@@ -19,6 +19,11 @@ interface ShiftClosingWizardProps {
     activeShiftId: number
     skipInventory?: boolean
     checklistTemplates?: any[]
+    inventorySettings?: {
+        employee_default_metric_key?: string
+        employee_allowed_warehouse_ids?: number[]
+        blind_inventory_enabled?: boolean
+    }
 }
 
 export function ShiftClosingWizard({
@@ -30,7 +35,8 @@ export function ShiftClosingWizard({
     reportTemplate,
     activeShiftId,
     skipInventory = false,
-    checklistTemplates = []
+    checklistTemplates = [],
+    inventorySettings
 }: ShiftClosingWizardProps) {
     const [step, setStep] = useState<0 | 1 | 2 | 3>(1)
     const [reportData, setReportData] = useState<any>({})
@@ -46,6 +52,7 @@ export function ShiftClosingWizard({
     // Reset state when opening
     useEffect(() => {
         if (isOpen) {
+            console.log('Wizard opened, resetting state')
             setReportData({})
             setInventoryId(null)
             setInventoryItems([])
@@ -97,7 +104,7 @@ export function ShiftClosingWizard({
                     .catch(console.error)
             }
         }
-    }, [isOpen, checklistTemplates, clubId])
+    }, [isOpen]) // Only reset when isOpen transitions to true
 
     // Step 1: Financial Report + Checklist
     const handleStep1Submit = () => {
@@ -169,8 +176,17 @@ export function ShiftClosingWizard({
     const startInventory = () => {
         startTransition(async () => {
             try {
-                // Determine target metric key
-                const newInvId = await createInventory(clubId, userId, 'shift_closing_check')
+                // Determine target metric key: use club settings if available, otherwise fallback to smart search
+                const targetMetric = inventorySettings?.employee_default_metric_key || 
+                    reportTemplate?.schema?.find((f: any) => 
+                        f.metric_key.toLowerCase().includes('bar') || 
+                        f.metric_key.toLowerCase().includes('revenue') ||
+                        f.custom_label.toLowerCase().includes('бар') ||
+                        f.custom_label.toLowerCase().includes('выручка')
+                    )?.metric_key || 'total_revenue'
+
+                console.log('Starting inventory with metric:', targetMetric)
+                const newInvId = await createInventory(clubId, userId, targetMetric)
                 setInventoryId(newInvId)
                 const items = await getInventoryItems(newInvId)
                 setInventoryItems(items)
@@ -190,10 +206,14 @@ export function ShiftClosingWizard({
     const handleInventorySubmit = () => {
         startTransition(async () => {
             try {
-                // Save all items first
-                await Promise.all(inventoryItems.map(item => 
-                    item.actual_stock !== null ? updateInventoryItem(item.id, item.actual_stock, clubId) : Promise.resolve()
-                ))
+                // Save all items first using bulk update
+                const itemsToUpdate = inventoryItems
+                    .filter(item => item.actual_stock !== null)
+                    .map(item => ({ id: item.id, actual_stock: item.actual_stock }))
+                
+                if (itemsToUpdate.length > 0) {
+                    await bulkUpdateInventoryItems(itemsToUpdate, clubId)
+                }
 
                 // Calculate local result for preview (Step 3)
                 let calculatedRev = 0
@@ -204,8 +224,19 @@ export function ShiftClosingWizard({
                     }
                 })
 
-                const reportedRev = parseFloat(reportData['bar_revenue'] || reportData['total_revenue'] || '0')
+                // Find the most likely revenue metric key from the template
+                const revenueKey = inventorySettings?.employee_default_metric_key || 
+                    reportTemplate?.schema?.find((f: any) => 
+                        f.metric_key.toLowerCase().includes('bar') || 
+                        f.metric_key.toLowerCase().includes('revenue') ||
+                        f.custom_label.toLowerCase().includes('бар') ||
+                        f.custom_label.toLowerCase().includes('выручка')
+                    )?.metric_key || 'total_revenue'
+
+                const reportedRev = parseFloat(reportData[revenueKey] || reportData['bar_revenue'] || reportData['total_revenue'] || '0')
                 
+                console.log('Calculation summary:', { revenueKey, reportedRev, calculatedRev, reportData })
+
                 setCalculationResult({
                     reported: reportedRev,
                     calculated: calculatedRev,
@@ -214,7 +245,7 @@ export function ShiftClosingWizard({
 
                 setStep(3)
             } catch (e) {
-                console.error(e)
+                console.error('Error saving inventory:', e)
                 alert("Ошибка сохранения подсчетов")
             }
         })
@@ -404,9 +435,13 @@ export function ShiftClosingWizard({
                             <div className="bg-blue-900/20 border border-blue-900/50 p-4 rounded-lg flex items-start gap-3">
                                 <Package className="h-5 w-5 text-blue-400 mt-0.5" />
                                 <div>
-                                    <h4 className="font-medium text-blue-100">Слепая инвентаризация</h4>
+                                    <h4 className="font-medium text-blue-100">
+                                        {inventorySettings?.blind_inventory_enabled !== false ? "Слепая инвентаризация" : "Инвентаризация"}
+                                    </h4>
                                     <p className="text-sm text-blue-300/80">
-                                        Посчитайте фактическое количество товаров. Ожидаемые остатки скрыты.
+                                        {inventorySettings?.blind_inventory_enabled !== false 
+                                            ? "Посчитайте фактическое количество товаров. Ожидаемые остатки скрыты."
+                                            : "Сверьте фактическое количество товаров с ожидаемым остатком."}
                                     </p>
                                 </div>
                             </div>
@@ -416,13 +451,21 @@ export function ShiftClosingWizard({
                                     <TableHeader className="bg-slate-900">
                                         <TableRow>
                                             <TableHead className="text-slate-300">Товар</TableHead>
-                                            <TableHead className="text-right text-slate-300">Остаток</TableHead>
+                                            {inventorySettings?.blind_inventory_enabled === false && (
+                                                <TableHead className="text-right text-slate-300">Ожидалось</TableHead>
+                                            )}
+                                            <TableHead className="text-right text-slate-300">Фактически</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
                                         {inventoryItems.map(item => (
                                             <TableRow key={item.id} className="border-slate-800">
                                                 <TableCell className="font-medium text-slate-200">{item.product_name}</TableCell>
+                                                {inventorySettings?.blind_inventory_enabled === false && (
+                                                    <TableCell className="text-right text-slate-400 font-mono">
+                                                        {item.expected_stock}
+                                                    </TableCell>
+                                                )}
                                                 <TableCell className="text-right">
                                                     <Input 
                                                         type="number" 

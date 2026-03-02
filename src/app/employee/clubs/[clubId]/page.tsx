@@ -24,6 +24,10 @@ interface ClubInfo {
     name: string
     role: string
     inventory_required: boolean
+    inventory_settings?: {
+        employee_default_metric_key?: string
+        employee_allowed_warehouse_ids?: number[]
+    }
 }
 
 interface ActiveShift {
@@ -913,6 +917,7 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                     activeShiftId={activeShift.id}
                     skipInventory={!club.inventory_required}
                     checklistTemplates={checklistTemplates}
+                    inventorySettings={club.inventory_settings}
                 />
             )}
 
