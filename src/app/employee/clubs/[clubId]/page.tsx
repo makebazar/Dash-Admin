@@ -48,6 +48,11 @@ interface Stats {
         checklist_bonuses: number
         maintenance_bonuses: number
         revenue_kpi_bonuses: number
+        revenue_kpi_breakdown?: Array<{
+            name: string
+            amount: number
+            is_virtual: boolean
+        }>
         virtual_bonuses?: {
             checklist: number
             maintenance: number
@@ -661,12 +666,12 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                                                     </div>
                                                 )}
 
-                                                {stats.breakdown.revenue_kpi_bonuses > 0 && (
-                                                    <div className="flex justify-between text-[11px] text-white/60">
-                                                        <span>KPI Выручка:</span>
-                                                        <span className="font-bold text-emerald-300">+{formatCurrency(stats.breakdown.revenue_kpi_bonuses)}</span>
+                                                {stats.breakdown.revenue_kpi_breakdown?.filter(b => !b.is_virtual).map((bonus, idx) => (
+                                                    <div key={idx} className="flex justify-between text-[11px] text-white/60">
+                                                        <span>{bonus.name}:</span>
+                                                        <span className="font-bold text-emerald-300">+{formatCurrency(bonus.amount)}</span>
                                                     </div>
-                                                )}
+                                                ))}
 
                                                 {stats.breakdown.virtual_bonuses && stats.breakdown.virtual_bonuses.total > 0 && (
                                                     <div className="mt-2 pt-2 border-t border-white/5 space-y-1">
@@ -683,12 +688,12 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                                                                 <span className="font-bold text-amber-300">+{stats.breakdown.virtual_bonuses.maintenance} Б</span>
                                                             </div>
                                                         )}
-                                                        {stats.breakdown.virtual_bonuses.revenue > 0 && (
-                                                            <div className="flex justify-between text-[11px] text-white/60">
-                                                                <span>KPI Выручка:</span>
-                                                                <span className="font-bold text-amber-300">+{stats.breakdown.virtual_bonuses.revenue} Б</span>
+                                                        {stats.breakdown.revenue_kpi_breakdown?.filter(b => b.is_virtual).map((bonus, idx) => (
+                                                            <div key={idx} className="flex justify-between text-[11px] text-white/60">
+                                                                <span>{bonus.name}:</span>
+                                                                <span className="font-bold text-amber-300">+{bonus.amount} Б</span>
                                                             </div>
-                                                        )}
+                                                        ))}
                                                     </div>
                                                 )}
                                             </div>

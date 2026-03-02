@@ -203,11 +203,10 @@ export async function GET(
         });
 
         // 4. Calculate All Bonuses Separately
-        let revenueKpiBonus = 0;
+        const revenueKpiBreakdown: any[] = [];
         let checklistMonthlyBonus = 0;
         let maintenanceBonus = 0;
         
-        let revenueKpiBonusVirtual = 0;
         let checklistMonthlyBonusVirtual = 0;
         let maintenanceBonusVirtual = 0;
         
@@ -235,11 +234,11 @@ export async function GET(
                     }
                     if (metPercent > 0) {
                         const earned = current_value * (metPercent / 100);
-                        if (bonus.payout_type === 'VIRTUAL_BALANCE') {
-                            revenueKpiBonusVirtual += earned;
-                        } else {
-                            revenueKpiBonus += earned;
-                        }
+                        revenueKpiBreakdown.push({
+                            name: bonus.name || 'KPI Выручка',
+                            amount: earned,
+                            is_virtual: bonus.payout_type === 'VIRTUAL_BALANCE'
+                        });
                     }
                 }
             });
@@ -289,7 +288,10 @@ export async function GET(
             }
         }
 
-        const totalKpiBonusReal = revenueKpiBonus + checklistMonthlyBonus + maintenanceBonus;
+        const revenueKpiBonusReal = revenueKpiBreakdown.filter(b => !b.is_virtual).reduce((sum, b) => sum + b.amount, 0);
+        const revenueKpiBonusVirtual = revenueKpiBreakdown.filter(b => b.is_virtual).reduce((sum, b) => sum + b.amount, 0);
+        
+        const totalKpiBonusReal = revenueKpiBonusReal + checklistMonthlyBonus + maintenanceBonus;
         const totalKpiBonusVirtual = revenueKpiBonusVirtual + checklistMonthlyBonusVirtual + maintenanceBonusVirtual;
         const monthEarnings = totalCalculatedSalary + totalKpiBonusReal;
 
@@ -299,7 +301,8 @@ export async function GET(
             shift_bonuses: totalShiftBonuses,
             checklist_bonuses: checklistMonthlyBonus,
             maintenance_bonuses: maintenanceBonus,
-            revenue_kpi_bonuses: revenueKpiBonus,
+            revenue_kpi_bonuses: revenueKpiBonusReal,
+            revenue_kpi_breakdown: revenueKpiBreakdown, // Include names from template
             total_kpi_bonuses: totalKpiBonusReal,
             virtual_bonuses: {
                 checklist: checklistMonthlyBonusVirtual,
