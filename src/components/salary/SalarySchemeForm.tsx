@@ -51,6 +51,11 @@ export interface Bonus {
     checklist_template_id?: number
     min_score?: number
     mode?: 'SHIFT' | 'MONTH'
+    use_thresholds?: boolean
+    checklist_thresholds?: {
+        min_score: number
+        amount: number
+    }[]
     // For maintenance_kpi
     calculation_mode?: 'PER_TASK' | 'MONTHLY'
     overdue_tolerance_days?: number
@@ -1070,72 +1075,199 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
 
                                                 {/* Checklist Bonus */}
                                                 {bonus.type === 'checklist' && (
-                                                    <div className="space-y-3">
-                                                        <div className="flex items-center gap-3">
-                                                            <span className="text-sm text-green-500 font-medium">+</span>
-                                                            <Input
-                                                                type="number"
-                                                                value={bonus.amount}
-                                                                onChange={e => updateBonus(index, 'amount', parseFloat(e.target.value) || 0)}
-                                                                className="w-28"
-                                                            />
-                                                            <span className="text-sm">₽</span>
+                                                    <div className="space-y-4">
+                                                        <div className="flex bg-muted p-1 rounded-lg w-fit">
+                                                            <button
+                                                                type="button"
+                                                                className={`text-[10px] px-2 py-1 rounded transition-all font-medium ${!bonus.use_thresholds ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:bg-background/50'}`}
+                                                                onClick={() => updateBonus(index, 'use_thresholds', false)}
+                                                            >
+                                                                Фикс. сумма
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                className={`text-[10px] px-2 py-1 rounded transition-all font-medium ${bonus.use_thresholds ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:bg-background/50'}`}
+                                                                onClick={() => {
+                                                                    updateBonus(index, 'use_thresholds', true);
+                                                                    updateBonus(index, 'mode', 'MONTH');
+                                                                    if (!bonus.checklist_thresholds || bonus.checklist_thresholds.length === 0) {
+                                                                        updateBonus(index, 'checklist_thresholds', [
+                                                                            { min_score: 80, amount: 300 },
+                                                                            { min_score: 95, amount: 500 }
+                                                                        ]);
+                                                                    }
+                                                                }}
+                                                            >
+                                                                Ступени
+                                                            </button>
                                                         </div>
-                                                        <div className="grid grid-cols-2 gap-4">
-                                                            <div className="space-y-1">
-                                                                <Label className="text-xs text-muted-foreground">Чек-лист</Label>
-                                                                <select
-                                                                    value={bonus.checklist_template_id}
-                                                                    onChange={e => updateBonus(index, 'checklist_template_id', Number(e.target.value))}
-                                                                    className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm"
-                                                                >
-                                                                    <option value="">Выберите шаблон</option>
-                                                                    {checklistTemplates.map(t => (
-                                                                        <option key={t.id} value={t.id}>{t.name}</option>
-                                                                    ))}
-                                                                </select>
-                                                            </div>
-                                                            <div className="space-y-1">
-                                                                <Label className="text-xs text-muted-foreground">Мин. балл (%)</Label>
-                                                                <div className="relative">
+
+                                                        {!bonus.use_thresholds ? (
+                                                            <div className="space-y-3 animate-in fade-in slide-in-from-top-1 duration-200">
+                                                                <div className="flex items-center gap-3">
+                                                                    <span className="text-sm text-green-500 font-medium">+</span>
                                                                     <Input
                                                                         type="number"
-                                                                        min="0"
-                                                                        max="100"
-                                                                        value={bonus.min_score}
-                                                                        onChange={e => updateBonus(index, 'min_score', parseFloat(e.target.value) || 0)}
-                                                                        className="pr-8"
+                                                                        value={bonus.amount}
+                                                                        onChange={e => updateBonus(index, 'amount', parseFloat(e.target.value) || 0)}
+                                                                        className="w-28"
                                                                     />
-                                                                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">%</span>
+                                                                    <span className="text-sm">₽</span>
+                                                                </div>
+                                                                <div className="grid grid-cols-2 gap-4">
+                                                                    <div className="space-y-1">
+                                                                        <Label className="text-xs text-muted-foreground">Чек-лист</Label>
+                                                                        <select
+                                                                            value={bonus.checklist_template_id}
+                                                                            onChange={e => updateBonus(index, 'checklist_template_id', Number(e.target.value))}
+                                                                            className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm"
+                                                                        >
+                                                                            <option value="">Выберите шаблон</option>
+                                                                            {checklistTemplates.map(t => (
+                                                                                <option key={t.id} value={t.id}>{t.name}</option>
+                                                                            ))}
+                                                                        </select>
+                                                                    </div>
+                                                                    <div className="space-y-1">
+                                                                        <Label className="text-xs text-muted-foreground">Мин. балл (%)</Label>
+                                                                        <div className="relative">
+                                                                            <Input
+                                                                                type="number"
+                                                                                min="0"
+                                                                                max="100"
+                                                                                value={bonus.min_score}
+                                                                                onChange={e => updateBonus(index, 'min_score', parseFloat(e.target.value) || 0)}
+                                                                                className="pr-8"
+                                                                            />
+                                                                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">%</span>
+                                                                        </div>
+                                                                    </div>
                                                                 </div>
                                                             </div>
-                                                        </div>
-                                                        <p className="text-xs text-muted-foreground">
-                                                            Бонус начисляется, если {bonus.mode === 'MONTH' ? 'средняя оценка за месяц' : 'оценка в смену'} выше {bonus.min_score}%.
-                                                        </p>
-                                                        <div className="flex items-center gap-2">
-                                                            <Label className="text-xs text-muted-foreground">Режим:</Label>
-                                                            <div className="flex gap-1">
-                                                                <Button
-                                                                    type="button"
-                                                                    variant={bonus.mode !== 'MONTH' ? 'secondary' : 'outline'}
-                                                                    size="sm"
-                                                                    onClick={() => updateBonus(index, 'mode', 'SHIFT')}
-                                                                    className="h-6 text-[10px]"
-                                                                >
-                                                                    В смену
-                                                                </Button>
-                                                                <Button
-                                                                    type="button"
-                                                                    variant={bonus.mode === 'MONTH' ? 'secondary' : 'outline'}
-                                                                    size="sm"
-                                                                    onClick={() => updateBonus(index, 'mode', 'MONTH')}
-                                                                    className="h-6 text-[10px]"
-                                                                >
-                                                                    За месяц
-                                                                </Button>
+                                                        ) : (
+                                                            <div className="space-y-3 animate-in fade-in slide-in-from-top-1 duration-200">
+                                                                <div className="space-y-1">
+                                                                    <Label className="text-xs text-muted-foreground">Шаблон чек-листа</Label>
+                                                                    <select
+                                                                        value={bonus.checklist_template_id}
+                                                                        onChange={e => updateBonus(index, 'checklist_template_id', Number(e.target.value))}
+                                                                        className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm"
+                                                                    >
+                                                                        <option value="">Выберите шаблон</option>
+                                                                        {checklistTemplates.map(t => (
+                                                                            <option key={t.id} value={t.id}>{t.name}</option>
+                                                                        ))}
+                                                                    </select>
+                                                                </div>
+                                                                <div className="space-y-2">
+                                                                     <Label className="text-[10px] uppercase font-bold text-muted-foreground">Ступени вознаграждения</Label>
+                                                                     <div className="space-y-2">
+                                                                         {(bonus.checklist_thresholds || []).map((t: any, ti: number) => (
+                                                                             <div key={ti} className="flex items-center gap-2 bg-muted/20 p-2 rounded-lg border border-dashed border-muted-foreground/20">
+                                                                                 <div className="flex-1 flex items-center gap-2">
+                                                                                     <span className="text-[10px] text-muted-foreground whitespace-nowrap">Балл ≥</span>
+                                                                                     <div className="relative w-16">
+                                                                                         <Input
+                                                                                             type="number"
+                                                                                             value={t.min_score}
+                                                                                             onChange={e => {
+                                                                                                 const newT = [...(bonus.checklist_thresholds || [])];
+                                                                                                 newT[ti].min_score = parseFloat(e.target.value) || 0;
+                                                                                                 updateBonus(index, 'checklist_thresholds', newT);
+                                                                                             }}
+                                                                                             className="h-7 text-xs pr-4 px-1"
+                                                                                         />
+                                                                                         <span className="absolute right-1 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">%</span>
+                                                                                     </div>
+                                                                                 </div>
+                                                                                 <div className="flex-1 flex items-center gap-2">
+                                                                                     <span className="text-[10px] text-muted-foreground whitespace-nowrap">Бонус:</span>
+                                                                                     <div className="relative w-20">
+                                                                                         <Input
+                                                                                             type="number"
+                                                                                             value={t.amount}
+                                                                                             onChange={e => {
+                                                                                                 const newT = [...(bonus.checklist_thresholds || [])];
+                                                                                                 newT[ti].amount = parseFloat(e.target.value) || 0;
+                                                                                                 updateBonus(index, 'checklist_thresholds', newT);
+                                                                                             }}
+                                                                                             className="h-7 text-xs pr-4 px-1"
+                                                                                         />
+                                                                                         <span className="absolute right-1 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">₽</span>
+                                                                                     </div>
+                                                                                 </div>
+                                                                                 <Button
+                                                                                     type="button"
+                                                                                     variant="ghost"
+                                                                                     size="icon"
+                                                                                     className="h-6 w-6 text-muted-foreground hover:text-red-500"
+                                                                                     onClick={() => {
+                                                                                         const newT = (bonus.checklist_thresholds || []).filter((_: any, i: number) => i !== ti);
+                                                                                         updateBonus(index, 'checklist_thresholds', newT);
+                                                                                     }}
+                                                                                 >
+                                                                                     <Trash2 className="h-3 w-3" />
+                                                                                 </Button>
+                                                                             </div>
+                                                                         ))}
+                                                                         <Button
+                                                                             type="button"
+                                                                             variant="outline"
+                                                                             size="sm"
+                                                                             className="w-full h-7 text-[10px] border-dashed"
+                                                                             onClick={() => {
+                                                                                 const thresholds = bonus.checklist_thresholds || [];
+                                                                                 const last = thresholds[thresholds.length - 1];
+                                                                                 updateBonus(index, 'checklist_thresholds', [
+                                                                                     ...thresholds,
+                                                                                     {
+                                                                                         min_score: (last?.min_score || 0) + 5,
+                                                                                         amount: (last?.amount || 0) + 100
+                                                                                     }
+                                                                                 ]);
+                                                                             }}
+                                                                         >
+                                                                             + Добавить ступень
+                                                                         </Button>
+                                                                     </div>
+                                                                 </div>
                                                             </div>
-                                                        </div>
+                                                        )}
+
+                                                        <p className="text-xs text-muted-foreground">
+                                                            Бонус начисляется, если {bonus.mode === 'MONTH' ? 'средняя оценка за месяц' : 'оценка в смену'} соответствует условиям.
+                                                        </p>
+                                                        {!bonus.use_thresholds && (
+                                                            <div className="flex items-center gap-2">
+                                                                <Label className="text-xs text-muted-foreground">Режим:</Label>
+                                                                <div className="flex gap-1">
+                                                                    <Button
+                                                                        type="button"
+                                                                        variant={bonus.mode !== 'MONTH' ? 'secondary' : 'outline'}
+                                                                        size="sm"
+                                                                        onClick={() => updateBonus(index, 'mode', 'SHIFT')}
+                                                                        className="h-6 text-[10px]"
+                                                                    >
+                                                                        В смену
+                                                                    </Button>
+                                                                    <Button
+                                                                        type="button"
+                                                                        variant={bonus.mode === 'MONTH' ? 'secondary' : 'outline'}
+                                                                        size="sm"
+                                                                        onClick={() => updateBonus(index, 'mode', 'MONTH')}
+                                                                        className="h-6 text-[10px]"
+                                                                    >
+                                                                        За месяц
+                                                                    </Button>
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                        {bonus.use_thresholds && (
+                                                            <div className="flex items-center gap-2 p-2 bg-blue-50/50 rounded-lg border border-blue-100/50 dark:bg-blue-900/10 dark:border-blue-900/20">
+                                                                <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+                                                                <span className="text-[10px] font-bold text-blue-700 uppercase">Режим: Только за месяц (для ступеней)</span>
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 )}
                                                 {/* Maintenance KPI Bonus */}

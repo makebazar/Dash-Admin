@@ -41,6 +41,7 @@ interface Employee {
     kpi_bonus_amount?: number;
     virtual_balance_accrued?: number;
     total_paid: number;
+    total_paid_bonus?: number;
     balance: number;
     virtual_balance?: number;
     payment_status: 'PAID' | 'PARTIAL' | 'PENDING';
@@ -48,6 +49,9 @@ interface Employee {
     has_kpi_feature?: boolean;
     has_virtual_balance_feature?: boolean;
     period_bonuses?: any[];
+    checklist_bonuses?: any[];
+    shift_bonuses_breakdown?: any[];
+    maintenance_status?: any;
     kpi_summary?: Array<{
         metric: string;
         progress: number;
@@ -353,10 +357,20 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                         <div className="grid grid-cols-5 gap-4 text-sm">
                                             <div><p className="text-muted-foreground mb-1">Смены</p><p className="font-medium">{employee.shifts_count}</p></div>
                                             <div><p className="text-muted-foreground mb-1">Начислено</p><p className="font-medium">{formatCurrency(employee.total_accrued)}</p></div>
-                                            <div><p className="text-muted-foreground mb-1">Выплачено</p><p className="font-medium">{formatCurrency(employee.total_paid)}</p></div>
+                                            <div><p className="text-muted-foreground mb-1">Выплачено</p>
+                                                <div className="flex flex-col">
+                                                    <p className="font-medium">{formatCurrency(employee.total_paid)}</p>
+                                                    {employee.total_paid_bonus && employee.total_paid_bonus > 0 ? (
+                                                        <p className="text-[9px] text-purple-600 font-bold">+{formatCurrency(employee.total_paid_bonus)} бон.</p>
+                                                    ) : null}
+                                                </div>
+                                            </div>
                                             <div><p className="text-muted-foreground mb-1">Остаток</p><p className="font-medium">{formatCurrency(employee.balance)}</p></div>
                                             {employee.has_kpi_feature && (
                                                 <div><p className="text-muted-foreground mb-1">KPI премия</p><p className={`font-medium ${employee.kpi_bonus_amount && employee.kpi_bonus_amount > 0 ? 'text-emerald-600' : ''}`}>{formatCurrency(employee.kpi_bonus_amount || 0)}</p></div>
+                                            )}
+                                            {employee.has_virtual_balance_feature && (
+                                                <div><p className="text-muted-foreground mb-1">Бонусный баланс</p><p className={`font-medium ${employee.virtual_balance && employee.virtual_balance > 0 ? 'text-purple-600' : ''}`}>{formatCurrency(employee.virtual_balance || 0)}</p></div>
                                             )}
                                         </div>
                                     </div>
@@ -769,44 +783,102 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                                                 </div>
                                                                             </div>
                                                                         );
-                                                                    })() : <p className="text-sm text-muted-foreground italic">Настройте KPI для отображения прогноза</p>}
+                                                                    })() : (
+                                                                        <div className="h-full flex flex-col justify-center">
+                                                                            <p className="text-sm text-muted-foreground italic">Настройте KPI для отображения прогноза</p>
+                                                                        </div>
+                                                                    )}
                                                                 </div>
-                                                                <div className="bg-muted/30 p-4 rounded-xl border">
-                                                                    <h5 className="text-xs font-bold uppercase mb-3 text-muted-foreground">Состав начислений</h5>
-                                                                    <div className="space-y-2 text-sm">
-                                                                        {employee.breakdown?.base_salary && employee.breakdown.base_salary > 0 && (
+                                                            </div>
+                                                            <div className="bg-muted/30 p-4 rounded-xl border mt-4">
+                                                                <h5 className="text-xs font-bold uppercase mb-3 text-muted-foreground">Состав начислений</h5>
+                                                                <div className="space-y-2 text-sm">
+                                                                        {employee.breakdown?.base_salary && employee.breakdown.base_salary > 0 ? (
                                                                             <div className="flex justify-between items-center">
                                                                                 <span>База (ставка):</span>
                                                                                 <span className="font-medium text-blue-600">{formatCurrency(employee.breakdown.base_salary)}</span>
                                                                             </div>
-                                                                        )}
-                                                                        {employee.has_kpi_feature && employee.kpi_bonus_amount && employee.kpi_bonus_amount > 0 && (
-                                                                            <div className="flex justify-between items-center text-emerald-600">
-                                                                                <span>KPI премия:</span>
-                                                                                <span className="font-bold">{formatCurrency(employee.kpi_bonus_amount)}</span>
+                                                                        ) : null}
+
+                                                                        {/* Расшифровка KPI (Денежные) */}
+                                                                        {employee.period_bonuses?.filter((kpi: any) => kpi.is_met && kpi.bonus_amount > 0 && kpi.payout_type !== 'VIRTUAL_BALANCE').map((kpi: any, idx: number) => (
+                                                                            <div key={`kpi-cash-${idx}`} className="flex justify-between items-center text-[11px] pl-2 text-emerald-600 border-l-2 border-emerald-100 ml-1">
+                                                                                <span>KPI: {kpi.name}</span>
+                                                                                <span>{formatCurrency(kpi.bonus_amount)}</span>
+                                                                            </div>
+                                                                        ))}
+
+                                                                        {/* Расшифровка Чек-листов (Денежные - месячные) */}
+                                                                        {employee.checklist_bonuses?.filter((cb: any) => cb.is_met && cb.bonus_amount > 0 && cb.payout_type !== 'VIRTUAL_BALANCE' && cb.mode === 'MONTH').map((cb: any, idx: number) => (
+                                                                            <div key={`cb-cash-month-${idx}`} className="flex justify-between items-center text-[11px] pl-2 text-emerald-600 border-l-2 border-emerald-100 ml-1">
+                                                                                <span>Чек-лист (за мес): {cb.name}</span>
+                                                                                <span>{formatCurrency(cb.bonus_amount)}</span>
+                                                                            </div>
+                                                                        ))}
+
+                                                                        {/* Расшифровка сменных бонусов (Денежные) */}
+                                                                        {employee.shift_bonuses_breakdown?.filter((sb: any) => sb.payout_type !== 'VIRTUAL_BALANCE' && sb.amount > 0).map((sb: any, idx: number) => (
+                                                                            <div key={`sb-cash-${idx}`} className="flex justify-between items-center text-[11px] pl-2 text-emerald-600 border-l-2 border-emerald-100 ml-1">
+                                                                                <span>{sb.name} (за смены)</span>
+                                                                                <span>{formatCurrency(sb.amount)}</span>
+                                                                            </div>
+                                                                        ))}
+
+                                                                        {employee.has_kpi_feature && (
+                                                                            <div className="flex justify-between items-center font-bold text-emerald-600 pt-1">
+                                                                                <span>Итого премия (на руки):</span>
+                                                                                <span>{formatCurrency(employee.kpi_bonus_amount || 0)}</span>
                                                                             </div>
                                                                         )}
-                                                                        {employee.has_virtual_balance_feature && employee.breakdown?.virtual_balance && employee.breakdown.virtual_balance > 0 && (
-                                                                            <div className="flex justify-between items-center text-purple-600 bg-purple-50 dark:bg-purple-900/20 px-2 py-1 rounded -mx-2">
-                                                                                <span>Бонусные (баланс):</span>
-                                                                                <span className="font-bold">{formatCurrency(employee.breakdown.virtual_balance)}</span>
+
+                                                                        {/* Виртуальные бонусы */}
+                                                                        {employee.has_virtual_balance_feature && (
+                                                                            <div className="pt-2 mt-2 border-t border-purple-100 space-y-1">
+                                                                                <div className="flex justify-between items-center text-purple-600 font-bold">
+                                                                                    <span>Бонусные (баланс):</span>
+                                                                                    <span>{formatCurrency(employee.breakdown?.virtual_balance || 0)}</span>
+                                                                                </div>
+                                                                                
+                                                                                {/* Расшифровка KPI (Виртуальные) */}
+                                                                                {employee.period_bonuses?.filter((kpi: any) => kpi.is_met && kpi.bonus_amount > 0 && kpi.payout_type === 'VIRTUAL_BALANCE').map((kpi: any, idx: number) => (
+                                                                                    <div key={`kpi-virt-${idx}`} className="flex justify-between items-center text-[10px] pl-2 text-purple-400 border-l-2 border-purple-100 ml-1">
+                                                                                        <span>KPI: {kpi.name}</span>
+                                                                                        <span>{formatCurrency(kpi.bonus_amount)}</span>
+                                                                                    </div>
+                                                                                ))}
+
+                                                                                {/* Расшифровка Чек-листов (Виртуальные - месячные) */}
+                                                                                {employee.checklist_bonuses?.filter((cb: any) => cb.is_met && cb.bonus_amount > 0 && cb.payout_type === 'VIRTUAL_BALANCE' && cb.mode === 'MONTH').map((cb: any, idx: number) => (
+                                                                                    <div key={`cb-virt-month-${idx}`} className="flex justify-between items-center text-[10px] pl-2 text-purple-400 border-l-2 border-purple-100 ml-1">
+                                                                                        <span>Чек-лист (за мес): {cb.name}</span>
+                                                                                        <span>{formatCurrency(cb.bonus_amount)}</span>
+                                                                                    </div>
+                                                                                ))}
+
+                                                                                {/* Расшифровка сменных бонусов (Виртуальные) */}
+                                                                                {employee.shift_bonuses_breakdown?.filter((sb: any) => sb.payout_type === 'VIRTUAL_BALANCE' && sb.amount > 0).map((sb: any, idx: number) => (
+                                                                                    <div key={`sb-virt-${idx}`} className="flex justify-between items-center text-[10px] pl-2 text-purple-400 border-l-2 border-purple-100 ml-1">
+                                                                                        <span>{sb.name} (за смены)</span>
+                                                                                        <span>{formatCurrency(sb.amount)}</span>
+                                                                                    </div>
+                                                                                ))}
                                                                             </div>
                                                                         )}
+
                                                                         <div className="pt-2 border-t mt-2 flex justify-between items-center font-bold">
                                                                             <span>Итого зарплата:</span>
                                                                             <span className="text-blue-600">{formatCurrency(employee.total_accrued)}</span>
                                                                         </div>
-                                                                        {employee.has_virtual_balance_feature && employee.virtual_balance_accrued !== undefined && employee.virtual_balance_accrued > 0 && (
-                                                                            <div className="pt-2 border-t border-purple-200 dark:border-purple-800 flex justify-between items-center font-bold text-purple-600 bg-purple-50 dark:bg-purple-900/20 px-2 py-1 rounded -mx-2">
-                                                                                <span>Итого бонусные:</span>
-                                                                                <span>{formatCurrency(employee.virtual_balance_accrued)}</span>
+                                                                        {employee.has_virtual_balance_feature && (
+                                                                            <div className={`pt-2 border-t flex justify-between items-center font-bold px-2 py-1 rounded -mx-2 ${employee.virtual_balance_accrued && employee.virtual_balance_accrued > 0 ? 'text-purple-600 bg-purple-50 border-purple-200 dark:bg-purple-900/20 dark:border-purple-800' : 'text-muted-foreground border-muted/20'}`}>
+                                                                                <span>Итого бонусные (за месяц):</span>
+                                                                                <span>{employee.virtual_balance_accrued && employee.virtual_balance_accrued > 0 ? formatCurrency(employee.virtual_balance_accrued) : '0 ₽'}</span>
                                                                             </div>
                                                                         )}
                                                                     </div>
-                                                                </div>
                                                             </div>
 
-                                                            <div className="space-y-4">
+                                                            <div className="space-y-4 mt-4">
                                                                 <h4 className="text-sm font-bold">Прогресс по порогам KPI</h4>
                                                                 {Array.isArray(employee.period_bonuses) && employee.period_bonuses.map((kpi: any) => (
                                                                     <div key={kpi.id} className="bg-background border rounded-xl p-4 space-y-4">
@@ -865,6 +937,164 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                                         {(kpi.thresholds || []).length === 0 && <div className="col-span-full p-4 bg-muted/20 border border-dashed rounded-xl text-center text-xs text-muted-foreground">Пороги для этого KPI не настроены</div>}
                                                                     </div>
                                                                 ))}
+
+                                                                {/* Checklist KPI Block */}
+                                                                {employee.checklist_bonuses && employee.checklist_bonuses.length > 0 && (
+                                                                    <div className="space-y-4">
+                                                                        <h4 className="text-sm font-bold">Статус по чек-листам</h4>
+                                                                        {employee.checklist_bonuses.map((bonus: any, bi: number) => (
+                                                                            <div key={bi} className="bg-background border rounded-xl p-4 space-y-4">
+                                                                                <div className="flex justify-between items-center">
+                                                                                    <div className="flex items-center gap-2">
+                                                                                        <span className="text-xl">📋</span>
+                                                                                        <div>
+                                                                                            <span className="font-bold text-sm">{bonus.name || 'Чек-лист'}</span>
+                                                                                            <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                                                                                                {bonus.mode === 'MONTH' ? 'Средний балл за месяц' : 'Среднее за смены'}
+                                                                                            </p>
+                                                                                        </div>
+                                                                                    </div>
+                                                                                    <div className="text-right">
+                                                                                        <span className="font-bold text-lg text-purple-600">{bonus.current_value?.toFixed(1)}%</span>
+                                                                                        <p className="text-[10px] text-muted-foreground">
+                                                                                            Начислено: +{formatCurrency(bonus.bonus_amount || 0)}
+                                                                                        </p>
+                                                                                    </div>
+                                                                                </div>
+
+                                                                                <div className="bg-purple-50/50 border border-purple-100 rounded-xl p-3 flex items-start gap-3 dark:bg-purple-900/10 dark:border-purple-900/30">
+                                                                                    <div className="bg-purple-100 p-1.5 rounded-lg text-purple-600 shrink-0 dark:bg-purple-900/50 dark:text-purple-400">
+                                                                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                                                                                    </div>
+                                                                                    <div className="text-[11px] leading-relaxed text-purple-800 dark:text-purple-300">
+                                                                                        <p className="font-bold mb-0.5 whitespace-nowrap">Условия вознаграждения</p>
+                                                                                        <p>
+                                                                                            {bonus.mode === 'MONTH' 
+                                                                                                ? 'Бонус рассчитывается один раз в конце месяца по среднему баллу всех проверок.' 
+                                                                                                : 'Бонус рассчитывается индивидуально за каждую смену, в которой была проверка.'}
+                                                                                        </p>
+                                                                                    </div>
+                                                                                </div>
+
+                                                                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+                                                                                    {bonus.use_thresholds && bonus.thresholds && [...bonus.thresholds].sort((a, b) => (Number(a.from) || 0) - (Number(b.from) || 0)).map((t: any, ti: number) => (
+                                                                                        <div 
+                                                                                            key={ti} 
+                                                                                            className={`relative p-3 rounded-xl border-2 transition-all duration-300 ${
+                                                                                                t.is_met 
+                                                                                                ? 'bg-purple-50/50 border-purple-400 shadow-sm dark:bg-purple-900/20 dark:border-purple-500' 
+                                                                                                : 'bg-muted/10 border-muted/30 opacity-60'
+                                                                                            }`}
+                                                                                        >
+                                                                                            <div className="flex justify-between items-start mb-2">
+                                                                                                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase ${
+                                                                                                    t.is_met ? 'bg-purple-600 text-white' : 'bg-muted text-muted-foreground'
+                                                                                                }`}>
+                                                                                                    {t.is_met ? '✓ Пройден' : '⏳ Порог'}
+                                                                                                </span>
+                                                                                            </div>
+                                                                                            <div className="space-y-1">
+                                                                                                <p className="text-[9px] text-muted-foreground uppercase leading-none mb-1">Балл ≥</p>
+                                                                                                <p className="text-xs font-black">{t.from}%</p>
+                                                                                                <div className="pt-1 mt-1 border-t border-purple-100/50">
+                                                                                                    <p className="text-[10px] font-bold text-purple-700">{formatCurrency(t.amount)}</p>
+                                                                                                </div>
+                                                                                            </div>
+                                                                                        </div>
+                                                                                    ))}
+                                                                                </div>
+
+                                                                                <div className={`text-[11px] p-2 rounded-lg border ${
+                                                                                    bonus.is_met 
+                                                                                    ? 'text-purple-800 bg-purple-50 border-purple-200' 
+                                                                                    : 'text-muted-foreground bg-white/40 border-dashed border-muted/30'
+                                                                                }`}>
+                                                                                    {bonus.is_met 
+                                                                                        ? `✅ Цель достигнута! Бонус за уровень начислен.` 
+                                                                                        : `⌛️ Для получения бонуса необходимо поднять качество выполнения чек-листа.`}
+                                                                                </div>
+                                                                            </div>
+                                                                        ))}
+                                                                    </div>
+                                                                )}
+
+                                                                {/* Maintenance KPI Block */}
+                                                                {employee.maintenance_status && (
+                                                                    <div className="space-y-4">
+                                                                        <h4 className="text-sm font-bold">Статус обслуживания</h4>
+                                                                        <div className="bg-background border rounded-xl p-4 space-y-4">
+                                                                            <div className="flex justify-between items-center">
+                                                                                <div className="flex items-center gap-2">
+                                                                                    <span className="text-xl">🔧</span>
+                                                                                    <div>
+                                                                                        <span className="font-bold text-sm">{employee.maintenance_status.name || 'KPI Обслуживание'}</span>
+                                                                                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Задачи за период</p>
+                                                                                    </div>
+                                                                                </div>
+                                                                                <div className="text-right">
+                                                                                    <span className="font-bold text-lg text-indigo-600">
+                                                                                        {employee.maintenance_status.current_value} / {employee.maintenance_status.target_value}
+                                                                                    </span>
+                                                                                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">задач выполнено</p>
+                                                                                </div>
+                                                                            </div>
+
+                                                                            <div className="bg-indigo-50/50 border border-indigo-100 rounded-xl p-3 flex items-start gap-3 dark:bg-indigo-900/10 dark:border-indigo-900/30">
+                                                                                <div className="bg-indigo-100 p-1.5 rounded-lg text-indigo-600 shrink-0 dark:bg-indigo-900/50 dark:text-indigo-400">
+                                                                                    <Wrench className="h-4 w-4" />
+                                                                                </div>
+                                                                                <div className="text-[11px] leading-relaxed text-indigo-800 dark:text-indigo-300">
+                                                                                    <p className="font-bold mb-0.5 whitespace-nowrap">Эффективность обслуживания: {employee.maintenance_status.efficiency.toFixed(1)}%</p>
+                                                                                    <p>Расчет бонуса за выполнение определенного количества задач за месяц.</p>
+                                                                                </div>
+                                                                            </div>
+
+                                                                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+                                                                                {employee.maintenance_status.thresholds && [...employee.maintenance_status.thresholds].sort((a, b) => (Number(a.from) || 0) - (Number(b.from) || 0)).map((t: any, ti: number) => (
+                                                                                    <div 
+                                                                                        key={ti} 
+                                                                                        className={`relative p-3 rounded-xl border-2 transition-all duration-300 ${
+                                                                                            t.is_met 
+                                                                                            ? 'bg-indigo-50/50 border-indigo-400 shadow-sm dark:bg-indigo-900/20 dark:border-indigo-500' 
+                                                                                            : 'bg-muted/10 border-muted/30 opacity-60'
+                                                                                        }`}
+                                                                                    >
+                                                                                        <div className="flex justify-between items-start mb-2">
+                                                                                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase ${
+                                                                                                t.is_met ? 'bg-indigo-600 text-white' : 'bg-muted text-muted-foreground'
+                                                                                             }`}>
+                                                                                                {t.is_met ? '✓ Пройден' : '⏳ Порог'}
+                                                                                            </span>
+                                                                                        </div>
+                                                                                        <div className="space-y-1">
+                                                                                            <p className="text-[9px] text-muted-foreground uppercase leading-none mb-1">
+                                                                                                {employee.maintenance_status.calculation_mode === 'MONTHLY' ? 'Эфф. ≥' : 'Задач ≥'}
+                                                                                            </p>
+                                                                                            <p className="text-xs font-black">{t.from}{employee.maintenance_status.calculation_mode === 'MONTHLY' ? '%' : ''}</p>
+                                                                                            <div className="pt-1 mt-1 border-t border-indigo-100/50">
+                                                                                                <p className="text-[10px] font-bold text-indigo-700">{formatCurrency(t.amount)}</p>
+                                                                                            </div>
+                                                                                        </div>
+                                                                                    </div>
+                                                                                ))}
+                                                                            </div>
+
+                                                                            <div className="flex justify-between items-center p-3 bg-muted/20 rounded-xl border border-dashed">
+                                                                                <div>
+                                                                                    <p className="text-[10px] text-muted-foreground uppercase font-bold">Начислено за период</p>
+                                                                                    <p className="text-lg font-black text-indigo-600">{formatCurrency(employee.maintenance_status.bonus_amount)}</p>
+                                                                                </div>
+                                                                                <div className="text-right">
+                                                                                    <span className={`text-[10px] font-bold px-2 py-1 rounded-full uppercase ${
+                                                                                        employee.maintenance_status.is_met ? 'bg-indigo-100 text-indigo-700' : 'bg-muted text-muted-foreground'
+                                                                                    }`}>
+                                                                                        {employee.maintenance_status.is_met ? 'Активен' : 'Нет задач'}
+                                                                                    </span>
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                )}
                                                             </div>
                                                         </>
                                                     );
@@ -1127,7 +1357,15 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                             <div key={idx} className="flex items-center justify-between p-3 bg-background rounded-lg border">
                                                                 <div className="flex items-center gap-3">
                                                                     <div className={`p-2 rounded-lg ${payment.payment_type === 'advance' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}><DollarSign className="h-4 w-4" /></div>
-                                                                    <div><p className="text-sm font-bold">{formatCurrency(payment.amount)}</p><p className="text-[10px] text-muted-foreground">{new Date(payment.date).toLocaleDateString('ru-RU', { day: '2-digit', month: 'long' })} • {payment.method === 'CASH' ? 'Наличные' : 'Безнал'}</p></div>
+                                                                    <div>
+                                                                        <p className="text-sm font-bold">{formatCurrency(payment.amount)}</p>
+                                                                        <p className="text-[10px] text-muted-foreground">
+                                                                            {new Date(payment.date).toLocaleDateString('ru-RU', { day: '2-digit', month: 'long' })} • {
+                                                                                payment.method === 'VIRTUAL' ? 'Виртуально' :
+                                                                                payment.method === 'CASH' ? 'Наличные' : 'Безнал'
+                                                                            }
+                                                                        </p>
+                                                                    </div>
                                                                 </div>
                                                                 <div className="flex items-center gap-3">
                                                                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${payment.payment_type === 'advance' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>{payment.payment_type === 'advance' ? 'Аванс' : 'Зарплата'}</span>
@@ -1190,28 +1428,44 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                     </Button>
                                     {paymentModal.employee.has_virtual_balance_feature && (
                                         <Button
-                                            type="button"
-                                            variant={paymentForm.paymentType === 'bonus' ? 'default' : 'outline'}
-                                            className="flex-1"
-                                            onClick={() => {
-                                                const bonusAmount = paymentModal.employee?.virtual_balance || 0;
-                                                setPaymentForm(prev => ({ ...prev, paymentType: 'bonus', amount: bonusAmount.toString() }));
-                                            }}
-                                        >
-                                            Бонусы
-                                        </Button>
-                                    )}
-                                </div>
-                                <p className="text-xs text-muted-foreground mt-1">
-                                    {paymentForm.paymentType === 'advance' ? 'Аванс: только базовая часть, KPI не замораживается' :
-                                     paymentForm.paymentType === 'salary' ? 'Зарплата: полная сумма с KPI, смены замораживаются' :
-                                     'Бонусы: выплата с виртуального (бонусного) баланса'}
-                                </p>
+                                        type="button"
+                                        variant={paymentForm.paymentType === 'bonus' ? 'default' : 'outline'}
+                                        className="flex-1"
+                                        onClick={() => {
+                                            const bonusAmount = paymentModal.employee?.virtual_balance || 0;
+                                            setPaymentForm(prev => ({ 
+                                                ...prev, 
+                                                paymentType: 'bonus', 
+                                                amount: bonusAmount.toString(),
+                                                method: 'VIRTUAL'
+                                            }));
+                                        }}
+                                    >
+                                        Бонусы
+                                    </Button>
+                                )}
                             </div>
+                            <p className="text-xs text-muted-foreground mt-1">
+                                {paymentForm.paymentType === 'advance' ? 'Аванс: только базовая часть, KPI не замораживается' :
+                                 paymentForm.paymentType === 'salary' ? 'Зарплата: полная сумма с KPI, смены замораживаются' :
+                                 'Бонусы: выплата с виртуального (бонусного) баланса'}
+                            </p>
+                        </div>
+                        
+                        {paymentForm.paymentType !== 'bonus' && (
                             <div>
                                 <label className="block text-sm font-medium mb-1">Способ оплаты</label>
-                                <select value={paymentForm.method} onChange={(e) => setPaymentForm({ ...paymentForm, method: e.target.value })} className="w-full border rounded px-3 py-2"><option value="CASH">Наличные</option><option value="CARD">Карта</option><option value="BANK_TRANSFER">Банковский перевод</option></select>
+                                <select 
+                                    value={paymentForm.method} 
+                                    onChange={(e) => setPaymentForm({ ...paymentForm, method: e.target.value })} 
+                                    className="w-full border rounded px-3 py-2"
+                                >
+                                    <option value="CASH">Наличные</option>
+                                    <option value="CARD">Карта</option>
+                                    <option value="BANK_TRANSFER">Банковский перевод</option>
+                                </select>
                             </div>
+                        )}
                             <div>
                                 <label className="block text-sm font-medium mb-1">Комментарий</label>
                                 <textarea value={paymentForm.notes} onChange={(e) => setPaymentForm({ ...paymentForm, notes: e.target.value })} className="w-full border rounded px-3 py-2" rows={3} placeholder="Примечание..." />
@@ -1220,6 +1474,26 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                         <div className="flex gap-3 mt-6">
                             <Button variant="outline" onClick={closePaymentModal} className="flex-1" disabled={processingPayment}>Отмена</Button>
                             <Button onClick={handlePayment} className="flex-1" disabled={processingPayment || !paymentForm.amount || parseFloat(paymentForm.amount) <= 0}>{processingPayment ? 'Обработка...' : 'Выплатить'}</Button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {confirmingDeleteId && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]">
+                    <div className="bg-white rounded-lg p-6 max-w-sm w-full mx-4 shadow-xl border animate-in zoom-in duration-200">
+                        <div className="flex items-center gap-3 text-destructive mb-4">
+                            <div className="p-2 bg-destructive/10 rounded-full">
+                                <Trash2 className="h-5 w-5" />
+                            </div>
+                            <h3 className="text-lg font-bold">Удалить выплату?</h3>
+                        </div>
+                        <p className="text-sm text-muted-foreground mb-6">
+                            Это действие отменит фиксацию зарплаты за этот период. Все смены снова станут доступны для пересчета.
+                        </p>
+                        <div className="flex gap-3">
+                            <Button variant="outline" onClick={() => setConfirmingDeleteId(null)} className="flex-1">Отмена</Button>
+                            <Button variant="destructive" onClick={() => onDeletePaymentClick(confirmingDeleteId)} className="flex-1">Удалить</Button>
                         </div>
                     </div>
                 </div>

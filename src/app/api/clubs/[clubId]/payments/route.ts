@@ -29,31 +29,46 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
         const payment = paymentRes.rows[0];
 
-        // For advances, skip salary snapshot (don't freeze KPI)
-        if (payment_type === 'advance') {
+        // For advances or bonus (virtual balance) payouts, skip salary snapshot (don't freeze KPI)
+        if (payment_type === 'advance' || payment_type === 'bonus') {
             return NextResponse.json({
                 payment_id: payment.id,
-                payment_type: 'advance',
+                payment_type: payment_type,
                 snapshot_created: false,
-                message: 'Advance payment recorded. KPI not frozen.'
+                message: payment_type === 'advance' ? 'Advance payment recorded. KPI not frozen.' : 'Bonus payment recorded from virtual balance. KPI not frozen.'
             });
         }
 
-        // 2. For full salary payment, get employee's salary scheme
+        // 2. For full salary payment, get employee's salary scheme and its latest version
         const schemeRes = await query(
-            `SELECT ss.* 
+            `SELECT ss.*, v.formula as versioned_formula
              FROM employee_salary_assignments esa
              JOIN salary_schemes ss ON ss.id = esa.scheme_id
+             LEFT JOIN LATERAL (
+                 SELECT formula 
+                 FROM salary_scheme_versions 
+                 WHERE scheme_id = ss.id 
+                 ORDER BY version DESC 
+                 LIMIT 1
+             ) v ON true
              WHERE esa.user_id = $1 AND esa.club_id = $2
              ORDER BY esa.assigned_at DESC
              LIMIT 1`,
             [employee_id, clubId]
         );
 
-        const scheme = schemeRes.rows[0];
-        if (!scheme) {
+        const schemeRow = schemeRes.rows[0];
+        if (!schemeRow) {
             return NextResponse.json({ error: 'No salary scheme found for employee' }, { status: 400 });
         }
+
+        // Merge formula from version into the scheme object
+        const formula = schemeRow.versioned_formula || {};
+        const scheme = {
+            ...schemeRow,
+            ...formula,
+            period_bonuses: schemeRow.period_bonuses || formula.period_bonuses || []
+        };
 
         // 3. Get planned shifts for the period
         const plannedShiftsRes = await query(
@@ -65,14 +80,22 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         const planned_shifts = plannedShiftsRes.rows[0]?.planned_shifts || 20;
 
         // 4. Create salary snapshot for unpaid shifts
+        // We include EVERYTHING from the scheme to freeze it "ironclad"
         const snapshot = {
             paid_at: payment.created_at,
             scheme_id: scheme.id,
             scheme_name: scheme.name,
-            hourly_rate: scheme.hourly_rate,
-            revenue_percent: scheme.revenue_percent,
+            // Freeze all base settings
+            base: scheme.base || {
+                type: scheme.type || 'hourly',
+                amount: scheme.amount || 0,
+                percent: scheme.percent || 0,
+                full_shift_hours: scheme.full_shift_hours || 12
+            },
+            bonuses: scheme.bonuses || [],
             period_bonuses: scheme.period_bonuses || [],
-            planned_shifts: planned_shifts
+            planned_shifts: planned_shifts,
+            standard_monthly_shifts: scheme.standard_monthly_shifts || 15
         };
 
         const startOfMonth = new Date(year, month - 1, 1);

@@ -14,7 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
-import { KpiOverview } from "@/components/employee/kpi/KpiOverview"
+import { KpiOverview, ChecklistKpiCard, MaintenanceKpiCard } from "@/components/employee/kpi/KpiOverview"
 import { ShiftClosingWizard } from "@/app/employee/clubs/[clubId]/_components/ShiftClosingWizard"
 import { ShiftOpeningWizard } from "@/app/employee/clubs/[clubId]/_components/ShiftOpeningWizard"
 import { VirtualBalanceCard } from "@/components/employee/VirtualBalanceCard"
@@ -36,11 +36,19 @@ interface ActiveShift {
 interface Stats {
     today_hours: number
     week_hours: number
+    total_hours: number
     week_earnings: number
     month_earnings: number
     hourly_rate: number
     kpi_bonus: number
     last_week_hours?: number
+    breakdown?: {
+        base_salary: number
+        shift_bonuses: number
+        checklist_bonuses: number
+        maintenance_bonuses: number
+        revenue_kpi_bonuses: number
+    }
 }
 
 interface KPIItem {
@@ -610,131 +618,50 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                             </Card>
                         </Link>
 
-                        {/* Equipment Management */}
-                        <Link href={`/employee/clubs/${clubId}/equipment`} className="block">
-                            <Card className="border-0 shadow-lg transition-all hover:scale-[1.02] active:scale-[0.98] bg-white dark:bg-slate-800/50 backdrop-blur">
-                                <CardContent className="pt-6">
-                                    <div className="flex items-start justify-between">
-                                        <div>
-                                            <p className="text-sm font-medium text-muted-foreground">Оборудование</p>
-                                            <p className="text-xl font-bold mt-1">Перемещение</p>
-                                            <p className="text-sm text-muted-foreground mt-1">
-                                                Управление и замена
-                                            </p>
-                                        </div>
-                                        <div className="p-3 rounded-xl bg-blue-500/10">
-                                            <Monitor className="h-6 w-6 text-blue-500" />
-                                        </div>
-                                    </div>
-                                </CardContent>
-                            </Card>
-                        </Link>
-
-                        {/* Equipment KPI Rating */}
-                        {kpiData?.equipment_rating && (
-                            <Link href={`/employee/clubs/${clubId}/tasks`} className="block">
-                                <Card className={cn(
-                                    "border-0 shadow-lg transition-all hover:scale-[1.02] active:scale-[0.98]",
-                                    (kpiData.equipment_rating.rating_multiplier || 1) > 1 
-                                        ? "bg-gradient-to-br from-emerald-500 to-green-600 text-white"
-                                        : (kpiData.equipment_rating.rating_multiplier || 1) < 1
-                                            ? "bg-gradient-to-br from-rose-500 to-red-600 text-white"
-                                            : "bg-white dark:bg-slate-800/50 backdrop-blur"
-                                )}>
-                                    <CardContent className="pt-6">
-                                        <div className="flex items-start justify-between">
-                                            <div>
-                                                <p className={cn(
-                                                    "text-sm font-medium",
-                                                    (kpiData.equipment_rating.rating_multiplier || 1) !== 1 ? "text-white/80" : "text-muted-foreground"
-                                                )}>Качество обслуживания</p>
-                                                <p className="text-3xl font-bold mt-1">
-                                                    {(kpiData.equipment_rating.efficiency_percent || 0).toFixed(0)}%
-                                                </p>
-                                                <div className="flex items-center gap-2 mt-1">
-                                                    <Badge variant="secondary" className={cn(
-                                                        "h-5 text-[10px]", 
-                                                        (kpiData.equipment_rating.rating_multiplier || 1) !== 1 ? "bg-white/20 text-white" : "bg-slate-100"
-                                                    )}>
-                                                        x{kpiData.equipment_rating.rating_multiplier || 1.0}
-                                                    </Badge>
-                                                    <p className={cn(
-                                                        "text-xs",
-                                                        (kpiData.equipment_rating.rating_multiplier || 1) !== 1 ? "text-white/80" : "text-muted-foreground"
-                                                    )}>
-                                                        {formatCurrency(kpiData.equipment_rating.projected_bonus || 0)}
-                                                    </p>
-                                                </div>
-                                            </div>
-                                            <div className={cn(
-                                                "p-3 rounded-xl",
-                                                (kpiData.equipment_rating.rating_multiplier || 1) !== 1 ? "bg-white/20" : "bg-purple-500/10"
-                                            )}>
-                                                <Trophy className={cn(
-                                                    "h-6 w-6",
-                                                    (kpiData.equipment_rating.rating_multiplier || 1) !== 1 ? "text-white" : "text-purple-500"
-                                                )} />
-                                            </div>
-                                        </div>
-                                    </CardContent>
-                                </Card>
-                            </Link>
-                        )}
-
-                        {/* Evaluations */}
-                        <Link href={`/employee/clubs/${clubId}/evaluations`} className="block">
-                            <Card className={cn(
-                                "border-0 shadow-lg transition-all hover:scale-[1.02] active:scale-[0.98]",
-                                evaluationScore === null
-                                    ? "bg-white dark:bg-slate-800/50 backdrop-blur"
-                                    : "bg-gradient-to-br from-orange-500 to-amber-500 text-white"
-                            )}>
-                                <CardContent className="pt-6">
-                                    <div className="flex items-start justify-between">
-                                        <div>
-                                            <p className={cn(
-                                                "text-sm font-medium",
-                                                evaluationScore === null ? "text-muted-foreground" : "text-white/80"
-                                            )}>Мои проверки</p>
-                                            <p className="text-3xl font-bold mt-1">
-                                                {isEvaluationsLoading
-                                                    ? '—'
-                                                    : evaluationScore !== null
-                                                        ? `${evaluationScore.toFixed(1)}%`
-                                                        : '—'}
-                                            </p>
-                                            <p className={cn(
-                                                "text-sm mt-1",
-                                                evaluationScore === null ? "text-emerald-500 font-medium" : "text-white/80"
-                                            )}>
-                                                {evaluationScore === null ? "Нет проверок" : "Последняя проверка"}
-                                            </p>
-                                        </div>
-                                        <div className={cn(
-                                            "p-3 rounded-xl",
-                                            evaluationScore === null ? "bg-orange-500/10" : "bg-white/20"
-                                        )}>
-                                            <ClipboardCheck className={cn(
-                                                "h-6 w-6",
-                                                evaluationScore === null ? "text-orange-500" : "text-white"
-                                            )} />
-                                        </div>
-                                    </div>
-                                </CardContent>
-                            </Card>
-                        </Link>
-
                         {/* Monthly Salary */}
-                        <Card className="border-0 shadow-lg bg-gradient-to-br from-purple-500 to-indigo-600 text-white">
-                            <CardContent className="pt-6">
+                        <Card className="border-0 shadow-lg bg-gradient-to-br from-purple-500 to-indigo-600 text-white overflow-hidden relative group">
+                            <div className="absolute inset-0 bg-white/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                            <CardContent className="pt-6 relative z-10">
                                 <div className="flex items-start justify-between">
                                     <div>
                                         <p className="text-sm font-medium text-white/70">Зарплата (ориентировочно)</p>
                                         <p className="text-3xl font-bold mt-1">{formatCurrency(stats?.month_earnings || 0)}</p>
-                                        {stats && stats.kpi_bonus > 0 && (
-                                            <p className="text-sm text-emerald-300 font-medium mt-1">
-                                                Включая {formatCurrency(stats.kpi_bonus)} бонусов
-                                            </p>
+                                        
+                                        {stats?.breakdown && (
+                                            <div className="mt-4 space-y-1.5 pt-4 border-t border-white/10">
+                                                <div className="flex justify-between text-[11px] text-white/60">
+                                                    <span>Ставка ({stats.total_hours || (stats.today_hours + stats.week_hours)} ч):</span>
+                                                    <span className="font-bold text-white">{formatCurrency(stats.breakdown.base_salary)}</span>
+                                                </div>
+                                                
+                                                {stats.breakdown.shift_bonuses > 0 && (
+                                                    <div className="flex justify-between text-[11px] text-white/60">
+                                                        <span>Бонусы смен:</span>
+                                                        <span className="font-bold text-emerald-300">+{formatCurrency(stats.breakdown.shift_bonuses)}</span>
+                                                    </div>
+                                                )}
+
+                                                {stats.breakdown.checklist_bonuses > 0 && (
+                                                    <div className="flex justify-between text-[11px] text-white/60">
+                                                        <span>Чек-листы (мес):</span>
+                                                        <span className="font-bold text-emerald-300">+{formatCurrency(stats.breakdown.checklist_bonuses)}</span>
+                                                    </div>
+                                                )}
+
+                                                {stats.breakdown.maintenance_bonuses > 0 && (
+                                                    <div className="flex justify-between text-[11px] text-white/60">
+                                                        <span>Обслуживание:</span>
+                                                        <span className="font-bold text-emerald-300">+{formatCurrency(stats.breakdown.maintenance_bonuses)}</span>
+                                                    </div>
+                                                )}
+
+                                                {stats.breakdown.revenue_kpi_bonuses > 0 && (
+                                                    <div className="flex justify-between text-[11px] text-white/60">
+                                                        <span>KPI Выручка:</span>
+                                                        <span className="font-bold text-emerald-300">+{formatCurrency(stats.breakdown.revenue_kpi_bonuses)}</span>
+                                                    </div>
+                                                )}
+                                            </div>
                                         )}
                                     </div>
                                     <div className="p-3 rounded-xl bg-white/20">
@@ -758,36 +685,75 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                     </div>
                 )}
 
-                {/* KPI Tracker - Simplified Experience */}
-                {kpiData && kpiData.kpi && kpiData.kpi.length > 0 ? (
-                    kpiData.kpi.map((kpi: any) => (
-                    <div key={kpi.id} className="space-y-4">
-                        {kpiData.kpi.length > 1 && (
-                            <div className="flex items-center gap-3 px-1">
-                                <div className="h-6 w-1 bg-purple-600 rounded-full" />
-                                <h2 className="text-xl font-black text-slate-800 dark:text-white uppercase tracking-tight">{kpi.name}</h2>
-                            </div>
-                        )}
+                {/* KPI Trackers */}
+                <div className="space-y-6">
+                    {/* Revenue KPI (Progressive) */}
+                    {kpiData && kpiData.kpi && kpiData.kpi.length > 0 && (
+                        <div className="space-y-4">
+                            {kpiData.kpi.map((kpi: any) => (
+                                <div key={kpi.id} className="space-y-4">
+                                    <div className="flex items-center gap-3 px-1">
+                                        <div className="h-6 w-1 bg-purple-600 rounded-full" />
+                                        <h2 className="text-xl font-black text-slate-800 dark:text-white uppercase tracking-tight">Выручка: {kpi.name}</h2>
+                                    </div>
 
-                        <KpiOverview
-                            kpi={kpi}
-                            formatCurrency={formatCurrency}
-                            remainingShifts={kpiData.remaining_shifts}
-                            shiftsCount={kpiData.shifts_count}
-                            plannedShifts={kpiData.planned_shifts}
-                            daysRemaining={kpiData.days_remaining}
-                            activeShift={activeShift}
-                        />
-                    </div>
-                ))) : (
-                    <Card className="border-0 shadow-lg bg-white dark:bg-slate-800/50 backdrop-blur">
-                        <CardContent className="py-8 text-center text-muted-foreground">
-                            <Target className="h-12 w-12 mx-auto mb-4 opacity-20" />
-                            <p>KPI показатели пока не назначены</p>
-                            {kpiData?.message && <p className="text-xs mt-2 opacity-50">{kpiData.message}</p>}
-                        </CardContent>
-                    </Card>
-                )}
+                                    <KpiOverview
+                                        kpi={kpi}
+                                        formatCurrency={formatCurrency}
+                                        remainingShifts={kpiData.remaining_shifts}
+                                        shiftsCount={kpiData.shifts_count}
+                                        plannedShifts={kpiData.planned_shifts}
+                                        daysRemaining={kpiData.days_remaining}
+                                        activeShift={activeShift}
+                                    />
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Checklist and Maintenance KPIs */}
+                    {(kpiData?.checklist?.length > 0 || kpiData?.maintenance) && (
+                        <div className="grid gap-6 md:grid-cols-2">
+                            {/* Checklist KPIs */}
+                            {kpiData.checklist?.map((checklist: any) => (
+                                <div key={checklist.id} className="space-y-4">
+                                    <div className="flex items-center gap-3 px-1">
+                                        <div className="h-6 w-1 bg-fuchsia-600 rounded-full" />
+                                        <h2 className="text-xl font-black text-slate-800 dark:text-white uppercase tracking-tight">Чек-лист</h2>
+                                    </div>
+                                    <ChecklistKpiCard 
+                                        kpi={checklist} 
+                                        formatCurrency={formatCurrency} 
+                                    />
+                                </div>
+                            ))}
+
+                            {/* Maintenance KPI */}
+                            {kpiData.maintenance && (
+                                <div className="space-y-4">
+                                    <div className="flex items-center gap-3 px-1">
+                                        <div className="h-6 w-1 bg-indigo-600 rounded-full" />
+                                        <h2 className="text-xl font-black text-slate-800 dark:text-white uppercase tracking-tight">Обслуживание</h2>
+                                    </div>
+                                    <MaintenanceKpiCard 
+                                        kpi={kpiData.maintenance} 
+                                        formatCurrency={formatCurrency} 
+                                    />
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {(!kpiData || (!kpiData.kpi?.length && !kpiData.checklist?.length && !kpiData.maintenance)) && (
+                        <Card className="border-0 shadow-lg bg-white dark:bg-slate-800/50 backdrop-blur">
+                            <CardContent className="py-8 text-center text-muted-foreground">
+                                <Target className="h-12 w-12 mx-auto mb-4 opacity-20" />
+                                <p>KPI показатели пока не назначены</p>
+                                {kpiData?.message && <p className="text-xs mt-2 opacity-50">{kpiData.message}</p>}
+                            </CardContent>
+                        </Card>
+                    )}
+                </div>
 
                 {/* Workday Progress (if shift active) - Removed */}
             </div>

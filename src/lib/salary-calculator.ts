@@ -118,10 +118,25 @@ export async function calculateSalary(
                     
                     if (evaluation) {
                         const score = Number(evaluation.score_percent) || 0;
-                        const minScore = Number(bonus.min_score) || 0;
                         
-                        if (score >= minScore) {
-                            bonusAmount = Number(bonus.amount) || 0;
+                        // Check if we use thresholds (new logic) or simple min_score (old logic)
+                        if (bonus.checklist_thresholds && Array.isArray(bonus.checklist_thresholds) && bonus.checklist_thresholds.length > 0) {
+                            // Sort descending by score to find the highest met threshold
+                            const sorted = [...bonus.checklist_thresholds].sort((a, b) => (Number(b.min_score) || 0) - (Number(a.min_score) || 0));
+                            const metThreshold = sorted.find(t => score >= (Number(t.min_score) || 0));
+                            
+                            if (metThreshold) {
+                                bonusAmount = Number(metThreshold.amount) || 0;
+                            }
+                        } else {
+                            // Legacy simple logic
+                            const minScore = Number(bonus.min_score) || 0;
+                            if (score >= minScore) {
+                                bonusAmount = Number(bonus.amount) || 0;
+                            }
+                        }
+                        
+                        if (bonusAmount > 0) {
                             const payoutType = bonus.payout_type || 'REAL_MONEY';
 
                             // Add metadata to breakdown for UI to show which checklist triggered this
