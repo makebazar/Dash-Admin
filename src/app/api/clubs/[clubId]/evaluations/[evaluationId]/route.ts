@@ -31,11 +31,12 @@ export async function GET(
         // Get Evaluation Details
         const evaluationResult = await query(
             `
-            SELECT e.*, t.name as template_name, u.full_name as employee_name, ev.full_name as evaluator_name
+            SELECT e.*, t.name as template_name, u.full_name as employee_name, ev.full_name as evaluator_name, rv.full_name as reviewer_name
             FROM evaluations e
             JOIN evaluation_templates t ON e.template_id = t.id
             JOIN users u ON e.employee_id = u.id
             LEFT JOIN users ev ON e.evaluator_id = ev.id
+            LEFT JOIN users rv ON e.reviewed_by = rv.id
             WHERE e.id = $1 AND e.club_id = $2
             `,
             [evaluationId, clubId]
@@ -47,6 +48,13 @@ export async function GET(
 
         const evaluation = evaluationResult.rows[0];
 
+        // Get all workstations for this club to calculate max scores
+        const workstationsResult = await query(
+            `SELECT id, zone, is_active FROM club_workstations WHERE club_id = $1`,
+            [clubId]
+        );
+        const workstations = workstationsResult.rows;
+
         // Get Responses with Item Details
         const responsesResult = await query(
             `
@@ -56,9 +64,14 @@ export async function GET(
                 r.comment,
                 r.photo_url,
                 r.photo_urls,
+                r.selected_workstations,
+                r.admin_comment,
                 i.content as item_content,
                 i.description,
-                i.weight as max_score
+                i.weight as max_score,
+                i.options,
+                i.related_entity_type,
+                i.target_zone
             FROM evaluation_responses r
             JOIN evaluation_template_items i ON r.item_id = i.id
             WHERE r.evaluation_id = $1
@@ -67,9 +80,24 @@ export async function GET(
             [evaluationId]
         );
 
+        const responses = responsesResult.rows.map((row: any) => {
+            if (row.related_entity_type === 'workstations') {
+                const hasSelectedWorkstations = Array.isArray(row.selected_workstations) && row.selected_workstations.length > 0
+                const commentHasIssues = typeof row.comment === 'string' && (row.comment.startsWith('Проблемы: ') || row.comment.startsWith('Проблемные: '))
+                return { 
+                    ...row, 
+                    max_score: 10,
+                    score: (Number(row.score) === 0 && !hasSelectedWorkstations && !commentHasIssues) 
+                        ? 10 
+                        : Number(row.score)
+                };
+            }
+            return row;
+        });
+
         return NextResponse.json({
             ...evaluation,
-            responses: responsesResult.rows
+            responses
         });
 
     } catch (error) {

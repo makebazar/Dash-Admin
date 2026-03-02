@@ -1,4 +1,15 @@
 import type { NextConfig } from "next";
+import dotenv from 'dotenv';
+import path from 'path';
+
+// Load .env.local BEFORE Next.js starts (critical for DATABASE_URL)
+// This must happen before any other imports or config
+const envLocalPath = path.resolve(process.cwd(), '.env.local');
+const envPath = path.resolve(process.cwd(), '.env');
+
+// Load in reverse order: .env first, then .env.local (overrides)
+dotenv.config({ path: envPath });
+dotenv.config({ path: envLocalPath });
 
 const nextConfig: NextConfig = {
   output: 'standalone',

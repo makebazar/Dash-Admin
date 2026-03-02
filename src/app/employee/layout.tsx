@@ -19,6 +19,8 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
     const [clubs, setClubs] = useState<Club[]>([])
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
     const [hasOwnedClubs, setHasOwnedClubs] = useState(false)
+    const hideMobileHeader = pathname?.includes('/employee/clubs/') && pathname?.includes('/evaluations/')
+    const showMobileHeader = !hideMobileHeader
 
     useEffect(() => {
         fetchUserData()
@@ -53,18 +55,19 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
 
     return (
         <div className="flex min-h-screen bg-background relative overflow-x-hidden">
-            {/* Mobile Header */}
-            <div className="md:hidden fixed top-0 left-0 right-0 h-16 border-b bg-card flex items-center justify-between px-4 z-40">
-                <Link href="/employee/dashboard" className="flex items-center gap-2">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-tr from-purple-500 to-blue-500">
-                        <Building2 className="h-5 w-5 text-white" />
-                    </div>
-                    <span className="text-lg font-semibold">DashAdmin</span>
-                </Link>
-                <Button variant="ghost" size="icon" onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}>
-                    {isMobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-                </Button>
-            </div>
+            {showMobileHeader && (
+                <div className="md:hidden fixed top-0 left-0 right-0 h-16 border-b bg-card flex items-center justify-between px-4 z-40">
+                    <Link href="/employee/dashboard" className="flex items-center gap-2">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-tr from-purple-500 to-blue-500">
+                            <Building2 className="h-5 w-5 text-white" />
+                        </div>
+                        <span className="text-lg font-semibold">DashAdmin</span>
+                    </Link>
+                    <Button variant="ghost" size="icon" onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}>
+                        {isMobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+                    </Button>
+                </div>
+            )}
 
             {/* Mobile Overlay */}
             {isMobileMenuOpen && (
@@ -212,7 +215,10 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
             </aside>
 
             {/* Main Content */}
-            <main className="md:ml-64 flex-1 pt-16 md:pt-0 transition-all duration-300">
+            <main className={cn(
+                "md:ml-64 flex-1 transition-all duration-300",
+                showMobileHeader ? "pt-16 md:pt-0" : "pt-0"
+            )}>
                 {children}
             </main>
         </div>

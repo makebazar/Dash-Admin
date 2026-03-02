@@ -33,7 +33,7 @@ export function ShiftOpeningWizard({
     const params = useParams()
     const clubId = params.clubId as string
     
-    const [checklistResponses, setChecklistResponses] = useState<Record<number, { score: number, comment: string, photo_urls: string[], selected_workstations?: string[] }>>({})
+    const [checklistResponses, setChecklistResponses] = useState<Record<number, { score: number, comment: string, photo_urls: string[], selected_workstations?: string[], is_issue_reported?: boolean }>>({})
     const [uploadingState, setUploadingState] = useState<Record<number, boolean>>({})
     
     // Workstations state
@@ -148,13 +148,37 @@ export function ShiftOpeningWizard({
             // Workstations selected -> There are issues -> Score 0
             // No workstations selected -> Maybe clean? -> Let user decide or keep current
             
-            // Logic: If user selects workstations, they are reporting issues.
-            const newScore = newSelected.length > 0 ? 0 : prev[itemId].score
+            // Logic: Calculate score based on number of issues
+            // Assume max score is 10 (or weight if provided, but typically 10 for workstations)
+            const maxScore = 10
+            
+            // Calculate penalty per issue
+            // We need to know total workstations in this zone
+            const targetZone = checklistTemplate?.items?.find((i: any) => i.id === itemId)?.target_zone
+            const totalWorkstations = workstations.filter(w => !targetZone || targetZone === 'all' || w.zone === targetZone).length
+            
+            const penaltyPerIssue = totalWorkstations > 0 ? (maxScore / totalWorkstations) : 0
+            
+            let newScore
+            if (newSelected.length > 0) {
+                const rawScore = maxScore - (newSelected.length * penaltyPerIssue)
+                // Round to 1 decimal place
+                newScore = Math.max(0, Math.round(rawScore * 10) / 10)
+            } else {
+                // If no issues selected, but "is_issue_reported" is true, user might be in process of selecting.
+                // If they cleared all selections, maybe they want to go back to perfect?
+                // But we stay in "issue reported" mode until they explicitly click "Perfect".
+                // So if no workstations selected, score is 10 (technically perfect), but state is still "issue reported".
+                newScore = maxScore
+            }
+            
+            // If the user explicitly clicked "Perfect", score would be set to weight/10 elsewhere.
+            // Here we are inside toggleWorkstationSelection, so we are definitely in "issue" mode.
 
             // Auto-generate comment
             const newComment = newSelected.length > 0 
                 ? `Проблемы: ${newSelected.join(', ')}` 
-                : (prev[itemId].score === 0 ? '' : prev[itemId].comment) // Clear comment if we reset score, else keep
+                : '' // Clear auto-comment if no workstations selected
 
             return {
                 ...prev,
@@ -292,14 +316,27 @@ export function ShiftOpeningWizard({
         const currentItem = checklistTemplate.items[currentStep]
         const response = checklistResponses[currentItem.id]
 
-        if (response?.score === -1) {
-            alert('Пожалуйста, выберите "Да" или "Нет"')
+        if (!response || (response.score === -1 && !response.is_issue_reported)) {
+            alert('Пожалуйста, выберите "Все отлично" или "Есть замечания"')
             return
         }
 
-        if (response?.score < (currentItem.weight || 1) && !response.comment && !response.selected_workstations?.length) {
-            alert('При выборе "Есть замечания" обязательно укажите комментарий или выберите вариант проблемы!')
-            return
+        if (response.is_issue_reported) {
+            if (response.score === -1) {
+                if (currentItem.related_entity_type === 'workstations') {
+                    alert('Пожалуйста, выберите проблемные рабочие места')
+                    return
+                }
+                if (currentItem.options && currentItem.options.length > 0) {
+                    alert('Пожалуйста, уточните проблему, выбрав один из вариантов')
+                    return
+                }
+            }
+
+            if (!response.comment && (!response.selected_workstations || response.selected_workstations.length === 0)) {
+                alert('При наличии замечаний обязательно укажите комментарий или выберите вариант проблемы!')
+                return
+            }
         }
 
         if (currentItem.is_photo_required) {
@@ -362,7 +399,7 @@ export function ShiftOpeningWizard({
                 </div>
 
                 {/* Content Area */}
-                <div className="flex-1 overflow-y-auto p-4 sm:p-6 flex flex-col justify-center min-h-[300px]">
+                <div className="flex-1 overflow-y-auto p-4 sm:p-6 flex flex-col min-h-[300px]">
                     {currentStep === -1 ? (
                         <div className="space-y-6 animate-in fade-in slide-in-from-left-4 duration-300">
                             <div className="space-y-2">
@@ -428,10 +465,21 @@ export function ShiftOpeningWizard({
 
                             <div className="grid grid-cols-2 gap-3">
                                 <button
-                                    onClick={() => handleChecklistChange(currentItem.id, currentItem.weight || 1)}
+                                    onClick={() => {
+                                        setChecklistResponses(prev => ({
+                                            ...prev,
+                                            [currentItem.id]: { 
+                                                ...prev[currentItem.id], 
+                                                score: currentItem.weight || 1,
+                                                is_issue_reported: false,
+                                                comment: '',
+                                                selected_workstations: []
+                                            }
+                                        }))
+                                    }}
                                     className={`
                                         flex flex-col items-center justify-center gap-2 p-4 rounded-xl border-2 transition-all
-                                        ${checklistResponses[currentItem.id]?.score === (currentItem.weight || 1)
+                                        ${!checklistResponses[currentItem.id]?.is_issue_reported && checklistResponses[currentItem.id]?.score === (currentItem.weight || 1)
                                             ? 'bg-green-500/10 border-green-500 text-green-400'
                                             : 'bg-slate-900 border-slate-800 text-slate-400 hover:bg-slate-800'}
                                     `}
@@ -443,14 +491,26 @@ export function ShiftOpeningWizard({
 
                                 <button
                                     onClick={() => {
-                                        // If options exist, select first bad option or just set score to 0
-                                        // But this button now acts as a toggle to show "Issues" section
-                                        // Let's just set score to 0 for now to trigger "bad" state, user can refine
-                                        handleChecklistChange(currentItem.id, 0)
+                                        const hasOptions = currentItem.options && currentItem.options.length > 0
+                                        const hasWorkstations = currentItem.related_entity_type === 'workstations'
+                                        
+                                        // If there are specific things to select (options or workstations), 
+                                        // we reset score to -1 to force user to select them.
+                                        // If it's a simple Yes/No, we set score to 0.
+                                        const newScore = (hasOptions || hasWorkstations) ? -1 : 0
+                                        
+                                        setChecklistResponses(prev => ({
+                                            ...prev,
+                                            [currentItem.id]: { 
+                                                ...prev[currentItem.id], 
+                                                score: newScore,
+                                                is_issue_reported: true
+                                            }
+                                        }))
                                     }}
                                     className={`
                                         flex flex-col items-center justify-center gap-2 p-4 rounded-xl border-2 transition-all
-                                        ${checklistResponses[currentItem.id]?.score < (currentItem.weight || 1)
+                                        ${checklistResponses[currentItem.id]?.is_issue_reported
                                             ? 'bg-red-500/10 border-red-500 text-red-400'
                                             : 'bg-slate-900 border-slate-800 text-slate-400 hover:bg-slate-800'}
                                     `}
@@ -461,7 +521,7 @@ export function ShiftOpeningWizard({
                             </div>
 
                             {/* Options Selection (If "Issues" selected and options exist) */}
-                            {checklistResponses[currentItem.id]?.score < (currentItem.weight || 1) && currentItem.options && currentItem.options.length > 0 && (
+                            {checklistResponses[currentItem.id]?.is_issue_reported && currentItem.options && currentItem.options.length > 0 && (
                                 <div className="p-4 bg-slate-900/50 rounded-xl border border-slate-800 animate-in fade-in slide-in-from-top-2">
                                     <p className="text-xs text-slate-400 mb-3 font-medium uppercase tracking-wider">Уточните состояние:</p>
                                     <div className="grid gap-2">
@@ -496,7 +556,7 @@ export function ShiftOpeningWizard({
                             )}
 
                             {/* Workstation Selection Grid */}
-                            {currentItem.related_entity_type === 'workstations' && (
+                            {checklistResponses[currentItem.id]?.is_issue_reported && currentItem.related_entity_type === 'workstations' && (
                                 <div className="p-4 bg-slate-900/50 rounded-xl border border-slate-800">
                                     <p className="text-xs text-slate-400 mb-3 font-medium uppercase tracking-wider">Отметьте проблемные места:</p>
                                     
@@ -528,7 +588,7 @@ export function ShiftOpeningWizard({
                             )}
 
                             {/* Photo Upload Section */}
-                            {(currentItem.is_photo_required || (checklistResponses[currentItem.id]?.photo_urls && checklistResponses[currentItem.id]?.photo_urls.length > 0)) && (
+                            {(currentItem.is_photo_required || checklistResponses[currentItem.id]?.is_issue_reported || (checklistResponses[currentItem.id]?.photo_urls && checklistResponses[currentItem.id]?.photo_urls.length > 0)) && (
                                 <div className="space-y-3">
                                     {/* Gallery */}
                                     {checklistResponses[currentItem.id]?.photo_urls && checklistResponses[currentItem.id].photo_urls.length > 0 && (
@@ -585,11 +645,11 @@ export function ShiftOpeningWizard({
                             )}
 
                             {/* Comment Input */}
-                            {(checklistResponses[currentItem.id]?.score < (currentItem.weight || 1) || checklistResponses[currentItem.id]?.comment) && (
+                            {(checklistResponses[currentItem.id]?.is_issue_reported || checklistResponses[currentItem.id]?.comment) && (
                                 <div className="animate-in fade-in slide-in-from-bottom-2">
                                     <Label className="text-xs text-slate-400 mb-2 block">Комментарий</Label>
                                     <Input 
-                                        placeholder={checklistResponses[currentItem.id]?.score < (currentItem.weight || 1) ? "Опишите проблему..." : "Комментарий (опционально)..."}
+                                        placeholder={checklistResponses[currentItem.id]?.is_issue_reported ? "Опишите проблему..." : "Комментарий (опционально)..."}
                                         className="bg-slate-900 border-slate-700 focus-visible:ring-purple-500"
                                         value={checklistResponses[currentItem.id]?.comment || ''}
                                         onChange={(e) => setChecklistResponses(prev => ({

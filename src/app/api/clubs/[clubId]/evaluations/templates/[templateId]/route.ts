@@ -112,7 +112,7 @@ export async function PATCH(
                         `UPDATE evaluation_template_items 
                          SET content = $1, description = $2, weight = $3, sort_order = $4, is_photo_required = $5, related_entity_type = $6, min_photos = $7, target_zone = $8, options = $9, is_active = TRUE
                          WHERE id = $10 AND template_id = $11`,
-                        [item.content, item.description, item.weight || 1.0, i, item.is_photo_required || false, item.related_entity_type || null, item.min_photos || 0, item.target_zone || null, JSON.stringify(item.options || []), item.id, templateId]
+                        [item.content, item.description, item.weight, i, item.is_photo_required || false, item.related_entity_type || null, item.min_photos || 0, item.target_zone || null, JSON.stringify(item.options || []), item.id, templateId]
                     )
                     updatedIds.add(item.id)
                 } else {
@@ -120,7 +120,7 @@ export async function PATCH(
                     await query(
                         `INSERT INTO evaluation_template_items (template_id, content, description, weight, sort_order, is_photo_required, related_entity_type, min_photos, target_zone, options, is_active)
                          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, TRUE)`,
-                        [templateId, item.content, item.description, item.weight || 1.0, i, item.is_photo_required || false, item.related_entity_type || null, item.min_photos || 0, item.target_zone || null, JSON.stringify(item.options || [])]
+                        [templateId, item.content, item.description, item.weight, i, item.is_photo_required || false, item.related_entity_type || null, item.min_photos || 0, item.target_zone || null, JSON.stringify(item.options || [])]
                     )
                 }
             }

@@ -2,33 +2,23 @@
 
 import { useEffect, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
-import { Loader2, Calendar, ClipboardCheck, ArrowLeft, ExternalLink, Camera, ChevronRight } from "lucide-react"
+import { Loader2, Calendar, ClipboardCheck, ArrowLeft, User, Clock } from "lucide-react"
 import Link from "next/link"
 
 interface Evaluation {
     id: number
     template_name: string
     evaluator_name: string
+    reviewer_name?: string
     total_score: number
     max_score: number
     evaluation_date: string
     created_at: string
     comments?: string
-}
-
-interface EvaluationDetail extends Evaluation {
-    responses: {
-        id: number
-        item_content: string
-        score: number
-        comment?: string
-        photo_url?: string
-        photo_urls?: string[]
-    }[]
+    reviewer_note?: string
+    status?: 'pending' | 'approved' | 'rejected'
 }
 
 export default function EmployeeEvaluationsPage() {
@@ -38,9 +28,22 @@ export default function EmployeeEvaluationsPage() {
 
     const [evaluations, setEvaluations] = useState<Evaluation[]>([])
     const [isLoading, setIsLoading] = useState(true)
-    const [selectedEvaluation, setSelectedEvaluation] = useState<EvaluationDetail | null>(null)
-    const [isDetailLoading, setIsDetailLoading] = useState(false)
     const [currentUserId, setCurrentUserId] = useState<string>('')
+
+    const parseIssuesFromComment = (comment?: string) => {
+        if (!comment) return []
+        const prefix = comment.startsWith('Проблемы: ')
+            ? 'Проблемы: '
+            : comment.startsWith('Проблемные: ')
+                ? 'Проблемные: '
+                : null
+        if (!prefix) return []
+        return comment
+            .slice(prefix.length)
+            .split(',')
+            .map(s => s.trim())
+            .filter(Boolean)
+    }
 
     useEffect(() => {
         // Fetch current user ID first
@@ -69,30 +72,6 @@ export default function EmployeeEvaluationsPage() {
         }
     }
 
-    const handleViewEvaluation = async (evaluationId: number) => {
-        // Find basic info from history first
-        const basicInfo = evaluations.find(h => h.id === evaluationId)
-        if (basicInfo) {
-            // @ts-ignore
-            setSelectedEvaluation({ ...basicInfo, responses: [] })
-        }
-        
-        setIsDetailLoading(true)
-        try {
-            const res = await fetch(`/api/clubs/${clubId}/evaluations/${evaluationId}`)
-            const data = await res.json()
-            if (res.ok) {
-                setSelectedEvaluation(data)
-            } else {
-                alert('Не удалось загрузить детали')
-            }
-        } catch (error) {
-            console.error(error)
-        } finally {
-            setIsDetailLoading(false)
-        }
-    }
-
     if (isLoading) {
         return (
             <div className="flex min-h-screen items-center justify-center bg-slate-50 dark:bg-slate-900/50">
@@ -106,12 +85,6 @@ export default function EmployeeEvaluationsPage() {
             <div className="mx-auto max-w-2xl space-y-6">
                 {/* Header */}
                 <div>
-                    <Link 
-                        href={`/employee/clubs/${clubId}`}
-                        className="mb-4 inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
-                    >
-                        <ArrowLeft className="mr-1 h-4 w-4" /> Назад
-                    </Link>
                     <h1 className="text-2xl font-bold tracking-tight">Мои проверки</h1>
                     <p className="text-muted-foreground">История оценок и чеклистов</p>
                 </div>
@@ -126,133 +99,54 @@ export default function EmployeeEvaluationsPage() {
                     </Card>
                 ) : (
                     <div className="space-y-3">
-                        {evaluations.map(evaluation => (
-                            <Card 
-                                key={evaluation.id} 
-                                className="cursor-pointer hover:shadow-md transition-all active:scale-[0.99]"
-                                onClick={() => handleViewEvaluation(evaluation.id)}
-                            >
-                                <CardContent className="p-4 flex items-center justify-between">
-                                    <div className="space-y-1">
-                                        <div className="font-medium">{evaluation.template_name}</div>
-                                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                            <Calendar className="h-3 w-3" />
-                                            {new Date(evaluation.evaluation_date || evaluation.created_at).toLocaleDateString()}
-                                            {evaluation.evaluator_name && (
-                                                <>• {evaluation.evaluator_name}</>
-                                            )}
+                    {evaluations.map(evaluation => {
+                            const total = Number(evaluation.total_score || 0)
+                            const max = Number(evaluation.max_score || 0)
+                            const scoreValue = max > 0 ? Math.round((total / max) * 100) : 0
+                            const scoreClass = scoreValue >= 80 ? "text-green-600" : scoreValue >= 50 ? "text-amber-600" : "text-red-600"
+                            const statusLabel = evaluation.status === 'approved' ? 'Проверено' : evaluation.status === 'rejected' ? 'Отклонено' : 'Ожидает'
+                            const statusClass = evaluation.status === 'approved'
+                                ? "bg-green-100 text-green-700 border-green-200"
+                                : evaluation.status === 'rejected'
+                                    ? "bg-red-100 text-red-700 border-red-200"
+                                    : "bg-amber-100 text-amber-700 border-amber-200"
+                            return (
+                                <Card
+                                    key={evaluation.id}
+                                    className="cursor-pointer hover:shadow-md transition-all active:scale-[0.99]"
+                                    onClick={() => router.push(`/employee/clubs/${clubId}/evaluations/${evaluation.id}`)}
+                                >
+                                    <CardContent className="p-4">
+                                        <div className="flex items-start justify-between gap-4">
+                                            <div className="space-y-2">
+                                                <div className="font-semibold">{evaluation.template_name}</div>
+                                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                                    <Calendar className="h-3 w-3" />
+                                                    {new Date(evaluation.evaluation_date || evaluation.created_at).toLocaleDateString()}
+                                                    <Clock className="h-3 w-3 ml-2" />
+                                                    {new Date(evaluation.created_at || evaluation.evaluation_date).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
+                                                </div>
+                                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                                    <User className="h-3 w-3" />
+                                                    {evaluation.reviewer_name || evaluation.evaluator_name || '—'}
+                                                </div>
+                                            </div>
+                                            <div className="flex flex-col items-end gap-2">
+                                                <Badge variant="outline" className={`text-[10px] h-5 px-2 ${statusClass}`}>
+                                                    {statusLabel}
+                                                </Badge>
+                                                <div className={`text-xl font-black ${scoreClass}`}>
+                                                    {scoreValue}%
+                                                </div>
+                                            </div>
                                         </div>
-                                    </div>
-                                    <div className="flex items-center gap-3">
-                                        <Badge 
-                                            variant={evaluation.total_score >= 80 ? 'default' : evaluation.total_score >= 50 ? 'secondary' : 'destructive'}
-                                            className="text-sm font-bold px-2.5 py-0.5"
-                                        >
-                                            {Math.round(evaluation.total_score)}%
-                                        </Badge>
-                                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                                    </div>
-                                </CardContent>
-                            </Card>
-                        ))}
+                                    </CardContent>
+                                </Card>
+                            )
+                        })}
                     </div>
                 )}
             </div>
-
-            {/* Detail Modal */}
-            <Dialog open={!!selectedEvaluation} onOpenChange={() => setSelectedEvaluation(null)}>
-                <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-                    <DialogHeader>
-                        <DialogTitle>{selectedEvaluation?.template_name}</DialogTitle>
-                        <DialogDescription>
-                            Проверка от {selectedEvaluation && new Date(selectedEvaluation.evaluation_date || selectedEvaluation.created_at).toLocaleDateString()}
-                        </DialogDescription>
-                    </DialogHeader>
-                    
-                    {isDetailLoading ? (
-                        <div className="flex justify-center py-12">
-                            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                        </div>
-                    ) : selectedEvaluation ? (
-                        <div className="space-y-6">
-                            <div className="flex items-center justify-between bg-muted/50 p-4 rounded-lg">
-                                <span className="text-sm font-medium">Итоговый результат</span>
-                                <Badge 
-                                    variant={selectedEvaluation.total_score >= 80 ? 'default' : selectedEvaluation.total_score >= 50 ? 'secondary' : 'destructive'}
-                                    className="text-lg"
-                                >
-                                    {Math.round(selectedEvaluation.total_score)}%
-                                </Badge>
-                            </div>
-
-                            {selectedEvaluation.comments && (
-                                <div className="space-y-2">
-                                    <h4 className="text-sm font-medium text-muted-foreground">Комментарий проверяющего</h4>
-                                    <div className="bg-muted p-3 rounded-md text-sm">
-                                        {selectedEvaluation.comments}
-                                    </div>
-                                </div>
-                            )}
-
-                            <div className="space-y-4">
-                                <h4 className="text-sm font-medium text-muted-foreground">Детализация</h4>
-                                <div className="space-y-3">
-                                    {selectedEvaluation.responses?.map((response, index) => (
-                                        <div key={index} className="border rounded-lg p-3">
-                                            <div className="flex justify-between items-start mb-2">
-                                                <p className="text-sm font-medium flex-1 pr-4">{response.item_content}</p>
-                                                {response.score > 0 ? (
-                                                    <Badge variant="outline" className="text-green-600 border-green-200 bg-green-50 shrink-0">Да</Badge>
-                                                ) : (
-                                                    <Badge variant="outline" className="text-red-600 border-red-200 bg-red-50 shrink-0">Нет</Badge>
-                                                )}
-                                            </div>
-                                            {response.comment && (
-                                                <p className="text-xs text-muted-foreground bg-muted/50 p-2 rounded mt-2">
-                                                    {response.comment}
-                                                </p>
-                                            )}
-                                            {/* Photo Gallery */}
-                                            {(response.photo_urls && response.photo_urls.length > 0) ? (
-                                                <div className="mt-3 grid grid-cols-3 gap-2">
-                                                    {response.photo_urls.map((url, idx) => (
-                                                        <a 
-                                                            key={idx}
-                                                            href={url} 
-                                                            target="_blank" 
-                                                            rel="noopener noreferrer"
-                                                            className="relative aspect-square rounded-md overflow-hidden border border-slate-200 hover:opacity-90 transition-opacity"
-                                                        >
-                                                            <img 
-                                                                src={url} 
-                                                                alt={`Evidence ${idx + 1}`} 
-                                                                className="h-full w-full object-cover"
-                                                            />
-                                                        </a>
-                                                    ))}
-                                                </div>
-                                            ) : response.photo_url && (
-                                                <div className="mt-2">
-                                                    <a 
-                                                        href={response.photo_url} 
-                                                        target="_blank" 
-                                                        rel="noopener noreferrer"
-                                                        className="inline-flex items-center gap-2 text-xs text-blue-600 hover:underline bg-blue-50 px-2 py-1 rounded-md border border-blue-100"
-                                                    >
-                                                        <Camera className="h-3 w-3" />
-                                                        Фото
-                                                        <ExternalLink className="h-3 w-3" />
-                                                    </a>
-                                                </div>
-                                            )}
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
-                    ) : null}
-                </DialogContent>
-            </Dialog>
         </div>
     )
 }

@@ -61,6 +61,8 @@ export interface Bonus {
         multiplier?: number
         amount?: number
     }[]
+    // Payout type: real money or virtual balance
+    payout_type?: 'REAL_MONEY' | 'VIRTUAL_BALANCE'
 }
 
 export interface PeriodBonus {
@@ -73,6 +75,8 @@ export interface PeriodBonus {
     reward_value: number
     thresholds?: { from: number; percent: number; label?: string }[]
     bonus_mode?: 'MONTH' | 'SHIFT'
+    // Payout type: real money or virtual balance
+    payout_type?: 'REAL_MONEY' | 'VIRTUAL_BALANCE'
 }
 
 export interface SalaryScheme {
@@ -255,10 +259,10 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
         let newBonus: Bonus
         switch (type) {
             case 'percent_revenue':
-                newBonus = { type: 'percent_revenue', name: 'Процент от выручки', source: 'total', percent: 5 }
+                newBonus = { type: 'percent_revenue', name: 'Процент от выручки', source: 'total', percent: 5, payout_type: 'REAL_MONEY' }
                 break
             case 'fixed':
-                newBonus = { type: 'fixed', name: 'Фикс бонус', amount: 500 }
+                newBonus = { type: 'fixed', name: 'Фикс бонус', amount: 500, payout_type: 'REAL_MONEY' }
                 break
             case 'tiered':
                 newBonus = {
@@ -269,7 +273,8 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                         { from: 0, to: 30000, bonus: 0 },
                         { from: 30001, to: 50000, bonus: 500 },
                         { from: 50001, to: null, bonus: 1000 }
-                    ]
+                    ],
+                    payout_type: 'REAL_MONEY'
                 }
                 break
             case 'progressive_percent':
@@ -281,11 +286,12 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                         { from: 30000, percent: 3 },
                         { from: 50000, percent: 5 },
                         { from: 80000, percent: 7 }
-                    ]
+                    ],
+                    payout_type: 'REAL_MONEY'
                 }
                 break
             case 'penalty':
-                newBonus = { type: 'penalty', name: 'Штраф', amount: 500, penalty_reason: 'Опоздание' }
+                newBonus = { type: 'penalty', name: 'Штраф', amount: 500, penalty_reason: 'Опоздание', payout_type: 'REAL_MONEY' }
                 break
             case 'checklist':
                 newBonus = {
@@ -294,7 +300,8 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                     amount: 500,
                     min_score: 100,
                     checklist_template_id: checklistTemplates.length > 0 ? checklistTemplates[0].id : undefined,
-                    mode: 'SHIFT'
+                    mode: 'SHIFT',
+                    payout_type: 'VIRTUAL_BALANCE'
                 }
                 break
             case 'maintenance_kpi':
@@ -311,11 +318,12 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                         { from_percent: 50, multiplier: 0.8, amount: 2000 },
                         { from_percent: 80, multiplier: 1.0, amount: 3000 },
                         { from_percent: 90, multiplier: 1.2, amount: 5000 }
-                    ]
+                    ],
+                    payout_type: 'REAL_MONEY'
                 }
                 break
             default:
-                newBonus = { type: 'fixed', name: 'Бонус', amount: 500 }
+                newBonus = { type: 'fixed', name: 'Бонус', amount: 500, payout_type: 'REAL_MONEY' }
         }
         setFormula(prev => ({ ...prev, bonuses: [...prev.bonuses, newBonus] }))
     }
@@ -380,7 +388,8 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
             target_per_shift: 5000,
             reward_type: 'FIXED',
             reward_value: 1000,
-            thresholds: type === 'PROGRESSIVE' ? [{ from: 30000, percent: 3 }] : undefined
+            thresholds: type === 'PROGRESSIVE' ? [{ from: 30000, percent: 3 }] : undefined,
+            payout_type: 'REAL_MONEY'
         }
         setPeriodBonuses([...periodBonuses, newBonus])
     }
@@ -767,6 +776,38 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                                             </div>
 
                                             <div className="pl-1">
+                                                {/* Payout Type Selector */}
+                                                <div className="mb-3 flex items-center gap-2">
+                                                    <Label className="text-xs text-muted-foreground">Тип выплаты:</Label>
+                                                    <div className="flex rounded-md border border-input overflow-hidden">
+                                                        <button
+                                                            type="button"
+                                                            className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                                                                bonus.payout_type === 'REAL_MONEY' || !bonus.payout_type
+                                                                    ? 'bg-blue-500 text-white'
+                                                                    : 'bg-background text-muted-foreground hover:bg-muted'
+                                                            }`}
+                                                            onClick={() => updateBonus(index, 'payout_type', 'REAL_MONEY')}
+                                                        >
+                                                            💵 Реальные деньги
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            className={`px-3 py-1.5 text-xs font-medium transition-colors border-l border-input ${
+                                                                bonus.payout_type === 'VIRTUAL_BALANCE'
+                                                                    ? 'bg-blue-500 text-white'
+                                                                    : 'bg-background text-muted-foreground hover:bg-muted'
+                                                            }`}
+                                                            onClick={() => updateBonus(index, 'payout_type', 'VIRTUAL_BALANCE')}
+                                                        >
+                                                            🎮 Виртуальный баланс
+                                                        </button>
+                                                    </div>
+                                                    <Badge variant={bonus.payout_type === 'VIRTUAL_BALANCE' ? 'secondary' : 'default'} className="text-xs">
+                                                        {bonus.payout_type === 'VIRTUAL_BALANCE' ? 'Баланс' : 'Деньги'}
+                                                    </Badge>
+                                                </div>
+
                                                 {/* Percent Revenue */}
                                                 {bonus.type === 'percent_revenue' && (
                                                     <div className="flex items-center gap-3">
@@ -1316,6 +1357,38 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                                                 >
                                                     <Trash2 className="h-4 w-4" />
                                                 </Button>
+                                            </div>
+
+                                            {/* Payout Type Selector for Period Bonus */}
+                                            <div className="mb-3 flex items-center gap-2">
+                                                <Label className="text-xs text-muted-foreground">Тип выплаты:</Label>
+                                                <div className="flex rounded-md border border-input overflow-hidden">
+                                                    <button
+                                                        type="button"
+                                                        className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                                                            bonus.payout_type === 'REAL_MONEY' || !bonus.payout_type
+                                                                ? 'bg-blue-500 text-white'
+                                                                : 'bg-background text-muted-foreground hover:bg-muted'
+                                                        }`}
+                                                        onClick={() => updatePeriodBonus(index, 'payout_type', 'REAL_MONEY')}
+                                                    >
+                                                        💵 Реальные деньги
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        className={`px-3 py-1.5 text-xs font-medium transition-colors border-l border-input ${
+                                                            bonus.payout_type === 'VIRTUAL_BALANCE'
+                                                                ? 'bg-blue-500 text-white'
+                                                                : 'bg-background text-muted-foreground hover:bg-muted'
+                                                        }`}
+                                                        onClick={() => updatePeriodBonus(index, 'payout_type', 'VIRTUAL_BALANCE')}
+                                                    >
+                                                        🎮 Виртуальный баланс
+                                                    </button>
+                                                </div>
+                                                <Badge variant={bonus.payout_type === 'VIRTUAL_BALANCE' ? 'secondary' : 'default'} className="text-xs">
+                                                    {bonus.payout_type === 'VIRTUAL_BALANCE' ? 'Баланс' : 'Деньги'}
+                                                </Badge>
                                             </div>
 
                                             <div className="mb-4">

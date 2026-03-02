@@ -38,11 +38,15 @@ interface Employee {
     planned_shifts: number;
     standard_monthly_shifts: number;
     total_accrued: number;
+    kpi_bonus_amount?: number;
+    virtual_balance_accrued?: number;
     total_paid: number;
     balance: number;
+    virtual_balance?: number;
     payment_status: 'PAID' | 'PARTIAL' | 'PENDING';
     has_active_kpi: boolean;
-    kpi_bonus_amount?: number;
+    has_kpi_feature?: boolean;
+    has_virtual_balance_feature?: boolean;
     period_bonuses?: any[];
     kpi_summary?: Array<{
         metric: string;
@@ -51,14 +55,14 @@ interface Employee {
     }>;
     breakdown?: {
         base_salary: number;
+        virtual_balance: number;
         kpi_bonuses: number;
         other_bonuses: number;
     };
     metrics?: {
-        total_revenue: number;
-        avg_revenue_per_shift: number;
-        total_hours: number;
-        avg_hours_per_shift: number;
+        total_hours?: number;
+        total_revenue?: number;
+        avg_revenue_per_shift?: number;
         revenue_by_metric: Record<string, {
             total: number;
             avg_per_shift: number;
@@ -80,13 +84,16 @@ interface Employee {
         date: string;
         total_hours: number;
         total_revenue: number;
-        calculated_salary: number;
+        calculated_salary: number;  // Только REAL_MONEY
+        virtual_balance_earned: number;  // VIRTUAL_BALANCE
         kpi_bonus: number;
         status: string;
         is_paid: boolean;
         type: string;
         metrics?: Record<string, number>;
         bonuses?: any[];
+        real_money_bonuses?: any[];
+        virtual_bonuses?: any[];
     }>;
     metric_categories?: Record<string, 'INCOME' | 'EXPENSE' | 'OTHER'>;
     metric_metadata?: Record<string, { label: string; category: string; is_numeric?: boolean }>;
@@ -107,7 +114,7 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
     const [activeTabs, setActiveTabs] = useState<Record<number, string>>({});
     const [expandedCards, setExpandedCards] = useState<Set<number>>(new Set());
     const [paymentModal, setPaymentModal] = useState<{ open: boolean; employee: Employee | null }>({ open: false, employee: null });
-    const [paymentForm, setPaymentForm] = useState({ amount: '', method: 'CASH', notes: '', paymentType: 'salary' as 'salary' | 'advance' });
+    const [paymentForm, setPaymentForm] = useState({ amount: '', method: 'CASH', notes: '', paymentType: 'salary' as 'salary' | 'advance' | 'bonus' });
     const [processingPayment, setProcessingPayment] = useState(false);
 
     const toggleCard = (employeeId: number) => {
@@ -302,7 +309,7 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
         <div className="space-y-8 p-8">
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
-                    <h1 className="text-3xl font-bold tracking-tight">💰 Зарплаты</h1>
+                    <h1 className="text-3xl font-bold tracking-tight">Зарплаты</h1>
                     <div className="flex items-center gap-2">
                         <Button variant="ghost" size="icon" onClick={() => navigateMonth(-1)}><ChevronLeft className="h-5 w-5" /></Button>
                         <div className="text-lg font-medium min-w-[160px] text-center">{monthNames[selectedMonth - 1]} {selectedYear}</div>
@@ -341,14 +348,16 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                 <h3 className="font-medium text-lg">{employee.full_name}</h3>
                                                 <p className="text-sm text-muted-foreground">{employee.role || 'Сотрудник'}</p>
                                             </div>
-                                            {employee.has_active_kpi && <Badge variant="secondary" className="text-xs">🎯 KPI</Badge>}
+                                            {employee.has_active_kpi && <Badge variant="secondary" className="text-xs">KPI</Badge>}
                                         </div>
                                         <div className="grid grid-cols-5 gap-4 text-sm">
                                             <div><p className="text-muted-foreground mb-1">Смены</p><p className="font-medium">{employee.shifts_count}</p></div>
                                             <div><p className="text-muted-foreground mb-1">Начислено</p><p className="font-medium">{formatCurrency(employee.total_accrued)}</p></div>
                                             <div><p className="text-muted-foreground mb-1">Выплачено</p><p className="font-medium">{formatCurrency(employee.total_paid)}</p></div>
                                             <div><p className="text-muted-foreground mb-1">Остаток</p><p className="font-medium">{formatCurrency(employee.balance)}</p></div>
-                                            <div><p className="text-muted-foreground mb-1">KPI премия</p><p className={`font-medium ${employee.kpi_bonus_amount && employee.kpi_bonus_amount > 0 ? 'text-green-600' : ''}`}>{formatCurrency(employee.kpi_bonus_amount || 0)}</p></div>
+                                            {employee.has_kpi_feature && (
+                                                <div><p className="text-muted-foreground mb-1">KPI премия</p><p className={`font-medium ${employee.kpi_bonus_amount && employee.kpi_bonus_amount > 0 ? 'text-emerald-600' : ''}`}>{formatCurrency(employee.kpi_bonus_amount || 0)}</p></div>
+                                            )}
                                         </div>
                                     </div>
                                     <div className="flex flex-col items-end gap-3 ml-6">
@@ -763,11 +772,36 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                                     })() : <p className="text-sm text-muted-foreground italic">Настройте KPI для отображения прогноза</p>}
                                                                 </div>
                                                                 <div className="bg-muted/30 p-4 rounded-xl border">
-                                                                    <h5 className="text-xs font-bold uppercase mb-3 text-muted-foreground">Состав зарплаты</h5>
+                                                                    <h5 className="text-xs font-bold uppercase mb-3 text-muted-foreground">Состав начислений</h5>
                                                                     <div className="space-y-2 text-sm">
-                                                                        <div className="flex justify-between items-center"><span>База:</span><span className="font-medium">{formatCurrency(employee.breakdown?.base_salary || 0)}</span></div>
-                                                                        <div className="flex justify-between items-center text-green-600"><span className="flex items-center gap-1">KPI бонусы:</span><span className="font-bold">{formatCurrency(employee.breakdown?.kpi_bonuses || 0)}</span></div>
-                                                                        <div className="pt-2 border-t mt-2 flex justify-between items-center font-bold"><span>Итого начислено:</span><span>{formatCurrency(employee.total_accrued)}</span></div>
+                                                                        {employee.breakdown?.base_salary && employee.breakdown.base_salary > 0 && (
+                                                                            <div className="flex justify-between items-center">
+                                                                                <span>База (ставка):</span>
+                                                                                <span className="font-medium text-blue-600">{formatCurrency(employee.breakdown.base_salary)}</span>
+                                                                            </div>
+                                                                        )}
+                                                                        {employee.has_kpi_feature && employee.kpi_bonus_amount && employee.kpi_bonus_amount > 0 && (
+                                                                            <div className="flex justify-between items-center text-emerald-600">
+                                                                                <span>KPI премия:</span>
+                                                                                <span className="font-bold">{formatCurrency(employee.kpi_bonus_amount)}</span>
+                                                                            </div>
+                                                                        )}
+                                                                        {employee.has_virtual_balance_feature && employee.breakdown?.virtual_balance && employee.breakdown.virtual_balance > 0 && (
+                                                                            <div className="flex justify-between items-center text-purple-600 bg-purple-50 dark:bg-purple-900/20 px-2 py-1 rounded -mx-2">
+                                                                                <span>Бонусные (баланс):</span>
+                                                                                <span className="font-bold">{formatCurrency(employee.breakdown.virtual_balance)}</span>
+                                                                            </div>
+                                                                        )}
+                                                                        <div className="pt-2 border-t mt-2 flex justify-between items-center font-bold">
+                                                                            <span>Итого зарплата:</span>
+                                                                            <span className="text-blue-600">{formatCurrency(employee.total_accrued)}</span>
+                                                                        </div>
+                                                                        {employee.has_virtual_balance_feature && employee.virtual_balance_accrued !== undefined && employee.virtual_balance_accrued > 0 && (
+                                                                            <div className="pt-2 border-t border-purple-200 dark:border-purple-800 flex justify-between items-center font-bold text-purple-600 bg-purple-50 dark:bg-purple-900/20 px-2 py-1 rounded -mx-2">
+                                                                                <span>Итого бонусные:</span>
+                                                                                <span>{formatCurrency(employee.virtual_balance_accrued)}</span>
+                                                                            </div>
+                                                                        )}
                                                                     </div>
                                                                 </div>
                                                             </div>
@@ -912,6 +946,10 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                     );
 
                                                     const otherMetricLabel = otherMetrics.length === 1 ? metadata[otherMetrics[0]].label : 'Доп. продажи';
+                                                    
+                                                    // Check if any shift has virtual balance bonuses
+                                                    const hasVirtualBonuses = (employee.virtual_balance_accrued || 0) > 0 || 
+                                                        (employee.shifts || []).some((s: any) => (s.virtual_balance_earned || 0) > 0);
 
                                                     return (
                                                         <div className="rounded-xl border overflow-hidden">
@@ -923,7 +961,10 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                                         <th className="p-3 font-bold uppercase tracking-wider text-right">Выручка</th>
                                                                         <th className="p-3 font-bold uppercase tracking-wider text-right text-indigo-600">Эффект.</th>
                                                                         <th className="p-3 font-bold uppercase tracking-wider text-right text-emerald-600">KPI</th>
-                                                                        <th className="p-3 font-bold uppercase tracking-wider text-right">З/П</th>
+                                                                        {hasVirtualBonuses && (
+                                                                            <th className="p-3 font-bold uppercase tracking-wider text-right text-purple-600">Бонусные</th>
+                                                                        )}
+                                                                        <th className="p-3 font-bold uppercase tracking-wider text-right text-blue-600">З/П</th>
                                                                         <th className="p-3 font-bold uppercase tracking-wider text-center">Статус</th>
                                                                         <th className="p-3"></th>
                                                                     </tr>
@@ -1020,7 +1061,27 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                                                             <span className="text-muted-foreground/30">—</span>
                                                                                         )}
                                                                                     </td>
-                                                                                    <td className="p-3 text-right font-black text-sm">{formatCurrency(shift.total_pay || shift.calculated_salary)}</td>
+                                                                                    {hasVirtualBonuses && (
+                                                                                        <td className="p-3 text-right">
+                                                                                            {shift.virtual_balance_earned > 0 ? (
+                                                                                                <div className="flex flex-col items-end">
+                                                                                                    <span className="text-purple-600 font-black">+{formatCurrency(shift.virtual_balance_earned)}</span>
+                                                                                                    {shift.virtual_bonuses && shift.virtual_bonuses.length > 0 && (
+                                                                                                        <div className="flex flex-col items-end gap-0.5 mt-1 overflow-hidden">
+                                                                                                            {shift.virtual_bonuses.map((b: any, bi: number) => (
+                                                                                                                <span key={bi} className="text-[8px] text-purple-600 leading-tight whitespace-nowrap bg-purple-50 dark:bg-purple-900/20 px-1 rounded">
+                                                                                                                    {b.name || b.type} <span className="font-bold">+{formatCurrency(b.amount)}</span>
+                                                                                                                </span>
+                                                                                                            ))}
+                                                                                                        </div>
+                                                                                                    )}
+                                                                                                </div>
+                                                                                            ) : (
+                                                                                                <span className="text-muted-foreground/30">—</span>
+                                                                                            )}
+                                                                                        </td>
+                                                                                    )}
+                                                                                    <td className="p-3 text-right font-black text-sm text-blue-600">{formatCurrency(shift.calculated_salary)}</td>
                                                                                     <td className="p-3 text-center">
                                                                                         <span className={`text-[9px] px-2 py-0.5 rounded-full font-black uppercase tracking-tight shadow-sm ${shift.status === 'PAID' || shift.is_paid
                                                                                             ? 'bg-green-100 text-green-700 border border-green-200'
@@ -1104,11 +1165,48 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                             </div>
                             <div>
                                 <label className="block text-sm font-medium mb-2">Тип выплаты</label>
-                                <div className="flex gap-2">
-                                    <Button type="button" variant={paymentForm.paymentType === 'advance' ? 'default' : 'outline'} className="flex-1" onClick={() => { const baseAmount = paymentModal.employee?.breakdown?.base_salary || 0; setPaymentForm(prev => ({ ...prev, paymentType: 'advance', amount: baseAmount.toString() })); }}>Аванс</Button>
-                                    <Button type="button" variant={paymentForm.paymentType === 'salary' ? 'default' : 'outline'} className="flex-1" onClick={() => { const fullAmount = paymentModal.employee?.balance || 0; setPaymentForm(prev => ({ ...prev, paymentType: 'salary', amount: fullAmount.toString() })); }}>Зарплата</Button>
+                                <div className="flex flex-wrap gap-2">
+                                    <Button
+                                        type="button"
+                                        variant={paymentForm.paymentType === 'advance' ? 'default' : 'outline'}
+                                        className="flex-1"
+                                        onClick={() => {
+                                            const baseAmount = paymentModal.employee?.breakdown?.base_salary || 0;
+                                            setPaymentForm(prev => ({ ...prev, paymentType: 'advance', amount: baseAmount.toString() }));
+                                        }}
+                                    >
+                                        Аванс
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        variant={paymentForm.paymentType === 'salary' ? 'default' : 'outline'}
+                                        className="flex-1"
+                                        onClick={() => {
+                                            const fullAmount = paymentModal.employee?.balance || 0;
+                                            setPaymentForm(prev => ({ ...prev, paymentType: 'salary', amount: fullAmount.toString() }));
+                                        }}
+                                    >
+                                        Зарплата
+                                    </Button>
+                                    {paymentModal.employee.has_virtual_balance_feature && (
+                                        <Button
+                                            type="button"
+                                            variant={paymentForm.paymentType === 'bonus' ? 'default' : 'outline'}
+                                            className="flex-1"
+                                            onClick={() => {
+                                                const bonusAmount = paymentModal.employee?.virtual_balance || 0;
+                                                setPaymentForm(prev => ({ ...prev, paymentType: 'bonus', amount: bonusAmount.toString() }));
+                                            }}
+                                        >
+                                            Бонусы
+                                        </Button>
+                                    )}
                                 </div>
-                                <p className="text-xs text-muted-foreground mt-1">{paymentForm.paymentType === 'advance' ? 'Аванс: только базовая часть, KPI не замораживается' : 'Зарплата: полная сумма с KPI, смены замораживаются'}</p>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                    {paymentForm.paymentType === 'advance' ? 'Аванс: только базовая часть, KPI не замораживается' :
+                                     paymentForm.paymentType === 'salary' ? 'Зарплата: полная сумма с KPI, смены замораживаются' :
+                                     'Бонусы: выплата с виртуального (бонусного) баланса'}
+                                </p>
                             </div>
                             <div>
                                 <label className="block text-sm font-medium mb-1">Способ оплаты</label>

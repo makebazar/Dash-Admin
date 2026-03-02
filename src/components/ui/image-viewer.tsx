@@ -130,14 +130,11 @@ export function ImageViewer({ src, alt, isOpen, onClose, images, onNext, onPrev,
                     <RotateCw className="h-4 w-4" />
                 </Button>
                 <div className="w-px h-4 bg-white/20 mx-1 shrink-0" />
-                <Button variant="ghost" size="icon" onClick={handleReset} className="text-white hover:bg-white/20 h-8 w-8 shrink-0" title="Сбросить">
-                    <Maximize2 className="h-4 w-4" />
-                </Button>
                 <Button 
                     variant="ghost" 
                     size="icon" 
                     onClick={onClose} 
-                    className="text-white hover:bg-white/20 h-8 w-8 ml-1 shrink-0 md:hidden"
+                    className="text-white hover:bg-white/20 h-8 w-8 shrink-0"
                 >
                     <X className="h-4 w-4" />
                 </Button>
@@ -194,31 +191,24 @@ export function ImageViewer({ src, alt, isOpen, onClose, images, onNext, onPrev,
                 </Button>
             )}
 
-            {/* Desktop Close button */}
-            <Button 
-                variant="ghost" 
-                size="icon" 
-                onClick={onClose} 
-                className="hidden md:flex absolute top-4 right-4 text-white hover:bg-white/20 rounded-full h-10 w-10 z-[151]"
-            >
-                <X className="h-6 w-6" />
-            </Button>
+            {/* Close button (Desktop & Mobile) removed as it is now in toolbar */}
 
             {/* Image Container */}
             <div 
-                className="w-full h-full flex items-center justify-center overflow-hidden cursor-grab active:cursor-grabbing"
-                onClick={e => e.stopPropagation()}
+                className="relative w-full h-full flex items-center justify-center p-4 overflow-hidden"
                 onMouseDown={handleMouseDown}
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUp}
                 onMouseLeave={handleMouseUp}
+                onClick={e => e.stopPropagation()}
             >
-                <img
-                    src={src}
-                    alt={alt || "Просмотр изображения"}
-                    className="max-h-screen max-w-screen object-contain transition-transform duration-200 ease-out"
-                    style={{
-                        transform: `translate(${position.x}px, ${position.y}px) scale(${scale}) rotate(${rotation}deg)`,
+                <img 
+                    src={src} 
+                    alt={alt || "Просмотр изображения"} 
+                    className="max-w-full max-h-full object-contain transition-transform duration-100 select-none"
+                    style={{ 
+                        transform: `scale(${scale}) rotate(${rotation}deg) translate(${position.x}px, ${position.y}px)`,
+                        cursor: scale > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default'
                     }}
                     draggable={false}
                 />

@@ -9,7 +9,7 @@ export async function POST(
     try {
         const userId = (await cookies()).get('session_user_id')?.value;
         const { clubId, evaluationId } = await params;
-        const { status, reviewer_note, items } = await request.json();
+        const { status, reviewer_note, items, item_reviews } = await request.json();
 
         if (!userId) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -30,47 +30,30 @@ export async function POST(
         await query('BEGIN');
 
         // 1. Update individual response items (accept/reject)
-        if (items && Array.isArray(items)) {
-            for (const item of items) {
+        const updates = Array.isArray(item_reviews) ? item_reviews : items
+        if (updates && Array.isArray(updates)) {
+            for (const item of updates) {
+                const adjustedScore = item.adjusted_score
                 await query(
                     `UPDATE evaluation_responses 
-                     SET is_accepted = $1, admin_comment = $2
-                     WHERE id = $3 AND evaluation_id = $4`,
-                    [item.is_accepted, item.admin_comment, item.response_id, evaluationId]
+                     SET is_accepted = $1, admin_comment = $2, score = COALESCE($3, score)
+                     WHERE id = $4 AND evaluation_id = $5`,
+                    [
+                        item.is_accepted,
+                        item.admin_comment || null,
+                        adjustedScore !== undefined && adjustedScore !== null ? adjustedScore : null,
+                        item.response_id,
+                        evaluationId
+                    ]
                 );
             }
         }
 
-        // 2. Recalculate Total Score based on updated responses
-        // We need to fetch all responses for this evaluation and their weights from the template
-        const calcResult = await query(
-            `
-            SELECT 
-                r.score, 
-                r.is_accepted,
-                t.weight
-            FROM evaluation_responses r
-            JOIN evaluations e ON r.evaluation_id = e.id
-            JOIN evaluation_template_items t ON r.item_id = t.id
-            WHERE e.id = $1
-            `,
+        const scoreResult = await query(
+            `SELECT COALESCE(SUM(score), 0) AS total_score FROM evaluation_responses WHERE evaluation_id = $1`,
             [evaluationId]
         );
-
-        let totalPoints = 0;
-        let maxPossiblePoints = 0;
-
-        for (const row of calcResult.rows) {
-            const weight = Number(row.weight) || 1;
-            // Only count score if accepted
-            if (row.is_accepted) {
-                totalPoints += (Number(row.score) || 0) * weight;
-            }
-            // Max possible points remains the same (we judge against the perfect execution)
-            maxPossiblePoints += 1 * weight; 
-        }
-
-        const newTotalScore = maxPossiblePoints > 0 ? (totalPoints / maxPossiblePoints) * 100 : 0;
+        const newTotalScore = Number(scoreResult.rows[0]?.total_score || 0);
 
         // 3. Update evaluation status and score
         await query(

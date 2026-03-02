@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils"
 import { KpiOverview } from "@/components/employee/kpi/KpiOverview"
 import { ShiftClosingWizard } from "@/app/employee/clubs/[clubId]/_components/ShiftClosingWizard"
 import { ShiftOpeningWizard } from "@/app/employee/clubs/[clubId]/_components/ShiftOpeningWizard"
+import { VirtualBalanceCard } from "@/components/employee/VirtualBalanceCard"
 
 interface ClubInfo {
     id: number
@@ -72,6 +73,13 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
     const [isLoading, setIsLoading] = useState(true)
     const [isActionLoading, setIsActionLoading] = useState(false)
     const [pendingTasksCount, setPendingTasksCount] = useState(0)
+    
+    // Virtual Balance State
+    const [virtualBalance, setVirtualBalance] = useState<{
+        balance: number;
+        currency: string;
+        todayAccrued: number;
+    } | null>(null)
 
     // Indicators Modal State
     const [isIndicatorsModalOpen, setIsIndicatorsModalOpen] = useState(false)
@@ -227,6 +235,29 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                 const ratingData = await ratingRes.json()
                 setKpiData((prev: any) => ({ ...prev, equipment_rating: ratingData }))
             }
+            
+            // Fetch Virtual Balance
+            const balanceRes = await fetch(`/api/clubs/${id}/employee-balance?employee_id=${currentUserId}`)
+            if (balanceRes.ok) {
+                const balanceData = await balanceRes.json()
+                
+                // Calculate today's accrued amount from transactions
+                const today = new Date()
+                today.setHours(0, 0, 0, 0)
+                const todayTransactions = (balanceData.transactions || [])
+                    .filter((t: any) => {
+                        const txDate = new Date(t.created_at)
+                        return txDate >= today && t.amount > 0 && t.payout_type === 'VIRTUAL_BALANCE'
+                    })
+                
+                const todayAccrued = todayTransactions.reduce((sum: number, t: any) => sum + parseFloat(t.amount || 0), 0)
+                
+                setVirtualBalance({
+                    balance: parseFloat(balanceData.balance?.balance || 0),
+                    currency: balanceData.balance?.currency || 'RUB',
+                    todayAccrued
+                })
+            }
 
         } catch (error) {
             console.error('Error fetching data:', error)
@@ -332,7 +363,8 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                         responses: Object.entries(checklistResponses).map(([k, v]: any) => ({
                             item_id: parseInt(k),
                             score: v.score,
-                            comment: v.comment
+                            comment: v.comment,
+                            selected_workstations: v.selected_workstations
                         }))
                     })
                 })
@@ -714,6 +746,18 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                     </div>
                 </div>
 
+                {/* Virtual Balance Card */}
+                {virtualBalance && (
+                    <div className="grid gap-4 md:grid-cols-2">
+                        <VirtualBalanceCard
+                            balance={virtualBalance.balance}
+                            accruedToday={virtualBalance.todayAccrued}
+                            currency={virtualBalance.currency}
+                            formatCurrency={formatCurrency}
+                        />
+                    </div>
+                )}
+
                 {/* KPI Tracker - Simplified Experience */}
                 {kpiData && kpiData.kpi && kpiData.kpi.length > 0 ? (
                     kpiData.kpi.map((kpi: any) => (
@@ -787,7 +831,8 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                                         item_id: parseInt(k),
                                         score: v.score,
                                         comment: v.comment,
-                                        photo_urls: v.photo_urls
+                                        photo_urls: v.photo_urls,
+                                        selected_workstations: v.selected_workstations
                                     }))
                                 })
                             })

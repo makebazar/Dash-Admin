@@ -102,11 +102,14 @@ export async function GET(
         // Process employees to merge formula into the object structure expected by logic
         const employees = employeesRes.rows.map((row: any) => {
             const formula = row.scheme_formula || {};
+            const periodBonuses = row.period_bonuses || formula.period_bonuses || [];
+            const bonuses = formula.bonuses || [];
+            
             return {
                 ...row,
                 ...formula, // Spread base, bonuses, type, amount etc.
                 // Priority to explicit columns if they existed (they don't, but meant to override formula if needed)
-                period_bonuses: row.period_bonuses || formula.period_bonuses,
+                period_bonuses: periodBonuses,
                 standard_monthly_shifts: row.standard_monthly_shifts || formula.standard_monthly_shifts
             };
         });
@@ -442,18 +445,57 @@ export async function GET(
                 return { ...s, calculated_salary: result.total, breakdown: result.breakdown };
             }));
 
-            // 3. Totals and final summary data
-            const total_accrued = processedShifts.reduce((sum: number, s: any) => sum + (s.calculated_salary || 0), 0);
-            const total_paid = parseFloat(empPayment?.total_paid || '0');
-            const total_with_kpi = total_accrued; // KPI is now included in individual shifts if percentage-based
+            // Update feature flags based on processed shifts
+            const periodBonuses_local = emp.period_bonuses || [];
+            const bonuses_local = emp.bonuses || [];
+            
+            const has_kpi_feature = periodBonuses_local.some((b: any) => !b.payout_type || b.payout_type === 'REAL_MONEY') ||
+                                   bonuses_local.some((b: any) => !b.payout_type || b.payout_type === 'REAL_MONEY');
 
-            // If any period bonus is FIXED-type and not yet in shifts, we add it back (but for now we assume they are handled)
-            let kpi_bonus_amount = bonuses_status
-                .filter((b: any) => b.is_met && b.current_reward_type === 'PERCENT')
-                .reduce((sum: number, b: any) => {
-                    const bonusAmount = b.current_value * (b.current_reward_value / 100);
-                    return sum + bonusAmount;
-                }, 0);
+            const has_virtual_balance_feature = periodBonuses_local.some((b: any) => b.payout_type === 'VIRTUAL_BALANCE') ||
+                                               bonuses_local.some((b: any) => b.payout_type === 'VIRTUAL_BALANCE') ||
+                                               (processedShifts.some((s: any) => s.breakdown?.virtual_balance_total > 0));
+
+            // 3. Totals and final summary data
+            // Разделяем зарплату и виртуальный баланс
+            // breakdown.total включает базу + сменные бонусы (REAL_MONEY), НО НЕ включает period bonuses
+            const total_accrued = processedShifts.reduce((sum: number, s: any) => {
+                const breakdown = s.breakdown || {};
+                // total_accrued = база + сменные бонусы (REAL_MONEY)
+                return sum + (breakdown.total || 0);
+            }, 0);
+            
+            // Вычисляем базу отдельно (только ставка, без бонусов)
+            const base_salary = processedShifts.reduce((sum: number, s: any) => {
+                const breakdown = s.breakdown || {};
+                return sum + (breakdown.base || 0);
+            }, 0);
+            
+            const virtual_balance_accrued = processedShifts.reduce((sum: number, s: any) => {
+                const breakdown = s.breakdown || {};
+                // virtual_balance_accrued включает только VIRTUAL_BALANCE
+                return sum + (breakdown.virtual_balance_total || 0);
+            }, 0);
+            
+            const total_paid = parseFloat(empPayment?.total_paid || '0');
+
+            // KPI бонусы (периодические) считаем отдельно
+            // Для PERCENT: процент от выручки
+            // Для FIXED: фиксированная сумма из reward_value
+            let kpi_bonus_amount = 0;
+            
+            for (const bonus of bonuses_status) {
+                if (bonus.is_met && bonus.current_reward_value > 0) {
+                    if (bonus.current_reward_type === 'PERCENT') {
+                        // Процент от выручки
+                        const bonusAmount = bonus.current_value * (bonus.current_reward_value / 100);
+                        kpi_bonus_amount += bonusAmount;
+                    } else if (bonus.current_reward_type === 'FIXED') {
+                        // Фиксированная сумма
+                        kpi_bonus_amount += bonus.current_reward_value;
+                    }
+                }
+            }
 
             // Add Maintenance KPI Bonus to the total KPI amount
             const maintBonus = monthlyMetrics['maintenance_bonus'] || 0;
@@ -494,14 +536,20 @@ export async function GET(
                 role: emp.role,
                 shifts_count,
                 planned_shifts, // DEBUG - show planned shifts in response
-                total_accrued: total_with_kpi,
-                total_paid,
-                balance: total_with_kpi - total_paid,
-                period_bonuses: bonuses_status,
+                base_salary,  // Только база (ставка)
+                total_accrued: total_accrued + kpi_bonus_amount,  // Теперь включает и KPI
                 kpi_bonus_amount,
+                virtual_balance_accrued,
+                total_paid,
+                balance: (total_accrued + kpi_bonus_amount) - total_paid,  // Баланс теперь корректный
+                virtual_balance: virtual_balance_accrued,  // Баланс по виртуальным бонусам
+                period_bonuses: bonuses_status,
+                has_kpi_feature,
+                has_virtual_balance_feature,
                 // New detailed data
                 breakdown: {
-                    base_salary: total_accrued,
+                    base_salary,
+                    virtual_balance: virtual_balance_accrued,
                     kpi_bonuses: kpi_bonus_amount,
                     other_bonuses: 0 // TODO: implement if needed
                 },
@@ -532,19 +580,26 @@ export async function GET(
                         const breakdown = s.breakdown || {};
                         const kpiBonus = breakdown.bonuses?.reduce((sum: number, b: any) =>
                             sum + (b.type === 'PERIOD_BONUS_CONTRIBUTION' || b.type === 'SHIFT_BONUS' ? parseFloat(b.amount) || 0 : 0), 0) || 0;
+                        
+                        // Разделяем бонусы по типам выплат
+                        const realMoneyBonuses = breakdown.bonuses?.filter((b: any) => b.payout_type !== 'VIRTUAL_BALANCE') || [];
+                        const virtualBonuses = breakdown.bonuses?.filter((b: any) => b.payout_type === 'VIRTUAL_BALANCE') || [];
 
                         return {
                             id: s.id,
                             date: s.check_in,
                             total_hours: parseFloat(s.total_hours || '0'),
                             total_revenue: calculateShiftIncome(s),
-                            calculated_salary: s.calculated_salary,
+                            calculated_salary: s.calculated_salary,  // Только REAL_MONEY
+                            virtual_balance_earned: breakdown.virtual_balance_total || 0,  // VIRTUAL_BALANCE
                             kpi_bonus: kpiBonus,
                             status: s.status,
                             is_paid: !!(s.salary_snapshot?.paid_at),
                             type: s.salary_snapshot?.type || 'REGULAR',
                             metrics: typeof s.report_data === 'string' ? JSON.parse(s.report_data) : s.report_data || {},
-                            bonuses: breakdown.bonuses || []
+                            bonuses: breakdown.bonuses || [],
+                            real_money_bonuses: realMoneyBonuses,
+                            virtual_bonuses: virtualBonuses
                         };
                     })
                 ].sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime()),

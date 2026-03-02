@@ -3,12 +3,13 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Loader2, Plus, GripVertical, Save, Trash2, ArrowLeft, ClipboardCheck, Camera } from "lucide-react"
+import { Loader2, Plus, GripVertical, Save, Trash2, ArrowLeft, Camera, Monitor, ChevronUp, ChevronDown } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core'
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
@@ -16,14 +17,14 @@ import { CSS } from '@dnd-kit/utilities'
 
 interface ChecklistItemOption {
     label: string
-    score: number
+    score: number | string
 }
 
 interface ChecklistItem {
     id?: number
     content: string
     description: string
-    weight: number
+    weight: number | string
     sort_order: number
     is_photo_required?: boolean
     min_photos?: number
@@ -42,7 +43,35 @@ interface ChecklistTemplate {
     created_at: string
 }
 
-function SortableItem({ item, index, onUpdate, onRemove, zones }: { item: ChecklistItem, index: number, onUpdate: (index: number, field: keyof ChecklistItem, value: any) => void, onRemove: (index: number) => void, zones: string[] }) {
+// Separate component to handle option score input state locally
+function OptionScoreInput({ score, onChange }: { score: number | string, onChange: (val: number | string) => void }) {
+    const [localScore, setLocalScore] = useState<string | number>(score)
+
+    useEffect(() => {
+        setLocalScore(score)
+    }, [score])
+
+    return (
+        <Input
+            type="number"
+            value={localScore}
+            onChange={(e) => {
+                const val = e.target.value
+                setLocalScore(val)
+                onChange(val)
+            }}
+            onBlur={() => {
+                if (localScore === '' || localScore === '.') {
+                    setLocalScore(0)
+                    onChange(0)
+                }
+            }}
+            className="h-8 text-sm text-center"
+        />
+    )
+}
+
+function SortableItem({ item, index, totalItems, onUpdate, onRemove, onBulkUpdate, onMove, zones }: { item: ChecklistItem, index: number, totalItems: number, onUpdate: (index: number, field: keyof ChecklistItem, value: any) => void, onRemove: (index: number) => void, onBulkUpdate: (index: number, updates: Partial<ChecklistItem>) => void, onMove: (index: number, direction: 'up' | 'down') => void, zones: string[] }) {
     const {
         attributes,
         listeners,
@@ -56,15 +85,62 @@ function SortableItem({ item, index, onUpdate, onRemove, zones }: { item: Checkl
         transition,
     }
 
+    // Helper to handle multiple updates
+    const handleWorkstationToggle = (checked: boolean) => {
+        if (checked) {
+            onBulkUpdate(index, {
+                related_entity_type: 'workstations',
+                weight: 10
+            })
+        } else {
+            onBulkUpdate(index, {
+                related_entity_type: null,
+                weight: 1,
+                target_zone: null
+            })
+        }
+    }
+
+    const [localWeight, setLocalWeight] = useState<string | number>(item.weight)
+    
+    // Sync local weight when item weight changes from outside (e.g. bulk update)
+    useEffect(() => {
+        setLocalWeight(item.weight)
+    }, [item.weight])
+
     return (
-        <Card ref={setNodeRef} style={style} className="overflow-hidden mb-4">
-            <div className="flex items-start bg-card p-4">
-                <div {...attributes} {...listeners} className="mt-3 mr-3 text-muted-foreground cursor-move">
+        <Card ref={setNodeRef} style={style} className="overflow-hidden mb-4 bg-white sm:rounded-xl sm:border sm:shadow-sm border-b sm:border-b-0 last:border-b-0 rounded-none shadow-none">
+            <div className="flex items-start bg-card p-4 md:p-6">
+                <div {...attributes} {...listeners} className="mt-3 mr-3 text-muted-foreground cursor-move touch-none hidden md:block">
                     <GripVertical className="h-5 w-5" />
                 </div>
-                <div className="flex-1 space-y-3">
+                <div className="flex-1 space-y-3 min-w-0">
                     <div className="flex items-center justify-between">
-                        <Badge variant="secondary">Пункт {index + 1}</Badge>
+                        <div className="flex items-center gap-2">
+                            <Badge variant="secondary" className="text-[10px] sm:text-xs">Пункт {index + 1}</Badge>
+                            
+                            {/* Mobile Move Buttons */}
+                            <div className="flex items-center gap-1 md:hidden">
+                                <Button
+                                    variant="outline"
+                                    size="icon"
+                                    className="h-7 w-7"
+                                    disabled={index === 0}
+                                    onClick={() => onMove(index, 'up')}
+                                >
+                                    <ChevronUp className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    size="icon"
+                                    className="h-7 w-7"
+                                    disabled={index === totalItems - 1}
+                                    onClick={() => onMove(index, 'down')}
+                                >
+                                    <ChevronDown className="h-4 w-4" />
+                                </Button>
+                            </div>
+                        </div>
                         <Button
                             variant="ghost"
                             size="sm"
@@ -80,44 +156,66 @@ function SortableItem({ item, index, onUpdate, onRemove, zones }: { item: Checkl
                             placeholder="Напр: Чистота рабочих поверхностей"
                             value={item.content}
                             onChange={e => onUpdate(index, 'content', e.target.value)}
+                            className="text-sm"
                         />
                     </div>
-                    <div className="flex gap-4">
+                    <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
                         <div className="flex-1 grid gap-2">
                             <Label className="text-xs">Доп. описание (опционально)</Label>
-                            <Input
+                            <Textarea
                                 placeholder="Пояснение для проверяющего"
                                 value={item.description}
                                 onChange={e => onUpdate(index, 'description', e.target.value)}
-                                className="text-sm"
+                                ref={el => {
+                                    if (!el) return
+                                    el.style.height = "auto"
+                                    el.style.height = `${el.scrollHeight}px`
+                                }}
+                                onInput={e => {
+                                    e.currentTarget.style.height = "auto"
+                                    e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`
+                                }}
+                                className="text-sm resize-none overflow-hidden min-h-[36px]"
+                                rows={1}
                             />
                         </div>
-                        <div className="w-24 grid gap-2">
+                        <div className="w-full sm:w-24 grid gap-2">
                             <Label className="text-xs">Вес (Баллы)</Label>
                             <Input
                                 type="number"
                                 step="0.1"
-                                value={item.weight}
-                                onChange={e => onUpdate(index, 'weight', parseFloat(e.target.value))}
-                                className="text-sm"
+                                value={localWeight}
+                                onChange={e => {
+                                    const val = e.target.value
+                                    setLocalWeight(val)
+                                    onUpdate(index, 'weight', val)
+                                }}
+                                onBlur={() => {
+                                    // Ensure valid number on blur
+                                    if (localWeight === '' || localWeight === '.') {
+                                        setLocalWeight(0)
+                                        onUpdate(index, 'weight', 0)
+                                    }
+                                }}
+                                className="text-sm text-center"
+                                disabled={item.related_entity_type === 'workstations' || (item.options && item.options.length > 0)}
                             />
                         </div>
                     </div>
-                    <div className="flex flex-wrap items-center gap-4 pt-2">
+                    <div className="flex flex-wrap items-center gap-3 sm:gap-4 pt-2">
                         <div className="flex items-center gap-2">
                             <Switch 
                                 id={`photo-required-${index}`}
                                 checked={item.is_photo_required}
                                 onCheckedChange={checked => onUpdate(index, 'is_photo_required', checked)}
                             />
-                            <Label htmlFor={`photo-required-${index}`} className="flex items-center gap-1 text-sm cursor-pointer">
-                                <Camera className="h-3 w-3" />
+                            <Label htmlFor={`photo-required-${index}`} className="flex items-center gap-1 text-xs sm:text-sm cursor-pointer select-none">
                                 Требовать фото
                             </Label>
                         </div>
 
                         {item.is_photo_required && (
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 animate-in fade-in slide-in-from-left-2">
                                 <Label className="text-xs whitespace-nowrap">Мин. фото:</Label>
                                 <Input
                                     type="number"
@@ -125,35 +223,32 @@ function SortableItem({ item, index, onUpdate, onRemove, zones }: { item: Checkl
                                     max="10"
                                     value={item.min_photos || 1}
                                     onChange={e => onUpdate(index, 'min_photos', parseInt(e.target.value))}
-                                    className="w-16 h-8 text-sm"
+                                    className="w-14 sm:w-16 h-8 text-sm text-center"
                                 />
                             </div>
                         )}
+                        
+                        <div className="w-full sm:w-auto h-px sm:h-4 bg-border sm:block hidden" />
 
                         <div className="flex items-center gap-2">
-                            <Label className="text-xs whitespace-nowrap">Привязка:</Label>
-                            <Select 
-                                value={item.related_entity_type || 'none'} 
-                                onValueChange={(val) => onUpdate(index, 'related_entity_type', val === 'none' ? null : val)}
-                            >
-                                <SelectTrigger className="h-8 w-[180px] text-sm">
-                                    <SelectValue placeholder="Нет" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="none">Нет</SelectItem>
-                                    <SelectItem value="workstations">Рабочие станции (ПК)</SelectItem>
-                                </SelectContent>
-                            </Select>
+                            <Switch 
+                                id={`workstation-check-${index}`}
+                                checked={item.related_entity_type === 'workstations'}
+                                onCheckedChange={(checked) => handleWorkstationToggle(checked)}
+                            />
+                            <Label htmlFor={`workstation-check-${index}`} className="flex items-center gap-1 text-xs sm:text-sm cursor-pointer select-none">
+                                Проверять рабочие места
+                            </Label>
                         </div>
 
                         {item.related_entity_type === 'workstations' && (
-                            <div className="flex items-center gap-2">
-                                <Label className="text-xs whitespace-nowrap">Зона (опционально):</Label>
+                            <div className="flex items-center gap-2 animate-in fade-in slide-in-from-left-2 w-full sm:w-auto">
+                                <Label className="text-xs whitespace-nowrap">Зона:</Label>
                                 <Select 
                                     value={item.target_zone || 'all'} 
                                     onValueChange={(val) => onUpdate(index, 'target_zone', val === 'all' ? null : val)}
                                 >
-                                    <SelectTrigger className="h-8 w-[150px] text-sm">
+                                    <SelectTrigger className="h-8 flex-1 sm:w-[150px] text-sm">
                                         <SelectValue placeholder="Все зоны" />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -167,90 +262,93 @@ function SortableItem({ item, index, onUpdate, onRemove, zones }: { item: Checkl
                         )}
                     </div>
 
-                    <div className="mt-4 pt-2 border-t">
-                        <div className="flex items-center justify-between mb-2">
-                            <Label className="text-xs font-semibold text-muted-foreground">Варианты замечаний (Опционально)</Label>
-                            <Button 
-                                variant="ghost" 
-                                size="sm" 
-                                className="h-6 text-xs"
-                                onClick={() => {
-                                    const currentOptions = item.options || []
-                                    onUpdate(index, 'options', [...currentOptions, { label: '', score: 0 }])
-                                }}
-                            >
-                                <Plus className="h-3 w-3 mr-1" /> Добавить вариант
-                            </Button>
-                        </div>
-                        
-                        {item.options && item.options.length > 0 && (
-                            <div className="space-y-2">
-                                {item.options.map((option, optIndex) => (
-                                    <div key={optIndex} className="flex gap-2 items-center">
-                                        <Input
-                                            placeholder="Текст замечания (напр. Грязно)"
-                                            value={option.label}
-                                            onChange={(e) => {
-                                                const newOptions = [...(item.options || [])]
-                                                newOptions[optIndex] = { ...newOptions[optIndex], label: e.target.value }
-                                                onUpdate(index, 'options', newOptions)
-                                            }}
-                                            className="h-8 text-sm"
-                                        />
-                                        <div className="w-24 flex items-center gap-1">
-                                            <Label className="text-[10px] text-muted-foreground">Балл:</Label>
+                    {/* Options Section - Hide if workstation check is enabled */}
+                    {!item.related_entity_type && (
+                        <div className="mt-4 pt-2 border-t">
+                            <div className="flex items-center justify-between mb-2">
+                                <Label className="text-xs font-semibold text-muted-foreground">Варианты замечаний (Опционально)</Label>
+                                <Button 
+                                    variant="ghost" 
+                                    size="sm" 
+                                    className="h-6 text-xs"
+                                    onClick={() => {
+                                        const currentOptions = item.options || []
+                                        onUpdate(index, 'options', [...currentOptions, { label: '', score: 0 }])
+                                    }}
+                                >
+                                    <Plus className="h-3 w-3 mr-1" /> Добавить вариант
+                                </Button>
+                            </div>
+                            
+                            {item.options && item.options.length > 0 && (
+                                <div className="space-y-2">
+                                    {item.options.map((option, optIndex) => (
+                                        <div key={optIndex} className="flex gap-2 items-center">
                                             <Input
-                                                type="number"
-                                                value={option.score}
+                                                placeholder="Текст замечания (напр. Грязно)"
+                                                value={option.label}
                                                 onChange={(e) => {
-                                                    const newScore = parseFloat(e.target.value)
                                                     const newOptions = [...(item.options || [])]
-                                                    newOptions[optIndex] = { ...newOptions[optIndex], score: newScore }
-                                                    
-                                                    // Auto-update weight if option score is higher
-                                                    let newWeight = item.weight
-                                                    if (newScore > newWeight) {
-                                                        newWeight = newScore
-                                                    }
-                                                    
-                                                    // We need to update both options and weight
-                                                    // Since onUpdate only takes one field, we need to handle this manually or call it twice
-                                                    // But here onUpdate updates state, so calling twice might cause race condition if not handled well.
-                                                    // Better to pass the whole item update logic to parent or use a more flexible update function.
-                                                    // For now, let's update options first, then check weight in the parent's handler or modify onUpdate to accept partial object.
-                                                    
-                                                    // Let's modify onUpdate signature in SortableItem to handle multiple fields? 
-                                                    // Or just trigger two updates. React state batching might help.
+                                                    newOptions[optIndex] = { ...newOptions[optIndex], label: e.target.value }
                                                     onUpdate(index, 'options', newOptions)
-                                                    if (newScore > item.weight) {
-                                                        onUpdate(index, 'weight', newScore)
-                                                    }
                                                 }}
                                                 className="h-8 text-sm"
                                             />
+                                            <div className="w-24 flex items-center gap-1">
+                                                <OptionScoreInput
+                                                    score={option.score}
+                                                    onChange={(val) => {
+                                                        const newOptions = [...(item.options || [])]
+                                                        newOptions[optIndex] = { ...newOptions[optIndex], score: val }
+                                                        
+                                                        // Calculate max score from ALL options (including the one just updated)
+                                                        // Parse everything to numbers for calculation
+                                                        const currentParsedScore = (typeof val === 'string' ? parseFloat(val) : val) || 0
+                                                        let maxWeight = currentParsedScore
+                                                        
+                                                        newOptions.forEach((opt, idx) => {
+                                                            if (idx === optIndex) return // Already handled
+                                                            const s = typeof opt.score === 'string' ? (parseFloat(opt.score) || 0) : opt.score
+                                                            if (s > maxWeight) maxWeight = s
+                                                        })
+                                                        
+                                                        // Only update weight if it's less than the max option score
+                                                        const currentWeight = typeof item.weight === 'string' ? (parseFloat(item.weight) || 0) : item.weight
+                                                        
+                                                        if (currentWeight < maxWeight) {
+                                                            onBulkUpdate(index, {
+                                                                options: newOptions,
+                                                                weight: maxWeight
+                                                            })
+                                                        } else {
+                                                            onUpdate(index, 'options', newOptions)
+                                                        }
+                                                    }}
+                                                />
+                                            </div>
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-8 w-8 p-0 text-muted-foreground hover:text-red-500"
+                                                onClick={() => {
+                                                    const newOptions = [...(item.options || [])]
+                                                    newOptions.splice(optIndex, 1)
+                                                    onUpdate(index, 'options', newOptions)
+                                                }}
+                                            >
+                                                <Trash2 className="h-3 w-3" />
+                                            </Button>
                                         </div>
-                                        <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            className="h-8 w-8 p-0 text-muted-foreground hover:text-red-500"
-                                            onClick={() => {
-                                                const newOptions = [...(item.options || [])]
-                                                newOptions.splice(optIndex, 1)
-                                                onUpdate(index, 'options', newOptions)
-                                            }}
-                                        >
-                                            <Trash2 className="h-3 w-3" />
-                                        </Button>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                        {(!item.options || item.options.length === 0) && (
-                            <div className="text-xs text-muted-foreground italic">
-                                Нет вариантов. Будет использована стандартная оценка.
-                            </div>
-                        )}
-                    </div>
+                                    ))}
+                                </div>
+                            )}
+                            {(!item.options || item.options.length === 0) && (
+                                <div className="text-xs text-muted-foreground italic">
+                                    Нет вариантов. Будет использована стандартная оценка.
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
             </div>
         </Card>
@@ -345,13 +443,18 @@ export default function ChecklistTemplatePage({ params }: { params: Promise<{ cl
         
         // Safety check: if updating weight, ensure it's not less than any option score
         if (field === 'weight') {
-            const maxOptionScore = newItems[index].options?.reduce((max, opt) => Math.max(max, opt.score), 0) || 0
-            if (value < maxOptionScore) {
+            const maxOptionScore = newItems[index].options?.reduce((max, opt) => {
+                const s = typeof opt.score === 'string' ? (parseFloat(opt.score) || 0) : opt.score
+                return Math.max(max, s)
+            }, 0) || 0
+            
+            const numericValue = typeof value === 'string' ? (parseFloat(value) || 0) : value
+            if (numericValue < maxOptionScore) {
                 // Don't allow lowering weight below max option
                 // Or we could auto-lower options? Better to just clamp weight.
                 // For simplicity in this UI, we'll allow it but maybe show warning?
                 // Actually, let's enforce it.
-                if (value < maxOptionScore) {
+                if (numericValue < maxOptionScore) {
                     // Force value to be at least maxOptionScore
                     // But this might be annoying if user wants to lower everything.
                     // Let's just trust the user or the auto-update logic in the input.
@@ -359,7 +462,41 @@ export default function ChecklistTemplatePage({ params }: { params: Promise<{ cl
             }
         }
 
-        setCurrentTemplate({ ...currentTemplate, items: newItems })
+        setCurrentTemplate(prev => ({ ...prev, items: newItems }))
+    }
+
+    // New handler for bulk updates
+    const handleBulkUpdateItem = (index: number, updates: Partial<ChecklistItem>) => {
+        setCurrentTemplate(prev => {
+            const newItems = [...(prev.items || [])]
+            newItems[index] = { ...newItems[index], ...updates }
+            return { ...prev, items: newItems }
+        })
+    }
+
+    // Handler for moving items up or down
+    const handleMoveItem = (index: number, direction: 'up' | 'down') => {
+        const items = [...(currentTemplate.items || [])]
+        if (direction === 'up' && index > 0) {
+            // Swap with previous item
+            [items[index], items[index - 1]] = [items[index - 1], items[index]]
+        } else if (direction === 'down' && index < items.length - 1) {
+            // Swap with next item
+            [items[index], items[index + 1]] = [items[index + 1], items[index]]
+        } else {
+            return // No move possible
+        }
+        
+        // Update sort_order for all items
+        const reorderedItems = items.map((item, idx) => ({
+            ...item,
+            sort_order: idx
+        }))
+
+        setCurrentTemplate({
+            ...currentTemplate,
+            items: reorderedItems
+        })
     }
 
     const handleRemoveItem = (index: number) => {
@@ -393,6 +530,19 @@ export default function ChecklistTemplatePage({ params }: { params: Promise<{ cl
     const handleSave = async () => {
         if (!currentTemplate.name) return alert('Введите название чеклиста')
 
+        // Ensure all weights and scores are numbers before saving
+        const templateToSave = {
+            ...currentTemplate,
+            items: currentTemplate.items?.map(item => ({
+                ...item,
+                weight: typeof item.weight === 'string' ? (parseFloat(item.weight) || 0) : item.weight,
+                options: item.options?.map(opt => ({
+                    ...opt,
+                    score: typeof opt.score === 'string' ? (parseFloat(opt.score) || 0) : opt.score
+                }))
+            }))
+        }
+
         setIsSaving(true)
         try {
             let res
@@ -401,14 +551,14 @@ export default function ChecklistTemplatePage({ params }: { params: Promise<{ cl
                 res = await fetch(`/api/clubs/${clubId}/evaluations/templates/${templateId}`, {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(currentTemplate),
+                    body: JSON.stringify(templateToSave),
                 })
             } else {
                 // Create new
                 res = await fetch(`/api/clubs/${clubId}/evaluations/templates`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(currentTemplate),
+                    body: JSON.stringify(templateToSave),
                 })
             }
 
@@ -429,9 +579,23 @@ export default function ChecklistTemplatePage({ params }: { params: Promise<{ cl
     if (isLoading) return <div className="flex h-screen items-center justify-center"><Loader2 className="animate-spin" /></div>
 
     return (
-        <div className="min-h-screen bg-background p-8 pb-24">
-            <div className="mx-auto max-w-3xl">
-                <div className="mb-8 flex items-center justify-between">
+        <div className="min-h-screen bg-slate-50/50 pb-24">
+            {/* Mobile Header - Sticky */}
+            <div className="sticky top-0 left-0 right-0 z-40 bg-white border-b px-4 py-3 flex items-center gap-3 md:hidden shadow-sm">
+                <Button variant="ghost" size="icon" className="-ml-2 h-9 w-9 shrink-0" onClick={() => router.push(`/clubs/${clubId}/settings/checklists`)}>
+                    <ArrowLeft className="h-5 w-5" />
+                </Button>
+                <div className="flex-1 min-w-0">
+                    <h1 className="text-base font-semibold truncate leading-tight">{templateId === 'new' ? 'Создание чеклиста' : 'Редактирование'}</h1>
+                </div>
+                <Button onClick={handleSave} disabled={isSaving} size="sm" className="bg-purple-600 hover:bg-purple-700 shrink-0 h-8 text-xs px-3">
+                    {isSaving ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Save className="mr-1 h-3 w-3" />}
+                    Сохранить
+                </Button>
+            </div>
+
+            <div className="mx-auto max-w-3xl md:p-8">
+                <div className="hidden md:flex mb-8 items-center justify-between">
                     <div>
                         <Button variant="ghost" onClick={() => router.push(`/clubs/${clubId}/settings/checklists`)} className="pl-0 hover:pl-0 hover:bg-transparent -ml-2 mb-2">
                             <ArrowLeft className="mr-2 h-4 w-4" /> К списку
@@ -444,11 +608,11 @@ export default function ChecklistTemplatePage({ params }: { params: Promise<{ cl
                     </Button>
                 </div>
 
-                <Card className="mb-8">
-                    <CardHeader>
+                <Card className="mb-4 md:mb-8 border-x-0 md:border-x rounded-none md:rounded-xl shadow-none md:shadow-sm">
+                    <CardHeader className="px-4 md:px-6">
                         <CardTitle>Основная информация</CardTitle>
                     </CardHeader>
-                    <CardContent className="space-y-4">
+                    <CardContent className="space-y-4 px-4 md:px-6">
                         <div className="grid gap-2">
                             <Label>Название чеклиста</Label>
                             <Input
@@ -515,21 +679,6 @@ export default function ChecklistTemplatePage({ params }: { params: Promise<{ cl
                                         })}
                                     />
                                 </div>
-                                <div className="flex items-center justify-between rounded-lg border p-4">
-                                    <div className="space-y-0.5">
-                                        <Label>Требовать фото</Label>
-                                        <p className="text-sm text-muted-foreground">
-                                            Обязательное фото-подтверждение для проблемных пунктов
-                                        </p>
-                                    </div>
-                                    <Switch 
-                                        checked={currentTemplate.settings?.require_photo_on_fail}
-                                        onCheckedChange={checked => setCurrentTemplate({
-                                            ...currentTemplate, 
-                                            settings: { ...currentTemplate.settings, require_photo_on_fail: checked }
-                                        })}
-                                    />
-                                </div>
                             </div>
                         )}
 
@@ -556,7 +705,7 @@ export default function ChecklistTemplatePage({ params }: { params: Promise<{ cl
                     </CardContent>
                 </Card>
 
-                <div className="space-y-4">
+                <div className="space-y-4 px-4 md:px-0">
                     <div className="flex items-center justify-between">
                         <h2 className="text-xl font-semibold">Пункты проверки</h2>
                         <Button variant="outline" size="sm" onClick={handleAddItem}>
@@ -586,6 +735,9 @@ export default function ChecklistTemplatePage({ params }: { params: Promise<{ cl
                                     index={index}
                                     onUpdate={handleUpdateItem}
                                     onRemove={handleRemoveItem}
+                                    onBulkUpdate={handleBulkUpdateItem}
+                                    onMove={handleMoveItem}
+                                    totalItems={currentTemplate.items?.length || 0}
                                     zones={zones}
                                 />
                             ))}

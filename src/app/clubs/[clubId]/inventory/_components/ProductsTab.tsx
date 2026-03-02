@@ -247,19 +247,19 @@ export function ProductsTab({ products, categories, warehouses, currentUserId }:
     return (
         <div className="space-y-4">
             {/* Toolbar */}
-            <div className="flex flex-col md:flex-row gap-4 justify-between bg-white p-4 rounded-lg border shadow-sm">
-                <div className="flex gap-4 flex-1">
+            <div className="flex flex-col md:flex-row gap-4 justify-between bg-white p-3 md:p-4 rounded-lg border shadow-sm">
+                <div className="flex flex-col sm:flex-row gap-3 md:gap-4 flex-1">
                     <div className="relative flex-1 max-w-sm">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                         <Input 
                             placeholder="Поиск товара..." 
-                            className="pl-9"
+                            className="pl-9 h-10 md:h-9"
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
                         />
                     </div>
                     <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                        <SelectTrigger className="w-[180px]">
+                        <SelectTrigger className="w-full sm:w-[180px] h-10 md:h-9">
                             <SelectValue placeholder="Категория" />
                         </SelectTrigger>
                         <SelectContent>
@@ -270,11 +270,11 @@ export function ProductsTab({ products, categories, warehouses, currentUserId }:
                         </SelectContent>
                     </Select>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 w-full md:w-auto">
                     {selectedIds.size > 0 && (
-                        <Button variant="secondary" onClick={() => setIsBulkDialogOpen(true)}>
-                            <Layers className="mr-2 h-4 w-4" />
-                            Изменить цены ({selectedIds.size})
+                        <Button variant="secondary" onClick={() => setIsBulkDialogOpen(true)} className="flex-1 md:flex-none h-10 md:h-9 text-sm">
+                            <Layers className="mr-1 md:mr-2 h-4 w-4 shrink-0" />
+                            <span className="md:inline">Цены ({selectedIds.size})</span>
                         </Button>
                     )}
                     <Button onClick={() => {
@@ -282,15 +282,15 @@ export function ProductsTab({ products, categories, warehouses, currentUserId }:
                         setDesiredMarkup("")
                         setDesiredMargin("")
                         setIsDialogOpen(true)
-                    }}>
-                        <Plus className="mr-2 h-4 w-4" />
-                        Добавить товар
+                    }} className="flex-1 md:flex-none h-10 md:h-9 text-sm">
+                        <Plus className="mr-1 md:mr-2 h-4 w-4 shrink-0" />
+                        Добавить
                     </Button>
                 </div>
             </div>
 
-            {/* Table */}
-            <div className="rounded-md border bg-white">
+            {/* Desktop Table */}
+            <div className="hidden md:block rounded-md border bg-white">
                 <Table>
                     <TableHeader>
                         <TableRow>
@@ -429,6 +429,89 @@ export function ProductsTab({ products, categories, warehouses, currentUserId }:
                         )}
                     </TableBody>
                 </Table>
+            </div>
+
+            {/* Mobile List View */}
+            <div className="md:hidden space-y-3">
+                {filteredProducts.map(product => {
+                    const isLowStock = product.min_stock_level > 0 && product.current_stock <= product.min_stock_level
+                    return (
+                        <div key={product.id} className="bg-white rounded-xl border p-4 shadow-sm relative overflow-hidden">
+                            {isLowStock && <div className="absolute top-0 left-0 w-1 h-full bg-red-500" />}
+                            
+                            <div className="flex justify-between items-start mb-3">
+                                <div className="flex gap-3">
+                                    <input 
+                                        type="checkbox"
+                                        className="rounded border-gray-300 mt-1"
+                                        checked={selectedIds.has(product.id)}
+                                        onChange={() => toggleSelection(product.id)}
+                                    />
+                                    <div>
+                                        <h3 className="font-bold text-base leading-tight">{product.name}</h3>
+                                        <div className="flex items-center gap-2 mt-1">
+                                            {product.category_name && (
+                                                <Badge variant="outline" className="text-[10px] h-4 px-1 leading-none uppercase tracking-wider font-bold border-slate-200 text-slate-500">
+                                                    {product.category_name}
+                                                </Badge>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <Button variant="ghost" className="h-8 w-8 p-0 -mt-1 -mr-1">
+                                            <MoreVertical className="h-4 w-4" />
+                                        </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end">
+                                        <DropdownMenuItem onClick={() => {
+                                            setEditingProduct(product)
+                                            setIsDialogOpen(true)
+                                        }}>
+                                            <Pencil className="mr-2 h-4 w-4" /> Изменить
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => setManageStockDialog({ isOpen: true, product })}>
+                                            <Box className="mr-2 h-4 w-4" /> Остатки
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => setWriteOffDialog({ isOpen: true, product })}>
+                                            <Trash2 className="mr-2 h-4 w-4" /> Списать
+                                        </DropdownMenuItem>
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuItem className="text-red-600" onClick={() => handleDelete(product.id)}>
+                                            <Trash2 className="mr-2 h-4 w-4" /> Удалить
+                                        </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4 pt-3 border-t border-slate-100">
+                                <div>
+                                    <p className="text-[10px] text-slate-400 uppercase font-bold mb-0.5">Цена продажи</p>
+                                    <p className="font-bold text-slate-900">{product.selling_price} ₽</p>
+                                    <p className="text-[10px] text-slate-400 mt-1 font-medium italic">Себестоимость: {product.cost_price} ₽</p>
+                                </div>
+                                <div className="text-right">
+                                    <p className="text-[10px] text-slate-400 uppercase font-bold mb-0.5">В наличии</p>
+                                    <div className="flex items-center justify-end gap-1.5">
+                                        <span className={isLowStock ? "text-lg font-black text-red-600" : "text-lg font-black text-slate-900"}>
+                                            {product.current_stock}
+                                        </span>
+                                        {isLowStock && (
+                                            <Badge variant="destructive" className="h-4 px-1 text-[9px] uppercase">
+                                                Мало
+                                            </Badge>
+                                        )}
+                                    </div>
+                                    <p className="text-[10px] text-slate-400 mt-0.5 font-medium italic">На сумму: {Math.round(product.current_stock * product.cost_price)} ₽</p>
+                                </div>
+                            </div>
+                        </div>
+                    )
+                })}
+                {filteredProducts.length === 0 && (
+                    <div className="py-12 text-center text-muted-foreground italic">Товары не найдены</div>
+                )}
             </div>
 
             {/* Edit Dialog */}

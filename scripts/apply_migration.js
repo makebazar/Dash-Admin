@@ -18,7 +18,8 @@ const pool = new Pool({
 
 async function run() {
     try {
-        const sqlPath = path.join(__dirname, '..', 'migrations', 'add_club_instructions.sql');
+        const argPath = process.argv[2];
+        const sqlPath = argPath ? path.resolve(process.cwd(), argPath) : path.join(__dirname, '..', 'migrations', 'add_club_instructions.sql');
         const sql = fs.readFileSync(sqlPath, 'utf-8');
         console.log('Executing migration from:', sqlPath);
         

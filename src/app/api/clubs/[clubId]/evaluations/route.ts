@@ -11,6 +11,7 @@ export async function GET(
         const { clubId } = await params;
         const { searchParams } = new URL(request.url);
         const employeeId = searchParams.get('employee_id');
+        const status = searchParams.get('status'); // 'active' (pending) or 'history' (approved/rejected)
 
         if (!userId) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -31,18 +32,27 @@ export async function GET(
         }
 
         let queryStr = `
-            SELECT e.*, t.name as template_name, u.full_name as employee_name, ev.full_name as evaluator_name
+            SELECT e.*, t.name as template_name, u.full_name as employee_name, ev.full_name as evaluator_name, rv.full_name as reviewer_name
             FROM evaluations e
             JOIN evaluation_templates t ON e.template_id = t.id
             JOIN users u ON e.employee_id = u.id
             LEFT JOIN users ev ON e.evaluator_id = ev.id
+            LEFT JOIN users rv ON e.reviewed_by = rv.id
             WHERE e.club_id = $1
         `;
         const queryParams: any[] = [clubId];
+        let paramIndex = 2;
 
         if (employeeId) {
-            queryStr += ` AND e.employee_id = $2`;
+            queryStr += ` AND e.employee_id = $${paramIndex}`;
             queryParams.push(employeeId);
+            paramIndex++;
+        }
+
+        if (status === 'history') {
+            queryStr += ` AND (e.status = 'approved' OR e.status = 'rejected')`;
+        } else if (status === 'active') {
+            queryStr += ` AND (e.status = 'pending' OR e.status IS NULL)`;
         }
 
         queryStr += ` ORDER BY e.evaluation_date DESC`;
@@ -142,17 +152,31 @@ export async function POST(
         );
         const evaluationId = evalResult.rows[0].id;
 
+        const normalizeSelectedWorkstations = (value: any) => {
+            if (Array.isArray(value)) return value;
+            if (typeof value === 'string') {
+                try {
+                    const parsed = JSON.parse(value);
+                    return Array.isArray(parsed) ? parsed : [];
+                } catch {
+                    return [];
+                }
+            }
+            return [];
+        }
+
         for (const resp of responses) {
             await query(
-                `INSERT INTO evaluation_responses (evaluation_id, item_id, score, comment, photo_url, photo_urls)
-                 VALUES ($1, $2, $3, $4, $5, $6)`,
+                `INSERT INTO evaluation_responses (evaluation_id, item_id, score, comment, photo_url, photo_urls, selected_workstations)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
                 [
                     evaluationId, 
                     resp.item_id, 
                     resp.score, 
                     resp.comment, 
                     (resp.photo_urls && resp.photo_urls.length > 0) ? resp.photo_urls[0] : (resp.photo_url || null),
-                    resp.photo_urls || (resp.photo_url ? [resp.photo_url] : [])
+                    resp.photo_urls || (resp.photo_url ? [resp.photo_url] : []),
+                    JSON.stringify(normalizeSelectedWorkstations(resp.selected_workstations))
                 ]
             );
         }

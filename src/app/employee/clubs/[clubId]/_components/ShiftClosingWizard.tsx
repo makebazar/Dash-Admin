@@ -39,7 +39,9 @@ export function ShiftClosingWizard({
     const [isPending, startTransition] = useTransition()
     const [calculationResult, setCalculationResult] = useState<{ reported: number, calculated: number, diff: number } | null>(null)
     const [requiredChecklist, setRequiredChecklist] = useState<any>(null)
-    const [checklistResponses, setChecklistResponses] = useState<Record<number, { score: number, comment: string }>>({})
+    const [checklistResponses, setChecklistResponses] = useState<Record<number, { score: number, comment: string, selected_workstations?: string[] }>>({})
+    const [workstations, setWorkstations] = useState<any[]>([])
+    const [problematicItems, setProblematicItems] = useState<Record<number, string[]>>({})
 
     // Reset state when opening
     useEffect(() => {
@@ -49,6 +51,7 @@ export function ShiftClosingWizard({
             setInventoryItems([])
             setCalculationResult(null)
             setChecklistResponses({})
+            setProblematicItems({})
             
             const mandatory = checklistTemplates?.find((t: any) => 
                 t.type === 'shift_handover' && t.settings?.block_shift_close
@@ -56,23 +59,63 @@ export function ShiftClosingWizard({
             
             if (mandatory) {
                 setRequiredChecklist(mandatory)
-                const initial: Record<number, { score: number, comment: string }> = {}
+                const initial: Record<number, { score: number, comment: string, selected_workstations?: string[] }> = {}
                 mandatory.items?.forEach((item: any) => {
-                    initial[item.id] = { score: 1, comment: '' }
+                    // For standard items, default to 1 (Yes). For workstation items, we wait for fetch.
+                    if (item.related_entity_type !== 'workstations') {
+                        initial[item.id] = { score: 1, comment: '', selected_workstations: [] }
+                    }
                 })
                 setChecklistResponses(initial)
             } else {
                 setRequiredChecklist(null)
             }
             setStep(1)
+
+            // Fetch workstations
+            if (clubId) {
+                fetch(`/api/clubs/${clubId}/workstations`)
+                    .then(res => res.json())
+                    .then(data => {
+                        if (Array.isArray(data)) {
+                            setWorkstations(data)
+                            // Set initial scores for workstation items to 10 (Max)
+                            if (mandatory) {
+                                setChecklistResponses(prev => {
+                                    const next = { ...prev }
+                                    mandatory.items?.forEach((item: any) => {
+                                        if (item.related_entity_type === 'workstations') {
+                                            // Default score is always 10 for workstation checks
+                                            next[item.id] = { score: 10, comment: '', selected_workstations: [] }
+                                        }
+                                    })
+                                    return next
+                                })
+                            }
+                        }
+                    })
+                    .catch(console.error)
+            }
         }
-    }, [isOpen, checklistTemplates])
+    }, [isOpen, checklistTemplates, clubId])
 
     // Step 1: Financial Report + Checklist
     const handleStep1Submit = () => {
         const requiredFields = reportTemplate?.schema.filter((f: any) => f.is_required).map((f: any) => f.metric_key) || []
         const missing = requiredFields.filter((key: string) => !reportData[key])
         if (missing.length > 0) return alert(`Заполните обязательные поля отчета`)
+        if (requiredChecklist?.items?.length) {
+            const missingWorkstationComment = requiredChecklist.items.some((item: any) => {
+                if (item.related_entity_type !== 'workstations') return false
+                const issues = problematicItems[item.id] || []
+                if (issues.length === 0) return false
+                const comment = checklistResponses[item.id]?.comment || ''
+                return comment.trim().length === 0
+            })
+            if (missingWorkstationComment) {
+                return alert("Укажите причину для проблемных мест")
+            }
+        }
 
         if (skipInventory) {
             onComplete({ ...reportData, checklistResponses, checklistId: requiredChecklist?.id })
@@ -88,6 +131,39 @@ export function ShiftClosingWizard({
             ...prev,
             [itemId]: { ...prev[itemId], score }
         }))
+    }
+
+    const toggleProblematicWorkstation = (itemId: number, wsId: string, maxScore: number, targetWs: any[]) => {
+        setProblematicItems(prev => {
+            const current = prev[itemId] || []
+            const newItems = current.includes(wsId) 
+                ? current.filter(id => id !== wsId)
+                : [...current, wsId]
+            
+            // Calculate proportional score
+            // Max score is always 10
+            // Error price = 10 / total_workstations
+            const totalWorkstations = targetWs.length
+            const errorPrice = totalWorkstations > 0 ? 10 / totalWorkstations : 0
+            
+            // Score = 10 - (errors * error_price)
+            const rawScore = 10 - (newItems.length * errorPrice)
+            // Round to 1 decimal place to look nice (e.g. 9.5, 8.3)
+            const newScore = Math.max(0, Math.round(rawScore * 10) / 10)
+            
+            const workstationNames = targetWs.filter(w => newItems.includes(w.id)).map(w => w.name)
+            
+            setChecklistResponses(r => ({
+                ...r,
+                [itemId]: {
+                    score: newScore,
+                    comment: r[itemId]?.comment || '',
+                    selected_workstations: workstationNames
+                }
+            }))
+            
+            return { ...prev, [itemId]: newItems }
+        })
     }
 
     const startInventory = () => {
@@ -193,7 +269,75 @@ export function ShiftClosingWizard({
                                     </div>
 
                                     <div className="space-y-3 pl-2 border-l-2 border-orange-800/30 ml-4">
-                                        {requiredChecklist.items?.map((item: any) => (
+                                        {requiredChecklist.items?.map((item: any) => {
+                                             // Workstation Checklist Logic
+                                             if (item.related_entity_type === 'workstations') {
+                                                 const targetWs = workstations.filter(w => w.is_active && (!item.target_zone || item.target_zone === 'all' || w.zone === item.target_zone))
+                                                 const maxScore = 10 // Fixed max score for workstation zones
+                                                 const currentProblematic = problematicItems[item.id] || []
+                                                 
+                                                 // Calculate current score
+                                                 const errorPrice = targetWs.length > 0 ? 10 / targetWs.length : 0
+                                                 const rawScore = 10 - (currentProblematic.length * errorPrice)
+                                                 const currentScore = Math.max(0, Math.round(rawScore * 10) / 10)
+                                                 
+                                                 return (
+                                                     <div key={item.id} className="space-y-2 py-2 border-b border-orange-800/20 last:border-0">
+                                                         <div className="flex flex-col gap-2">
+                                                             <div className="flex items-center justify-between">
+                                                                 <span className="text-sm font-medium text-slate-200">{item.content}</span>
+                                                                 <div className="text-xs font-mono bg-slate-900 px-2 py-1 rounded text-slate-400 border border-slate-800">
+                                                                     <span className={currentScore < 10 ? "text-red-400" : "text-green-400"}>{currentScore}</span>
+                                                                     <span className="opacity-50 mx-1">/</span>
+                                                                     <span>10</span>
+                                                                 </div>
+                                                             </div>
+                                                             <p className="text-xs text-slate-400 -mt-1">
+                                                                 Отметьте проблемные места (штраф -{Math.round(errorPrice * 10) / 10}):
+                                                             </p>
+                                                             {targetWs.length > 0 ? (
+                                                                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-1">
+                                                                     {targetWs.map(ws => {
+                                                                         const isProblematic = currentProblematic.includes(ws.id)
+                                                                         return (
+                                                                             <Button
+                                                                                 key={ws.id}
+                                                                                 variant="outline"
+                                                                                 size="sm"
+                                                                                 className={`h-9 text-xs justify-start px-2 transition-all ${isProblematic 
+                                                                                     ? 'bg-red-950/50 border-red-800 text-red-200 hover:bg-red-900/60 hover:text-red-100 hover:border-red-700' 
+                                                                                     : 'bg-slate-900 border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white'}`}
+                                                                                 onClick={() => toggleProblematicWorkstation(item.id, ws.id, 10, targetWs)}
+                                                                             >
+                                                                                 <div className={`w-2 h-2 rounded-full mr-2 shrink-0 ${isProblematic ? 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]' : 'bg-green-500/50'}`} />
+                                                                                 <span className="truncate">{ws.name}</span>
+                                                                             </Button>
+                                                                         )
+                                                                     })}
+                                                                 </div>
+                                                             ) : (
+                                                                 <div className="text-xs text-slate-500 italic bg-slate-900/50 p-2 rounded">
+                                                                     Нет рабочих мест в зоне "{item.target_zone}"
+                                                                 </div>
+                                                             )}
+                                                            {currentProblematic.length > 0 && (
+                                                                <Input
+                                                                    placeholder="Комментарий по проблемным местам (обязательно)"
+                                                                    className={`h-8 text-xs bg-slate-900 border-slate-700 ${!checklistResponses[item.id]?.comment ? 'border-amber-500' : ''}`}
+                                                                    value={checklistResponses[item.id]?.comment || ''}
+                                                                    onChange={(e) => setChecklistResponses(prev => ({
+                                                                        ...prev,
+                                                                        [item.id]: { ...prev[item.id], comment: e.target.value }
+                                                                    }))}
+                                                                />
+                                                            )}
+                                                         </div>
+                                                     </div>
+                                                 )
+                                             }
+
+                                            // Standard Logic
+                                            return (
                                             <div key={item.id} className="space-y-2">
                                                 <div className="flex items-center justify-between">
                                                     <span className="text-sm font-medium text-slate-200">{item.content}</span>
@@ -228,7 +372,7 @@ export function ShiftClosingWizard({
                                                     />
                                                 )}
                                             </div>
-                                        ))}
+                                        )})}
                                     </div>
                                 </div>
                             )}

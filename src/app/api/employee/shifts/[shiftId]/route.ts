@@ -105,7 +105,7 @@ export async function PATCH(
 
         // End shift and save report
         await query(
-            `UPDATE shifts 
+            `UPDATE shifts
        SET check_out = NOW(),
            status = 'CLOSED',
            total_hours = $8,
@@ -132,6 +132,80 @@ export async function PATCH(
                 JSON.stringify(salaryBreakdown) // $10
             ]
         );
+
+        // Process Virtual Balance Bonuses
+        // Используем breakdown.virtual_balance_total для проверки и общей суммы
+        if (salaryBreakdown && salaryBreakdown.virtual_balance_total > 0) {
+            const virtualBonuses = salaryBreakdown.bonuses.filter((b: any) => b.payout_type === 'VIRTUAL_BALANCE' && b.amount > 0);
+
+            if (virtualBonuses.length > 0) {
+                const client = await (await import('@/db')).queryClient();
+
+                try {
+                    await client.query('BEGIN');
+
+                    for (const bonus of virtualBonuses) {
+                        // Create transaction record
+                        await client.query(
+                            `INSERT INTO employee_balance_transactions (
+                                club_id, user_id, amount, transaction_type, description,
+                                payout_type, bonus_type, shift_id, reference_type, reference_id, created_by
+                             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+                            [
+                                clubId,
+                                shiftUserId,
+                                bonus.amount,
+                                'BONUS',
+                                `${bonus.name || 'Бонус за смену'} (${bonus.type})`,
+                                'VIRTUAL_BALANCE',
+                                bonus.type,
+                                shiftId,
+                                'shift',
+                                shiftId,
+                                userId
+                            ]
+                        );
+                    }
+
+                    // Update employee balance
+                    // Используем breakdown.virtual_balance_total для точной суммы
+                    const totalVirtualBonus = salaryBreakdown.virtual_balance_total;
+
+                    // Get or create balance record
+                    const balanceCheck = await client.query(
+                        `SELECT balance FROM employee_balances
+                         WHERE club_id = $1 AND user_id = $2`,
+                        [clubId, shiftUserId]
+                    );
+
+                    if (balanceCheck.rows.length > 0) {
+                        const currentBalance = parseFloat(balanceCheck.rows[0].balance) || 0;
+                        await client.query(
+                            `UPDATE employee_balances
+                             SET balance = $1, updated_at = NOW()
+                             WHERE club_id = $2 AND user_id = $3`,
+                            [currentBalance + totalVirtualBonus, clubId, shiftUserId]
+                        );
+                    } else {
+                        await client.query(
+                            `INSERT INTO employee_balances (club_id, user_id, balance, currency)
+                             VALUES ($1, $2, $3, 'RUB')`,
+                            [clubId, shiftUserId, totalVirtualBonus]
+                        );
+                    }
+
+                    await client.query('COMMIT');
+                    
+                    console.log(`[Virtual Balance] Accrued ${totalVirtualBonus} to User ${shiftUserId} for Shift ${shiftId}`);
+                } catch (error: any) {
+                    await client.query('ROLLBACK');
+                    console.error('Error processing virtual bonuses:', error);
+                    // Don't fail the request, just log the error
+                } finally {
+                    client.release();
+                }
+            }
+        }
 
         return NextResponse.json({ success: true });
 

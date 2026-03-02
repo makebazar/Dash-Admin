@@ -4,9 +4,19 @@ import { Menu } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { useState } from "react"
+import { usePathname } from "next/navigation"
 
 export function MobileNav({ children }: { children: React.ReactNode }) {
     const [open, setOpen] = useState(false)
+    const pathname = usePathname()
+
+    // Hide mobile nav on review details page and checklist editor
+    if (
+        (pathname?.includes('/reviews/') && pathname?.split('/').length > 4) ||
+        (pathname?.includes('/settings/checklists/') && pathname?.split('/').length > 5)
+    ) {
+        return null
+    }
 
     return (
         <div className="flex items-center p-4 border-b md:hidden bg-background sticky top-0 z-40">

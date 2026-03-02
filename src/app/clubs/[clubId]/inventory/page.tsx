@@ -29,15 +29,15 @@ export default async function InventoryPage({ params }: { params: Promise<{ club
     ])
 
     return (
-        <div className="p-8 max-w-[1600px] mx-auto space-y-6">
-            <div className="flex flex-col gap-2">
-                <h1 className="text-3xl font-bold tracking-tight">Склад и учет</h1>
-                <p className="text-muted-foreground">Управление товарными запасами, поставками, складами и проведение ревизий.</p>
+        <div className="p-4 md:p-8 max-w-[1600px] mx-auto space-y-4 md:space-y-6">
+            <div className="flex flex-col gap-1 md:gap-2">
+                <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Склад и учет</h1>
+                <p className="text-sm md:text-base text-muted-foreground">Управление товарными запасами, поставками, складами и проведение ревизий.</p>
             </div>
             
             <Tabs defaultValue="stock" className="w-full">
-                <div className="border-b mb-6 overflow-x-auto">
-                    <TabsList className="bg-transparent p-0 h-auto space-x-6 w-full justify-start">
+                <div className="border-b mb-4 md:mb-6 overflow-x-auto no-scrollbar">
+                    <TabsList className="bg-transparent p-0 h-auto space-x-4 md:space-x-6 w-full justify-start min-w-max flex">
                         <TabsTrigger 
                             value="stock" 
                             className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:shadow-none px-0 py-3 bg-transparent font-medium"

@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Loader2, History, Camera, CheckCircle, XCircle, AlertTriangle, BarChart3, Search, Filter, Monitor, CheckCircle2, Eye, Clock, User, Layers, Calendar, ChevronDown, ChevronUp, Box, Keyboard, Mouse, Headphones, Gamepad2, Tv, Trash2, RotateCcw } from "lucide-react"
+import { Loader2, History, Camera, CheckCircle, XCircle, BarChart3, Filter, Monitor, CheckCircle2, Eye, User, Layers, Calendar, ChevronDown, ChevronUp, Trash2, RotateCcw, ChevronLeft, ChevronRight } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -24,6 +24,7 @@ interface Evaluation {
     template_name: string
     employee_name: string
     evaluator_name: string
+    reviewer_name?: string
     total_score: number
     max_score: number
     evaluation_date: string
@@ -47,6 +48,7 @@ interface EvaluationDetail extends Evaluation {
     comments?: string
     responses: EvaluationResponse[]
     reviewed_by?: string
+    reviewer_name?: string
     reviewed_at?: string
 }
 
@@ -72,20 +74,6 @@ interface VerificationTask {
     kpi_points: number
 }
 
-const getEquipmentIcon = (type: string) => {
-    switch (type) {
-        case 'PC': return <Monitor className="h-4 w-4" />;
-        case 'MONITOR': return <Monitor className="h-4 w-4" />;
-        case 'KEYBOARD': return <Keyboard className="h-4 w-4" />;
-        case 'MOUSE': return <Mouse className="h-4 w-4" />;
-        case 'HEADSET': return <Headphones className="h-4 w-4" />;
-        case 'CONSOLE': return <Gamepad2 className="h-4 w-4" />;
-        case 'TV': return <Tv className="h-4 w-4" />;
-        case 'CLEANING': return <div className="inline-flex items-center rounded-full border py-0.5 transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 text-foreground text-[10px] h-5 px-1.5 font-normal ml-auto sm:ml-0 bg-blue-50 text-blue-700 border-blue-200">Уборка</div>;
-        default: return <Box className="h-4 w-4" />;
-    }
-}
-
 const getTaskTypeLabel = (type: string) => {
     switch (type) {
         case 'CLEANING': return 'ЧИСТКА';
@@ -104,12 +92,15 @@ export default function ChecklistsPage({ params, searchParams }: { params: Promi
     const [history, setHistory] = useState<Evaluation[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [selectedEvaluation, setSelectedEvaluation] = useState<EvaluationDetail | null>(null)
-    const [isDetailLoading, setIsDetailLoading] = useState(false)
     const [photoPreviewUrl, setPhotoPreviewUrl] = useState<string | null>(null)
     const [isReviewMode, setIsReviewMode] = useState(false)
     const [reviewItems, setReviewItems] = useState<Record<number, { is_accepted: boolean, admin_comment: string }>>({})
     const [reviewerNote, setReviewerNote] = useState('')
     const [isSubmittingReview, setIsSubmittingReview] = useState(false)
+    const [deletingChecklistId, setDeletingChecklistId] = useState<number | null>(null)
+    const [deleteChecklistTarget, setDeleteChecklistTarget] = useState<Evaluation | null>(null)
+    const [restoringChecklistId, setRestoringChecklistId] = useState<number | null>(null)
+    const [restoreChecklistTarget, setRestoreChecklistTarget] = useState<Evaluation | null>(null)
 
     // Equipment Verification State
     const [tasks, setTasks] = useState<VerificationTask[]>([])
@@ -123,16 +114,24 @@ export default function ChecklistsPage({ params, searchParams }: { params: Promi
     const [filterZone, setFilterZone] = useState<string>("all")
     const [filterEmployee, setFilterEmployee] = useState<string>("all")
     const [filterStatus, setFilterStatus] = useState<string>("all")
+    const [filterMonth, setFilterMonth] = useState<string>(() => format(new Date(), 'yyyy-MM'))
     const [equipmentTab, setEquipmentTab] = useState<'active' | 'history'>('active')
+    const [checklistsTab, setChecklistsTab] = useState<'active' | 'history'>('active')
     
+    // Checklist Filters
+    const [filterChecklistEmployee, setFilterChecklistEmployee] = useState<string>("all")
+    const [filterChecklistStatus, setFilterChecklistStatus] = useState<string>("all")
+    const [filterChecklistMonth, setFilterChecklistMonth] = useState<string>(() => format(new Date(), 'yyyy-MM'))
+
     // Active Tab State (synced with URL)
     const [activeTab, setActiveTab] = useState("equipment")
 
     useEffect(() => {
         Promise.all([params, searchParams]).then(([p, sp]) => {
             setClubId(p.clubId)
-            fetchHistory(p.clubId)
-            fetchTasks(p.clubId)
+            // Initial fetch based on default tabs
+            fetchTasks(p.clubId, equipmentTab)
+            fetchChecklists(p.clubId, checklistsTab)
             
             if (sp.tab) {
                 setActiveTab(sp.tab)
@@ -148,10 +147,11 @@ export default function ChecklistsPage({ params, searchParams }: { params: Promi
         window.history.pushState({}, '', url.toString())
     }
 
-    const fetchHistory = async (id: string) => {
+    const fetchChecklists = async (id: string, status: 'active' | 'history' = 'active') => {
         setIsLoading(true)
         try {
-            const res = await fetch(`/api/clubs/${id}/evaluations`)
+            const query = status === 'history' ? '?status=history' : '?status=active'
+            const res = await fetch(`/api/clubs/${id}/evaluations${query}`)
             const data = await res.json()
             if (res.ok && Array.isArray(data)) {
                 setHistory(data)
@@ -184,6 +184,12 @@ export default function ChecklistsPage({ params, searchParams }: { params: Promi
             fetchTasks(clubId, equipmentTab)
         }
     }, [equipmentTab, clubId])
+
+    useEffect(() => {
+        if (clubId) {
+            fetchChecklists(clubId, checklistsTab)
+        }
+    }, [checklistsTab, clubId])
 
     // --- Checklists Handlers ---
 
@@ -239,6 +245,66 @@ export default function ChecklistsPage({ params, searchParams }: { params: Promi
             alert('Ошибка сервера')
         } finally {
             setIsSubmittingReview(false)
+        }
+    }
+
+    const handleDeleteChecklist = (evaluation: Evaluation, e?: React.MouseEvent) => {
+        e?.stopPropagation()
+        setDeleteChecklistTarget(evaluation)
+    }
+
+    const handleRestoreChecklist = (evaluation: Evaluation, e?: React.MouseEvent) => {
+        e?.stopPropagation()
+        setRestoreChecklistTarget(evaluation)
+    }
+
+    const confirmDeleteChecklist = async () => {
+        if (!deleteChecklistTarget) return
+        setDeletingChecklistId(deleteChecklistTarget.id)
+        try {
+            const res = await fetch(`/api/clubs/${clubId}/evaluations/${deleteChecklistTarget.id}`, {
+                method: 'DELETE'
+            })
+            if (res.ok) {
+                setHistory(prev => prev.filter(item => item.id !== deleteChecklistTarget.id))
+                if (selectedEvaluation?.id === deleteChecklistTarget.id) {
+                    setSelectedEvaluation(null)
+                    setIsReviewMode(false)
+                }
+                setDeleteChecklistTarget(null)
+            } else {
+                alert("Ошибка при удалении")
+            }
+        } catch (error) {
+            console.error("Error deleting checklist:", error)
+            alert("Произошла ошибка")
+        } finally {
+            setDeletingChecklistId(null)
+        }
+    }
+
+    const confirmRestoreChecklist = async () => {
+        if (!restoreChecklistTarget) return
+        setRestoringChecklistId(restoreChecklistTarget.id)
+        try {
+            const res = await fetch(`/api/clubs/${clubId}/evaluations/${restoreChecklistTarget.id}/restore`, {
+                method: 'POST'
+            })
+            if (res.ok) {
+                setHistory(prev => prev.filter(item => item.id !== restoreChecklistTarget.id))
+                if (selectedEvaluation?.id === restoreChecklistTarget.id) {
+                    setSelectedEvaluation(null)
+                    setIsReviewMode(false)
+                }
+                setRestoreChecklistTarget(null)
+            } else {
+                alert("Ошибка при возврате")
+            }
+        } catch (error) {
+            console.error("Error restoring checklist:", error)
+            alert("Произошла ошибка")
+        } finally {
+            setRestoringChecklistId(null)
         }
     }
 
@@ -353,11 +419,41 @@ export default function ChecklistsPage({ params, searchParams }: { params: Promi
         return Array.from(unique).sort()
     }, [tasks])
 
+    const months = useMemo(() => {
+        const currentMonth = format(new Date(), 'yyyy-MM')
+        const unique = new Set(
+            tasks
+                .map(t => t.completed_at || t.due_date)
+                .filter(Boolean)
+                .map(date => format(new Date(date), 'yyyy-MM'))
+        )
+        unique.add(currentMonth)
+        return Array.from(unique).sort((a, b) => b.localeCompare(a))
+    }, [tasks])
+
+    const currentMonthIndex = useMemo(() => {
+        return months.findIndex(m => m === filterMonth)
+    }, [months, filterMonth])
+
+    useEffect(() => {
+        if (equipmentTab !== 'history') return
+        if (!months.includes(filterMonth)) {
+            const currentMonth = format(new Date(), 'yyyy-MM')
+            setFilterMonth(months.includes(currentMonth) ? currentMonth : (months[0] || 'all'))
+        }
+    }, [equipmentTab, months, filterMonth])
+
     const groupedTasks = useMemo(() => {
         const filtered = tasks.filter(t => {
             if (filterZone !== "all" && (t.zone_name || 'Без зоны') !== filterZone) return false
             if (filterEmployee !== "all" && (t.completed_by_name || 'Неизвестный') !== filterEmployee) return false
             if (filterStatus !== "all" && t.verification_status !== filterStatus) return false
+            if (equipmentTab === 'history' && filterMonth !== "all") {
+                const dateValue = t.completed_at || t.due_date
+                if (!dateValue) return false
+                const monthKey = format(new Date(dateValue), 'yyyy-MM')
+                if (monthKey !== filterMonth) return false
+            }
             return true
         })
 
@@ -370,13 +466,69 @@ export default function ChecklistsPage({ params, searchParams }: { params: Promi
         })
 
         return Object.entries(groups).sort((a, b) => a[0].localeCompare(b[0]))
-    }, [tasks, filterZone, filterEmployee, filterStatus])
+    }, [tasks, filterZone, filterEmployee, filterStatus, filterMonth])
 
     // Stats
-    const totalEvaluations = history.length
     const pendingEvaluations = history.filter(h => h.status === 'pending' || !h.status).length
     const pendingTasks = tasks.length
-    const totalPending = pendingEvaluations + pendingTasks
+
+    // Filter checklists
+    const filteredChecklists = useMemo(() => {
+        return history.filter(item => {
+            // Status filter
+            if (filterChecklistStatus !== 'all') {
+                if (filterChecklistStatus === 'approved' && item.status !== 'approved') return false
+                if (filterChecklistStatus === 'rejected' && item.status !== 'rejected') return false
+                if (filterChecklistStatus === 'pending' && item.status !== 'pending') return false
+            }
+    
+            // Employee filter
+            if (filterChecklistEmployee !== 'all') {
+                if (item.employee_name !== filterChecklistEmployee) return false
+            }
+    
+            // Month filter (only for history tab)
+            if (checklistsTab === 'history' && filterChecklistMonth !== 'all') {
+                const date = item.evaluation_date || item.created_at
+                if (!date) return false
+                const itemMonth = format(new Date(date), 'yyyy-MM')
+                if (itemMonth !== filterChecklistMonth) return false
+            }
+    
+            return true
+        })
+    }, [history, filterChecklistStatus, filterChecklistEmployee, filterChecklistMonth, checklistsTab])
+
+    // Get available months for checklists
+    const checklistMonths = useMemo(() => {
+        // Collect months from history
+        const months = Array.from(new Set(history
+            .map(t => {
+                const date = t.evaluation_date || t.created_at
+                return date ? format(new Date(date), 'yyyy-MM') : null
+            })
+            .filter(Boolean) as string[]
+        ))
+
+        // Ensure current month is in the list
+        const currentMonth = format(new Date(), 'yyyy-MM')
+        if (!months.includes(currentMonth)) {
+            months.push(currentMonth)
+        }
+
+        // Sort descending (newest first)
+        return months.sort((a, b) => b.localeCompare(a))
+    }, [history])
+
+    // Update checklistMonthIndex when filter or list changes
+    const checklistMonthIndex = checklistMonths.indexOf(filterChecklistMonth)
+
+    // Ensure filterChecklistMonth is valid, otherwise set to first available (current/newest)
+    useEffect(() => {
+        if (checklistsTab === 'history' && checklistMonths.length > 0 && !checklistMonths.includes(filterChecklistMonth)) {
+            setFilterChecklistMonth(checklistMonths[0])
+        }
+    }, [checklistMonths, filterChecklistMonth, checklistsTab])
 
     return (
         <PageShell maxWidth="6xl">
@@ -419,7 +571,8 @@ export default function ChecklistsPage({ params, searchParams }: { params: Promi
                             {tasks.length > 0 && (
                                 <PageToolbar>
                                     <ToolbarGroup className="w-full sm:w-auto">
-                                        <div className="flex items-center gap-2 w-full">
+                                        <div className="flex flex-col sm:flex-row gap-2 w-full">
+                                            <div className="flex items-center gap-2 w-full sm:w-auto">
                                             {equipmentTab === 'active' ? (
                                                 <Select value={filterZone} onValueChange={setFilterZone}>
                                                     <SelectTrigger className="w-full sm:w-[180px] h-9 text-sm bg-muted/50 border-transparent hover:bg-muted transition-colors flex-1 min-w-0">
@@ -461,6 +614,45 @@ export default function ChecklistsPage({ params, searchParams }: { params: Promi
                                                     {employees.map(e => <SelectItem key={e} value={e}>{e}</SelectItem>)}
                                                 </SelectContent>
                                             </Select>
+                                            </div>
+                                            {equipmentTab === 'history' && (
+                                                <div className="flex items-center justify-between rounded-md bg-muted/50 px-3 h-9 border border-transparent w-full sm:w-[280px]">
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="h-7 w-7"
+                                                        onClick={() => {
+                                                            const nextIndex = currentMonthIndex + 1
+                                                            if (nextIndex < months.length) {
+                                                                setFilterMonth(months[nextIndex])
+                                                            }
+                                                        }}
+                                                        disabled={currentMonthIndex === -1 || currentMonthIndex >= months.length - 1}
+                                                    >
+                                                        <ChevronLeft className="h-4 w-4" />
+                                                    </Button>
+                                                    <div className="flex items-center gap-2">
+                                                        <Calendar className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                                        <span className="text-sm font-medium truncate">
+                                                            {filterMonth === 'all' ? 'Все месяцы' : format(new Date(`${filterMonth}-01`), 'MMMM yyyy', { locale: ru })}
+                                                        </span>
+                                                    </div>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="h-7 w-7"
+                                                        onClick={() => {
+                                                            const nextIndex = currentMonthIndex - 1
+                                                            if (nextIndex >= 0) {
+                                                                setFilterMonth(months[nextIndex])
+                                                            }
+                                                        }}
+                                                        disabled={currentMonthIndex <= 0}
+                                                    >
+                                                        <ChevronRight className="h-4 w-4" />
+                                                    </Button>
+                                                </div>
+                                            )}
                                         </div>
                                     </ToolbarGroup>
                                     <ToolbarGroup align="end" className="gap-2">
@@ -690,65 +882,200 @@ export default function ChecklistsPage({ params, searchParams }: { params: Promi
                         </div>
                     </TabsContent>
 
-                    {/* HISTORY TAB (Original Checklists) */}
+                    {/* HISTORY TAB (Checklists) */}
                     <TabsContent value="checklists">
-                        <Card>
-                            <CardHeader className="flex flex-row items-center justify-between">
-                                <div>
-                                    <CardTitle>История проверок</CardTitle>
-                                    <CardDescription>Результаты чеклистов сотрудников</CardDescription>
-                                </div>
-                                <div className="flex gap-2">
-                                    <Button variant="outline" size="sm" onClick={() => fetchHistory(clubId)}>
-                                        Обновить
-                                    </Button>
-                                </div>
-                            </CardHeader>
-                            <CardContent>
+                        <div className="space-y-6">
+                            <Tabs value={checklistsTab} onValueChange={(v) => setChecklistsTab(v as 'active' | 'history')} className="w-full">
+                                <TabsList className="w-full sm:w-auto grid grid-cols-2">
+                                    <TabsTrigger value="active">Входящие</TabsTrigger>
+                                    <TabsTrigger value="history">История</TabsTrigger>
+                                </TabsList>
+                            </Tabs>
+
+                            {/* Filters */}
+                            <PageToolbar>
+                                <ToolbarGroup className="w-full sm:w-auto">
+                                    <div className="flex flex-col sm:flex-row gap-2 w-full">
+                                        
+                                        {/* Month Filter for History */}
+                                        {checklistsTab === 'history' && (
+                                            <div className="flex items-center justify-between rounded-md bg-muted/50 px-3 h-9 border border-transparent w-full sm:w-[280px]">
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-7 w-7"
+                                                    onClick={() => {
+                                                        const nextIndex = checklistMonthIndex + 1
+                                                        if (nextIndex < checklistMonths.length) {
+                                                            setFilterChecklistMonth(checklistMonths[nextIndex])
+                                                        }
+                                                    }}
+                                                    disabled={checklistMonthIndex === -1 || checklistMonthIndex >= checklistMonths.length - 1}
+                                                >
+                                                    <ChevronLeft className="h-4 w-4" />
+                                                </Button>
+                                                <div className="flex items-center gap-2">
+                                                    <Calendar className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                                    <span className="text-sm font-medium truncate">
+                                                        {filterChecklistMonth === 'all' ? 'Все месяцы' : format(new Date(`${filterChecklistMonth}-01`), 'MMMM yyyy', { locale: ru })}
+                                                    </span>
+                                                </div>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-7 w-7"
+                                                    onClick={() => {
+                                                        const nextIndex = checklistMonthIndex - 1
+                                                        if (nextIndex >= 0) {
+                                                            setFilterChecklistMonth(checklistMonths[nextIndex])
+                                                        }
+                                                    }}
+                                                    disabled={checklistMonthIndex <= 0}
+                                                >
+                                                    <ChevronRight className="h-4 w-4" />
+                                                </Button>
+                                            </div>
+                                        )}
+                                    </div>
+                                </ToolbarGroup>
+                            </PageToolbar>
+
+                            {/* Month Filter for History (Removed from separate block) */}
+
+                            {/* Mobile Cards */}
+                            <div className="sm:hidden flex flex-col gap-0 -mx-4">
                                 {isLoading ? (
                                     <div className="flex justify-center py-12"><Loader2 className="animate-spin text-muted-foreground" /></div>
-                                ) : history.length === 0 ? (
-                                    <div className="text-center py-12 text-muted-foreground">
+                                ) : filteredChecklists.length === 0 ? (
+                                    <div className="text-center py-12 text-muted-foreground bg-muted/10 rounded-xl border border-dashed mx-4">
                                         <History className="mx-auto h-12 w-12 opacity-20 mb-4" />
-                                        <p>Проверок еще не проводилось</p>
+                                        <p>{checklistsTab === 'active' ? 'Нет проверок на рассмотрении' : 'История проверок пуста'}</p>
                                     </div>
                                 ) : (
-                                    <Table>
-                                        <TableHeader>
-                                            <TableRow>
-                                                <TableHead>Статус</TableHead>
-                                                <TableHead>Дата</TableHead>
-                                                <TableHead>Шаблон</TableHead>
-                                                <TableHead>Кого проверяли</TableHead>
-                                                <TableHead>Кто проверял</TableHead>
-                                                <TableHead className="text-right">Баллы</TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {history.map(evaluation => (
-                                                <TableRow key={evaluation.id} className="cursor-pointer hover:bg-muted/50" onClick={() => handleViewEvaluation(evaluation.id)}>
-                                                    <TableCell>{getStatusBadge(evaluation.status)}</TableCell>
-                                                    <TableCell>
-                                                        <div className="flex flex-col">
-                                                            <span className="font-medium">{new Date(evaluation.evaluation_date || evaluation.created_at).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })}</span>
-                                                            <span className="text-xs text-muted-foreground">{new Date(evaluation.evaluation_date || evaluation.created_at).toLocaleTimeString('ru-RU', {hour: '2-digit', minute:'2-digit'})}</span>
+                                    filteredChecklists.map(evaluation => {
+                                        const percent = Math.round((evaluation.total_score / (evaluation.max_score || 100)) * 100)
+                                        return (
+                                            <div key={evaluation.id} className="bg-white border-b last:border-0 p-4 active:bg-muted/50 transition-colors" onClick={() => handleViewEvaluation(evaluation.id)}>
+                                                <div className="flex justify-between items-start mb-2">
+                                                    <div className="flex flex-col">
+                                                        <div className="font-semibold text-base">{evaluation.employee_name}</div>
+                                                        <div className="text-xs text-muted-foreground">{evaluation.template_name}</div>
+                                                    </div>
+                                                    <div className="flex flex-col items-end gap-1">
+                                                        <div className="flex items-center gap-2">
+                                                            {getStatusBadge(evaluation.status)}
+                                                            {checklistsTab === 'history' && (
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="icon"
+                                                                    className="h-7 w-7 text-blue-500 hover:text-blue-600"
+                                                                    onClick={(e) => handleRestoreChecklist(evaluation, e)}
+                                                                    disabled={restoringChecklistId === evaluation.id}
+                                                                >
+                                                                    <RotateCcw className="h-4 w-4" />
+                                                                </Button>
+                                                            )}
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                className="h-7 w-7 text-red-500 hover:text-red-600"
+                                                                onClick={(e) => handleDeleteChecklist(evaluation, e)}
+                                                                disabled={deletingChecklistId === evaluation.id}
+                                                            >
+                                                                <Trash2 className="h-4 w-4" />
+                                                            </Button>
                                                         </div>
-                                                    </TableCell>
-                                                    <TableCell>{evaluation.template_name}</TableCell>
-                                                    <TableCell>{evaluation.employee_name}</TableCell>
-                                                    <TableCell>{evaluation.evaluator_name || '—'}</TableCell>
-                                                    <TableCell className="text-right">
-                                                        <span className={`font-bold ${((evaluation.total_score / (evaluation.max_score || 100)) * 100) >= 80 ? 'text-green-600' : ((evaluation.total_score / (evaluation.max_score || 100)) * 100) >= 50 ? 'text-amber-600' : 'text-red-600'}`}>
-                                                            {Math.round((evaluation.total_score / (evaluation.max_score || 100)) * 100)}%
+                                                        <span className="text-xs text-muted-foreground">
+                                                            {new Date(evaluation.evaluation_date || evaluation.created_at).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })}
                                                         </span>
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))}
-                                        </TableBody>
-                                    </Table>
+                                                    </div>
+                                                </div>
+                                                
+                                                <div className="flex justify-between items-center mt-3 pt-2 border-t border-border/50">
+                                                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                                        <User className="h-3.5 w-3.5" />
+                                                        <span>{evaluation.reviewer_name || evaluation.evaluator_name || '—'}</span>
+                                                    </div>
+                                                    <div className={`font-bold text-lg ${percent >= 80 ? 'text-green-600' : percent >= 50 ? 'text-amber-600' : 'text-red-600'}`}>
+                                                        {percent}%
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )
+                                    })
                                 )}
-                            </CardContent>
-                        </Card>
+                            </div>
+
+                            <Card className="hidden sm:block">
+                                <CardContent className="p-0">
+                                    {isLoading ? (
+                                        <div className="flex justify-center py-12"><Loader2 className="animate-spin text-muted-foreground" /></div>
+                                    ) : filteredChecklists.length === 0 ? (
+                                        <div className="text-center py-12 text-muted-foreground">
+                                            <History className="mx-auto h-12 w-12 opacity-20 mb-4" />
+                                            <p>{checklistsTab === 'active' ? 'Нет проверок на рассмотрении' : 'История проверок пуста'}</p>
+                                        </div>
+                                    ) : (
+                                        <Table>
+                                            <TableHeader>
+                                                <TableRow>
+                                                    <TableHead>Статус</TableHead>
+                                                    <TableHead>Дата</TableHead>
+                                                    <TableHead>Шаблон</TableHead>
+                                                    <TableHead>Кого проверяли</TableHead>
+                                                    <TableHead>Кто проверял</TableHead>
+                                                    <TableHead className="text-right">Баллы</TableHead>
+                                                    <TableHead className="text-right">Действия</TableHead>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {filteredChecklists.map(evaluation => (
+                                                <TableRow key={evaluation.id} className="cursor-pointer hover:bg-muted/50" onClick={() => handleViewEvaluation(evaluation.id)}>
+                                                        <TableCell>{getStatusBadge(evaluation.status)}</TableCell>
+                                                        <TableCell>
+                                                            <div className="flex flex-col">
+                                                                <span className="font-medium">{new Date(evaluation.evaluation_date || evaluation.created_at).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })}</span>
+                                                                <span className="text-xs text-muted-foreground">{new Date(evaluation.evaluation_date || evaluation.created_at).toLocaleTimeString('ru-RU', {hour: '2-digit', minute:'2-digit'})}</span>
+                                                            </div>
+                                                        </TableCell>
+                                                        <TableCell>{evaluation.template_name}</TableCell>
+                                                        <TableCell>{evaluation.employee_name}</TableCell>
+                                                        <TableCell>{evaluation.reviewer_name || evaluation.evaluator_name || '—'}</TableCell>
+                                                        <TableCell className="text-right">
+                                                            <span className={`font-bold ${((evaluation.total_score / (evaluation.max_score || 100)) * 100) >= 80 ? 'text-green-600' : ((evaluation.total_score / (evaluation.max_score || 100)) * 100) >= 50 ? 'text-amber-600' : 'text-red-600'}`}>
+                                                                {Math.round((evaluation.total_score / (evaluation.max_score || 100)) * 100)}%
+                                                            </span>
+                                                        </TableCell>
+                                                    <TableCell className="text-right">
+                                                        {checklistsTab === 'history' && (
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                className="h-8 w-8 text-blue-500 hover:text-blue-600"
+                                                                onClick={(e) => handleRestoreChecklist(evaluation, e)}
+                                                                disabled={restoringChecklistId === evaluation.id}
+                                                            >
+                                                                <RotateCcw className="h-4 w-4" />
+                                                            </Button>
+                                                        )}
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="h-8 w-8 text-red-500 hover:text-red-600"
+                                                            onClick={(e) => handleDeleteChecklist(evaluation, e)}
+                                                            disabled={deletingChecklistId === evaluation.id}
+                                                        >
+                                                            <Trash2 className="h-4 w-4" />
+                                                        </Button>
+                                                    </TableCell>
+                                                    </TableRow>
+                                                ))}
+                                            </TableBody>
+                                        </Table>
+                                    )}
+                                </CardContent>
+                            </Card>
+                        </div>
                     </TabsContent>
 
                     <TabsContent value="stats">
@@ -814,6 +1141,49 @@ export default function ChecklistsPage({ params, searchParams }: { params: Promi
                     </TabsContent>
                 </Tabs>
 
+            <Dialog open={!!deleteChecklistTarget} onOpenChange={(open) => !open && setDeleteChecklistTarget(null)}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Удаление чеклиста</DialogTitle>
+                        <DialogDescription>
+                            Вы уверены, что хотите удалить этот чеклист? Это действие нельзя отменить.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setDeleteChecklistTarget(null)}>Отмена</Button>
+                        <Button
+                            variant="destructive"
+                            onClick={confirmDeleteChecklist}
+                            disabled={!!deletingChecklistId}
+                        >
+                            {deletingChecklistId ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                            Удалить
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog open={!!restoreChecklistTarget} onOpenChange={(open) => !open && setRestoreChecklistTarget(null)}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Вернуть чеклист</DialogTitle>
+                        <DialogDescription>
+                            Вернуть чеклист в активные? Он появится в разделе проверок.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setRestoreChecklistTarget(null)}>Отмена</Button>
+                        <Button
+                            onClick={confirmRestoreChecklist}
+                            disabled={!!restoringChecklistId}
+                        >
+                            {restoringChecklistId ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                            Вернуть
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
             {/* DETAIL & REVIEW DIALOG */}
             <Dialog
                 open={!!selectedEvaluation}
@@ -835,11 +1205,7 @@ export default function ChecklistsPage({ params, searchParams }: { params: Promi
                             </DialogDescription>
                         </DialogHeader>
                         
-                        {isDetailLoading ? (
-                            <div className="flex justify-center py-8">
-                                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                            </div>
-                        ) : selectedEvaluation ? (
+                        {selectedEvaluation ? (
                             <div className="space-y-6">
                                 {/* Header Info */}
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm bg-muted/30 p-4 rounded-xl border">
@@ -848,8 +1214,8 @@ export default function ChecklistsPage({ params, searchParams }: { params: Promi
                                         <p className="font-medium">{selectedEvaluation.employee_name}</p>
                                     </div>
                                     <div>
-                                        <p className="text-muted-foreground text-xs uppercase font-bold">Проверяющий</p>
-                                        <p className="font-medium">{selectedEvaluation.reviewed_by ? 'Администратор' : (selectedEvaluation.evaluator_name || '—')}</p>
+                                        <p className="text-muted-foreground text-xs uppercase font-bold">Подтвердил</p>
+                                        <p className="font-medium">{selectedEvaluation.reviewer_name || '—'}</p>
                                     </div>
                                     <div>
                                         <p className="text-muted-foreground text-xs uppercase font-bold">Дата проверки</p>
@@ -960,6 +1326,7 @@ export default function ChecklistsPage({ params, searchParams }: { params: Promi
                                                             <div key={photoIndex} className="relative group">
                                                                 <img 
                                                                     src={url} 
+                                                                    alt="Фото"
                                                                     className="h-16 w-16 object-cover rounded-md border cursor-pointer hover:opacity-80 transition-opacity" 
                                                                     onClick={() => setPhotoPreviewUrl(url)}
                                                                 />
@@ -1041,7 +1408,7 @@ export default function ChecklistsPage({ params, searchParams }: { params: Promi
                 
                 {photoPreviewUrl && (
                     <div className="fixed inset-0 bg-black/90 z-[60] flex items-center justify-center p-4" onClick={() => setPhotoPreviewUrl(null)}>
-                        <img src={photoPreviewUrl} className="max-w-full max-h-full object-contain rounded" />
+                        <img src={photoPreviewUrl} alt="Фото крупно" className="max-w-full max-h-full object-contain rounded" />
                         <button className="absolute top-4 right-4 text-white hover:text-gray-300">
                             <XCircle className="h-8 w-8" />
                         </button>

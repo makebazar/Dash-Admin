@@ -37,7 +37,13 @@ export async function calculateSalary(
     reportMetrics: Record<string, number> = {}
 ) {
     let baseAmount = 0;
-    const breakdown: any = { base: 0, bonuses: [], penalties: [], total: 0 };
+    const breakdown: any = { 
+        base: 0, 
+        bonuses: [], 
+        penalties: [], 
+        total: 0,  // Только REAL_MONEY (для зарплаты)
+        virtual_balance_total: 0  // Только VIRTUAL_BALANCE (отдельно)
+    };
 
     // Normalize base params
     const type = scheme.base?.type || scheme.type || 'hourly';
@@ -45,7 +51,7 @@ export async function calculateSalary(
     const percent = scheme.base?.percent ?? scheme.percent ?? 0;
     const fullShiftHours = scheme.base?.full_shift_hours ?? scheme.full_shift_hours ?? 12;
 
-    // 1. Base Salary
+    // 1. Base Salary (всегда REAL_MONEY)
     if (type === 'hourly') {
         baseAmount = amount * (shift.total_hours || 0);
     } else if (type === 'fixed' || type === 'per_shift') {
@@ -63,7 +69,8 @@ export async function calculateSalary(
     }
 
     breakdown.base = parseFloat(baseAmount.toFixed(2));
-    let total = baseAmount;
+    let total = baseAmount;  // Зарплата (REAL_MONEY)
+    let virtualBalanceTotal = 0;  // Виртуальный баланс (отдельно)
 
     // 2. Per-Shift Bonuses (from scheme.bonuses)
     if (scheme.bonuses && Array.isArray(scheme.bonuses)) {
@@ -115,7 +122,8 @@ export async function calculateSalary(
                         
                         if (score >= minScore) {
                             bonusAmount = Number(bonus.amount) || 0;
-                            
+                            const payoutType = bonus.payout_type || 'REAL_MONEY';
+
                             // Add metadata to breakdown for UI to show which checklist triggered this
                             breakdown.bonuses.push({
                                 name: bonus.name || 'Бонус за чек-лист',
@@ -123,9 +131,16 @@ export async function calculateSalary(
                                 amount: parseFloat(bonusAmount.toFixed(2)),
                                 source_key: 'checklist_score',
                                 source_value: score,
-                                template_id: bonus.checklist_template_id
+                                template_id: bonus.checklist_template_id,
+                                payout_type: payoutType
                             });
-                            total += bonusAmount;
+                            
+                            // Разделяем по типу выплаты
+                            if (payoutType === 'VIRTUAL_BALANCE') {
+                                virtualBalanceTotal += bonusAmount;
+                            } else {
+                                total += bonusAmount;
+                            }
                             continue; // Skip the default push below
                         }
                     }
@@ -190,6 +205,8 @@ export async function calculateSalary(
                     }
 
                     if (finalAmount > 0) {
+                        const payoutType = bonus.payout_type || 'REAL_MONEY';
+                        
                         breakdown.bonuses.push({
                             name: bonus.name || 'KPI Обслуживания',
                             type: 'MAINTENANCE_KPI',
@@ -197,22 +214,38 @@ export async function calculateSalary(
                             source_key: 'maintenance_tasks',
                             source_value: rawSum,
                             multiplier: bonus.reward_type === 'FIXED' ? undefined : efficiencyMultiplier,
-                            reward_type: bonus.reward_type // Add this for UI
+                            reward_type: bonus.reward_type,
+                            payout_type: payoutType
                         });
-                        total += finalAmount;
+                        
+                        // Разделяем по типу выплаты
+                        if (payoutType === 'VIRTUAL_BALANCE') {
+                            virtualBalanceTotal += finalAmount;
+                        } else {
+                            total += finalAmount;
+                        }
                     }
                 }
             }
 
             if (bonus.type !== 'checklist' && bonus.type !== 'maintenance_kpi') {
+                const payoutType = bonus.payout_type || 'REAL_MONEY';
+                
                 breakdown.bonuses.push({
                     name: bonus.name || bonus.type,
                     type: 'SHIFT_BONUS',
                     amount: parseFloat(bonusAmount.toFixed(2)),
                     source_key: sourceKey,
-                    source_value: metricValue
+                    source_value: metricValue,
+                    payout_type: payoutType
                 });
-                total += bonusAmount;
+                
+                // Разделяем по типу выплаты
+                if (payoutType === 'VIRTUAL_BALANCE') {
+                    virtualBalanceTotal += bonusAmount;
+                } else {
+                    total += bonusAmount;
+                }
             }
         }
     }
@@ -238,6 +271,8 @@ export async function calculateSalary(
             }
 
             if (bonusAmount > 0) {
+                const payoutType = bonus.payout_type || 'REAL_MONEY';
+                
                 breakdown.bonuses.push({
                     name: bonus.name || 'KPI',
                     type: 'PERIOD_BONUS_CONTRIBUTION',
@@ -245,9 +280,16 @@ export async function calculateSalary(
                     source_key: metricKey,
                     source_value: metricValue,
                     reward_value: rewardValue,
-                    reward_type: rewardType
+                    reward_type: rewardType,
+                    payout_type: payoutType
                 });
-                total += bonusAmount;
+                
+                // Разделяем по типу выплаты
+                if (payoutType === 'VIRTUAL_BALANCE') {
+                    virtualBalanceTotal += bonusAmount;
+                } else {
+                    total += bonusAmount;
+                }
             }
         }
     }
@@ -256,38 +298,25 @@ export async function calculateSalary(
     // Legacy support: if 'maintenance_bonus' is passed directly but NO maintenance_kpi bonus is configured in the scheme
     // This prevents double counting if we switched to the new system
     const hasNewKpiBonus = scheme.bonuses?.some(b => b.type === 'maintenance_kpi');
-    
+
     if (!hasNewKpiBonus && reportMetrics['maintenance_bonus'] && reportMetrics['maintenance_bonus'] > 0) {
-        // Apply Maintenance KPI Multipliers if present in scheme config
         let amount = reportMetrics['maintenance_bonus'];
-        
-        // If the scheme has maintenance_kpi config, we might want to apply efficiency multipliers here
-        // However, usually efficiency is calculated over a MONTH.
-        // For PER-SHIFT payment, we just pay what was earned.
-        // For MONTHLY payment, this amount is just a record, and the multiplier is applied at month end.
-        
-        // Check if we need to apply a daily efficiency multiplier?
-        // Current logic: The bonus passed in 'maintenance_bonus' is already (Base Points * Price).
-        // If we want to penalize daily performance, we could do it here, but typically KPI is monthly.
-        // So we just add it as is.
-        
         amount = parseFloat(amount.toFixed(2));
-        
+
         breakdown.bonuses.push({
             name: 'Обслуживание оборудования',
             type: 'EQUIPMENT_MAINTENANCE',
             amount: amount,
-            source_key: 'maintenance_bonus'
+            source_key: 'maintenance_bonus',
+            payout_type: 'REAL_MONEY'  // Legacy bonus всегда REAL_MONEY
         });
-        
-        // Only add to total if it's NOT a monthly KPI that will be paid separately
-        // But for now, let's assume if it's in the shift calculation, it should be paid.
-        // If scheme.maintenance_kpi.mode === 'MONTHLY', maybe we shouldn't add it to shift total?
-        // Let's keep it simple: It adds to the shift "earned" amount.
+
+        // Добавляем только к зарплате (REAL_MONEY)
         total += amount;
     }
 
     breakdown.total = parseFloat(total.toFixed(2));
+    breakdown.virtual_balance_total = parseFloat(virtualBalanceTotal.toFixed(2));
 
     return {
         total: breakdown.total,
