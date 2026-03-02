@@ -13,6 +13,7 @@ export async function GET(
         const { searchParams } = new URL(request.url);
 
         const status = searchParams.get('status');
+        const verificationStatus = searchParams.get('verification_status');
         const assignedTo = searchParams.get('assigned_to') || searchParams.get('assigned');
         const equipmentId = searchParams.get('equipment_id');
         const dateFrom = searchParams.get('date_from');
@@ -38,8 +39,13 @@ export async function GET(
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
+        // Determine if we should use DISTINCT ON
+        // We usually use it for the "Smart Horizon" view to show one task per equipment
+        // But if we're filtering for REJECTED tasks specifically, we want all of them
+        const useDistinct = !verificationStatus && !status;
+
         let sql = `
-            SELECT DISTINCT ON (mt.equipment_id)
+            SELECT ${useDistinct ? 'DISTINCT ON (mt.equipment_id)' : ''}
                 mt.id,
                 mt.equipment_id,
                 mt.task_type,
@@ -95,8 +101,6 @@ export async function GET(
             }
         }
 
-        // Removed explicit status filter to allow "Smart Horizon" view (Active OR Latest Completed)
-        // If specific status is requested, we can still filter, but for the main view we want the mix
         if (status) {
              const statusList = status.split(',');
              if (statusList.length > 1) {
@@ -107,6 +111,12 @@ export async function GET(
                  queryParams.push(status);
              }
              paramIndex++;
+        }
+
+        if (verificationStatus) {
+            sql += ` AND mt.verification_status = $${paramIndex}`;
+            queryParams.push(verificationStatus);
+            paramIndex++;
         }
 
         if (equipmentId) {
@@ -232,8 +242,8 @@ export async function POST(
             const dates = scheduleMap[userId];
             if (!dates || dates.length === 0) return null;
             for (const d of dates) {
-                // Ensure date string comparison works correctly by handling Date objects
-                const dStr = d instanceof Date ? (d as Date).toISOString().split('T')[0] : d;
+                // Ensure date string comparison works correctly
+                const dStr = d instanceof Date ? (d as Date).toISOString().split('T')[0] : String(d);
                 if (dStr >= fromDate) return dStr;
             }
             return null;
