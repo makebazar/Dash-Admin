@@ -31,7 +31,7 @@ interface ClubInfo {
 }
 
 interface ActiveShift {
-    id: number
+    id: string | number
     check_in: string
     total_hours: number
     report_data?: any

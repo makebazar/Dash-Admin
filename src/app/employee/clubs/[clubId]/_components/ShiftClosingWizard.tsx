@@ -16,7 +16,7 @@ interface ShiftClosingWizardProps {
     clubId: string
     userId: string
     reportTemplate: any
-    activeShiftId: number
+    activeShiftId: string | number
     skipInventory?: boolean
     checklistTemplates?: any[]
     inventorySettings?: {
