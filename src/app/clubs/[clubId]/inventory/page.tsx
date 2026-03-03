@@ -1,5 +1,5 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { getProducts, getCategories, getSupplies, getInventories, getWarehouses, getEmployees, getClubTasks, getProcurementLists, getSuppliersForSelect, getClubSettings, manualTriggerReplenishment } from "./actions"
+import { getProducts, getCategories, getSupplies, getInventories, getWarehouses, getEmployees, getClubTasks, getProcurementLists, getSuppliersForSelect, getClubSettings, manualTriggerReplenishment, getSalesAnalytics } from "./actions"
 import { ProductsTab } from "./_components/ProductsTab"
 import { SuppliesTab } from "./_components/SuppliesTab"
 import { InventoryTab } from "./_components/InventoryTab"
@@ -7,9 +7,10 @@ import { CategoriesTab } from "./_components/CategoriesTab"
 import { WarehousesTab } from "./_components/WarehousesTab"
 import { TasksTab } from "./_components/TasksTab"
 import { ProcurementTab } from "./_components/ProcurementTab"
+import { SalesTab } from "./_components/SalesTab"
 import { cookies } from "next/headers"
 import { Button } from "@/components/ui/button"
-import { RefreshCw } from "lucide-react"
+import { RefreshCw, ShoppingCart } from "lucide-react"
 import { revalidatePath } from "next/cache"
 
 export default async function InventoryPage({ params }: { params: Promise<{ clubId: string }> }) {
@@ -24,7 +25,7 @@ export default async function InventoryPage({ params }: { params: Promise<{ club
         revalidatePath(`/clubs/${clubId}/inventory`)
     }
 
-    const [products, categories, supplies, inventories, warehouses, employees, tasks, procurementLists, suppliers, clubSettings] = await Promise.all([
+    const [products, categories, supplies, inventories, warehouses, employees, tasks, procurementLists, suppliers, clubSettings, sales] = await Promise.all([
         getProducts(clubId),
         getCategories(clubId),
         getSupplies(clubId),
@@ -34,7 +35,8 @@ export default async function InventoryPage({ params }: { params: Promise<{ club
         getClubTasks(clubId),
         getProcurementLists(clubId),
         getSuppliersForSelect(clubId),
-        getClubSettings(clubId)
+        getClubSettings(clubId),
+        getSalesAnalytics(clubId)
     ])
 
     return (
@@ -60,6 +62,12 @@ export default async function InventoryPage({ params }: { params: Promise<{ club
                             className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:shadow-none px-0 py-3 bg-transparent font-medium"
                         >
                             Товары
+                        </TabsTrigger>
+                        <TabsTrigger 
+                            value="sales" 
+                            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:shadow-none px-0 py-3 bg-transparent font-medium"
+                        >
+                            Продажи
                         </TabsTrigger>
                         <TabsTrigger 
                             value="tasks" 
@@ -102,6 +110,10 @@ export default async function InventoryPage({ params }: { params: Promise<{ club
 
                 <TabsContent value="stock" className="mt-0">
                     <ProductsTab products={products} categories={categories} warehouses={warehouses} currentUserId={userId} />
+                </TabsContent>
+
+                <TabsContent value="sales" className="mt-0">
+                    <SalesTab sales={sales} />
                 </TabsContent>
                 
                 <TabsContent value="tasks" className="mt-0">

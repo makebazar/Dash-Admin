@@ -550,13 +550,14 @@ async function logStockMovement(
     type: string, 
     reason: string | null = null,
     relatedEntityType: string | null = null,
-    relatedEntityId: number | null = null
+    relatedEntityId: number | null = null,
+    shiftId: string | null = null
 ) {
     await client.query(`
         INSERT INTO warehouse_stock_movements 
-        (club_id, product_id, user_id, change_amount, previous_stock, new_stock, type, reason, related_entity_type, related_entity_id)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-    `, [clubId, productId, userId, changeAmount, previousStock, newStock, type, reason, relatedEntityType, relatedEntityId])
+        (club_id, product_id, user_id, change_amount, previous_stock, new_stock, type, reason, related_entity_type, related_entity_id, shift_id)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+    `, [clubId, productId, userId, changeAmount, previousStock, newStock, type, reason, relatedEntityType, relatedEntityId, shiftId])
 }
 
 // --- TASKS ---
@@ -585,6 +586,24 @@ export async function manualTriggerReplenishment(clubId: string) {
         console.error('Manual trigger failed:', e)
         throw e
     }
+}
+
+export async function getSalesAnalytics(clubId: string, limit: number = 50) {
+    const res = await query(`
+        SELECT sm.*, 
+               p.name as product_name, 
+               u.full_name as user_name,
+               s.check_in as shift_start,
+               s.check_out as shift_end
+        FROM warehouse_stock_movements sm
+        JOIN warehouse_products p ON sm.product_id = p.id
+        LEFT JOIN users u ON sm.user_id = u.id
+        LEFT JOIN shifts s ON sm.shift_id = s.id
+        WHERE sm.club_id = $1 AND sm.type = 'SALE'
+        ORDER BY sm.created_at DESC
+        LIMIT $2
+    `, [clubId, limit])
+    return res.rows
 }
 
 export async function getProducts(clubId: string) {
@@ -1013,17 +1032,17 @@ export async function getClubSettings(clubId: string) {
     }
 }
 
-export async function createInventory(clubId: string, userId: string, targetMetricKey: string | null, categoryId?: number | null, warehouseId?: number | null) {
+export async function createInventory(clubId: string, userId: string, targetMetricKey: string | null, categoryId?: number | null, warehouseId?: number | null, shiftId: string | null = null) {
     const client = await import("@/db").then(m => m.getClient())
     try {
         await client.query('BEGIN')
 
         // 1. Create Inventory Header
         const invRes = await client.query(`
-            INSERT INTO warehouse_inventories (club_id, created_by, status, target_metric_key, warehouse_id)
-            VALUES ($1, $2, 'OPEN', $3, $4)
+            INSERT INTO warehouse_inventories (club_id, created_by, status, target_metric_key, warehouse_id, shift_id)
+            VALUES ($1, $2, 'OPEN', $3, $4, $5)
             RETURNING id
-        `, [clubId, userId, targetMetricKey, warehouseId])
+        `, [clubId, userId, targetMetricKey, warehouseId, shiftId])
         const inventoryId = invRes.rows[0].id
 
         // 2. Snapshot current stock
@@ -1192,9 +1211,11 @@ export async function closeInventory(inventoryId: number, clubId: string, report
         // 3. Update Stock Levels to Actual and Log Movements
         // Strategy: Adjust stock in the Inventoried Warehouse (or Default if legacy)
         
-        // Get inventory warehouse
-        const invHeader = await client.query('SELECT warehouse_id FROM warehouse_inventories WHERE id = $1', [inventoryId])
+        // Get inventory info including shift_id
+        const invHeader = await client.query('SELECT warehouse_id, shift_id, created_by FROM warehouse_inventories WHERE id = $1', [inventoryId])
         let warehouseId = invHeader.rows[0]?.warehouse_id
+        const shiftId = invHeader.rows[0]?.shift_id
+        const userId = invHeader.rows[0]?.created_by
 
         if (!warehouseId) {
              // Fallback to default warehouse (Legacy)
@@ -1213,13 +1234,18 @@ export async function closeInventory(inventoryId: number, clubId: string, report
         for (const item of diffItems.rows) {
             const diffAmount = item.actual_stock - item.expected_stock
             
+            // If actual < expected, it's a SALE (negative diff in stock)
+            // If actual > expected, it's an ADJUSTMENT (positive diff in stock)
+            const type = diffAmount < 0 ? 'SALE' : 'INVENTORY_ADJUSTMENT'
+            const reason = diffAmount < 0 ? `Продажа за смену (инвентаризация #${inventoryId})` : `Корректировка инвентаризацией #${inventoryId}`
+
             await client.query(`
                 INSERT INTO warehouse_stock (warehouse_id, product_id, quantity)
                 VALUES ($1, $2, $3)
                 ON CONFLICT (warehouse_id, product_id) DO UPDATE SET quantity = warehouse_stock.quantity + $3
             `, [warehouseId, item.product_id, diffAmount])
 
-            await logStockMovement(client, clubId, null, item.product_id, diffAmount, item.expected_stock, item.actual_stock, 'INVENTORY_ADJUSTMENT', `Inventory #${inventoryId}`, 'INVENTORY', inventoryId)
+            await logStockMovement(client, clubId, userId, item.product_id, diffAmount, item.expected_stock, item.actual_stock, type, reason, 'INVENTORY', inventoryId, shiftId)
         }
 
         // Update Cache

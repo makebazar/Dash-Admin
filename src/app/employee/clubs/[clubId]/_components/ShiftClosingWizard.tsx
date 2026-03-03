@@ -196,7 +196,8 @@ export function ShiftClosingWizard({
                     userId, 
                     targetMetric, 
                     null, // categoryId
-                    allowedWarehouseId
+                    allowedWarehouseId,
+                    activeShiftId.toString() // Pass shiftId
                 )
                 
                 setInventoryId(newInvId)
