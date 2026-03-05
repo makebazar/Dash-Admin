@@ -964,29 +964,6 @@ export function ShiftClosingWizard({
                 {/* STEP 2: INVENTORY */}
                 {step === 2 && (
                     <div className="space-y-6 max-w-4xl mx-auto pb-20">
-                        {/* Progress Tracker */}
-                        <div className="bg-slate-900/50 p-4 rounded-2xl border border-slate-800 flex items-center justify-between">
-                            <div className="flex flex-col">
-                                <span className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Прогресс пересчета</span>
-                                <div className="flex items-center gap-2 mt-1">
-                                    <div className="h-1.5 w-32 bg-slate-800 rounded-full overflow-hidden">
-                                        <div 
-                                            className="h-full bg-blue-500 transition-all duration-500" 
-                                            style={{ width: `${(inventoryItems.filter(i => i.actual_stock !== null).length / inventoryItems.length) * 100}%` }}
-                                        />
-                                    </div>
-                                    <span className="text-xs font-bold text-slate-200">
-                                        {inventoryItems.filter(i => i.actual_stock !== null).length}/{inventoryItems.length}
-                                    </span>
-                                </div>
-                            </div>
-                            {forgottenItems.length > 0 && (
-                                <Badge variant="outline" className="bg-amber-900/20 text-amber-400 border-amber-900/30 text-[10px] animate-pulse">
-                                    Не посчитано: {forgottenItems.length}
-                                </Badge>
-                            )}
-                        </div>
-
                         <div className="relative">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
                             <Input 
