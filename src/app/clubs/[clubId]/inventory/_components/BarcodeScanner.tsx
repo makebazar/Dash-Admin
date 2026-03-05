@@ -74,15 +74,18 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
 
                 // Optimal configuration for speed and accuracy
                 const config = {
-                    fps: 20,
+                    fps: 30, // Increase FPS for smoother focus
                     qrbox: (viewfinderWidth: number, viewFinderHeight: number) => {
                         const minEdge = Math.min(viewfinderWidth, viewFinderHeight);
-                        const qrboxSize = Math.floor(minEdge * 0.7);
-                        return { width: qrboxSize, height: Math.floor(qrboxSize * 0.6) };
+                        const qrboxSize = Math.floor(minEdge * 0.8);
+                        return { width: qrboxSize, height: Math.floor(qrboxSize * 0.5) };
                     },
                     aspectRatio: 1.0,
-                    experimentalFeatures: {
-                        useBarCodeDetectorIfSupported: true
+                    videoConstraints: {
+                        facingMode: "environment",
+                        focusMode: "continuous",
+                        width: { min: 640, ideal: 1280, max: 1920 },
+                        height: { min: 480, ideal: 720, max: 1080 }
                     }
                 }
 
@@ -188,15 +191,30 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
         }
     }
 
-    const triggerFocus = async () => {
+    const triggerFocus = async (e: React.MouseEvent) => {
         if (!scannerRef.current || !scannerRef.current.isScanning) return
+        
+        // Visual feedback for tap-to-focus
+        const element = e.currentTarget
+        const rect = element.getBoundingClientRect()
+        const x = e.clientX - rect.left
+        const y = e.clientY - rect.top
+        
+        const ripple = document.createElement('div')
+        ripple.className = 'absolute border-2 border-white/50 rounded-full w-12 h-12 -translate-x-1/2 -translate-y-1/2 pointer-events-none animate-ripple'
+        ripple.style.left = `${x}px`
+        ripple.style.top = `${y}px`
+        element.appendChild(ripple)
+        setTimeout(() => ripple.remove(), 600)
+
         try {
             // @ts-ignore
             const capabilities: any = scannerRef.current.getRunningTrackCapabilities()
             if (capabilities.focusMode) {
+                // Try to force a re-focus by switching modes
                 await scannerRef.current.applyVideoConstraints({
                     // @ts-ignore
-                    advanced: [{ focusMode: "continuous" }]
+                    advanced: [{ focusMode: "manual" }, { focusMode: "continuous" }]
                 })
             }
         } catch (e) {
@@ -305,6 +323,13 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
                 }
                 .animate-scan-line {
                     animation: scan-line 3s infinite ease-in-out;
+                }
+                @keyframes ripple {
+                    0% { transform: translate(-50%, -50%) scale(0.5); opacity: 1; }
+                    100% { transform: translate(-50%, -50%) scale(2); opacity: 0; }
+                }
+                .animate-ripple {
+                    animation: ripple 0.6s ease-out;
                 }
             `}</style>
         </Dialog>
