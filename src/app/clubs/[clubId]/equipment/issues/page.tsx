@@ -307,9 +307,13 @@ export default function IssuesBoard() {
                     })
                 })
                 fetchComments(issueId)
+            } else {
+                const error = await res.json()
+                alert(`Ошибка при обновлении статуса: ${error.error || 'Неизвестная ошибка'}`)
             }
         } catch (error) {
             console.error("Error updating issue status:", error)
+            alert("Произошла ошибка при обновлении статуса. Проверьте подключение к сети.")
         }
     }
 
@@ -819,7 +823,7 @@ export default function IssuesBoard() {
                                                     />
                                                     <Button
                                                         className="w-full bg-green-600 hover:bg-green-700"
-                                                        disabled={!resolutionNotes || isUploading}
+                                                        disabled={isUploading}
                                                         onClick={handleResolveWithPhotos}
                                                     >
                                                         {isUploading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

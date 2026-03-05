@@ -172,6 +172,16 @@ export async function PATCH(
             values
         );
 
+        // SYNC: Update all PENDING maintenance tasks for this equipment if assigned user changed
+        if (body.assigned_user_id !== undefined) {
+            await query(
+                `UPDATE equipment_maintenance_tasks 
+                 SET assigned_user_id = $1
+                 WHERE equipment_id = $2 AND status = 'PENDING'`,
+                [body.assigned_user_id === '' ? null : body.assigned_user_id, equipmentId]
+            );
+        }
+
         // Track movement if workstation changed
         if (newWorkstationId !== undefined && newWorkstationId !== currentWorkstationId) {
             await query(

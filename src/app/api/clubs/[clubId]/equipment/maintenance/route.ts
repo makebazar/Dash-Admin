@@ -164,17 +164,21 @@ export async function GET(
         const result = await query(finalSql, queryParams);
 
         // Get stats
-        const today = new Date().toISOString().split('T')[0];
+        const todayStr = new Date().toISOString().split('T')[0];
         const statsResult = await query(
             `SELECT 
-                COUNT(*) FILTER (WHERE status = 'PENDING' AND due_date <= $2) as overdue_count,
-                COUNT(*) FILTER (WHERE status = 'PENDING' AND due_date = $2) as due_today_count,
-                COUNT(*) FILTER (WHERE status = 'PENDING' AND due_date > $2) as upcoming_count,
-                COUNT(*) FILTER (WHERE status = 'COMPLETED') as completed_count
+                COUNT(*) FILTER (WHERE mt.status = 'PENDING' AND mt.due_date < $2) as overdue_count,
+                COUNT(*) FILTER (WHERE mt.status = 'PENDING' AND mt.due_date = $2) as due_today_count,
+                COUNT(*) FILTER (WHERE mt.status = 'PENDING' AND mt.due_date > $2) as upcoming_count,
+                COUNT(*) FILTER (WHERE mt.status = 'COMPLETED') as completed_count
             FROM equipment_maintenance_tasks mt
             JOIN equipment e ON mt.equipment_id = e.id
-            WHERE e.club_id = $1`,
-            [clubId, today]
+            WHERE e.club_id = $1
+              AND (
+                ($3::uuid IS NULL) OR 
+                (COALESCE(mt.assigned_user_id, e.assigned_user_id) = $3)
+              )`,
+            [clubId, todayStr, myTasks ? userId : (assignedTo && assignedTo !== 'unassigned' ? assignedTo : null)]
         );
 
         return NextResponse.json({
@@ -229,7 +233,10 @@ export async function POST(
             const map: Record<string, string[]> = {};
             scheduleRes.rows.forEach((row: any) => {
                 if (!map[row.user_id]) map[row.user_id] = [];
-                map[row.user_id].push(row.date);
+                // Date handling
+                const d = row.date;
+                const dStr = d instanceof Date ? d.toISOString().split('T')[0] : String(d);
+                map[row.user_id].push(dStr);
             });
             Object.keys(map).forEach(key => map[key].sort());
             scheduleMap = map;
@@ -241,9 +248,7 @@ export async function POST(
             if (!scheduleMap) return null;
             const dates = scheduleMap[userId];
             if (!dates || dates.length === 0) return null;
-            for (const d of dates) {
-                // Ensure date string comparison works correctly
-                const dStr = d instanceof Date ? (d as Date).toISOString().split('T')[0] : String(d);
+            for (const dStr of dates) {
                 if (dStr >= fromDate) return dStr;
             }
             return null;

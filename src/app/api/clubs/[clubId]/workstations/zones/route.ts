@@ -42,26 +42,26 @@ export async function PATCH(
         );
 
         // Also update equipment linked to these workstations
-        if (assignedUserId) {
+        if (assignedUserId !== undefined) {
             const workstationIds = result.rows.map(r => r.id);
             if (workstationIds.length > 0) {
+                // 1. Update equipment assigned user
                 await query(
                     `UPDATE equipment 
                      SET assigned_user_id = $1,
-                         maintenance_enabled = TRUE
+                         maintenance_enabled = CASE WHEN $1 IS NOT NULL THEN TRUE ELSE FALSE END
                      WHERE workstation_id = ANY($2)`,
                     [assignedUserId, workstationIds]
                 );
-            }
-        } else if (assignedUserId === null) {
-            const workstationIds = result.rows.map(r => r.id);
-            if (workstationIds.length > 0) {
+
+                // 2. Update PENDING maintenance tasks for all affected equipment
                 await query(
-                    `UPDATE equipment 
-                     SET assigned_user_id = NULL,
-                         maintenance_enabled = FALSE
-                     WHERE workstation_id = ANY($1)`,
-                    [workstationIds]
+                    `UPDATE equipment_maintenance_tasks 
+                     SET assigned_user_id = $1
+                     WHERE equipment_id IN (
+                         SELECT id FROM equipment WHERE workstation_id = ANY($2)
+                     ) AND status = 'PENDING'`,
+                    [assignedUserId, workstationIds]
                 );
             }
         }

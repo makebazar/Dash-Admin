@@ -2,6 +2,11 @@
 ALTER TABLE equipment_issues
 ADD COLUMN IF NOT EXISTS assigned_to UUID REFERENCES users(id) ON DELETE SET NULL;
 
+-- Add resolution columns to equipment_issues
+ALTER TABLE equipment_issues
+ADD COLUMN IF NOT EXISTS resolution_notes TEXT,
+ADD COLUMN IF NOT EXISTS resolution_photos TEXT[];
+
 -- Create comments table for issues
 CREATE TABLE IF NOT EXISTS equipment_issue_comments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
