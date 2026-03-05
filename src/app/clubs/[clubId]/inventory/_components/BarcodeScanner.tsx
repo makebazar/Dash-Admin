@@ -54,7 +54,7 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
 
                 const config = {
                     fps: 10,
-                    qrbox: { width: 250, height: 250 },
+                    qrbox: { width: 200, height: 200 },
                     aspectRatio: 1.0
                 }
 
@@ -103,7 +103,7 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
                         await scanner.stop()
                         console.log("Scanner stopped")
                     } catch (err) {
-                        console.error("Failed to stop scanner", err)
+                        // ignore stop errors
                     }
                 }
             }
@@ -111,7 +111,7 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
             cleanup()
             scannerRef.current = null
         }
-    }, [isOpen]) // Убрал onScan из зависимостей, чтобы избежать циклической перезагрузки
+    }, [isOpen, onScan])
 
     return (
         <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>

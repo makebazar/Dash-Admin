@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useTransition, useEffect, useMemo } from "react"
+import { useState, useTransition, useEffect, useMemo, useCallback } from "react"
 import { Loader2, ArrowRight, CheckCircle2, AlertTriangle, Package, Camera, Search, Barcode, X, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -229,7 +229,7 @@ export function ShiftClosingWizard({
         })
     }
 
-    const handleBarcodeScan = async (barcode: string) => {
+    const handleBarcodeScan = useCallback(async (barcode: string) => {
         const item = inventoryItems.find(i => i.barcode === barcode)
         
         if (item) {
@@ -241,12 +241,9 @@ export function ShiftClosingWizard({
                 return i
             }))
             setScannedItemId(item.id)
-            // Мы НЕ закрываем сканер здесь (setIsScannerOpen(false)), 
-            // чтобы сотрудник мог отсканировать несколько штук подряд (+1, +1, +1)
             return
         }
 
-        // Try to find in general products if not in current inventory
         try {
             const product = await getProductByBarcode(clubId, barcode)
             if (product) {
@@ -258,7 +255,6 @@ export function ShiftClosingWizard({
                         const oldItem = inventoryItems.find(old => old.id === i.id)
                         return { 
                             ...i, 
-                            // Если это новый товар, ставим 1 и делаем видимым
                             actual_stock: isNew ? 1 : i.actual_stock,
                             is_visible: isNew ? true : oldItem?.is_visible || false 
                         }
@@ -272,7 +268,7 @@ export function ShiftClosingWizard({
         } catch (e) {
             console.error(e)
         }
-    }
+    }, [inventoryItems, clubId, inventoryId])
 
     const handleAddProductManually = async () => {
         if (!selectedProductToAdd) return

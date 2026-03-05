@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useTransition, useEffect, useMemo } from "react"
+import { useState, useTransition, useEffect, useMemo, useCallback } from "react"
 import { ArrowLeft, CheckCircle2, AlertTriangle, Loader2, Save, X, Search, Camera, Barcode } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -123,7 +123,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner }: ActiveInvento
         }
     }
 
-    const handleBarcodeScan = async (barcode: string) => {
+    const handleBarcodeScan = useCallback(async (barcode: string) => {
         // 1. Find item in the current inventory list
         const existingItem = items.find(i => i.barcode === barcode)
         
@@ -166,7 +166,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner }: ActiveInvento
             console.error(e)
             alert("Ошибка при поиске товара")
         }
-    }
+    }, [items, clubId, inventoryId])
 
     const handleScannedStockSave = async () => {
         if (!scannedItem) return
