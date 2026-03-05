@@ -602,7 +602,7 @@ export async function getSalesAnalytics(clubId: string, limit: number = 200) {
         JOIN warehouse_products p ON sm.product_id = p.id
         LEFT JOIN users u ON sm.user_id = u.id
         LEFT JOIN shifts s ON sm.shift_id = s.id
-        WHERE sm.club_id = $1 AND sm.type IN ('SALE', 'INVENTORY_ADJUSTMENT')
+        WHERE sm.club_id = $1 AND sm.type = 'SALE'
         ORDER BY sm.created_at DESC
         LIMIT $2
     `, [clubId, limit])
