@@ -27,9 +27,9 @@ interface SalaryScheme {
 interface ShiftData {
     id: string;
     total_hours: number;
-    bar_purchases?: number;
     report_data?: any;
     evaluations?: any[]; // Added to support checklist bonuses
+    bar_purchases?: number; // Added to support bar deductions
 }
 
 export async function calculateSalary(
@@ -42,11 +42,12 @@ export async function calculateSalary(
         base: 0, 
         bonuses: [], 
         penalties: [], 
+        deductions: [], // Added for bar purchases
         total: 0,  // Только REAL_MONEY (для зарплаты)
         virtual_balance_total: 0  // Только VIRTUAL_BALANCE (отдельно)
     };
 
-    // Normalize base params
+    // ... (existing base normalization) ...
     const type = scheme.base?.type || scheme.type || 'hourly';
     const amount = scheme.base?.amount ?? scheme.amount ?? 0;
     const percent = scheme.base?.percent ?? scheme.percent ?? 0;
@@ -331,15 +332,14 @@ export async function calculateSalary(
         total += amount;
     }
 
-    // 5. Bar Purchases Deduction
-    const barPurchases = Number(shift.bar_purchases || 0);
-    if (barPurchases > 0) {
-        breakdown.penalties.push({
-            name: 'Покупки в баре',
-            type: 'BAR_PURCHASE',
-            amount: -parseFloat(barPurchases.toFixed(2))
+    // 5. Bar Deductions (from shift.bar_purchases)
+    if (shift.bar_purchases && shift.bar_purchases > 0) {
+        const deduction = parseFloat(shift.bar_purchases.toFixed(2));
+        breakdown.deductions.push({
+            name: 'Покупка бара',
+            amount: deduction
         });
-        total -= barPurchases;
+        total -= deduction;
     }
 
     breakdown.total = parseFloat(total.toFixed(2));

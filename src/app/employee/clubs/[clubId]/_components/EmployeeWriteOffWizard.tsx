@@ -23,12 +23,10 @@ import { cn } from "@/lib/utils"
 interface EmployeeWriteOffWizardProps {
     isOpen: boolean
     onClose: () => void
-    onComplete?: () => void
     clubId: string
     userId: string
     activeShiftId?: string
-    shiftEarnings?: number
-    shiftDeductions?: number
+    currentSalary?: number // Added to check limits
 }
 
 interface WriteOffItem {
@@ -39,7 +37,7 @@ interface WriteOffItem {
     price: number
 }
 
-export function EmployeeWriteOffWizard({ isOpen, onClose, onComplete, clubId, userId, activeShiftId, shiftEarnings = 0, shiftDeductions = 0 }: EmployeeWriteOffWizardProps) {
+export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, activeShiftId, currentSalary = 0 }: EmployeeWriteOffWizardProps) {
     const [step, setStep] = useState(1) // 1: Items, 2: Final Details
     const [items, setItems] = useState<WriteOffItem[]>([])
     const [allProducts, setAllProducts] = useState<any[]>([])
@@ -54,8 +52,6 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, onComplete, clubId, us
     const [writeOffType, setWriteOffType] = useState<'WASTE' | 'SALARY_DEDUCTION'>('WASTE')
     const [notes, setNotes] = useState("")
 
-    const availableFromShift = Math.max(0, shiftEarnings - shiftDeductions)
-
     useEffect(() => {
         if (isOpen) {
             getProducts(clubId).then(setAllProducts)
@@ -66,32 +62,18 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, onComplete, clubId, us
         const product = allProducts.find(p => p.id === Number(selectedProductId))
         if (!product) return
 
-        const price = product.selling_price || 0
-        const qty = Number(itemQty)
-
-        if (writeOffType === 'SALARY_DEDUCTION') {
-            const currentTotalDeduction = items
-                .filter(i => i.type === 'SALARY_DEDUCTION')
-                .reduce((acc, i) => acc + (i.quantity * i.price), 0)
-            
-            if (currentTotalDeduction + (qty * price) > availableFromShift) {
-                alert(`Недостаточно средств в текущей смене. Доступно: ${Math.floor(availableFromShift)} ₽.`)
-                return
-            }
-        }
-
         const existingIdx = items.findIndex(i => i.product_id === product.id && i.type === writeOffType)
         if (existingIdx > -1) {
             const newItems = [...items]
-            newItems[existingIdx].quantity += qty
+            newItems[existingIdx].quantity += Number(itemQty)
             setItems(newItems)
         } else {
             setItems(prev => [...prev, {
                 product_id: product.id,
                 name: product.name,
-                quantity: qty,
+                quantity: Number(itemQty),
                 type: writeOffType,
-                price: price
+                price: product.selling_price || 0
             }])
         }
 
@@ -104,13 +86,6 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, onComplete, clubId, us
         try {
             const product = await getProductByBarcode(clubId, barcode)
             if (product) {
-                const price = product.selling_price || 0
-                const currentTotalDeduction = items
-                    .filter(i => i.type === 'SALARY_DEDUCTION')
-                    .reduce((acc, i) => acc + (i.quantity * i.price), 0)
-
-                // For barcode scan, default to WASTE if no funds, or just add as WASTE
-                // Here we default to WASTE since we can't easily ask type in scanner
                 const existingIdx = items.findIndex(i => i.product_id === product.id && i.type === 'WASTE')
                 if (existingIdx > -1) {
                     const newItems = [...items]
@@ -122,7 +97,7 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, onComplete, clubId, us
                         name: product.name,
                         quantity: 1,
                         type: 'WASTE',
-                        price: price
+                        price: product.selling_price || 0
                     }])
                 }
                 return true
@@ -140,16 +115,6 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, onComplete, clubId, us
 
     const handleFinalize = () => {
         if (items.length === 0) return
-        
-        const totalDeduction = items
-            .filter(i => i.type === 'SALARY_DEDUCTION')
-            .reduce((acc, i) => acc + (i.quantity * i.price), 0)
-
-        if (totalDeduction > availableFromShift) {
-            alert(`Сумма покупок превышает заработок за смену!`)
-            return
-        }
-
         startTransition(async () => {
             try {
                 await createWriteOff(clubId, userId, {
@@ -162,11 +127,10 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, onComplete, clubId, us
                     shift_id: activeShiftId
                 })
                 alert("Списание успешно оформлено")
-                if (onComplete) onComplete()
                 handleClose()
-            } catch (e: any) {
+            } catch (e) {
                 console.error(e)
-                alert(e.message || "Ошибка при оформлении списания")
+                alert("Ошибка при оформлении списания")
             }
         })
     }
@@ -187,6 +151,8 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, onComplete, clubId, us
         .filter(i => i.type === 'SALARY_DEDUCTION')
         .reduce((acc, i) => acc + (i.quantity * i.price), 0)
 
+    const isOverSalaryLimit = totalDeduction > currentSalary
+
     return (
         <>
             <Dialog open={isOpen} onOpenChange={handleClose}>
@@ -197,7 +163,12 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, onComplete, clubId, us
                             {step === 1 ? "Списание товара" : "Причина списания"}
                         </DialogTitle>
                         <DialogDescription className="text-slate-400">
-                            {step === 1 ? "Выберите товары для списания или покупки в счет ЗП." : "Укажите причину (брак, просрочка и т.д.)"}
+                            {step === 1 ? (
+                                <span>
+                                    Выберите товары для списания. 
+                                    {currentSalary > 0 && <span className="ml-1 text-emerald-400">Доступно из ЗП: {currentSalary.toLocaleString()} ₽</span>}
+                                </span>
+                            ) : "Укажите причину (брак, просрочка и т.д.)"}
                         </DialogDescription>
                     </DialogHeader>
 
@@ -224,9 +195,19 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, onComplete, clubId, us
                                 </div>
 
                                 <div className="space-y-4">
-                                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-2">
-                                        <ShoppingCart className="h-3 w-3" />
-                                        Список списания ({items.length})
+                                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <ShoppingCart className="h-3 w-3" />
+                                            Список списания ({items.length})
+                                        </div>
+                                        {totalDeduction > 0 && (
+                                            <span className={cn(
+                                                "text-[10px]",
+                                                isOverSalaryLimit ? "text-red-400" : "text-emerald-400"
+                                            )}>
+                                                Итого в счет ЗП: {totalDeduction.toLocaleString()} ₽
+                                            </span>
+                                        )}
                                     </h4>
                                     
                                     {items.length === 0 ? (
@@ -287,12 +268,23 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, onComplete, clubId, us
                                 </div>
 
                                 {totalDeduction > 0 && (
-                                    <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl flex items-center gap-3">
-                                        <Wallet className="h-6 w-6 text-amber-500" />
-                                        <div>
-                                            <p className="text-sm font-bold text-amber-500">Будет вычтено из текущей смены:</p>
+                                    <div className={cn(
+                                        "p-4 border rounded-2xl flex items-center gap-3",
+                                        isOverSalaryLimit 
+                                            ? "bg-red-500/10 border-red-500/20" 
+                                            : "bg-amber-500/10 border-amber-500/20"
+                                    )}>
+                                        <Wallet className={cn("h-6 w-6", isOverSalaryLimit ? "text-red-500" : "text-amber-500")} />
+                                        <div className="flex-1">
+                                            <p className={cn("text-sm font-bold", isOverSalaryLimit ? "text-red-500" : "text-amber-500")}>
+                                                {isOverSalaryLimit ? "Лимит превышен!" : "Будет вычтено из зарплаты:"}
+                                            </p>
                                             <p className="text-xl font-black text-white">{totalDeduction.toLocaleString()} ₽</p>
-                                            <p className="text-[10px] text-slate-400 mt-1">Доступно: {Math.floor(availableFromShift)} ₽</p>
+                                            {isOverSalaryLimit && (
+                                                <p className="text-[10px] text-red-400 mt-1">
+                                                    Максимально доступно: {currentSalary.toLocaleString()} ₽ (текущая ЗП за месяц)
+                                                </p>
+                                            )}
                                         </div>
                                     </div>
                                 )}
@@ -303,8 +295,11 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, onComplete, clubId, us
                     <DialogFooter className="p-6 border-t border-slate-800 bg-slate-900/50">
                         {step === 1 ? (
                             <Button 
-                                className="w-full h-12 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl shadow-lg shadow-red-900/20"
-                                disabled={items.length === 0}
+                                className={cn(
+                                    "w-full h-12 font-bold rounded-xl shadow-lg",
+                                    isOverSalaryLimit ? "bg-slate-800 text-slate-500 cursor-not-allowed" : "bg-red-600 hover:bg-red-700 text-white shadow-red-900/20"
+                                )}
+                                disabled={items.length === 0 || isOverSalaryLimit}
                                 onClick={() => setStep(2)}
                             >
                                 Далее
@@ -322,7 +317,7 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, onComplete, clubId, us
                                 <Button 
                                     className="flex-1 h-12 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl shadow-lg shadow-green-900/20"
                                     onClick={handleFinalize}
-                                    disabled={isPending}
+                                    disabled={isPending || isOverSalaryLimit}
                                 >
                                     {isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <CheckCircle2 className="h-4 w-4 mr-2" />}
                                     Подтвердить

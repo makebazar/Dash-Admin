@@ -697,83 +697,34 @@ export async function createWriteOff(clubId: string, userId: string, data: { ite
     try {
         await client.query('BEGIN')
 
-        // Ensure bar_purchases column exists in shifts table (one-time migration check)
-        await client.query(`ALTER TABLE shifts ADD COLUMN IF NOT EXISTS bar_purchases DECIMAL(10, 2) DEFAULT 0`)
-
         // Find default warehouse
         const defaultWh = await client.query('SELECT id FROM warehouses WHERE club_id = $1 AND is_default = true LIMIT 1', [clubId])
         const warehouseId = defaultWh.rows[0]?.id
         if (!warehouseId) throw new Error("Склад по умолчанию не найден")
 
-        // 1. Calculate total deduction and validate shift earnings
-        let totalDeduction = 0
-        const isSalaryDeduction = data.items.some(i => i.type === 'SALARY_DEDUCTION')
-
-        if (isSalaryDeduction) {
-            if (!data.shift_id) throw new Error("Смена не найдена. Начните смену перед покупкой.")
-            
-            // Get current shift earnings
-            // We calculate earnings based on hourly rate and hours worked so far
-            const shiftRes = await client.query(`
-                SELECT s.id, s.check_in, s.bar_purchases,
-                       (r.default_kpi_settings->>'base_rate')::numeric as hourly_rate
-                FROM shifts s
-                JOIN users u ON s.user_id = u.id
-                JOIN roles r ON u.role_id = r.id
-                WHERE s.id = $1 AND s.user_id = $2
-            `, [data.shift_id, userId])
-
-            if (shiftRes.rowCount === 0) throw new Error("Смена не найдена")
-            
-            const shift = shiftRes.rows[0]
-            const checkIn = new Date(shift.check_in)
-            const now = new Date()
-            const hours = Math.max(0, (now.getTime() - checkIn.getTime()) / (1000 * 60 * 60))
-            const rate = parseFloat(shift.hourly_rate || '150')
-            const currentEarnings = hours * rate
-            const existingDeductions = parseFloat(shift.bar_purchases || '0')
-
-            // Calculate new total deduction
-            for (const item of data.items) {
-                if (item.type === 'SALARY_DEDUCTION') {
-                    const prodRes = await client.query('SELECT selling_price FROM warehouse_products WHERE id = $1', [item.product_id])
-                    const price = parseFloat(prodRes.rows[0]?.selling_price || '0')
-                    totalDeduction += price * item.quantity
-                }
-            }
-
-            if (totalDeduction + existingDeductions > currentEarnings) {
-                throw new Error(`Недостаточно заработанных средств. Заработано: ${Math.floor(currentEarnings)} ₽, потрачено: ${existingDeductions} ₽. Нужно еще ${Math.ceil(totalDeduction + existingDeductions - currentEarnings)} ₽.`)
-            }
-
-            // Update shift bar_purchases
-            await client.query(`UPDATE shifts SET bar_purchases = bar_purchases + $1 WHERE id = $2`, [totalDeduction, data.shift_id])
-        }
-
-        // 2. Process stock movements
         for (const item of data.items) {
-            // Get current stock
+            // 1. Get current stock
             const stockRes = await client.query('SELECT quantity FROM warehouse_stock WHERE warehouse_id = $1 AND product_id = $2', [warehouseId, item.product_id])
             const previousStock = stockRes.rows[0]?.quantity || 0
             const newStock = previousStock - item.quantity
 
-            // Update stock
+            // 2. Update stock
             await client.query(`
                 UPDATE warehouse_stock 
                 SET quantity = $1 
                 WHERE warehouse_id = $2 AND product_id = $3
             `, [newStock, warehouseId, item.product_id])
 
-            // Update product cache
+            // 3. Update product cache
             await client.query(`
                 UPDATE warehouse_products
                 SET current_stock = (SELECT COALESCE(SUM(quantity), 0) FROM warehouse_stock WHERE product_id = $1)
                 WHERE id = $1
             `, [item.product_id])
 
-            // Log movement
+            // 4. Log movement
             const reason = item.type === 'SALARY_DEDUCTION' ? `В счет ЗП: ${data.notes}` : `Списание: ${data.notes}`
-            const movementType = item.type === 'SALARY_DEDUCTION' ? 'SALE' : 'ADJUSTMENT'
+            const movementType = item.type === 'SALARY_DEDUCTION' ? 'SALE' : 'ADJUSTMENT' // SALARY_DEDUCTION is essentially a sale to employee
             
             await logStockMovement(
                 client, 
@@ -789,11 +740,27 @@ export async function createWriteOff(clubId: string, userId: string, data: { ite
                 null, 
                 data.shift_id || null
             )
+
+            // 5. If Salary Deduction, update Shift and log
+            if (item.type === 'SALARY_DEDUCTION') {
+                const prodRes = await client.query('SELECT selling_price FROM warehouse_products WHERE id = $1', [item.product_id])
+                const price = prodRes.rows[0]?.selling_price || 0
+                const totalDeduction = price * item.quantity
+
+                if (data.shift_id) {
+                    await client.query(`
+                        UPDATE shifts 
+                        SET bar_purchases = COALESCE(bar_purchases, 0) + $1 
+                        WHERE id = $2
+                    `, [totalDeduction, data.shift_id])
+                }
+            }
         }
 
         await client.query('COMMIT')
         revalidatePath(`/clubs/${clubId}/inventory`)
-    } catch (e: any) {
+        revalidatePath(`/employee/clubs/${clubId}`)
+    } catch (e) {
         await client.query('ROLLBACK')
         throw e
     } finally {
