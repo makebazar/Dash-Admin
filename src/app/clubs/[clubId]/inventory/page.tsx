@@ -1,5 +1,5 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { getProducts, getCategories, getSupplies, getInventories, getWarehouses, getEmployees, getClubTasks, getProcurementLists, getSuppliersForSelect, getClubSettings, manualTriggerReplenishment, getSalesAnalytics } from "./actions"
+import { getProducts, getCategories, getSupplies, getInventories, getWarehouses, getEmployees, getClubTasks, getProcurementLists, getSuppliersForSelect, getClubSettings, manualTriggerReplenishment, getSalesAnalytics, getActiveShiftsForClub } from "./actions"
 import { ProductsTab } from "./_components/ProductsTab"
 import { SuppliesTab } from "./_components/SuppliesTab"
 import { InventoryTab } from "./_components/InventoryTab"
@@ -25,7 +25,7 @@ export default async function InventoryPage({ params }: { params: Promise<{ club
         revalidatePath(`/clubs/${clubId}/inventory`)
     }
 
-    const [products, categories, supplies, inventories, warehouses, employees, tasks, procurementLists, suppliers, clubSettings, sales] = await Promise.all([
+    const [products, categories, supplies, inventories, warehouses, employees, tasks, procurementLists, suppliers, clubSettings, sales, shifts] = await Promise.all([
         getProducts(clubId),
         getCategories(clubId),
         getSupplies(clubId),
@@ -36,7 +36,8 @@ export default async function InventoryPage({ params }: { params: Promise<{ club
         getProcurementLists(clubId),
         getSuppliersForSelect(clubId),
         getClubSettings(clubId),
-        getSalesAnalytics(clubId)
+        getSalesAnalytics(clubId),
+        getActiveShiftsForClub(clubId)
     ])
 
     return (
@@ -113,7 +114,7 @@ export default async function InventoryPage({ params }: { params: Promise<{ club
                 </TabsContent>
 
                 <TabsContent value="sales" className="mt-0">
-                    <SalesTab sales={sales} />
+                    <SalesTab sales={sales} shifts={shifts} clubId={clubId} />
                 </TabsContent>
                 
                 <TabsContent value="tasks" className="mt-0">

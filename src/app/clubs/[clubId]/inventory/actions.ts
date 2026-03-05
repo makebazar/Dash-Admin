@@ -590,22 +590,101 @@ export async function manualTriggerReplenishment(clubId: string) {
     }
 }
 
-export async function getSalesAnalytics(clubId: string, limit: number = 50) {
+export async function getSalesAnalytics(clubId: string, limit: number = 200) {
     const res = await query(`
         SELECT sm.*, 
                p.name as product_name, 
                u.full_name as user_name,
                s.check_in as shift_start,
-               s.check_out as shift_end
+               s.check_out as shift_end,
+               s.id as shift_id_raw
         FROM warehouse_stock_movements sm
         JOIN warehouse_products p ON sm.product_id = p.id
         LEFT JOIN users u ON sm.user_id = u.id
         LEFT JOIN shifts s ON sm.shift_id = s.id
-        WHERE sm.club_id = $1 AND sm.type = 'SALE'
+        WHERE sm.club_id = $1 AND sm.type IN ('SALE', 'INVENTORY_ADJUSTMENT')
         ORDER BY sm.created_at DESC
         LIMIT $2
     `, [clubId, limit])
     return res.rows
+}
+
+export async function getActiveShiftsForClub(clubId: string) {
+    const res = await query(`
+        SELECT id, check_in, check_out, 
+               (SELECT full_name FROM users WHERE id = user_id) as employee_name
+        FROM shifts 
+        WHERE club_id = $1
+        ORDER BY check_in DESC 
+        LIMIT 20
+    `, [clubId])
+    return res.rows
+}
+
+export async function deleteStockMovement(id: number, clubId: string) {
+    const client = await import("@/db").then(m => m.getClient())
+    try {
+        await client.query('BEGIN')
+        
+        // 1. Get movement info to revert stock if needed
+        const moveRes = await client.query('SELECT * FROM warehouse_stock_movements WHERE id = $1 AND club_id = $2', [id, clubId])
+        if (moveRes.rowCount === 0) throw new Error("Запись не найдена")
+        
+        const move = moveRes.rows[0]
+        
+        // 2. Revert stock
+        // If we deleted a SALE (-5), we need to add +5 back
+        // If we deleted a SUPPLY (+10), we need to subtract -10
+        const revertAmount = -move.change_amount
+        
+        // Find warehouse (try to guess from reason or related entity, or use default)
+        const defaultWh = await client.query('SELECT id FROM warehouses WHERE club_id = $1 AND is_default = true LIMIT 1', [clubId])
+        const warehouseId = defaultWh.rows[0]?.id
+
+        if (warehouseId) {
+            await client.query(`
+                INSERT INTO warehouse_stock (warehouse_id, product_id, quantity)
+                VALUES ($1, $2, $3)
+                ON CONFLICT (warehouse_id, product_id) DO UPDATE SET quantity = warehouse_stock.quantity + $3
+            `, [warehouseId, move.product_id, revertAmount])
+            
+            // Update cache
+            await client.query(`
+                UPDATE warehouse_products
+                SET current_stock = (SELECT COALESCE(SUM(quantity), 0) FROM warehouse_stock WHERE product_id = $1)
+                WHERE id = $1
+            `, [move.product_id])
+        }
+
+        // 3. Delete movement
+        await client.query('DELETE FROM warehouse_stock_movements WHERE id = $1', [id])
+        
+        await client.query('COMMIT')
+    } catch (e) {
+        await client.query('ROLLBACK')
+        throw e
+    } finally {
+        client.release()
+    }
+    revalidatePath(`/clubs/${clubId}/inventory`)
+}
+
+export async function assignShiftToMovement(movementId: number, shiftId: number | null, clubId: string) {
+    await query(`
+        UPDATE warehouse_stock_movements 
+        SET shift_id = $1 
+        WHERE id = $2 AND club_id = $3
+    `, [shiftId, movementId, clubId])
+    revalidatePath(`/clubs/${clubId}/inventory`)
+}
+
+export async function massAssignShiftToMovements(movementIds: number[], shiftId: number | null, clubId: string) {
+    await query(`
+        UPDATE warehouse_stock_movements 
+        SET shift_id = $1 
+        WHERE id = ANY($2) AND club_id = $3
+    `, [shiftId, movementIds, clubId])
+    revalidatePath(`/clubs/${clubId}/inventory`)
 }
 
 export async function getProducts(clubId: string) {
