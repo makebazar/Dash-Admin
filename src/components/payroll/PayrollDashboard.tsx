@@ -386,6 +386,7 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                 { id: 'overview', label: 'Обзор', icon: '📊' },
                                                 { id: 'kpi', label: 'KPI и Начисления', icon: '🎯' },
                                                 { id: 'shifts', label: 'Смены', icon: '📅' },
+                                                { id: 'bar', label: 'Бар', icon: '🍹' },
                                                 { id: 'payments', label: 'Выплаты', icon: '💰' }
                                             ].map((tab) => (
                                                 <button
@@ -1345,6 +1346,51 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                         </div>
                                                     );
                                                 })()}
+                                            </div>
+                                        )}
+
+                                        {activeTabs[employee.id] === 'bar' && (
+                                            <div className="space-y-6 animate-in slide-in-from-left-2 duration-300">
+                                                <div className="bg-background border rounded-xl overflow-hidden">
+                                                    <div className="p-4 bg-muted/30 border-b flex justify-between items-center">
+                                                        <h4 className="font-bold text-sm">Покупки из бара в счет ЗП</h4>
+                                                        <div className="text-right">
+                                                            <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Итого удержано</p>
+                                                            <p className="text-lg font-black text-red-600">
+                                                                -{formatCurrency((employee.shifts || []).reduce((sum, s) => sum + (Number((s as any).metrics?.bar_purchases) || 0), 0))}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                    <div className="overflow-x-auto">
+                                                        <table className="w-full text-sm">
+                                                            <thead className="bg-muted/20 border-b">
+                                                                <tr>
+                                                                    <th className="px-4 py-2 text-left font-medium text-muted-foreground">Дата</th>
+                                                                    <th className="px-4 py-2 text-left font-medium text-muted-foreground">Смена</th>
+                                                                    <th className="px-4 py-2 text-right font-medium text-muted-foreground">Сумма</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody className="divide-y">
+                                                                {(employee.shifts || [])
+                                                                    .filter(s => (Number((s as any).metrics?.bar_purchases) || 0) > 0)
+                                                                    .map(s => (
+                                                                        <tr key={s.id} className="hover:bg-muted/10 transition-colors">
+                                                                            <td className="px-4 py-3">{new Date(s.date).toLocaleDateString('ru-RU')}</td>
+                                                                            <td className="px-4 py-3 text-muted-foreground">Смена #{s.id}</td>
+                                                                            <td className="px-4 py-3 text-right font-bold text-red-600">-{formatCurrency(Number((s as any).metrics?.bar_purchases) || 0)}</td>
+                                                                        </tr>
+                                                                    ))}
+                                                                {!(employee.shifts || []).some(s => (Number((s as any).metrics?.bar_purchases) || 0) > 0) && (
+                                                                    <tr>
+                                                                        <td colSpan={3} className="px-4 py-8 text-center text-muted-foreground italic">
+                                                                            В этом месяце покупок не было
+                                                                        </td>
+                                                                    </tr>
+                                                                )}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                </div>
                                             </div>
                                         )}
 

@@ -442,7 +442,8 @@ export async function GET(
                 const reportMetricsForShift: Record<string, number> = {
                     total_revenue: calculateShiftIncome(s),
                     revenue_cash: parseFloat(s.cash_income || 0),
-                    revenue_card: parseFloat(s.card_income || 0)
+                    revenue_card: parseFloat(s.card_income || 0),
+                    bar_purchases: parseFloat(s.bar_purchases || 0)
                 };
 
                 if (s.report_data) {
@@ -481,7 +482,8 @@ export async function GET(
                         id: s.id, 
                         total_hours: parseFloat(s.total_hours || 0), 
                         report_data: s.report_data,
-                        evaluations: shiftEvalsMap[s.id] || []
+                        evaluations: shiftEvalsMap[s.id] || [],
+                        bar_purchases: parseFloat(s.bar_purchases || 0)
                     },
                     schemeWithRewards,
                     reportMetricsForShift
