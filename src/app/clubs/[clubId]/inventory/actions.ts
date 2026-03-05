@@ -594,14 +594,19 @@ export async function getSalesAnalytics(clubId: string, limit: number = 200) {
     const res = await query(`
         SELECT sm.*, 
                p.name as product_name, 
+               p.selling_price as current_price,
                u.full_name as user_name,
                s.check_in as shift_start,
                s.check_out as shift_end,
-               s.id as shift_id_raw
+               s.id as shift_id_raw,
+               inv.reported_revenue as shift_reported_revenue,
+               inv.calculated_revenue as shift_calculated_revenue,
+               inv.revenue_difference as shift_revenue_difference
         FROM warehouse_stock_movements sm
         JOIN warehouse_products p ON sm.product_id = p.id
         LEFT JOIN users u ON sm.user_id = u.id
         LEFT JOIN shifts s ON sm.shift_id = s.id
+        LEFT JOIN warehouse_inventories inv ON s.id = inv.shift_id
         WHERE sm.club_id = $1 AND sm.type = 'SALE'
         ORDER BY sm.created_at DESC
         LIMIT $2

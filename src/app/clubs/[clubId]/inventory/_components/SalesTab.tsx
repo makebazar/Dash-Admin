@@ -46,7 +46,10 @@ export function SalesTab({ sales, shifts, clubId }: SalesTabProps) {
                             id: shiftId,
                             start: sale.shift_start,
                             end: sale.shift_end,
-                            employee: sale.user_name
+                            employee: sale.user_name,
+                            reported: Number(sale.shift_reported_revenue || 0),
+                            calculated: Number(sale.shift_calculated_revenue || 0),
+                            difference: Number(sale.shift_revenue_difference || 0)
                         },
                         items: [],
                         totalAmount: 0
@@ -200,10 +203,7 @@ export function SalesTab({ sales, shifts, clubId }: SalesTabProps) {
                                             {isUnassigned ? (
                                                 <span className="text-sm font-bold text-amber-700">Продажи без привязки</span>
                                             ) : (
-                                                <>
-                                                    <span className="text-sm font-bold text-slate-900">{group.shift.employee}</span>
-                                                    <Badge variant="outline" className="text-[10px] h-5 bg-blue-50 text-blue-700 border-blue-100 uppercase tracking-tight">Смена #{groupId}</Badge>
-                                                </>
+                                                <span className="text-sm font-bold text-slate-900">{group.shift.employee}</span>
                                             )}
                                         </div>
                                         <div className="flex items-center gap-3 text-[10px] text-slate-500 mt-1">
@@ -221,13 +221,36 @@ export function SalesTab({ sales, shifts, clubId }: SalesTabProps) {
                                     </div>
                                 </div>
                                 
-                                <div className="flex items-center gap-3">
+                                <div className="flex items-center gap-6">
+                                    {!isUnassigned && (
+                                        <div className="flex gap-4 border-r pr-6 border-slate-100">
+                                            <div className="text-right">
+                                                <div className="text-[9px] text-slate-400 uppercase font-bold tracking-wider leading-none mb-1">По складу</div>
+                                                <div className="text-sm font-bold text-blue-600 leading-none">{group.shift.calculated.toLocaleString()} ₽</div>
+                                            </div>
+                                            <div className="text-right">
+                                                <div className="text-[9px] text-slate-400 uppercase font-bold tracking-wider leading-none mb-1">По кассе</div>
+                                                <div className="text-sm font-bold text-slate-700 leading-none">{group.shift.reported.toLocaleString()} ₽</div>
+                                            </div>
+                                            <div className="text-right">
+                                                <div className="text-[9px] text-slate-400 uppercase font-bold tracking-wider leading-none mb-1">Расхождение</div>
+                                                <div className={cn(
+                                                    "text-sm font-black leading-none",
+                                                    group.shift.difference === 0 ? "text-green-500" : 
+                                                    group.shift.difference > 0 ? "text-amber-500" : "text-red-500"
+                                                )}>
+                                                    {group.shift.difference > 0 ? "+" : ""}{group.shift.difference.toLocaleString()} ₽
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
                                     {isUnassigned && items.length > 0 && (
                                         <Badge variant="destructive" className="bg-amber-500 text-white border-none text-[10px] px-2 py-0.5 animate-pulse">
                                             Требует привязки
                                         </Badge>
                                     )}
-                                    <div className="text-right">
+                                    <div className="text-right min-w-[60px]">
                                         <div className="text-[10px] text-slate-400 uppercase font-bold tracking-wider leading-none mb-1">Кол-во</div>
                                         <div className="text-lg font-black text-slate-700 leading-none">{group.totalAmount}</div>
                                     </div>
