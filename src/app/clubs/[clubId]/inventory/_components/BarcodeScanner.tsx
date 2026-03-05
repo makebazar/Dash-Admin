@@ -175,7 +175,7 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
         if (!scannerRef.current || !scannerRef.current.isScanning) return
         try {
             // @ts-ignore
-            const capabilities = scannerRef.current.getRunningTrackCapabilities()
+            const capabilities: any = scannerRef.current.getRunningTrackCapabilities()
             if (capabilities.focusMode) {
                 await scannerRef.current.applyVideoConstraints({
                     // @ts-ignore
@@ -245,12 +245,6 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
                     {/* Simple Indicator Overlay */}
                     {!isInitializing && !error && (
                         <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center">
-                            <div className="px-6 py-2 bg-black/40 backdrop-blur-md border border-white/10 rounded-full flex items-center gap-2">
-                                <Barcode className="h-4 w-4 text-slate-400" />
-                                <span className="text-slate-200 text-[10px] uppercase font-bold tracking-widest">
-                                    Наведите на штрихкод
-                                </span>
-                            </div>
                         </div>
                     )}
                 </div>
