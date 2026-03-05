@@ -57,20 +57,35 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
 
                 // Optimal configuration for speed and accuracy
                 const config = {
-                    fps: 20, // Higher FPS for faster recognition
+                    fps: 20,
                     qrbox: (viewfinderWidth: number, viewFinderHeight: number) => {
                         const minEdge = Math.min(viewfinderWidth, viewFinderHeight);
                         const qrboxSize = Math.floor(minEdge * 0.7);
-                        return { width: qrboxSize, height: Math.floor(qrboxSize * 0.6) }; // Rectangular for barcodes
+                        return { width: qrboxSize, height: Math.floor(qrboxSize * 0.6) };
                     },
                     aspectRatio: 1.0,
                     experimentalFeatures: {
-                        useBarCodeDetectorIfSupported: true // Uses native system API if available (much faster)
+                        useBarCodeDetectorIfSupported: true
                     }
                 }
 
+                // Explicitly check for cameras first (this often triggers the permission prompt more reliably on mobile)
+                const devices = await Html5Qrcode.getCameras();
+                if (!devices || devices.length === 0) {
+                    throw new Error("No cameras found");
+                }
+
+                // On mobile, find the back camera specifically
+                const backCamera = devices.find(device => 
+                    device.label.toLowerCase().includes('back') || 
+                    device.label.toLowerCase().includes('rear') ||
+                    device.label.toLowerCase().includes('основная')
+                );
+
+                const cameraId = backCamera ? backCamera.id : { facingMode: "environment" };
+
                 startPromise = scannerRef.current.start(
-                    { facingMode: "environment" },
+                    cameraId,
                     config,
                     (decodedText) => {
                         const now = Date.now()
