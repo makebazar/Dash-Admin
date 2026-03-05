@@ -2,9 +2,10 @@
 
 import { useEffect, useRef, useState } from "react"
 import { Html5Qrcode, Html5QrcodeScanType } from "html5-qrcode"
-import { X, Camera, RefreshCcw, Zap, ZapOff, Barcode } from "lucide-react"
+import { X, Camera, RefreshCcw, Zap, ZapOff, Barcode, ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 
 interface BarcodeScannerProps {
     onScan: (barcode: string) => Promise<boolean>
@@ -20,6 +21,8 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
     const [isInitializing, setIsInitializing] = useState(false)
     const [isTorchOn, setIsTorchOn] = useState(false)
     const [hasTorch, setHasTorch] = useState(false)
+    const [cameras, setCameras] = useState<{ id: string, label: string }[]>([])
+    const [currentCameraId, setCurrentCameraId] = useState<string | null>(null)
 
     // Clear scan status after some time
     useEffect(() => {
@@ -31,151 +34,134 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
         }
     }, [scanStatus])
 
+    const startScanner = async (cameraId: string) => {
+        if (!isOpen) return
+        
+        setIsInitializing(true)
+        setError(null)
+        setIsTorchOn(false)
+        
+        // Wait for element to be in DOM
+        await new Promise(resolve => setTimeout(resolve, 300))
+        
+        const element = document.getElementById("barcode-reader")
+        if (!element) {
+            setIsInitializing(false)
+            return
+        }
+
+        try {
+            if (scannerRef.current?.isScanning) {
+                await scannerRef.current.stop()
+            }
+            
+            if (!scannerRef.current) {
+                scannerRef.current = new Html5Qrcode("barcode-reader")
+            }
+
+            const config = {
+                fps: 30,
+                qrbox: (viewfinderWidth: number, viewFinderHeight: number) => {
+                    const minEdge = Math.min(viewfinderWidth, viewFinderHeight);
+                    const qrboxSize = Math.floor(minEdge * 0.8);
+                    return { width: qrboxSize, height: Math.floor(qrboxSize * 0.5) };
+                },
+                aspectRatio: 1.0,
+                videoConstraints: {
+                    focusMode: "continuous",
+                    width: { min: 640, ideal: 1280, max: 1920 },
+                    height: { min: 480, ideal: 720, max: 1080 }
+                }
+            }
+
+            await scannerRef.current.start(
+                cameraId,
+                config,
+                async (decodedText) => {
+                    const now = Date.now()
+                    if (lastScannedRef.current?.code === decodedText && now - lastScannedRef.current.time < 2000) {
+                        return
+                    }
+                    lastScannedRef.current = { code: decodedText, time: now }
+                    
+                    if (typeof window !== 'undefined' && window.navigator.vibrate) {
+                        window.navigator.vibrate(100)
+                    }
+
+                    const success = await onScan(decodedText)
+                    setScanStatus({ 
+                        type: success ? 'success' : 'error', 
+                        message: success ? 'Товар добавлен' : 'Товар не найден' 
+                    })
+                },
+                () => {}
+            )
+
+            setCurrentCameraId(cameraId)
+            
+            try {
+                const capabilities = scannerRef.current.getRunningTrackCapabilities()
+                // @ts-ignore
+                setHasTorch(!!capabilities.torch)
+            } catch (e) {
+                setHasTorch(false)
+            }
+        } catch (err: any) {
+            console.error("Scanner start error:", err)
+            setError("Не удалось запустить камеру.")
+        } finally {
+            setIsInitializing(false)
+        }
+    }
+
     useEffect(() => {
         let isMounted = true
-        let startPromise: Promise<any> | null = null
         
-        const startScanner = async () => {
+        const init = async () => {
             if (!isOpen) return
             
-            // Проверка на HTTPS (обязательно для мобильных камер)
             if (typeof window !== 'undefined' && window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
-                setError("Доступ к камере заблокирован браузером (требуется HTTPS).")
-                setIsInitializing(false)
-                return
-            }
-            
-            if (scannerRef.current?.isScanning || isInitializing) return
-            
-            setIsInitializing(true)
-            setError(null)
-            setIsTorchOn(false)
-            console.log("Starting scanner engine...")
-
-            // Wait for Dialog to animate and element to be in DOM
-            await new Promise(resolve => setTimeout(resolve, 600))
-            
-            if (!isMounted || !isOpen) {
-                setIsInitializing(false)
-                return
-            }
-
-            const element = document.getElementById("barcode-reader")
-            if (!element) {
-                console.error("barcode-reader element not found")
-                setIsInitializing(false)
+                setError("Требуется HTTPS для доступа к камере.")
                 return
             }
 
             try {
-                if (!scannerRef.current) {
-                    scannerRef.current = new Html5Qrcode("barcode-reader")
-                }
-
-                // Optimal configuration for speed and accuracy
-                const config = {
-                    fps: 30, // Increase FPS for smoother focus
-                    qrbox: (viewfinderWidth: number, viewFinderHeight: number) => {
-                        const minEdge = Math.min(viewfinderWidth, viewFinderHeight);
-                        const qrboxSize = Math.floor(minEdge * 0.8);
-                        return { width: qrboxSize, height: Math.floor(qrboxSize * 0.5) };
-                    },
-                    aspectRatio: 1.0,
-                    videoConstraints: {
-                        facingMode: "environment",
-                        focusMode: "continuous",
-                        width: { min: 640, ideal: 1280, max: 1920 },
-                        height: { min: 480, ideal: 720, max: 1080 }
+                const devices = await Html5Qrcode.getCameras()
+                if (isMounted) {
+                    setCameras(devices.map(d => ({ id: d.id, label: d.label })))
+                    
+                    if (devices.length > 0) {
+                        // Priority: Back camera
+                        const backCamera = devices.find(d => 
+                            /back|rear|основная/i.test(d.label) && !/wide|ultra/i.test(d.label)
+                        ) || devices.find(d => /back|rear|основная/i.test(d.label)) || devices[0]
+                        
+                        await startScanner(backCamera.id)
+                    } else {
+                        setError("Камеры не найдены.")
                     }
                 }
-
-                // Explicitly check for cameras first
-                const devices = await Html5Qrcode.getCameras();
-                if (!devices || devices.length === 0) {
-                    throw new Error("No cameras found");
-                }
-
-                const backCamera = devices.find(device => 
-                    device.label.toLowerCase().includes('back') || 
-                    device.label.toLowerCase().includes('rear') ||
-                    device.label.toLowerCase().includes('основная')
-                );
-
-                const cameraId = backCamera ? backCamera.id : { facingMode: "environment" };
-
-                startPromise = scannerRef.current.start(
-                    cameraId,
-                    config,
-                    async (decodedText) => {
-                        const now = Date.now()
-                        if (lastScannedRef.current?.code === decodedText && now - lastScannedRef.current.time < 2000) {
-                            return
-                        }
-                        lastScannedRef.current = { code: decodedText, time: now }
-                        
-                        if (typeof window !== 'undefined' && window.navigator.vibrate) {
-                            window.navigator.vibrate(100)
-                        }
-
-                        // Try to process the scan without closing
-                        const success = await onScan(decodedText)
-                        
-                        if (success) {
-                            setScanStatus({ type: 'success', message: 'Товар добавлен' })
-                        } else {
-                            setScanStatus({ type: 'error', message: 'Товар не найден' })
-                        }
-                    },
-                    () => {}
-                )
-
-                await startPromise
-                
-                try {
-                    const capabilities = scannerRef.current.getRunningTrackCapabilities()
-                    // @ts-ignore
-                    setHasTorch(!!capabilities.torch)
-                } catch (e) {
-                    setHasTorch(false)
-                }
-
-                console.log("Scanner started successfully")
-            } catch (err: any) {
-                console.error("Camera access error:", err)
-                if (err?.name === "NotAllowedError" || err?.name === "PermissionDeniedError") {
-                    setError("Доступ к камере отклонен. Разрешите его в настройках браузера.")
-                } else {
-                    setError("Не удалось запустить камеру. Попробуйте обновить страницу.")
-                }
-            } finally {
-                if (isMounted) setIsInitializing(false)
+            } catch (err) {
+                console.error("Camera init error:", err)
+                setError("Ошибка при поиске камер.")
             }
         }
 
-        startScanner()
+        init()
 
         return () => {
             isMounted = false
-            const scanner = scannerRef.current
-            
-            const cleanup = async () => {
-                if (startPromise) {
-                    try { await startPromise } catch (e) {}
-                }
-                if (scanner && scanner.isScanning) {
-                    try {
-                        await scanner.stop()
-                        console.log("Scanner stopped")
-                    } catch (err) {
-                        // ignore
-                    }
-                }
+            if (scannerRef.current?.isScanning) {
+                scannerRef.current.stop().catch(console.error)
             }
-            
-            cleanup()
             scannerRef.current = null
         }
-    }, [isOpen]) // Remove onScan from dependencies to avoid restarts when parent state changes
+    }, [isOpen])
+
+    const switchCamera = (cameraId: string) => {
+        if (cameraId === currentCameraId) return
+        startScanner(cameraId)
+    }
 
     const toggleTorch = async () => {
         if (!scannerRef.current || !scannerRef.current.isScanning) return
@@ -226,11 +212,38 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
         <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
             <DialogContent className="w-[95vw] sm:max-w-[500px] p-0 overflow-hidden bg-black border-slate-800 z-[10000] rounded-3xl border shadow-2xl">
                 <DialogHeader className="p-4 bg-slate-900/90 backdrop-blur-md sticky top-0 left-0 right-0 z-[10001] flex-row items-center justify-between space-y-0 border-b border-slate-800">
-                    <DialogTitle className="text-white text-base font-bold flex items-center gap-2">
-                        <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
-                        Сканер
-                    </DialogTitle>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-3 overflow-hidden mr-2">
+                        <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse shrink-0" />
+                        
+                        {cameras.length > 1 ? (
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button variant="ghost" className="p-0 h-auto hover:bg-transparent text-white text-sm font-bold flex items-center gap-1 truncate max-w-[200px]">
+                                        <span className="truncate">{cameras.find(c => c.id === currentCameraId)?.label || 'Сканер'}</span>
+                                        <ChevronDown className="h-3 w-3 shrink-0 opacity-50" />
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent className="bg-slate-900 border-slate-800 text-white min-w-[240px]">
+                                    {cameras.map((camera) => (
+                                        <DropdownMenuItem 
+                                            key={camera.id} 
+                                            onClick={() => switchCamera(camera.id)}
+                                            className={`text-xs p-3 focus:bg-slate-800 focus:text-white ${camera.id === currentCameraId ? 'bg-blue-600/20 text-blue-400' : ''}`}
+                                        >
+                                            <Camera className="h-3 w-3 mr-2 shrink-0" />
+                                            <span className="truncate">{camera.label}</span>
+                                        </DropdownMenuItem>
+                                    ))}
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                        ) : (
+                            <DialogTitle className="text-white text-base font-bold truncate">
+                                Сканер
+                            </DialogTitle>
+                        )}
+                    </div>
+                    
+                    <div className="flex items-center gap-2 shrink-0">
                         {hasTorch && (
                             <Button 
                                 variant="outline" 
