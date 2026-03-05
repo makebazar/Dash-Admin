@@ -408,19 +408,6 @@ export function ShiftClosingWizard({
                         <h2 className="text-lg font-bold truncate">
                             {skipInventory ? "Закрытие смены" : `Закрытие смены: Шаг ${step} из 3`}
                         </h2>
-                        {step === 2 && (
-                            <div className="flex items-center gap-2 shrink-0">
-                                <Button 
-                                    variant="outline" 
-                                    size="sm" 
-                                    onClick={() => setIsScannerOpen(true)}
-                                    className="bg-blue-600/20 border-blue-500/30 text-blue-400 hover:bg-blue-600/30 h-8 px-2.5"
-                                >
-                                    <Camera className="h-3.5 w-3.5 mr-1.5" />
-                                    <span className="text-[11px] font-medium">Сканер</span>
-                                </Button>
-                            </div>
-                        )}
                         <Button 
                             variant="outline" 
                             size="icon" 
@@ -648,10 +635,19 @@ export function ShiftClosingWizard({
                     </Button>
                 )}
                 {step === 2 && (
-                    <Button onClick={handleInventorySubmit} disabled={isPending} className="w-full h-14 text-lg font-bold bg-blue-600 hover:bg-blue-700 rounded-2xl shadow-lg shadow-blue-900/20">
-                        Далее: Сверка итогов
-                        <ArrowRight className="ml-2 h-5 w-5" />
-                    </Button>
+                    <div className="flex flex-col gap-3">
+                        <Button 
+                            onClick={() => setIsScannerOpen(true)}
+                            className="w-full h-14 text-lg font-bold bg-blue-600/20 border-blue-500/30 text-blue-400 hover:bg-blue-600/30 rounded-2xl"
+                        >
+                            <Camera className="mr-2 h-6 w-6" />
+                            Открыть Сканер
+                        </Button>
+                        <Button onClick={handleInventorySubmit} disabled={isPending} className="w-full h-14 text-lg font-bold bg-blue-600 hover:bg-blue-700 rounded-2xl shadow-lg shadow-blue-900/20">
+                            Далее: Сверка итогов
+                            <ArrowRight className="ml-2 h-5 w-5" />
+                        </Button>
+                    </div>
                 )}
                 {step === 3 && (
                     <Button onClick={handleFinalize} disabled={isPending} className="w-full h-14 text-lg font-bold bg-green-600 hover:bg-green-700 rounded-2xl shadow-lg shadow-green-900/20">
