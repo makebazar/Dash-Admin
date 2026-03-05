@@ -419,14 +419,6 @@ export function ShiftClosingWizard({
                                     <Camera className="h-3.5 w-3.5 mr-1.5" />
                                     <span className="text-[11px] font-medium">Сканер</span>
                                 </Button>
-                                <Button 
-                                    variant="outline" 
-                                    size="icon" 
-                                    onClick={openAddDialog}
-                                    className="bg-slate-800 border-slate-700 text-slate-300 h-8 w-8"
-                                >
-                                    <Plus className="h-4 w-4" />
-                                </Button>
                             </div>
                         )}
                         <Button 
