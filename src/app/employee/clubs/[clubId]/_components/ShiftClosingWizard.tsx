@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { createInventory, closeInventory, getInventoryItems, getProducts, InventoryItem, bulkUpdateInventoryItems, getProductByBarcode, addProductToInventory } from "@/app/clubs/[clubId]/inventory/actions"
+import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { BarcodeScanner } from "@/app/clubs/[clubId]/inventory/_components/BarcodeScanner"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -98,6 +99,11 @@ export function ShiftClosingWizard({
     }, [inventoryItems, unaccountedSales])
 
     const totalSalesRevenue = salesPreview.reduce((acc, s) => acc + s.total, 0)
+
+    // Forgotten items (expected > 0 but actual is null)
+    const forgottenItems = useMemo(() => {
+        return inventoryItems.filter(i => (i.expected_stock || 0) > 0 && i.actual_stock === null)
+    }, [inventoryItems])
 
     // Load persisted state
     useEffect(() => {
@@ -673,6 +679,14 @@ export function ShiftClosingWizard({
     // Step 3: Finalize
     const handleFinalize = () => {
         if (!inventoryId || !calculationResult) return
+        
+        // Prevent finalize if there are uncounted items
+        if (forgottenItems.length > 0) {
+            alert(`Вы не посчитали ${forgottenItems.length} товаров. Укажите их остаток (даже если 0), чтобы закрыть смену.`)
+            setStep(2) // Return to inventory
+            return
+        }
+
         startTransition(async () => {
             try {
                 // Close inventory in DB with unaccounted sales
@@ -728,6 +742,18 @@ export function ShiftClosingWizard({
         setSelectedUnaccountedProduct("")
         setUnaccountedQty("1")
         setIsUnaccountedDialogOpen(false)
+    }
+
+    const markAllForgottenAsZero = () => {
+        if (confirm(`Вы уверены, что хотите установить остаток 0 для всех ${forgottenItems.length} нераспределенных товаров? Это зафиксирует недостачу.`)) {
+            const updatedItems = inventoryItems.map(item => {
+                if ((item.expected_stock || 0) > 0 && item.actual_stock === null) {
+                    return { ...item, actual_stock: 0 }
+                }
+                return item
+            })
+            setInventoryItems(updatedItems)
+        }
     }
 
     const handleBack = () => {
@@ -938,6 +964,29 @@ export function ShiftClosingWizard({
                 {/* STEP 2: INVENTORY */}
                 {step === 2 && (
                     <div className="space-y-6 max-w-4xl mx-auto pb-20">
+                        {/* Progress Tracker */}
+                        <div className="bg-slate-900/50 p-4 rounded-2xl border border-slate-800 flex items-center justify-between">
+                            <div className="flex flex-col">
+                                <span className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Прогресс пересчета</span>
+                                <div className="flex items-center gap-2 mt-1">
+                                    <div className="h-1.5 w-32 bg-slate-800 rounded-full overflow-hidden">
+                                        <div 
+                                            className="h-full bg-blue-500 transition-all duration-500" 
+                                            style={{ width: `${(inventoryItems.filter(i => i.actual_stock !== null).length / inventoryItems.length) * 100}%` }}
+                                        />
+                                    </div>
+                                    <span className="text-xs font-bold text-slate-200">
+                                        {inventoryItems.filter(i => i.actual_stock !== null).length}/{inventoryItems.length}
+                                    </span>
+                                </div>
+                            </div>
+                            {forgottenItems.length > 0 && (
+                                <Badge variant="outline" className="bg-amber-900/20 text-amber-400 border-amber-900/30 text-[10px] animate-pulse">
+                                    Не посчитано: {forgottenItems.length}
+                                </Badge>
+                            )}
+                        </div>
+
                         <div className="relative">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
                             <Input 
@@ -1051,6 +1100,44 @@ export function ShiftClosingWizard({
                                 </p>
                             </div>
                         </div>
+
+                        {/* FORGOTTEN ITEMS WARNING */}
+                        {forgottenItems.length > 0 && (
+                            <div className="bg-red-900/20 border border-red-500/30 p-5 rounded-2xl space-y-4">
+                                <div className="flex items-center gap-3 text-red-400">
+                                    <AlertTriangle className="h-6 w-6" />
+                                    <h4 className="font-bold">Вы не посчитали {forgottenItems.length} товаров!</h4>
+                                </div>
+                                <p className="text-xs text-red-300/80 leading-relaxed">
+                                    Эти товары числятся на складе, но вы не указали их фактическое количество. 
+                                    Система не позволит закрыть смену, пока вы их не проверите.
+                                </p>
+                                <div className="bg-slate-950/50 rounded-xl p-3 max-h-[150px] overflow-y-auto space-y-2">
+                                    {forgottenItems.map(item => (
+                                        <div key={item.id} className="flex justify-between items-center text-[11px]">
+                                            <span className="text-slate-300">{item.product_name}</span>
+                                            <span className="text-slate-500 italic">Ожидалось: {item.expected_stock} шт.</span>
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="flex gap-2">
+                                    <Button 
+                                        onClick={() => setStep(2)} 
+                                        variant="outline" 
+                                        className="flex-1 h-10 text-xs border-red-500/30 text-red-400 hover:bg-red-500/10"
+                                    >
+                                        Вернуться к пересчету
+                                    </Button>
+                                    <Button 
+                                        onClick={markAllForgottenAsZero} 
+                                        variant="ghost" 
+                                        className="flex-1 h-10 text-xs text-red-500 hover:bg-red-500/10"
+                                    >
+                                        Этих товаров нет (0)
+                                    </Button>
+                                </div>
+                            </div>
+                        )}
 
                         {/* Sales Detail Preview */}
                         <div className="bg-slate-900/50 rounded-2xl border border-slate-800 overflow-hidden">
