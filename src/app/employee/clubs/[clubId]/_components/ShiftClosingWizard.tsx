@@ -390,19 +390,23 @@ export function ShiftClosingWizard({
         })
     }
 
-    if (step === 2) {
-        return (
-            <div className="fixed inset-0 bg-slate-950 text-white flex flex-col z-[9999] animate-in fade-in duration-300">
+    return (
+        <div className="fixed inset-0 bg-slate-950 text-white flex flex-col z-[9999] animate-in fade-in duration-300 overflow-hidden">
+            {step === 2 && (
                 <BarcodeScanner 
                     isOpen={isScannerOpen} 
                     onScan={handleBarcodeScan} 
                     onClose={() => setIsScannerOpen(false)} 
                 />
-                
-                <header className="px-4 py-4 border-b border-slate-800 bg-slate-900/50 backdrop-blur-md sticky top-0 z-50">
-                    <div className="space-y-3">
-                        <div className="flex items-center justify-between gap-4">
-                            <h2 className="text-lg font-bold truncate">Инвентаризация</h2>
+            )}
+            
+            <header className="px-4 py-4 border-b border-slate-800 bg-slate-900/50 backdrop-blur-md sticky top-0 z-50">
+                <div className="flex flex-col gap-3">
+                    <div className="flex items-center justify-between gap-4">
+                        <h2 className="text-lg font-bold truncate">
+                            {skipInventory ? "Закрытие смены" : `Закрытие смены: Шаг ${step} из 3`}
+                        </h2>
+                        {step === 2 && (
                             <div className="flex items-center gap-2 shrink-0">
                                 <Button 
                                     variant="outline" 
@@ -422,240 +426,85 @@ export function ShiftClosingWizard({
                                     <Plus className="h-4 w-4" />
                                 </Button>
                             </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <div className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse" />
-                            <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold">
-                                Шаг 2 из 3: Внесите остатки
-                            </p>
-                        </div>
+                        )}
+                        <Button variant="ghost" size="icon" onClick={onClose} className="text-slate-500 hover:text-white">
+                            <X className="h-5 w-5" />
+                        </Button>
                     </div>
-                </header>
-
-                <main className="flex-1 overflow-y-auto px-4 py-6 space-y-6">
-                    <div className="flex flex-col gap-4 md:flex-row md:items-center">
-                        <div className="relative flex-1">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
-                            <Input 
-                                placeholder="Поиск по названию или штрихкоду..."
-                                className="pl-10 bg-slate-900 border-slate-800 h-12 focus:border-blue-500 transition-all"
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                            />
-                        </div>
+                    <div className="flex items-center gap-2">
+                        <div className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse" />
+                        <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold">
+                            {step === 1 && "Заполните финансовый отчет"}
+                            {step === 2 && "Внесите остатки на складе"}
+                            {step === 3 && "Сверка итогов"}
+                        </p>
                     </div>
+                </div>
+            </header>
 
-                    {visibleItems.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center py-20 bg-slate-900/30 border-2 border-dashed border-slate-800 rounded-2xl">
-                            <div className="bg-slate-800/50 p-6 rounded-full mb-4">
-                                <Barcode className="h-12 w-12 text-slate-600" />
-                            </div>
-                            <h3 className="text-lg font-medium text-slate-300">Список пуст</h3>
-                            <p className="text-sm text-slate-500 mt-2 text-center max-w-xs">
-                                Начните сканировать товары или воспользуйтесь поиском выше.
-                            </p>
-                            <Button onClick={() => setIsScannerOpen(true)} className="mt-8 bg-blue-600 hover:bg-blue-700 px-8">
-                                <Camera className="h-4 w-4 mr-2" />
-                                Сканировать
-                            </Button>
-                        </div>
-                    ) : (
-                        <div className="border border-slate-800 rounded-xl overflow-hidden bg-slate-900/50">
-                            <Table>
-                                <TableHeader className="bg-slate-900">
-                                    <TableRow className="border-slate-800 hover:bg-transparent">
-                                        <TableHead className="text-slate-300 py-4">Товар</TableHead>
-                                        <TableHead className="text-right text-slate-300 py-4">Кол-во</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {visibleItems.map(item => (
-                                        <TableRow 
-                                            key={item.id} 
-                                            className={`border-slate-800 transition-colors ${scannedItemId === item.id ? 'bg-blue-950/30' : 'hover:bg-slate-800/30'}`}
-                                        >
-                                            <TableCell className="py-4">
-                                                <div className="flex flex-col">
-                                                    <span className="font-medium text-slate-200">{item.product_name}</span>
-                                                    {item.barcode && (
-                                                        <span className="text-[10px] text-slate-500 font-mono mt-1 flex items-center gap-1">
-                                                            <Barcode className="h-2.5 w-2.5" />
-                                                            {item.barcode}
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            </TableCell>
-                                            <TableCell className="text-right py-4">
-                                                <Input 
-                                                    type="number" 
-                                                    id={`inventory-input-${item.id}`}
-                                                    className={`bg-slate-900 border-slate-700 text-right w-24 ml-auto font-bold text-lg h-11 focus:ring-2 focus:ring-blue-500 transition-all ${scannedItemId === item.id ? 'border-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.2)]' : ''}`}
-                                                    placeholder="0"
-                                                    value={item.actual_stock === null ? "" : item.actual_stock}
-                                                    onChange={(e) => handleStockChange(item.id, e.target.value)}
-                                                />
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
-                        </div>
-                    )}
-                </main>
-
-                <footer className="p-4 border-t border-slate-800 bg-slate-900/80 backdrop-blur-md sticky bottom-0">
-                    <Button 
-                        onClick={handleInventorySubmit} 
-                        disabled={isPending} 
-                        className="w-full h-12 text-base font-bold bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-900/20 rounded-xl"
-                    >
-                        {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                        Далее: Сверка итогов <ArrowRight className="ml-2 h-4 w-4" />
-                    </Button>
-                </footer>
-
-                {/* Add Product Manually Dialog */}
-                <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-                    <DialogContent className="bg-slate-950 border-slate-800 text-white max-w-[90vw] rounded-2xl">
-                        <DialogHeader>
-                            <DialogTitle>Добавить товар</DialogTitle>
-                        </DialogHeader>
-                        <div className="py-6 space-y-4">
-                            <div className="space-y-3">
-                                <Label className="text-slate-400 text-xs uppercase tracking-wider">Выберите товар из списка</Label>
-                                <Select value={selectedProductToAdd} onValueChange={setSelectedProductToAdd}>
-                                    <SelectTrigger className="bg-slate-900 border-slate-800 h-12 rounded-xl">
-                                        <SelectValue placeholder="Начните вводить название..." />
-                                    </SelectTrigger>
-                                    <SelectContent className="bg-slate-900 border-slate-800 text-white max-h-[300px]">
-                                        {allProducts.map(p => (
-                                            <SelectItem key={p.id} value={p.id.toString()}>{p.name}</SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                        </div>
-                        <DialogFooter className="flex-row gap-3 pt-2">
-                            <Button variant="outline" onClick={() => setIsAddDialogOpen(false)} className="flex-1 border-slate-800 h-12 rounded-xl">Отмена</Button>
-                            <Button onClick={handleAddProductManually} disabled={!selectedProductToAdd || isPending} className="flex-1 bg-blue-600 h-12 rounded-xl">
-                                {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                Добавить
-                            </Button>
-                        </DialogFooter>
-                    </DialogContent>
-                </Dialog>
-            </div>
-        )
-    }
-
-    return (
-        <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-            <DialogContent className="max-w-4xl bg-slate-950 border-slate-800 text-white max-h-[90vh] overflow-hidden flex flex-col">
-                <DialogHeader>
-                    <DialogTitle>
-                        {skipInventory ? "Закрытие смены" : `Закрытие смены: Шаг ${step} из 3`}
-                    </DialogTitle>
-                    <DialogDescription className="text-slate-400">
-                        {step === 1 && "Заполните финансовый отчет"}
-                        {!skipInventory && step === 3 && "Сверка итогов"}
-                    </DialogDescription>
-                </DialogHeader>
-
-                <div className="flex-1 overflow-y-auto py-4 pr-2">
-                    {/* STEP 1: REPORT FORM + CHECKLIST */}
-                    {step === 1 && (
-                        <div className="space-y-6">
-                            {/* Checklist Section if Required */}
-                            {requiredChecklist && (
-                                <div className="bg-orange-900/10 border border-orange-900/30 p-4 rounded-lg space-y-4">
-                                    <div className="flex items-start gap-3">
-                                        <div className="bg-orange-100/10 p-2 rounded-full">
-                                            <CheckCircle2 className="h-5 w-5 text-orange-400" />
-                                        </div>
-                                        <div>
-                                            <h4 className="font-medium text-orange-100">Обязательный чеклист: {requiredChecklist.name}</h4>
-                                            <p className="text-sm text-orange-200/70">Необходимо заполнить перед закрытием смены</p>
-                                        </div>
+            <main className="flex-1 overflow-y-auto px-4 py-6">
+                {/* STEP 1: REPORT FORM + CHECKLIST */}
+                {step === 1 && (
+                    <div className="space-y-6 max-w-2xl mx-auto pb-20">
+                        {/* Checklist Section if Required */}
+                        {requiredChecklist && (
+                            <div className="bg-orange-900/10 border border-orange-900/30 p-4 rounded-xl space-y-4">
+                                <div className="flex items-start gap-3">
+                                    <div className="bg-orange-100/10 p-2 rounded-full">
+                                        <CheckCircle2 className="h-5 w-5 text-orange-400" />
                                     </div>
+                                    <div>
+                                        <h4 className="font-medium text-orange-100">Чеклист: {requiredChecklist.name}</h4>
+                                        <p className="text-xs text-orange-200/60">Обязательно перед закрытием</p>
+                                    </div>
+                                </div>
 
-                                    <div className="space-y-3 pl-2 border-l-2 border-orange-800/30 ml-4">
-                                        {requiredChecklist.items?.map((item: any) => {
-                                             // Workstation Checklist Logic
-                                             if (item.related_entity_type === 'workstations') {
-                                                 const targetWs = workstations.filter(w => w.is_active && (!item.target_zone || item.target_zone === 'all' || w.zone === item.target_zone))
-                                                 const maxScore = 10 // Fixed max score for workstation zones
-                                                 const currentProblematic = problematicItems[item.id] || []
-                                                 
-                                                 // Calculate current score
-                                                 const errorPrice = targetWs.length > 0 ? 10 / targetWs.length : 0
-                                                 const rawScore = 10 - (currentProblematic.length * errorPrice)
-                                                 const currentScore = Math.max(0, Math.round(rawScore * 10) / 10)
-                                                 
-                                                 return (
-                                                     <div key={item.id} className="space-y-2 py-2 border-b border-orange-800/20 last:border-0">
-                                                         <div className="flex flex-col gap-2">
-                                                             <div className="flex items-center justify-between">
-                                                                 <span className="text-sm font-medium text-slate-200">{item.content}</span>
-                                                                 <div className="text-xs font-mono bg-slate-900 px-2 py-1 rounded text-slate-400 border border-slate-800">
-                                                                     <span className={currentScore < 10 ? "text-red-400" : "text-green-400"}>{currentScore}</span>
-                                                                     <span className="opacity-50 mx-1">/</span>
-                                                                     <span>10</span>
-                                                                 </div>
-                                                             </div>
-                                                             <p className="text-xs text-slate-400 -mt-1">
-                                                                 Отметьте проблемные места (штраф -{Math.round(errorPrice * 10) / 10}):
-                                                             </p>
-                                                             {targetWs.length > 0 ? (
-                                                                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-1">
-                                                                     {targetWs.map(ws => {
-                                                                         const isProblematic = currentProblematic.includes(ws.id)
-                                                                         return (
-                                                                             <Button
-                                                                                 key={ws.id}
-                                                                                 variant="outline"
-                                                                                 size="sm"
-                                                                                 className={`h-9 text-xs justify-start px-2 transition-all ${isProblematic 
-                                                                                     ? 'bg-red-950/50 border-red-800 text-red-200 hover:bg-red-900/60 hover:text-red-100 hover:border-red-700' 
-                                                                                     : 'bg-slate-900 border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white'}`}
-                                                                                 onClick={() => toggleProblematicWorkstation(item.id, ws.id, 10, targetWs)}
-                                                                             >
-                                                                                 <div className={`w-2 h-2 rounded-full mr-2 shrink-0 ${isProblematic ? 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]' : 'bg-green-500/50'}`} />
-                                                                                 <span className="truncate">{ws.name}</span>
-                                                                             </Button>
-                                                                         )
-                                                                     })}
-                                                                 </div>
-                                                             ) : (
-                                                                 <div className="text-xs text-slate-500 italic bg-slate-900/50 p-2 rounded">
-                                                                     Нет рабочих мест в зоне "{item.target_zone}"
-                                                                 </div>
-                                                             )}
-                                                            {currentProblematic.length > 0 && (
-                                                                <Input
-                                                                    placeholder="Комментарий по проблемным местам (обязательно)"
-                                                                    className={`h-8 text-xs bg-slate-900 border-slate-700 ${!checklistResponses[item.id]?.comment ? 'border-amber-500' : ''}`}
-                                                                    value={checklistResponses[item.id]?.comment || ''}
-                                                                    onChange={(e) => setChecklistResponses(prev => ({
-                                                                        ...prev,
-                                                                        [item.id]: { ...prev[item.id], comment: e.target.value }
-                                                                    }))}
-                                                                />
-                                                            )}
+                                <div className="space-y-4 pl-2 border-l-2 border-orange-800/30 ml-4">
+                                    {requiredChecklist.items?.map((item: any) => {
+                                         // Workstation Checklist Logic
+                                         if (item.related_entity_type === 'workstations') {
+                                             const targetWs = workstations.filter(w => w.is_active && (!item.target_zone || item.target_zone === 'all' || w.zone === item.target_zone))
+                                             const currentProblematic = problematicItems[item.id] || []
+                                             const errorPrice = targetWs.length > 0 ? 10 / targetWs.length : 0
+                                             const rawScore = 10 - (currentProblematic.length * errorPrice)
+                                             const currentScore = Math.max(0, Math.round(rawScore * 10) / 10)
+                                             
+                                             return (
+                                                 <div key={item.id} className="space-y-3 py-2">
+                                                     <div className="flex items-center justify-between">
+                                                         <span className="text-sm font-medium text-slate-200">{item.content}</span>
+                                                         <div className="text-xs font-mono bg-slate-900 px-2 py-1 rounded border border-slate-800">
+                                                             <span className={currentScore < 10 ? "text-red-400" : "text-green-400"}>{currentScore}</span>
+                                                             <span className="opacity-50 mx-1">/</span>
+                                                             <span>10</span>
                                                          </div>
                                                      </div>
-                                                 )
-                                             }
+                                                     <div className="grid grid-cols-3 gap-2">
+                                                         {targetWs.map(ws => (
+                                                             <Button
+                                                                 key={ws.id}
+                                                                 variant="outline"
+                                                                 size="sm"
+                                                                 className={`h-8 text-[10px] ${currentProblematic.includes(ws.id) ? 'bg-red-950/50 border-red-800 text-red-200' : 'bg-slate-900/50 border-slate-800'}`}
+                                                                 onClick={() => toggleProblematicWorkstation(item.id, ws.id, 10, targetWs)}
+                                                             >
+                                                                 {ws.name}
+                                                             </Button>
+                                                         ))}
+                                                     </div>
+                                                 </div>
+                                             )
+                                         }
 
-                                            // Standard Logic
-                                            return (
+                                        return (
                                             <div key={item.id} className="space-y-2">
-                                                <div className="flex items-center justify-between">
+                                                <div className="flex items-center justify-between gap-4">
                                                     <span className="text-sm font-medium text-slate-200">{item.content}</span>
-                                                    <div className="flex gap-1 bg-slate-900 p-1 rounded-md border border-slate-800">
+                                                    <div className="flex gap-1 bg-slate-900 p-1 rounded-lg border border-slate-800 shrink-0">
                                                         <Button 
                                                             variant={checklistResponses[item.id]?.score === 1 ? 'default' : 'ghost'} 
                                                             size="sm"
-                                                            className={`h-7 px-3 text-xs ${checklistResponses[item.id]?.score === 1 ? 'bg-green-600 hover:bg-green-700' : 'text-slate-400'}`}
+                                                            className={`h-7 px-3 text-xs ${checklistResponses[item.id]?.score === 1 ? 'bg-green-600' : 'text-slate-400'}`}
                                                             onClick={() => handleChecklistChange(item.id, 1)}
                                                         >
                                                             Да
@@ -663,42 +512,36 @@ export function ShiftClosingWizard({
                                                         <Button 
                                                             variant={checklistResponses[item.id]?.score === 0 ? 'default' : 'ghost'} 
                                                             size="sm"
-                                                            className={`h-7 px-3 text-xs ${checklistResponses[item.id]?.score === 0 ? 'bg-red-600 hover:bg-red-700' : 'text-slate-400'}`}
+                                                            className={`h-7 px-3 text-xs ${checklistResponses[item.id]?.score === 0 ? 'bg-red-600' : 'text-slate-400'}`}
                                                             onClick={() => handleChecklistChange(item.id, 0)}
                                                         >
                                                             Нет
                                                         </Button>
                                                     </div>
                                                 </div>
-                                                {checklistResponses[item.id]?.score === 0 && (
-                                                    <Input 
-                                                        placeholder="Комментарий (обязательно при отказе)..."
-                                                        className="h-8 text-xs bg-slate-900 border-slate-700"
-                                                        value={checklistResponses[item.id]?.comment || ''}
-                                                        onChange={(e) => setChecklistResponses(prev => ({
-                                                            ...prev,
-                                                            [item.id]: { ...prev[item.id], comment: e.target.value }
-                                                        }))}
-                                                    />
-                                                )}
                                             </div>
                                         )})}
-                                    </div>
                                 </div>
-                            )}
+                            </div>
+                        )}
 
-                            <div className="space-y-4">
-                                <h4 className="font-medium text-slate-200">Финансовый отчет</h4>
+                        <div className="space-y-6">
+                            <h3 className="text-lg font-bold text-slate-200 flex items-center gap-2">
+                                <div className="h-1 w-4 bg-purple-500 rounded-full" />
+                                Финансовый отчет
+                            </h3>
+                            <div className="grid gap-5">
                                 {reportTemplate?.schema.map((field: any, idx: number) => (
                                     <div key={idx} className="space-y-2">
-                                        <Label>
+                                        <Label className="text-slate-400 text-xs uppercase tracking-wider ml-1">
                                             {field.custom_label}
                                             {field.is_required && <span className="text-red-500 ml-1">*</span>}
                                         </Label>
                                         <Input
                                             required={field.is_required}
                                             type={field.metric_key.includes('comment') ? 'text' : 'number'}
-                                            className="bg-slate-900 border-slate-700"
+                                            inputMode={field.metric_key.includes('comment') ? 'text' : 'numeric'}
+                                            className="bg-slate-900 border-slate-800 h-12 rounded-xl focus:ring-2 focus:ring-purple-500 transition-all text-lg font-medium"
                                             value={reportData[field.metric_key] || ''}
                                             onChange={(e) => setReportData({ ...reportData, [field.metric_key]: e.target.value })}
                                         />
@@ -706,81 +549,142 @@ export function ShiftClosingWizard({
                                 ))}
                             </div>
                         </div>
-                    )}
+                    </div>
+                )}
 
-                    {/* STEP 3: SUMMARY */}
-                    {step === 3 && calculationResult && (
-                        <div className="space-y-6">
-                            <div className="grid grid-cols-3 gap-4">
-                                <div className="bg-slate-900 p-4 rounded-lg border border-slate-800 text-center">
-                                    <p className="text-xs text-slate-400 uppercase">Заявлено в отчете</p>
-                                    <p className="text-2xl font-bold mt-1">{calculationResult.reported.toLocaleString()} ₽</p>
-                                </div>
-                                <div className="bg-slate-900 p-4 rounded-lg border border-slate-800 text-center">
-                                    <p className="text-xs text-slate-400 uppercase">Расчет по товарам</p>
-                                    <p className="text-2xl font-bold mt-1">{calculationResult.calculated.toLocaleString()} ₽</p>
-                                </div>
-                                <div className={`p-4 rounded-lg border text-center ${
-                                    calculationResult.diff === 0 ? 'bg-emerald-900/20 border-emerald-900/50 text-emerald-400' : 
-                                    calculationResult.diff > 0 ? 'bg-emerald-900/20 border-emerald-900/50 text-emerald-400' :
-                                    'bg-red-900/20 border-red-900/50 text-red-400'
-                                }`}>
-                                    <p className="text-xs opacity-80 uppercase">Разница</p>
-                                    <p className="text-2xl font-bold mt-1">
-                                        {calculationResult.diff > 0 ? '+' : ''}{calculationResult.diff.toLocaleString()} ₽
-                                    </p>
-                                </div>
+                {/* STEP 2: INVENTORY */}
+                {step === 2 && (
+                    <div className="space-y-6 max-w-4xl mx-auto pb-20">
+                        <div className="relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+                            <Input 
+                                placeholder="Поиск по названию или штрихкоду..."
+                                className="pl-10 bg-slate-900 border-slate-800 h-12 rounded-xl focus:ring-2 focus:ring-blue-500 transition-all"
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                            />
+                        </div>
+
+                        {visibleItems.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center py-20 bg-slate-900/30 border-2 border-dashed border-slate-800 rounded-2xl">
+                                <Barcode className="h-12 w-12 text-slate-700 mb-4" />
+                                <h3 className="text-lg font-medium text-slate-400 text-center">Список пуст.<br/>Сканируйте товар!</h3>
                             </div>
+                        ) : (
+                            <div className="border border-slate-800 rounded-2xl overflow-hidden bg-slate-900/50">
+                                <Table>
+                                    <TableHeader className="bg-slate-900">
+                                        <TableRow className="border-slate-800 hover:bg-transparent">
+                                            <TableHead className="text-slate-400 text-[10px] uppercase font-bold py-4 pl-6">Товар</TableHead>
+                                            <TableHead className="text-right text-slate-400 text-[10px] uppercase font-bold py-4 pr-6">Кол-во</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {visibleItems.map(item => (
+                                            <TableRow key={item.id} className={`border-slate-800 ${scannedItemId === item.id ? 'bg-blue-900/20' : ''}`}>
+                                                <TableCell className="py-4 pl-6">
+                                                    <div className="flex flex-col">
+                                                        <span className="font-bold text-slate-200">{item.product_name}</span>
+                                                        {item.barcode && <span className="text-[10px] text-slate-500 font-mono">{item.barcode}</span>}
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell className="text-right py-4 pr-6">
+                                                    <Input 
+                                                        type="number" 
+                                                        id={`inventory-input-${item.id}`}
+                                                        className="bg-slate-900 border-slate-800 text-right w-20 ml-auto font-bold h-10 rounded-lg"
+                                                        value={item.actual_stock === null ? "" : item.actual_stock}
+                                                        onChange={(e) => handleStockChange(item.id, e.target.value)}
+                                                    />
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        )}
+                    </div>
+                )}
 
-                            {calculationResult.diff !== 0 && (
-                                <div className="bg-red-900/20 border border-red-900/50 p-4 rounded-lg flex items-start gap-3">
-                                    <AlertTriangle className="h-5 w-5 text-red-400 mt-0.5" />
-                                    <div>
-                                        <h4 className="font-medium text-red-100">Внимание! Расхождение</h4>
-                                        <p className="text-sm text-red-300/80">
-                                            Сумма в кассе не сходится с проданными товарами. 
-                                            Пожалуйста, перепроверьте данные или укажите причину в комментарии к смене.
-                                        </p>
-                                    </div>
-                                </div>
-                            )}
+                {/* STEP 3: SUMMARY */}
+                {step === 3 && calculationResult && (
+                    <div className="space-y-8 max-w-2xl mx-auto pb-20">
+                        <div className="grid grid-cols-1 gap-4">
+                            <div className="bg-slate-900/50 p-6 rounded-2xl border border-slate-800 flex justify-between items-center">
+                                <span className="text-slate-400">В кассе (отчет)</span>
+                                <span className="text-xl font-bold">{calculationResult.reported.toLocaleString()} ₽</span>
+                            </div>
+                            <div className="bg-slate-900/50 p-6 rounded-2xl border border-slate-800 flex justify-between items-center">
+                                <span className="text-slate-400">Продано (склад)</span>
+                                <span className="text-xl font-bold">{calculationResult.calculated.toLocaleString()} ₽</span>
+                            </div>
+                            <div className={`p-6 rounded-2xl border flex justify-between items-center ${
+                                calculationResult.diff >= 0 ? 'bg-green-900/10 border-green-900/30 text-green-400' : 'bg-red-900/10 border-red-900/30 text-red-400'
+                            }`}>
+                                <span className="font-bold">Разница</span>
+                                <span className="text-2xl font-black">{calculationResult.diff.toLocaleString()} ₽</span>
+                            </div>
+                        </div>
 
-                            <div className="space-y-2">
-                                <Label>Комментарий к закрытию (если есть расхождения)</Label>
+                        {calculationResult.diff !== 0 && (
+                            <div className="space-y-3">
+                                <Label className="text-slate-400 text-xs uppercase tracking-wider ml-1">Причина расхождения</Label>
                                 <Input 
-                                    className="bg-slate-900 border-slate-700"
-                                    placeholder="Обоснование недостачи/излишков..."
+                                    className="bg-slate-900 border-slate-800 h-14 rounded-xl"
+                                    placeholder="Укажите причину..."
                                     value={reportData['shift_comment'] || ''}
                                     onChange={(e) => setReportData({ ...reportData, 'shift_comment': e.target.value })}
                                 />
                             </div>
-                        </div>
-                    )}
-                </div>
+                        )}
+                    </div>
+                )}
+            </main>
 
-                <DialogFooter className="mt-4 border-t border-slate-800 pt-4">
-                    {step === 1 && (
-                        <Button onClick={handleStep1Submit} className="w-full bg-purple-600 hover:bg-purple-700">
-                            {skipInventory ? (
-                                <>
-                                    <CheckCircle2 className="mr-2 h-4 w-4" />
-                                    Завершить смену
-                                </>
-                            ) : (
-                                <>
-                                    Далее: Инвентаризация <ArrowRight className="ml-2 h-4 w-4" />
-                                </>
-                            )}
-                        </Button>
-                    )}
-                    {step === 3 && (
-                        <Button onClick={handleFinalize} disabled={isPending} className="w-full bg-emerald-600 hover:bg-emerald-700">
-                            {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                            <CheckCircle2 className="mr-2 h-4 w-4" /> Подтвердить и закрыть смену
-                        </Button>
-                    )}
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
+            <footer className="p-4 border-t border-slate-800 bg-slate-900/80 backdrop-blur-md sticky bottom-0 z-50">
+                {step === 1 && (
+                    <Button onClick={handleStep1Submit} className="w-full h-14 text-lg font-bold bg-purple-600 hover:bg-purple-700 rounded-2xl shadow-lg shadow-purple-900/20">
+                        {skipInventory ? "Завершить смену" : "Далее: Инвентаризация"}
+                        <ArrowRight className="ml-2 h-5 w-5" />
+                    </Button>
+                )}
+                {step === 2 && (
+                    <Button onClick={handleInventorySubmit} disabled={isPending} className="w-full h-14 text-lg font-bold bg-blue-600 hover:bg-blue-700 rounded-2xl shadow-lg shadow-blue-900/20">
+                        Далее: Сверка итогов
+                        <ArrowRight className="ml-2 h-5 w-5" />
+                    </Button>
+                )}
+                {step === 3 && (
+                    <Button onClick={handleFinalize} disabled={isPending} className="w-full h-14 text-lg font-bold bg-green-600 hover:bg-green-700 rounded-2xl shadow-lg shadow-green-900/20">
+                        Подтвердить и закрыть
+                    </Button>
+                )}
+            </footer>
+
+            {/* Manual Add Dialog */}
+            <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+                <DialogContent className="bg-slate-950 border-slate-800 text-white max-w-[90vw] rounded-2xl">
+                    <DialogHeader>
+                        <DialogTitle>Добавить товар</DialogTitle>
+                    </DialogHeader>
+                    <div className="py-6 space-y-4">
+                        <Select value={selectedProductToAdd} onValueChange={setSelectedProductToAdd}>
+                            <SelectTrigger className="bg-slate-900 border-slate-800 h-12 rounded-xl">
+                                <SelectValue placeholder="Выберите товар..." />
+                            </SelectTrigger>
+                            <SelectContent className="bg-slate-900 border-slate-800 text-white max-h-[300px]">
+                                {allProducts.map(p => (
+                                    <SelectItem key={p.id} value={p.id.toString()}>{p.name}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <DialogFooter className="flex-row gap-3">
+                        <Button variant="outline" onClick={() => setIsAddDialogOpen(false)} className="flex-1 border-slate-800 h-12 rounded-xl">Отмена</Button>
+                        <Button onClick={handleAddProductManually} disabled={!selectedProductToAdd || isPending} className="flex-1 bg-blue-600 h-12 rounded-xl">Добавить</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+        </div>
     )
 }
