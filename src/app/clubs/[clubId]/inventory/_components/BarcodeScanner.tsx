@@ -75,13 +75,12 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
                     }
                 }
 
-                // Explicitly check for cameras first (this often triggers the permission prompt more reliably on mobile)
+                // Explicitly check for cameras first
                 const devices = await Html5Qrcode.getCameras();
                 if (!devices || devices.length === 0) {
                     throw new Error("No cameras found");
                 }
 
-                // On mobile, find the back camera specifically
                 const backCamera = devices.find(device => 
                     device.label.toLowerCase().includes('back') || 
                     device.label.toLowerCase().includes('rear') ||
@@ -100,12 +99,10 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
                         }
                         lastScannedRef.current = { code: decodedText, time: now }
                         
-                        // Haptic feedback if supported
                         if (typeof window !== 'undefined' && window.navigator.vibrate) {
                             window.navigator.vibrate(100)
                         }
 
-                        // Закрываем сканер сразу после успешного сканирования
                         onClose()
                         onScan(decodedText)
                     },
@@ -114,7 +111,6 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
 
                 await startPromise
                 
-                // Check if camera supports torch
                 try {
                     const capabilities = scannerRef.current.getRunningTrackCapabilities()
                     // @ts-ignore
@@ -151,7 +147,7 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
                         await scanner.stop()
                         console.log("Scanner stopped")
                     } catch (err) {
-                        // ignore stop errors
+                        // ignore
                     }
                 }
             }
@@ -175,9 +171,25 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
         }
     }
 
+    const triggerFocus = async () => {
+        if (!scannerRef.current || !scannerRef.current.isScanning) return
+        try {
+            // @ts-ignore
+            const capabilities = scannerRef.current.getRunningTrackCapabilities()
+            if (capabilities.focusMode) {
+                await scannerRef.current.applyVideoConstraints({
+                    // @ts-ignore
+                    advanced: [{ focusMode: "continuous" }]
+                })
+            }
+        } catch (e) {
+            console.warn("Manual focus not supported", e)
+        }
+    }
+
     return (
         <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-            <DialogContent className="w-[95vw] sm:max-w-[500px] p-0 overflow-hidden bg-black border-slate-800 z-[10000] rounded-3xl border">
+            <DialogContent className="w-[95vw] sm:max-w-[500px] p-0 overflow-hidden bg-black border-slate-800 z-[10000] rounded-3xl border shadow-2xl">
                 <DialogHeader className="p-4 bg-slate-900/90 backdrop-blur-md sticky top-0 left-0 right-0 z-[10001] flex-row items-center justify-between space-y-0 border-b border-slate-800">
                     <DialogTitle className="text-white text-base font-bold flex items-center gap-2">
                         <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
@@ -205,7 +217,10 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
                     </div>
                 </DialogHeader>
 
-                <div className="relative w-full aspect-square bg-black flex items-center justify-center overflow-hidden">
+                <div 
+                    className="relative w-full aspect-square bg-black flex items-center justify-center overflow-hidden cursor-crosshair"
+                    onClick={triggerFocus}
+                >
                     <div id="barcode-reader" className="w-full h-full"></div>
                     
                     {isInitializing && (
@@ -227,37 +242,17 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
                         </div>
                     )}
 
-                    {/* Pro Scanning Overlay */}
+                    {/* Simple Indicator Overlay */}
                     {!isInitializing && !error && (
                         <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center">
-                            <div className="w-[260px] h-[160px] relative">
-                                {/* Corners with glowing effect */}
-                                <div className="absolute -top-2 -left-2 w-8 h-8 border-t-4 border-l-4 border-blue-500 rounded-tl-2xl shadow-[0_0_15px_rgba(59,130,246,0.5)]"></div>
-                                <div className="absolute -top-2 -right-2 w-8 h-8 border-t-4 border-r-4 border-blue-500 rounded-tr-2xl shadow-[0_0_15px_rgba(59,130,246,0.5)]"></div>
-                                <div className="absolute -bottom-2 -left-2 w-8 h-8 border-b-4 border-l-4 border-blue-500 rounded-bl-2xl shadow-[0_0_15px_rgba(59,130,246,0.5)]"></div>
-                                <div className="absolute -bottom-2 -right-2 w-8 h-8 border-b-4 border-r-4 border-blue-500 rounded-br-2xl shadow-[0_0_15px_rgba(59,130,246,0.5)]"></div>
-                                
-                                {/* High-tech scanning line */}
-                                <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-blue-400 to-transparent shadow-[0_0_20px_rgba(96,165,250,1)] animate-scan-fast"></div>
-                                
-                                {/* Darken outside the scanning area */}
-                                <div className="absolute -inset-[2000px] border-[2000px] border-black/40"></div>
-                            </div>
-                            
-                            <div className="mt-12 px-6 py-2 bg-blue-600/20 backdrop-blur-md border border-blue-500/30 rounded-full flex items-center gap-2">
-                                <Barcode className="h-4 w-4 text-blue-400" />
-                                <span className="text-blue-100 text-[10px] uppercase font-bold tracking-widest">
+                            <div className="px-6 py-2 bg-black/40 backdrop-blur-md border border-white/10 rounded-full flex items-center gap-2">
+                                <Barcode className="h-4 w-4 text-slate-400" />
+                                <span className="text-slate-200 text-[10px] uppercase font-bold tracking-widest">
                                     Наведите на штрихкод
                                 </span>
                             </div>
                         </div>
                     )}
-                </div>
-
-                <div className="p-4 bg-slate-900/50 border-t border-slate-800">
-                    <p className="text-[10px] text-slate-500 text-center px-4 leading-relaxed">
-                        Совет: держите телефон параллельно штрихкоду на расстоянии 10-15 см.
-                    </p>
                 </div>
             </DialogContent>
 
@@ -266,17 +261,12 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
                 #barcode-reader__dashboard { display: none !important; }
                 #barcode-reader__video_flow_container { width: 100% !important; height: 100% !important; }
                 #barcode-reader video { width: 100% !important; height: 100% !important; object-fit: cover !important; }
-                #barcode-reader__scan_region { display: none !important; }
-                #barcode-reader__scan_region svg { display: none !important; }
-                #barcode-reader__video_flow_container > div { display: none !important; }
-                @keyframes scan-fast {
-                    0% { top: 0%; opacity: 0; }
-                    10% { opacity: 1; }
-                    90% { opacity: 1; }
-                    100% { top: 100%; opacity: 0; }
-                }
-                .animate-scan-fast {
-                    animation: scan-fast 1.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+                #barcode-reader__scan_region { display: flex !important; align-items: center !important; justify-content: center !important; }
+                #barcode-reader__scan_region svg { 
+                    width: 240px !important; 
+                    height: 160px !important; 
+                    stroke: #3b82f6 !important; 
+                    stroke-width: 2px !important;
                 }
             `}</style>
         </Dialog>
