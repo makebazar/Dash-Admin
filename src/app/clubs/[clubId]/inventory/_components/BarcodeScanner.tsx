@@ -24,6 +24,13 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
     const [cameras, setCameras] = useState<{ id: string, label: string }[]>([])
     const [currentCameraId, setCurrentCameraId] = useState<string | null>(null)
 
+    const cycleCamera = () => {
+        if (cameras.length <= 1) return
+        const currentIndex = cameras.findIndex(c => c.id === currentCameraId)
+        const nextIndex = (currentIndex + 1) % cameras.length
+        switchCamera(cameras[nextIndex].id)
+    }
+
     // Clear scan status after some time
     useEffect(() => {
         if (scanStatus.type !== 'idle') {
@@ -133,15 +140,29 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
             try {
                 const devices = await Html5Qrcode.getCameras()
                 if (isMounted) {
-                    setCameras(devices.map(d => ({ id: d.id, label: d.label })))
+                    const mappedDevices = devices.map(d => ({ id: d.id, label: d.label }))
+                    setCameras(mappedDevices)
                     
                     if (devices.length > 0) {
-                        // Priority: Back camera
-                        const backCamera = devices.find(d => 
-                            /back|rear|основная/i.test(d.label) && !/wide|ultra/i.test(d.label)
-                        ) || devices.find(d => /back|rear|основная/i.test(d.label)) || devices[0]
+                        // Better back camera selection
+                        const backCameras = devices.filter(d => 
+                            /back|rear|основная/i.test(d.label) || 
+                            d.label.toLowerCase().includes("камера 0") ||
+                            d.label.toLowerCase().includes("camera 0")
+                        )
+
+                        // If no matches, try finding cameras that don't say "front"
+                        const likelyBackCameras = backCameras.length > 0 ? backCameras : devices.filter(d => 
+                            !/front|селфи|передняя/i.test(d.label)
+                        )
+
+                        // Avoid wide/ultra-wide if possible
+                        const preferredCamera = likelyBackCameras.find(d => 
+                            !/wide|ultra|широко/i.test(d.label.toLowerCase()) && 
+                            !/0\.5x/i.test(d.label.toLowerCase())
+                        ) || likelyBackCameras[0] || devices[0]
                         
-                        await startScanner(backCamera.id)
+                        await startScanner(preferredCamera.id)
                     } else {
                         setError("Камеры не найдены.")
                     }
@@ -243,16 +264,31 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
                                     </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent className="bg-slate-900 border-slate-800 text-white min-w-[240px]">
-                                    {cameras.map((camera) => (
-                                        <DropdownMenuItem 
-                                            key={camera.id} 
-                                            onClick={() => switchCamera(camera.id)}
-                                            className={`text-xs p-3 focus:bg-slate-800 focus:text-white ${camera.id === currentCameraId ? 'bg-blue-600/20 text-blue-400' : ''}`}
-                                        >
-                                            <Camera className="h-3 w-3 mr-2 shrink-0" />
-                                            <span className="truncate">{camera.label}</span>
-                                        </DropdownMenuItem>
-                                    ))}
+                                    {cameras.map((camera, index) => {
+                                        const label = camera.label || `Камера ${index + 1}`
+                                        const isWide = /wide|ultra|широко/i.test(label) || /0\.5x/i.test(label)
+                                        const isFront = /front|селфи|передняя/i.test(label)
+                                        
+                                        return (
+                                            <DropdownMenuItem 
+                                                key={camera.id} 
+                                                onClick={() => switchCamera(camera.id)}
+                                                className={`text-xs p-3 focus:bg-slate-800 focus:text-white ${camera.id === currentCameraId ? 'bg-blue-600/20 text-blue-400' : ''}`}
+                                            >
+                                                <div className="flex flex-col">
+                                                    <div className="flex items-center">
+                                                        <Camera className="h-3 w-3 mr-2 shrink-0" />
+                                                        <span className="truncate font-medium">{label}</span>
+                                                    </div>
+                                                    {(isWide || isFront) && (
+                                                        <span className="text-[10px] opacity-50 ml-5">
+                                                            {isWide ? 'Широкоугольная' : 'Фронтальная'}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </DropdownMenuItem>
+                                        )
+                                    })}
                                 </DropdownMenuContent>
                             </DropdownMenu>
                         ) : (
@@ -263,6 +299,16 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
                     </div>
                     
                     <div className="flex items-center gap-2 shrink-0">
+                        {cameras.length > 1 && (
+                            <Button 
+                                variant="outline" 
+                                size="icon" 
+                                onClick={cycleCamera}
+                                className="h-9 w-9 rounded-xl border-slate-800 bg-slate-800/50 text-slate-400 hover:text-white"
+                            >
+                                <RefreshCcw className="h-5 w-5" />
+                            </Button>
+                        )}
                         {hasTorch && (
                             <Button 
                                 variant="outline" 
