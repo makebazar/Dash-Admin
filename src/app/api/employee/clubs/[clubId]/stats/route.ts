@@ -85,13 +85,12 @@ export async function GET(
         const scheme = { ...rawScheme, ...formula };
         
         const hourlyRate = parseFloat(scheme?.role_rate || scheme?.amount || '150');
-        const period_bonuses = scheme?.period_bonuses || [];
         const standard_monthly_shifts = scheme?.standard_monthly_shifts || 15;
 
         // 3. Get shifts data
         const shiftsRes = await query(
             `SELECT 
-                id, cash_revenue, card_revenue, total_hours, report_data, calculated_salary, check_in, salary_snapshot
+                id, cash_revenue, card_revenue, total_hours, report_data, calculated_salary, check_in, salary_snapshot, status
              FROM shifts
              WHERE user_id = $1 AND club_id = $2
                AND check_in >= $3 AND check_in <= $4
@@ -100,7 +99,6 @@ export async function GET(
         );
 
         const finishedShifts = shiftsRes.rows;
-        const total_shifts_count = finishedShifts.length;
 
         // Get evaluations for checklist bonus
         const evalRes = await query(
@@ -143,6 +141,20 @@ export async function GET(
         );
         const totalManualMaintBonus = parseFloat(monthlyBonusRes.rows[0]?.total_monthly_bonus || '0');
 
+        const barDeductionsRes = await query(
+            `SELECT COALESCE(SUM(ABS(m.change_amount) * p.selling_price), 0) as total
+             FROM warehouse_stock_movements m
+             JOIN warehouse_products p ON p.id = m.product_id
+             WHERE m.club_id = $1
+               AND m.user_id = $2
+               AND m.type = 'SALE'
+               AND m.reason LIKE 'В счет ЗП%'
+               AND m.created_at >= $3
+               AND m.created_at <= $4`,
+            [clubId, userId, startOfMonth, endOfMonth]
+        );
+        const totalBarDeductions = parseFloat(barDeductionsRes.rows[0]?.total || '0');
+
         let totalCalculatedSalary = 0;
         let totalHours = 0;
         let todayHours = 0;
@@ -150,13 +162,19 @@ export async function GET(
         let totalBaseSalary = 0;
         let totalShiftBonuses = 0;
         const monthlyMetrics: Record<string, number> = { total_revenue: 0, total_hours: 0 };
+        const activeShiftMetrics: Record<string, number> = { total_revenue: 0, total_hours: 0 };
 
         const startOfWeek = new Date(now);
         startOfWeek.setDate(now.getDate() - now.getDay() + (now.getDay() === 0 ? -6 : 1)); // Monday
         startOfWeek.setHours(0, 0, 0, 0);
 
+        let completed_shifts_count = 0;
+
         finishedShifts.forEach(s => {
             const hours = parseFloat(s.total_hours || 0);
+            const isActive = s.status === 'ACTIVE';
+            if (!isActive) completed_shifts_count++;
+
             totalHours += hours;
             
             // USE CALCULATED SALARY FROM SHIFT (WHICH USES THE TEMPLATE)
@@ -202,56 +220,83 @@ export async function GET(
                         shiftIncome += val;
                     }
                     monthlyMetrics[key] = (monthlyMetrics[key] || 0) + val;
+                    if (isActive) activeShiftMetrics[key] = (activeShiftMetrics[key] || 0) + val;
                 });
             }
             monthlyMetrics.total_revenue += shiftIncome;
+            if (isActive) activeShiftMetrics.total_revenue += shiftIncome;
         });
 
         // 4. Calculate All Bonuses Separately
         const revenueKpiBreakdown: any[] = [];
-        let checklistMonthlyBonus = 0;
-        let maintenanceBonus = 0;
         
         let checklistMonthlyBonusVirtual = 0;
+        let checklistMonthlyBonusReal = 0;
         let maintenanceBonusVirtual = 0;
-        
-        // 4.1. Period Revenue Bonuses
-        if (Array.isArray(period_bonuses)) {
-            period_bonuses.forEach((bonus: any) => {
+        let maintenanceBonusReal = 0;
+
+        // 4.1. Period Revenue Bonuses (Logic synced with salary summary)
+        const period_bonuses_config = scheme?.period_bonuses || [];
+        if (Array.isArray(period_bonuses_config)) {
+            period_bonuses_config.forEach((bonus: any) => {
                 const metric_key = bonus.metric_key || 'total_revenue';
-                const current_value = monthlyMetrics[metric_key] ||
-                    (metric_key === 'total_revenue' ? monthlyMetrics.total_revenue : 0);
+
+                // For scaling and checking MET status, we use revenue from CLOSED shifts only
+                const value_for_scaling_bonus = metric_key === 'total_revenue' ? (monthlyMetrics.total_revenue - (activeShiftMetrics.total_revenue || 0)) : 
+                                              (monthlyMetrics[metric_key] - (activeShiftMetrics[metric_key] || 0));
+
+                let is_met = false;
+                let metPercent = 0;
+                let earned = 0;
+
+                const mode = bonus.bonus_mode || 'MONTH';
 
                 if (bonus.type === 'PROGRESSIVE' && bonus.thresholds?.length) {
                     const sorted = [...bonus.thresholds].sort((a: any, b: any) => (a.from || 0) - (b.from || 0));
-                    const mode = bonus.bonus_mode || 'MONTH';
-
-                    let metPercent = 0;
+                    
                     for (let i = sorted.length - 1; i >= 0; i--) {
                         const scaled_threshold = mode === 'SHIFT'
-                            ? sorted[i].from * total_shifts_count
-                            : (sorted[i].from / standard_monthly_shifts) * total_shifts_count;
+                            ? sorted[i].from * completed_shifts_count
+                            : (sorted[i].from / standard_monthly_shifts) * completed_shifts_count;
 
-                        if (total_shifts_count > 0 && current_value >= scaled_threshold) {
+                        if (completed_shifts_count > 0 && value_for_scaling_bonus >= scaled_threshold) {
                             metPercent = sorted[i].percent;
+                            is_met = true;
                             break;
                         }
                     }
-                    if (metPercent > 0) {
-                        const earned = current_value * (metPercent / 100);
-                        revenueKpiBreakdown.push({
-                            name: bonus.name || 'KPI Выручка',
-                            amount: earned,
-                            is_virtual: bonus.payout_type === 'VIRTUAL_BALANCE'
-                        });
+                    if (is_met && metPercent > 0) {
+                        earned = value_for_scaling_bonus * (metPercent / 100);
                     }
+                } else {
+                    const target_value = mode === 'SHIFT' 
+                        ? (bonus.target_per_shift || 0) * completed_shifts_count 
+                        : (bonus.target_value || 0) / standard_monthly_shifts * completed_shifts_count;
+                    
+                    is_met = completed_shifts_count > 0 && value_for_scaling_bonus >= target_value;
+                    if (is_met) {
+                        if (bonus.reward_type === 'PERCENT') {
+                            earned = value_for_scaling_bonus * (bonus.reward_value / 100);
+                        } else {
+                            earned = bonus.reward_value;
+                        }
+                    }
+                }
+
+                if (earned > 0) {
+                    revenueKpiBreakdown.push({
+                        name: bonus.name || 'KPI Выручка',
+                        amount: earned,
+                        metPercent: metPercent || bonus.reward_value,
+                        is_virtual: bonus.payout_type === 'VIRTUAL_BALANCE'
+                    });
                 }
             });
         }
 
         // 4.2. Checklist Bonuses (Monthly)
-        const checklistBonuses = (scheme.bonuses || []).filter((b: any) => b.type === 'checklist' && b.mode === 'MONTH');
-        checklistBonuses.forEach((b: any) => {
+        const allChecklistConfigs = (scheme.bonuses || []).filter((b: any) => b.type === 'checklist');
+        allChecklistConfigs.forEach((b: any) => {
             let earned = 0;
             if (b.use_thresholds && b.checklist_thresholds?.length) {
                 const sorted = [...b.checklist_thresholds].sort((x, y) => (Number(y.min_score) || 0) - (Number(x.min_score) || 0));
@@ -262,10 +307,12 @@ export async function GET(
             }
 
             if (earned > 0) {
-                if (b.payout_type === 'VIRTUAL_BALANCE') {
-                    checklistMonthlyBonusVirtual += earned;
-                } else {
-                    checklistMonthlyBonus += earned;
+                if (b.mode === 'MONTH') {
+                    if (b.payout_type === 'VIRTUAL_BALANCE') {
+                        checklistMonthlyBonusVirtual += earned;
+                    } else {
+                        checklistMonthlyBonusReal += earned;
+                    }
                 }
             }
         });
@@ -288,7 +335,7 @@ export async function GET(
                 if (maintConfig.payout_type === 'VIRTUAL_BALANCE') {
                     maintenanceBonusVirtual += earned;
                 } else {
-                    maintenanceBonus += earned;
+                    maintenanceBonusReal += earned;
                 }
             }
         }
@@ -296,18 +343,21 @@ export async function GET(
         const revenueKpiBonusReal = revenueKpiBreakdown.filter(b => !b.is_virtual).reduce((sum, b) => sum + b.amount, 0);
         const revenueKpiBonusVirtual = revenueKpiBreakdown.filter(b => b.is_virtual).reduce((sum, b) => sum + b.amount, 0);
         
-        const totalKpiBonusReal = revenueKpiBonusReal + checklistMonthlyBonus + maintenanceBonus;
+        const totalKpiBonusReal = revenueKpiBonusReal + checklistMonthlyBonusReal + maintenanceBonusReal;
         const totalKpiBonusVirtual = revenueKpiBonusVirtual + checklistMonthlyBonusVirtual + maintenanceBonusVirtual;
-        const monthEarnings = totalCalculatedSalary + totalKpiBonusReal;
+        
+        // Month earnings: Sum of calculated salary for closed shifts + ANY monthly bonuses reached so far
+        const monthEarnings = totalCalculatedSalary + totalKpiBonusReal - totalBarDeductions;
 
-        // Calculate breakdown
+        // CRITICAL: Ensure we are sending ALL pieces of info needed for the breakdown
         const breakdown = {
             base_salary: totalBaseSalary,
             shift_bonuses: totalShiftBonuses,
-            checklist_bonuses: checklistMonthlyBonus,
-            maintenance_bonuses: maintenanceBonus,
+            checklist_bonuses: checklistMonthlyBonusReal,
+            maintenance_bonuses: maintenanceBonusReal,
             revenue_kpi_bonuses: revenueKpiBonusReal,
-            revenue_kpi_breakdown: revenueKpiBreakdown, // Include names from template
+            bar_deductions: totalBarDeductions,
+            revenue_kpi_breakdown: revenueKpiBreakdown, 
             total_kpi_bonuses: totalKpiBonusReal,
             virtual_bonuses: {
                 checklist: checklistMonthlyBonusVirtual,
@@ -321,11 +371,10 @@ export async function GET(
             today_hours: todayHours,
             week_hours: weekHours,
             total_hours: totalHours,
-            week_earnings: weekHours * hourlyRate, 
             month_earnings: monthEarnings,
             hourly_rate: hourlyRate,
             kpi_bonus: totalKpiBonusReal,
-            breakdown
+            breakdown: breakdown
         });
 
     } catch (error) {

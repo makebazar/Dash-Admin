@@ -27,16 +27,12 @@ export async function GET(
         // Get active shift
         const shiftResult = await query(
             `SELECT 
-                s.id,
-                s.check_in,
-                s.bar_purchases,
-                EXTRACT(EPOCH FROM (NOW() - s.check_in)) / 3600 as total_hours,
-                COALESCE((r.default_kpi_settings->>'base_rate')::numeric, 150) as hourly_rate
-            FROM shifts s
-            JOIN users u ON s.user_id = u.id
-            LEFT JOIN roles r ON u.role_id = r.id
-            WHERE s.user_id = $1 AND s.club_id = $2 AND s.check_out IS NULL
-            LIMIT 1`,
+        id,
+        check_in,
+        EXTRACT(EPOCH FROM (NOW() - check_in)) / 3600 as total_hours
+       FROM shifts
+       WHERE user_id = $1 AND club_id = $2 AND check_out IS NULL
+       LIMIT 1`,
             [userId, clubId]
         );
 
@@ -50,9 +46,7 @@ export async function GET(
             shift: {
                 id: shift.id,
                 check_in: shift.check_in,
-                bar_purchases: parseFloat(shift.bar_purchases || '0'),
-                total_hours: parseFloat(shift.total_hours) || 0,
-                hourly_rate: parseFloat(shift.hourly_rate || '150')
+                total_hours: parseFloat(shift.total_hours) || 0
             }
         });
 

@@ -1,13 +1,14 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { getProducts, getCategories, getSupplies, getInventories, getWarehouses, getEmployees, getClubTasks, getProcurementLists, getSuppliersForSelect, getClubSettings, manualTriggerReplenishment, getSalesAnalytics, getActiveShiftsForClub } from "./actions"
 import { ProductsTab } from "./_components/ProductsTab"
-import { SuppliesTab } from "./_components/SuppliesTab"
-import { InventoryTab } from "./_components/InventoryTab"
+import { SalesTab } from "./_components/SalesTab"
+import { TasksTab } from "./_components/TasksTab"
 import { CategoriesTab } from "./_components/CategoriesTab"
 import { WarehousesTab } from "./_components/WarehousesTab"
-import { TasksTab } from "./_components/TasksTab"
+import { TransfersTab } from "./_components/TransfersTab"
+import { SuppliesTab } from "./_components/SuppliesTab"
 import { ProcurementTab } from "./_components/ProcurementTab"
-import { SalesTab } from "./_components/SalesTab"
+import { InventoryTab } from "./_components/InventoryTab"
 import { cookies } from "next/headers"
 import { Button } from "@/components/ui/button"
 import { RefreshCw, ShoppingCart } from "lucide-react"
@@ -89,6 +90,12 @@ export default async function InventoryPage({ params }: { params: Promise<{ club
                             Склады
                         </TabsTrigger>
                         <TabsTrigger 
+                            value="transfers" 
+                            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:shadow-none px-0 py-3 bg-transparent font-medium"
+                        >
+                            Перемещения
+                        </TabsTrigger>
+                        <TabsTrigger 
                             value="supplies" 
                             className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:shadow-none px-0 py-3 bg-transparent font-medium"
                         >
@@ -127,6 +134,10 @@ export default async function InventoryPage({ params }: { params: Promise<{ club
 
                 <TabsContent value="warehouses" className="mt-0">
                     <WarehousesTab warehouses={warehouses} employees={employees} currentUserId={userId} />
+                </TabsContent>
+                
+                <TabsContent value="transfers" className="mt-0">
+                    <TransfersTab warehouses={warehouses} products={products} currentUserId={userId} />
                 </TabsContent>
                 
                 <TabsContent value="supplies" className="mt-0">

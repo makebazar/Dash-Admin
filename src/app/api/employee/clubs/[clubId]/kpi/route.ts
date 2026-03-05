@@ -265,18 +265,20 @@ export async function GET(
                 (metric_key === 'total_revenue' ? monthlyMetrics.total_revenue :
                     metric_key === 'total_hours' ? monthlyMetrics.total_hours : 0);
             
-            // Value from CLOSED shifts only (for historical average)
-            const closed_value = metric_key === 'total_revenue' ? closedShiftsMetrics.total_revenue :
-                                 metric_key === 'total_hours' ? closedShiftsMetrics.total_hours :
-                                 (closedShiftsMetrics[metric_key] || 0);
+            // Value for scaling (CLOSED shifts ONLY)
+            // This is the value used to compare against scaled thresholds
+            const value_for_scaling = metric_key === 'total_revenue' ? closedShiftsMetrics.total_revenue :
+                                     metric_key === 'total_hours' ? closedShiftsMetrics.total_hours :
+                                     (closedShiftsMetrics[metric_key] || 0);
 
             // Average per shift based on COMPLETED shifts only to avoid skewing by partial active shift
-            const avg_per_shift = completed_shifts_count > 0 ? closed_value / completed_shifts_count : 0;
+            const avg_per_shift = completed_shifts_count > 0 ? value_for_scaling / completed_shifts_count : 0;
             
             const mode = bonus.bonus_mode || bonus.mode || 'MONTH';
 
             let current_level = 0;
             let current_reward = 0;
+            let current_bonus_amount = 0;
             let is_met = false;
             let all_thresholds: any[] = [];
 
@@ -290,11 +292,13 @@ export async function GET(
                 all_thresholds = sorted.map((t: any, idx: number) => {
                     const original_from = t.from || 0;
                     
+                    // SCALE thresholds based ONLY on CLOSED shifts count
                     const scaled_threshold = mode === 'SHIFT'
-                        ? original_from * total_shifts_count
-                        : (original_from / standard_monthly_shifts) * total_shifts_count;
+                        ? original_from * completed_shifts_count
+                        : (original_from / standard_monthly_shifts) * completed_shifts_count;
 
-                    const isThresholdMet = total_shifts_count > 0 && current_value >= scaled_threshold;
+                    // CHECK MET status based ONLY on CLOSED shifts revenue
+                    const isThresholdMet = completed_shifts_count > 0 && value_for_scaling >= scaled_threshold;
 
                     // To REACH: we need to reach the SCALED threshold at the END of the month
                     // So we scale the monthly threshold to the TOTAL planned shifts
@@ -318,6 +322,7 @@ export async function GET(
                         monthly_threshold: original_from,
                         planned_month_threshold: endOfMonthThreshold,
                         scaled_threshold: scaled_threshold,
+                        display_shifts_count: completed_shifts_count, // Передаем актуальное кол-во смен для подписи
                         percent: percent,
                         amount: amount,
                         is_met: isThresholdMet,
@@ -332,7 +337,15 @@ export async function GET(
                 for (let i = all_thresholds.length - 1; i >= 0; i--) {
                     if (all_thresholds[i].is_met) {
                         current_level = i + 1;
-                        current_reward = all_thresholds[i].percent || all_thresholds[i].amount;
+                        const reached_t = all_thresholds[i];
+                        
+                        // If threshold has percent, calculate from value. Otherwise use amount.
+                        if (reached_t.percent > 0) {
+                            current_bonus_amount = value_for_scaling * (reached_t.percent / 100);
+                        } else {
+                            current_bonus_amount = reached_t.amount;
+                        }
+                        
                         is_met = true;
                         break;
                     }
@@ -370,13 +383,13 @@ export async function GET(
                 
                 if (is_met) {
                     current_level = 1;
-                    current_reward = bonus.reward_value;
+                    if (bonus.reward_type === 'PERCENT') {
+                        current_bonus_amount = value_for_scaling * (bonus.reward_value / 100);
+                    } else {
+                        current_bonus_amount = bonus.reward_value;
+                    }
                 }
             }
-
-            const current_bonus_amount = is_met && current_reward > 0
-                ? (bonus.reward_type === 'FIXED' ? current_reward : current_value * (current_reward / 100))
-                : 0;
 
             // Projection logic (same as before but based on scaled metrics)
             const projected_total = current_value + (avg_per_shift * remaining_future_shifts);
@@ -539,6 +552,7 @@ export async function GET(
             total_kpi_bonus,
             total_projected_bonus,
             shifts_count: total_shifts_count, // Revert to TOTAL (including active) for UI "Passed X shifts"
+            completed_shifts_count,
             planned_shifts,
             remaining_shifts: remaining_future_shifts,
             days_remaining: remainingDays,

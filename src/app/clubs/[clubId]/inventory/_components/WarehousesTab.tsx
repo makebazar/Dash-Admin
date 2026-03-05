@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
-import { createWarehouse, updateWarehouse, Warehouse } from "../actions"
+import { createWarehouse, updateWarehouse, deleteWarehouse, Warehouse } from "../actions"
 import { useParams } from "next/navigation"
 
 interface WarehousesTabProps {
@@ -38,7 +38,6 @@ export function WarehousesTab({ warehouses, employees, currentUserId }: Warehous
                         name,
                         address: editingWarehouse.address || undefined,
                         type: editingWarehouse.type || 'GENERAL',
-                        responsible_user_id: editingWarehouse.responsible_user_id || undefined,
                         contact_info: editingWarehouse.contact_info || undefined,
                         characteristics: editingWarehouse.characteristics || undefined,
                         is_active: editingWarehouse.is_active ?? true
@@ -49,7 +48,6 @@ export function WarehousesTab({ warehouses, employees, currentUserId }: Warehous
                         name,
                         address: editingWarehouse.address || undefined,
                         type: editingWarehouse.type || 'GENERAL',
-                        responsible_user_id: editingWarehouse.responsible_user_id || undefined,
                         contact_info: editingWarehouse.contact_info || undefined,
                         characteristics: editingWarehouse.characteristics || undefined
                     }
@@ -64,8 +62,22 @@ export function WarehousesTab({ warehouses, employees, currentUserId }: Warehous
         })
     }
 
+    const handleDelete = async (id: number) => {
+        if (!confirm('Вы уверены, что хотите удалить этот склад? Это действие нельзя отменить.')) return
+
+        startTransition(async () => {
+            try {
+                await deleteWarehouse(id, clubId, currentUserId)
+                alert('Склад удален')
+            } catch (err: any) {
+                console.error(err)
+                alert(err.message || "Ошибка при удалении")
+            }
+        })
+    }
+
     const openCreate = () => {
-        setEditingWarehouse({ name: '', responsible_user_id: undefined, is_active: true })
+        setEditingWarehouse({ name: '', is_active: true })
         setIsDialogOpen(true)
     }
 
@@ -89,7 +101,7 @@ export function WarehousesTab({ warehouses, employees, currentUserId }: Warehous
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {warehouses.map(wh => (
-                    <div key={wh.id} className="bg-white border rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow">
+                    <div key={wh.id} className="bg-white border rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow group">
                         <div className="flex justify-between items-center mb-4">
                             <div className="flex items-center gap-3">
                                 <div className="h-10 w-10 bg-blue-50 text-blue-600 rounded-lg flex items-center justify-center">
@@ -97,22 +109,26 @@ export function WarehousesTab({ warehouses, employees, currentUserId }: Warehous
                                 </div>
                                 <div>
                                     <h4 className="font-semibold text-lg">{wh.name}</h4>
+                                    {wh.is_default && <Badge variant="secondary" className="text-[10px] py-0 px-1 bg-blue-100 text-blue-700 border-none">Основной</Badge>}
                                 </div>
                             </div>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-slate-700" onClick={() => openEdit(wh)}>
-                                <Pencil className="h-4 w-4" />
-                            </Button>
+                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-slate-700" onClick={() => openEdit(wh)}>
+                                    <Pencil className="h-4 w-4" />
+                                </Button>
+                                {!wh.is_default && (
+                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-red-600" onClick={() => handleDelete(wh.id)}>
+                                        <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                )}
+                            </div>
                         </div>
                         
                         <div className="space-y-3 text-sm text-slate-600">
-                            {wh.responsible_name ? (
-                                <div className="flex items-center gap-2">
-                                    <User className="h-4 w-4 text-slate-400" />
-                                    <span>Отв: {wh.responsible_name}</span>
-                                </div>
-                            ) : (
-                                <div className="text-slate-400 text-xs">Ответственный не назначен</div>
-                            )}
+                            <div className="flex items-center gap-2">
+                                <Info className="h-4 w-4 text-slate-400" />
+                                <span>Тип: {wh.type === 'GENERAL' ? 'Общий' : wh.type}</span>
+                            </div>
                         </div>
                     </div>
                 ))}
@@ -139,24 +155,6 @@ export function WarehousesTab({ warehouses, employees, currentUserId }: Warehous
                                 required
                                 placeholder="Например: Бар"
                             />
-                        </div>
-
-                        <div className="space-y-2">
-                            <Label>Ответственное лицо</Label>
-                            <Select 
-                                value={editingWarehouse?.responsible_user_id || "none"} 
-                                onValueChange={v => setEditingWarehouse(prev => ({ ...prev!, responsible_user_id: v === "none" ? undefined : v }))}
-                            >
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Не назначено" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="none">Не назначено</SelectItem>
-                                    {employees.map(emp => (
-                                        <SelectItem key={emp.id} value={emp.id}>{emp.full_name}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
                         </div>
 
                         <DialogFooter>

@@ -111,6 +111,15 @@ export function EmployeeSupplyWizard({ isOpen, onClose, clubId, userId, activeSh
         setItems(prev => prev.filter(i => i.product_id !== productId))
     }
 
+    const updateItem = (productId: number, field: 'quantity' | 'cost_price', value: number) => {
+        setItems(prev => prev.map(i => 
+            i.product_id === productId ? { ...i, [field]: value } : i
+        ))
+    }
+
+    const totalSum = items.reduce((acc, i) => acc + (i.quantity * i.cost_price), 0)
+    const totalQty = items.reduce((acc, i) => acc + i.quantity, 0)
+
     const handleFinalize = () => {
         if (items.length === 0) return
         startTransition(async () => {
@@ -149,18 +158,20 @@ export function EmployeeSupplyWizard({ isOpen, onClose, clubId, userId, activeSh
     return (
         <>
             <Dialog open={isOpen} onOpenChange={handleClose}>
-                <DialogContent className="max-w-2xl bg-slate-950 border-slate-800 text-white p-0 overflow-hidden flex flex-col h-[90vh]">
-                    <DialogHeader className="p-6 border-b border-slate-800">
-                        <DialogTitle className="flex items-center gap-2">
-                            <Package className="h-5 w-5 text-blue-400" />
-                            {step === 1 ? "Оформление поставки" : "Детали поставки"}
-                        </DialogTitle>
-                        <DialogDescription className="text-slate-400">
-                            {step === 1 ? "Добавьте товары, которые поступили в клуб." : "Укажите поставщика и примечание."}
-                        </DialogDescription>
+                <DialogContent className="max-w-none w-screen h-screen m-0 p-0 rounded-none bg-slate-950 border-none text-white overflow-hidden flex flex-col">
+                    <DialogHeader className="p-6 border-b border-slate-800 flex-row items-center justify-between space-y-0">
+                        <div className="space-y-1">
+                            <DialogTitle className="flex items-center gap-2">
+                                <Package className="h-5 w-5 text-blue-400" />
+                                {step === 1 ? "Оформление поставки" : "Детали поставки"}
+                            </DialogTitle>
+                            <DialogDescription className="text-slate-400">
+                                {step === 1 ? "Добавьте товары, которые поступили в клуб." : "Укажите поставщика и примечание."}
+                            </DialogDescription>
+                        </div>
                     </DialogHeader>
 
-                    <div className="flex-1 overflow-y-auto p-6">
+                    <div className="flex-1 overflow-y-auto p-4 md:p-8 max-w-4xl mx-auto w-full">
                         {step === 1 ? (
                             <div className="space-y-6">
                                 {/* Actions Area */}
@@ -185,9 +196,17 @@ export function EmployeeSupplyWizard({ isOpen, onClose, clubId, userId, activeSh
 
                                 {/* Items List */}
                                 <div className="space-y-4">
-                                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-2">
-                                        <ShoppingCart className="h-3 w-3" />
-                                        Выбранные товары ({items.length})
+                                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <ShoppingCart className="h-3 w-3" />
+                                            Выбранные товары ({items.length})
+                                        </div>
+                                        {totalSum > 0 && (
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-slate-500">Итого:</span>
+                                                <span className="text-blue-400 font-black">{totalSum.toLocaleString()} ₽</span>
+                                            </div>
+                                        )}
                                     </h4>
                                     
                                     {items.length === 0 ? (
@@ -201,17 +220,42 @@ export function EmployeeSupplyWizard({ isOpen, onClose, clubId, userId, activeSh
                                                 <TableBody>
                                                     {items.map((item) => (
                                                         <TableRow key={item.product_id} className="border-slate-800 hover:bg-slate-800/50">
-                                                            <TableCell className="py-3">
+                                                            <TableCell className="py-3 pr-0">
                                                                 <div className="flex flex-col">
-                                                                    <span className="text-sm font-medium text-slate-200">{item.name}</span>
-                                                                    <span className="text-[10px] text-slate-500">{item.cost_price} ₽ / шт</span>
+                                                                    <span className="text-sm font-medium text-slate-200 truncate max-w-[140px]">{item.name}</span>
+                                                                    <div className="flex items-center gap-2 mt-1">
+                                                                        <Input 
+                                                                            type="number" 
+                                                                            value={item.cost_price} 
+                                                                            onChange={e => updateItem(item.product_id, 'cost_price', Number(e.target.value))}
+                                                                            className="h-6 w-16 bg-slate-900 border-slate-800 text-[10px] p-1 text-center"
+                                                                        />
+                                                                        <span className="text-[10px] text-slate-500">₽/шт</span>
+                                                                    </div>
                                                                 </div>
                                                             </TableCell>
                                                             <TableCell className="text-right py-3">
                                                                 <div className="flex items-center justify-end gap-3">
-                                                                    <Badge variant="secondary" className="bg-blue-500/10 text-blue-400 border-none font-bold">
-                                                                        {item.quantity} шт
-                                                                    </Badge>
+                                                                    <div className="flex items-center gap-1 bg-slate-900 border border-slate-800 rounded-lg p-1">
+                                                                        <button 
+                                                                            className="w-6 h-6 flex items-center justify-center text-slate-500 hover:text-white"
+                                                                            onClick={() => updateItem(item.product_id, 'quantity', Math.max(1, item.quantity - 1))}
+                                                                        >
+                                                                            -
+                                                                        </button>
+                                                                        <input 
+                                                                            type="number" 
+                                                                            value={item.quantity} 
+                                                                            onChange={e => updateItem(item.product_id, 'quantity', Number(e.target.value))}
+                                                                            className="w-10 bg-transparent text-center text-sm font-bold text-blue-400 focus:outline-none"
+                                                                        />
+                                                                        <button 
+                                                                            className="w-6 h-6 flex items-center justify-center text-slate-500 hover:text-white"
+                                                                            onClick={() => updateItem(item.product_id, 'quantity', item.quantity + 1)}
+                                                                        >
+                                                                            +
+                                                                        </button>
+                                                                    </div>
                                                                     <Button 
                                                                         variant="ghost" 
                                                                         size="icon" 
@@ -255,12 +299,12 @@ export function EmployeeSupplyWizard({ isOpen, onClose, clubId, userId, activeSh
                                 <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-2xl">
                                     <div className="flex justify-between items-center text-sm">
                                         <span className="text-slate-400">Итого товаров:</span>
-                                        <span className="font-bold text-white">{items.reduce((acc, i) => acc + i.quantity, 0)} шт</span>
+                                        <span className="font-bold text-white">{totalQty} шт</span>
                                     </div>
                                     <div className="flex justify-between items-center text-sm mt-2">
                                         <span className="text-slate-400">На сумму:</span>
                                         <span className="font-bold text-blue-400">
-                                            {items.reduce((acc, i) => acc + (i.quantity * i.cost_price), 0).toLocaleString()} ₽
+                                            {totalSum.toLocaleString()} ₽
                                         </span>
                                     </div>
                                 </div>

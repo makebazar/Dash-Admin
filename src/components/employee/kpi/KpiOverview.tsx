@@ -11,6 +11,7 @@ interface KpiOverviewProps {
     formatCurrency: (amount: number) => string;
     remainingShifts: number;
     shiftsCount: number;
+    completedShiftsCount?: number;
     plannedShifts: number;
     daysRemaining: number;
     activeShift: any | null;
@@ -225,6 +226,7 @@ export function KpiOverview({
     formatCurrency,
     remainingShifts,
     shiftsCount,
+    completedShiftsCount,
     plannedShifts,
     daysRemaining,
     activeShift
@@ -299,7 +301,7 @@ export function KpiOverview({
         if (onTrack) {
             const messages = [
                 `Отличный темп! Вы уверенно идете к следующему уровню.`,
-                `Супер результат! Ваш средний чек (${formatCurrency(kpi.avg_per_shift)}) выше планового.`,
+                `Супер результат! Ваша выручка за смену выше плановой.`,
                 `Так держать! Бонус уже близко.`,
                 `Вы на верном пути! Продолжайте в том же духе.`
             ];
@@ -310,12 +312,17 @@ export function KpiOverview({
             const percentDiff = (diff / nextThreshold.per_shift_to_reach) * 100;
             
             if (percentDiff < 15) {
-                return `Вы совсем близко! Нужно подтянуть средний чек всего на ${formatCurrency(diff)}. Предлагайте напитки и снеки каждому гостю!`;
+                return `Вы совсем близко! Нужно продавать в смену всего на ${formatCurrency(diff)} больше. Предлагайте напитки и снеки каждому гостю!`;
             } else {
                 return `Есть потенциал для роста. Обратите внимание на чистоту и сервис — довольные гости тратят больше. Нужно ускориться!`;
             }
         }
     };
+
+    // Label count for revenue
+    const revenueShiftLabel = completedShiftsCount !== undefined 
+        ? (completedShiftsCount === 1 ? '1 закрытая смена' : `${completedShiftsCount} закр. смены`)
+        : `${shiftsCount} смен`;
 
     return (
         <div className="space-y-4">
@@ -435,7 +442,7 @@ export function KpiOverview({
                         </div>
                         <div className="flex justify-between text-xs pt-1">
                             <div>
-                                <p className="text-white/50 mb-0.5">Выручка ({shiftsCount} смен)</p>
+                                <p className="text-white/50 mb-0.5">Выручка ({revenueShiftLabel})</p>
                                 <p className="font-bold text-white text-sm">{formatCurrency(kpi.current_value)}</p>
                             </div>
                             <div className="text-right">
@@ -501,7 +508,7 @@ export function KpiOverview({
                             </div>
                             <div className="flex items-center gap-2 text-xs font-normal text-muted-foreground bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-700">
                                 <Zap className="h-3 w-3 text-yellow-500 fill-current" />
-                                Ваша выручка: <span className="font-bold text-foreground">{formatCurrency(kpi.current_value)}</span> ({shiftsCount} смен)
+                                Ваша выручка: <span className="font-bold text-foreground">{formatCurrency(kpi.current_value)}</span> ({revenueShiftLabel})
                             </div>
                         </h3>
                         <div className="space-y-3">
@@ -543,7 +550,10 @@ export function KpiOverview({
 
                                                     {/* Актуальный порог для закрытых смен */}
                                                     <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
-                                                        План на {shiftsCount} смен: {formatCurrency(level.scaled_threshold)}
+                                                        План на {level.display_shifts_count || shiftsCount} {
+                                                            (level.display_shifts_count || shiftsCount) === 1 ? 'смену' : 
+                                                            (level.display_shifts_count || shiftsCount) < 5 ? 'смены' : 'смен'
+                                                        }: {formatCurrency(level.scaled_threshold)}
                                                         {isCompleted && ' ✓'}
                                                     </p>
                                                 </div>

@@ -54,9 +54,11 @@ interface Stats {
         checklist_bonuses: number
         maintenance_bonuses: number
         revenue_kpi_bonuses: number
+        bar_deductions?: number
         revenue_kpi_breakdown?: Array<{
             name: string
             amount: number
+            metPercent?: number
             is_virtual: boolean
         }>
         virtual_bonuses?: {
@@ -715,7 +717,7 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                                         {stats?.breakdown && (
                                             <div className="mt-4 space-y-1.5 pt-4 border-t border-white/10">
                                                 <div className="flex justify-between text-[11px] text-white/60">
-                                                    <span>Ставка ({stats.total_hours || (stats.today_hours + stats.week_hours)} ч):</span>
+                                                    <span>Ставка ({stats.total_hours?.toFixed(1) || (stats.today_hours + stats.week_hours)?.toFixed(1)} ч):</span>
                                                     <span className="font-bold text-white">{formatCurrency(stats.breakdown.base_salary)}</span>
                                                 </div>
                                                 
@@ -725,6 +727,13 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                                                         <span className="font-bold text-emerald-300">+{formatCurrency(stats.breakdown.shift_bonuses)}</span>
                                                     </div>
                                                 )}
+
+                                                {stats.breakdown.revenue_kpi_breakdown?.filter((b: any) => !b.is_virtual).map((bonus: any, idx: number) => (
+                                                    <div key={`real-${idx}`} className="flex justify-between text-[11px] text-white/60">
+                                                        <span>{bonus.name} ({bonus.metPercent}%):</span>
+                                                        <span className="font-bold text-emerald-300">+{formatCurrency(bonus.amount)}</span>
+                                                    </div>
+                                                ))}
 
                                                 {stats.breakdown.checklist_bonuses > 0 && (
                                                     <div className="flex justify-between text-[11px] text-white/60">
@@ -740,12 +749,12 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                                                     </div>
                                                 )}
 
-                                                {stats.breakdown.revenue_kpi_breakdown?.filter(b => !b.is_virtual).map((bonus, idx) => (
-                                                    <div key={idx} className="flex justify-between text-[11px] text-white/60">
-                                                        <span>{bonus.name}:</span>
-                                                        <span className="font-bold text-emerald-300">+{formatCurrency(bonus.amount)}</span>
+                                                {(stats.breakdown.bar_deductions || 0) > 0 && (
+                                                    <div className="flex justify-between text-[11px] text-white/70">
+                                                        <span>Бар в счет ЗП:</span>
+                                                        <span className="font-bold text-rose-300">-{formatCurrency(stats.breakdown.bar_deductions || 0)}</span>
                                                     </div>
-                                                ))}
+                                                )}
 
                                                 {stats.breakdown.virtual_bonuses && stats.breakdown.virtual_bonuses.total > 0 && (
                                                     <div className="mt-2 pt-2 border-t border-white/5 space-y-1">
@@ -763,8 +772,8 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                                                             </div>
                                                         )}
                                                         {stats.breakdown.revenue_kpi_breakdown?.filter(b => b.is_virtual).map((bonus, idx) => (
-                                                            <div key={idx} className="flex justify-between text-[11px] text-white/60">
-                                                                <span>{bonus.name}:</span>
+                                                            <div key={`virtual-${idx}`} className="flex justify-between text-[11px] text-white/60">
+                                                                <span>{bonus.name} ({bonus.metPercent}%):</span>
                                                                 <span className="font-bold text-amber-300">+{bonus.amount} Б</span>
                                                             </div>
                                                         ))}
@@ -811,6 +820,7 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                                         formatCurrency={formatCurrency}
                                         remainingShifts={kpiData.remaining_shifts}
                                         shiftsCount={kpiData.shifts_count}
+                                        completedShiftsCount={kpiData.completed_shifts_count}
                                         plannedShifts={kpiData.planned_shifts}
                                         daysRemaining={kpiData.days_remaining}
                                         activeShift={activeShift}

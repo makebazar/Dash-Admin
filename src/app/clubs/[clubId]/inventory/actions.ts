@@ -181,26 +181,64 @@ export async function getWarehouses(clubId: string) {
     return res.rows as Warehouse[]
 }
 
-export async function createWarehouse(clubId: string, userId: string, data: { name: string, address?: string, type: string, responsible_user_id?: string, contact_info?: string, characteristics?: any }) {
+export async function createWarehouse(clubId: string, userId: string, data: { name: string, address?: string, type: string, contact_info?: string, characteristics?: any }) {
     const res = await query(`
-        INSERT INTO warehouses (club_id, name, address, type, responsible_user_id, contact_info, characteristics)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        INSERT INTO warehouses (club_id, name, address, type, contact_info, characteristics)
+        VALUES ($1, $2, $3, $4, $5, $6)
         RETURNING id
-    `, [clubId, data.name, data.address, data.type, data.responsible_user_id, data.contact_info, data.characteristics || {}])
+    `, [clubId, data.name, data.address, data.type, data.contact_info, data.characteristics || {}])
 
     await logOperation(clubId, userId, 'CREATE_WAREHOUSE', 'WAREHOUSE', res.rows[0].id, data)
     revalidatePath(`/clubs/${clubId}/inventory`)
 }
 
-export async function updateWarehouse(id: number, clubId: string, userId: string, data: { name: string, address?: string, type: string, responsible_user_id?: string, contact_info?: string, characteristics?: any, is_active: boolean }) {
+export async function updateWarehouse(id: number, clubId: string, userId: string, data: { name: string, address?: string, type: string, contact_info?: string, characteristics?: any, is_active: boolean }) {
     await query(`
         UPDATE warehouses
-        SET name = $1, address = $2, type = $3, responsible_user_id = $4, contact_info = $5, characteristics = $6, is_active = $7
-        WHERE id = $8
-    `, [data.name, data.address, data.type, data.responsible_user_id, data.contact_info, data.characteristics || {}, data.is_active, id])
+        SET name = $1, address = $2, type = $3, contact_info = $4, characteristics = $5, is_active = $6
+        WHERE id = $7
+    `, [data.name, data.address, data.type, data.contact_info, data.characteristics || {}, data.is_active, id])
 
     await logOperation(clubId, userId, 'UPDATE_WAREHOUSE', 'WAREHOUSE', id, data)
     revalidatePath(`/clubs/${clubId}/inventory`)
+}
+
+export async function deleteWarehouse(id: number, clubId: string, userId: string) {
+    const client = await import("@/db").then(m => m.getClient())
+    try {
+        await client.query('BEGIN')
+
+        // 1. Check if warehouse has stock
+        const stockRes = await client.query('SELECT SUM(quantity) as total FROM warehouse_stock WHERE warehouse_id = $1', [id])
+        const totalStock = parseFloat(stockRes.rows[0]?.total || '0')
+        
+        if (totalStock > 0) {
+            throw new Error('Нельзя удалить склад, на котором есть товары. Сначала переместите их или спишите.')
+        }
+
+        // 2. Check if it's default warehouse
+        const whRes = await client.query('SELECT is_default FROM warehouses WHERE id = $1', [id])
+        if (whRes.rows[0]?.is_default) {
+            throw new Error('Нельзя удалить основной склад клуба.')
+        }
+
+        // 3. Delete replenishment rules where this warehouse is source or target
+        await client.query('DELETE FROM warehouse_replenishment_rules WHERE source_warehouse_id = $1 OR target_warehouse_id = $2', [id, id])
+
+        // 4. Delete the warehouse
+        await client.query('DELETE FROM warehouses WHERE id = $1', [id])
+
+        await logOperation(clubId, userId, 'DELETE_WAREHOUSE', 'WAREHOUSE', id)
+        await client.query('COMMIT')
+        
+        revalidatePath(`/clubs/${clubId}/inventory`)
+        return { success: true }
+    } catch (e: any) {
+        await client.query('ROLLBACK')
+        throw e
+    } finally {
+        client.release()
+    }
 }
 
 export async function getEmployees(clubId: string) {
@@ -212,6 +250,82 @@ export async function getEmployees(clubId: string) {
         ORDER BY u.full_name
     `, [clubId])
     return res.rows as { id: string, full_name: string, role: string }[]
+}
+
+export async function transferStock(clubId: string, userId: string, data: { source_warehouse_id: number, target_warehouse_id: number, product_id: number, quantity: number, notes?: string }) {
+    const client = await import("@/db").then(m => m.getClient())
+    try {
+        await client.query('BEGIN')
+
+        const { source_warehouse_id, target_warehouse_id, product_id, quantity } = data
+
+        if (source_warehouse_id === target_warehouse_id) {
+            throw new Error('Склады отправления и назначения должны быть разными')
+        }
+
+        // 1. Check source stock
+        const sourceStockRes = await client.query('SELECT quantity FROM warehouse_stock WHERE warehouse_id = $1 AND product_id = $2', [source_warehouse_id, product_id])
+        const sourcePrevStock = sourceStockRes.rows[0]?.quantity || 0
+        
+        if (sourcePrevStock < quantity) {
+            throw new Error(`Недостаточно товара на складе отправления. Доступно: ${sourcePrevStock}`)
+        }
+
+        // 2. Update source stock
+        const sourceNewStock = sourcePrevStock - quantity
+        await client.query('UPDATE warehouse_stock SET quantity = $1 WHERE warehouse_id = $2 AND product_id = $3', [sourceNewStock, source_warehouse_id, product_id])
+
+        // 3. Update target stock
+        const targetStockRes = await client.query('SELECT quantity FROM warehouse_stock WHERE warehouse_id = $1 AND product_id = $2', [target_warehouse_id, product_id])
+        const targetPrevStock = targetStockRes.rows[0]?.quantity || 0
+        const targetNewStock = targetPrevStock + quantity
+        
+        await client.query(`
+            INSERT INTO warehouse_stock (warehouse_id, product_id, quantity)
+            VALUES ($1, $2, $3)
+            ON CONFLICT (warehouse_id, product_id) DO UPDATE SET quantity = warehouse_stock.quantity + $3
+        `, [target_warehouse_id, product_id, quantity])
+
+        // 4. Log movements
+        const notes = data.notes ? `: ${data.notes}` : ''
+        
+        // Log out from source
+        await logStockMovement(
+            client, clubId, userId, product_id, -quantity, sourcePrevStock, sourceNewStock, 
+            'ADJUSTMENT', `Перемещение на склад #${target_warehouse_id}${notes}`, 
+            'TRANSFER', null, null, source_warehouse_id
+        )
+        
+        // Log in to target
+        await logStockMovement(
+            client, clubId, userId, product_id, quantity, targetPrevStock, targetNewStock, 
+            'ADJUSTMENT', `Перемещение со склада #${source_warehouse_id}${notes}`, 
+            'TRANSFER', null, null, target_warehouse_id
+        )
+
+        await client.query('COMMIT')
+        revalidatePath(`/clubs/${clubId}/inventory`)
+        return { success: true }
+    } catch (e: any) {
+        await client.query('ROLLBACK')
+        throw e
+    } finally {
+        client.release()
+    }
+}
+
+export async function getStockMovements(clubId: string, limit: number = 100) {
+    const res = await query(`
+        SELECT m.*, p.name as product_name, u.full_name as user_name, w.name as warehouse_name
+        FROM warehouse_stock_movements m
+        JOIN warehouse_products p ON m.product_id = p.id
+        LEFT JOIN users u ON m.user_id = u.id
+        LEFT JOIN warehouses w ON m.warehouse_id = w.id
+        WHERE m.club_id = $1
+        ORDER BY m.created_at DESC
+        LIMIT $2
+    `, [clubId, limit])
+    return res.rows
 }
 
 export interface ReplenishmentRule {
@@ -553,13 +667,14 @@ async function logStockMovement(
     reason: string | null = null,
     relatedEntityType: string | null = null,
     relatedEntityId: number | null = null,
-    shiftId: string | null = null
+    shiftId: string | null = null,
+    warehouseId: number | null = null
 ) {
     await client.query(`
         INSERT INTO warehouse_stock_movements 
-        (club_id, product_id, user_id, change_amount, previous_stock, new_stock, type, reason, related_entity_type, related_entity_id, shift_id)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-    `, [clubId, productId, userId, changeAmount, previousStock, newStock, type, reason, relatedEntityType, relatedEntityId, shiftId])
+        (club_id, product_id, user_id, change_amount, previous_stock, new_stock, type, reason, related_entity_type, related_entity_id, shift_id, warehouse_id)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+    `, [clubId, productId, userId, changeAmount, previousStock, newStock, type, reason, relatedEntityType, relatedEntityId, shiftId, warehouseId])
 }
 
 // --- TASKS ---
@@ -692,20 +807,24 @@ export async function massAssignShiftToMovements(movementIds: number[], shiftId:
     revalidatePath(`/clubs/${clubId}/inventory`)
 }
 
-export async function createWriteOff(clubId: string, userId: string, data: { items: { product_id: number, quantity: number, type: 'WASTE' | 'SALARY_DEDUCTION' }[], notes: string, shift_id?: string }) {
+export async function createWriteOff(clubId: string, userId: string, data: { items: { product_id: number, quantity: number, type: 'WASTE' | 'SALARY_DEDUCTION' }[], notes: string, shift_id?: string, warehouse_id?: number }) {
     const client = await import("@/db").then(m => m.getClient())
     try {
         await client.query('BEGIN')
 
-        // Find default warehouse (or fallback to first available)
-        const whRes = await client.query(`
-            SELECT id FROM warehouses 
-            WHERE club_id = $1 
-            ORDER BY is_default DESC, created_at ASC 
-            LIMIT 1
-        `, [clubId])
+        // Find warehouse (passed explicitly, or default, or fallback to first available)
+        let warehouseId = data.warehouse_id
         
-        const warehouseId = whRes.rows[0]?.id
+        if (!warehouseId) {
+            const whRes = await client.query(`
+                SELECT id FROM warehouses 
+                WHERE club_id = $1 
+                ORDER BY is_default DESC, created_at ASC 
+                LIMIT 1
+            `, [clubId])
+            warehouseId = whRes.rows[0]?.id
+        }
+        
         if (!warehouseId) throw new Error("В клубе не создано ни одного склада")
 
         for (const item of data.items) {
@@ -744,7 +863,8 @@ export async function createWriteOff(clubId: string, userId: string, data: { ite
                 reason, 
                 'WRITE_OFF', 
                 null, 
-                data.shift_id || null
+                data.shift_id || null,
+                warehouseId
             )
 
             // 5. If Salary Deduction, update Shift and log
@@ -832,7 +952,7 @@ export async function createProduct(clubId: string, userId: string, data: { name
                     VALUES ($1, $2, $3)
                 `, [warehouseId, productId, data.current_stock])
                 
-                await logStockMovement(client, clubId, userId, productId, data.current_stock, 0, data.current_stock, 'SUPPLY', 'Initial Stock', 'WAREHOUSE', warehouseId)
+                await logStockMovement(client, clubId, userId, productId, data.current_stock, 0, data.current_stock, 'SUPPLY', 'Initial Stock', 'WAREHOUSE', productId, null, warehouseId)
             }
         }
         
@@ -1125,7 +1245,7 @@ export async function createSupply(clubId: string, userId: string, data: { suppl
                         WHERE id = $1
                     `, [item.product_id, item.cost_price])
                     
-                    await logStockMovement(client, clubId, userId, item.product_id, item.quantity, 0, 0, 'SUPPLY', `Supply #${supplyId}`, 'SUPPLY', supplyId)
+                    await logStockMovement(client, clubId, userId, item.product_id, item.quantity, 0, 0, 'SUPPLY', `Supply #${supplyId}`, 'SUPPLY', supplyId, null, warehouseId)
                 }
             }
 
@@ -1476,7 +1596,7 @@ export async function closeInventory(
                 ON CONFLICT (warehouse_id, product_id) DO UPDATE SET quantity = warehouse_stock.quantity + $3
             `, [warehouseId, item.product_id, diffAmount])
 
-            await logStockMovement(client, clubId, userId, item.product_id, diffAmount, item.expected_stock, item.actual_stock, type, reason, 'INVENTORY', inventoryId, shiftId)
+            await logStockMovement(client, clubId, userId, item.product_id, diffAmount, item.expected_stock, item.actual_stock, type, reason, 'INVENTORY', inventoryId, shiftId, warehouseId)
         }
 
         // --- PART B: Handle Unaccounted Sales (Sold items that weren't in stock at all) ---
@@ -1495,7 +1615,7 @@ export async function closeInventory(
             // They start at 0 (effectively), get supplied (+qty), then sold (-qty)
             // But since they were sold, the net change for THIS inventory is just the revenue.
             // However, to be accurate in logs:
-            await logStockMovement(client, clubId, userId, sale.product_id, -sale.quantity, 0, 0, 'SALE', `Продажа неучтенного товара (инвентаризация #${inventoryId})`, 'INVENTORY', inventoryId, shiftId)
+            await logStockMovement(client, clubId, userId, sale.product_id, -sale.quantity, 0, 0, 'SALE', `Продажа неучтенного товара (инвентаризация #${inventoryId})`, 'INVENTORY', inventoryId, shiftId, warehouseId)
         }
 
         // Create automatic supply for all excess/unaccounted items

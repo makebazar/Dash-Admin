@@ -27,7 +27,7 @@ export async function PATCH(
 
         // Verify shift belongs to user
         const shiftCheck = await query(
-            `SELECT id, club_id, check_in, user_id, bar_purchases FROM shifts WHERE id = $1 AND user_id = $2 AND check_out IS NULL`,
+            `SELECT id, club_id, check_in, user_id FROM shifts WHERE id = $1 AND user_id = $2 AND check_out IS NULL`,
             [shiftId, userId]
         );
 
@@ -38,7 +38,6 @@ export async function PATCH(
         const clubId = shiftCheck.rows[0].club_id;
         const checkIn = new Date(shiftCheck.rows[0].check_in);
         const shiftUserId = shiftCheck.rows[0].user_id;
-        const barPurchases = parseFloat(shiftCheck.rows[0].bar_purchases || '0');
 
         // Calculate hours
         const now = new Date();
@@ -89,7 +88,7 @@ export async function PATCH(
 
             // Pass formula directly - calculator now handles normalization
             const calculation = await calculateSalary(
-                { id: shiftId, total_hours: totalHours, evaluations, bar_purchases: barPurchases },
+                { id: shiftId, total_hours: totalHours, evaluations },
                 formula,
                 metrics
             );

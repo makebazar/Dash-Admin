@@ -123,6 +123,7 @@ export async function GET(
                 total_hours,
                 cash_income,
                 card_income,
+                bar_purchases,
                 report_data,
                 salary_snapshot,
                 salary_breakdown,
@@ -242,6 +243,24 @@ export async function GET(
 
         // Process each employee
         const summary = await Promise.all(employees.map(async (emp: any) => {
+            // Fetch detailed bar purchases for this employee and month
+            const barPurchasesRes = await query(`
+                SELECT 
+                    m.id, 
+                    m.created_at as date, 
+                    p.name as product_name, 
+                    ABS(m.change_amount) as quantity,
+                    m.shift_id,
+                    p.selling_price as price
+                FROM warehouse_stock_movements m
+                JOIN warehouse_products p ON m.product_id = p.id
+                WHERE m.user_id = $1 
+                  AND m.type = 'SALE' 
+                  AND m.reason LIKE 'В счет ЗП%'
+                  AND m.created_at >= $2 AND m.created_at <= $3
+                ORDER BY m.created_at DESC
+            `, [emp.id, startOfMonth.toISOString(), endOfMonth.toISOString()]);
+
             const empShifts = shiftsRes.rows.filter((s: any) => s.user_id === emp.id);
             const empPayment = paymentsRes.rows.find((p: any) => p.user_id === emp.id);
             const empPlannedShifts = plannedShiftsRes.rows.find((p: any) => p.user_id === emp.id);
@@ -252,6 +271,9 @@ export async function GET(
             // 0. Pre-calculate monthly totals for KPI metrics
             const finishedShifts = empShifts.filter((s: any) => s.status !== 'ACTIVE' && (!s.salary_snapshot || s.salary_snapshot.type !== 'PERIOD_BONUS'));
             const monthlyMetrics: Record<string, number> = { total_revenue: 0, total_hours: 0 };
+            
+            // bar_purchases - сумма покупок из бара за месяц (включая активную смену)
+            const total_bar_purchases = empShifts.reduce((sum: number, s: any) => sum + (parseFloat(s.bar_purchases || 0)), 0);
 
             finishedShifts.forEach(s => {
                 monthlyMetrics.total_revenue += calculateShiftIncome(s);
@@ -759,6 +781,15 @@ export async function GET(
                     amount: parseFloat(p.amount),
                     method: p.payment_method,
                     payment_type: p.payment_type || 'salary'
+                })),
+                total_bar_purchases,
+                bar_details: barPurchasesRes.rows.map((m: any) => ({
+                    id: m.id,
+                    date: m.date,
+                    product_name: m.product_name,
+                    quantity: m.quantity,
+                    amount: m.price * m.quantity,
+                    shift_id: m.shift_id
                 })),
                 shifts: [
                     // 1. Physical shifts from DB

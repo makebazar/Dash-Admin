@@ -76,6 +76,12 @@ export function SuppliesTab({ supplies, products, warehouses, suppliers, current
         setItems(prev => prev.filter((_, i) => i !== index))
     }
 
+    const handleUpdateItem = (index: number, field: 'quantity' | 'cost', value: number) => {
+        setItems(prev => prev.map((item, i) => 
+            i === index ? { ...item, [field]: value } : item
+        ))
+    }
+
     const handleSubmit = async () => {
         if (!supplierName || items.length === 0) return
         
@@ -315,8 +321,25 @@ export function SuppliesTab({ supplies, products, warehouses, suppliers, current
                                         return (
                                             <TableRow key={idx}>
                                                 <TableCell className="py-2">{p?.name}</TableCell>
-                                                <TableCell className="text-right py-2">{item.quantity}</TableCell>
-                                                <TableCell className="text-right py-2">{item.cost} ₽</TableCell>
+                                                <TableCell className="text-right py-2">
+                                                    <Input 
+                                                        type="number" 
+                                                        className="h-7 w-16 ml-auto text-right text-xs"
+                                                        value={item.quantity}
+                                                        onChange={e => handleUpdateItem(idx, 'quantity', Number(e.target.value))}
+                                                    />
+                                                </TableCell>
+                                                <TableCell className="text-right py-2">
+                                                    <div className="flex items-center justify-end gap-1">
+                                                        <Input 
+                                                            type="number" 
+                                                            className="h-7 w-20 text-right text-xs"
+                                                            value={item.cost}
+                                                            onChange={e => handleUpdateItem(idx, 'cost', Number(e.target.value))}
+                                                        />
+                                                        <span className="text-[10px]">₽</span>
+                                                    </div>
+                                                </TableCell>
                                                 <TableCell className="text-right py-2 font-medium">{(item.quantity * item.cost).toLocaleString()} ₽</TableCell>
                                                 <TableCell className="py-2">
                                                     <Button variant="ghost" size="icon" className="h-6 w-6 text-red-500" onClick={() => handleRemoveItem(idx)}>

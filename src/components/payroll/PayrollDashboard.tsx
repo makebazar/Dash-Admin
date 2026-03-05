@@ -42,6 +42,8 @@ interface Employee {
     virtual_balance_accrued?: number;
     total_paid: number;
     total_paid_bonus?: number;
+    total_bar_purchases?: number;
+    bar_details?: Array<{ id: number | string; date: string; amount: number; product_name?: string; quantity?: number; shift_id?: string }>;
     balance: number;
     virtual_balance?: number;
     payment_status: 'PAID' | 'PARTIAL' | 'PENDING';
@@ -193,6 +195,29 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
         } catch (error) {
             console.error('Delete shift error:', error);
             alert('Не удалось удалить смену');
+        }
+    };
+
+    const handleDeleteBarPurchase = async (movementId: number | string) => {
+        if (!confirm('Вы уверены, что хотите отменить эту покупку? Товар будет возвращен на склад, а сумма вычтена из удержаний.')) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/clubs/${clubId}/bar-purchases/${movementId}`, {
+                method: 'DELETE'
+            });
+
+            if (response.ok) {
+                alert('Покупка отменена, товар возвращен на склад.');
+                fetchData();
+            } else {
+                const error = await response.json();
+                alert(`Ошибка: ${error.error}`);
+            }
+        } catch (error) {
+            console.error('Delete bar purchase error:', error);
+            alert('Не удалось отменить покупку');
         }
     };
 
@@ -366,6 +391,9 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                 </div>
                                             </div>
                                             <div><p className="text-muted-foreground mb-1">Остаток</p><p className="font-medium">{formatCurrency(employee.balance)}</p></div>
+                                            {employee.total_bar_purchases && employee.total_bar_purchases > 0 ? (
+                                                <div><p className="text-muted-foreground mb-1">Покупки бара</p><p className="font-medium text-red-600">-{formatCurrency(employee.total_bar_purchases)}</p></div>
+                                            ) : null}
                                             {employee.has_kpi_feature && (
                                                 <div><p className="text-muted-foreground mb-1">KPI премия</p><p className={`font-medium ${employee.kpi_bonus_amount && employee.kpi_bonus_amount > 0 ? 'text-emerald-600' : ''}`}>{formatCurrency(employee.kpi_bonus_amount || 0)}</p></div>
                                             )}
@@ -1357,7 +1385,7 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                         <div className="text-right">
                                                             <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Итого удержано</p>
                                                             <p className="text-lg font-black text-red-600">
-                                                                -{formatCurrency((employee.shifts || []).reduce((sum, s) => sum + (Number((s as any).metrics?.bar_purchases) || 0), 0))}
+                                                                -{formatCurrency(employee.total_bar_purchases || 0)}
                                                             </p>
                                                         </div>
                                                     </div>
@@ -1366,21 +1394,35 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                             <thead className="bg-muted/20 border-b">
                                                                 <tr>
                                                                     <th className="px-4 py-2 text-left font-medium text-muted-foreground">Дата</th>
+                                                                    <th className="px-4 py-2 text-left font-medium text-muted-foreground">Товар</th>
                                                                     <th className="px-4 py-2 text-left font-medium text-muted-foreground">Смена</th>
                                                                     <th className="px-4 py-2 text-right font-medium text-muted-foreground">Сумма</th>
+                                                                    <th className="px-4 py-2 text-right font-medium text-muted-foreground w-[50px]"></th>
                                                                 </tr>
                                                             </thead>
                                                             <tbody className="divide-y">
-                                                                {(employee.shifts || [])
-                                                                    .filter(s => (Number((s as any).metrics?.bar_purchases) || 0) > 0)
-                                                                    .map(s => (
-                                                                        <tr key={s.id} className="hover:bg-muted/10 transition-colors">
-                                                                            <td className="px-4 py-3">{new Date(s.date).toLocaleDateString('ru-RU')}</td>
-                                                                            <td className="px-4 py-3 text-muted-foreground">Смена #{s.id}</td>
-                                                                            <td className="px-4 py-3 text-right font-bold text-red-600">-{formatCurrency(Number((s as any).metrics?.bar_purchases) || 0)}</td>
+                                                                {(employee.bar_details || [])
+                                                                    .map(item => (
+                                                                        <tr key={item.id} className="hover:bg-muted/10 transition-colors group">
+                                                                            <td className="px-4 py-3 whitespace-nowrap text-xs">{new Date(item.date).toLocaleDateString('ru-RU')}</td>
+                                                                            <td className="px-4 py-3 font-medium text-xs">{item.product_name} {item.quantity! > 1 && <span className="text-muted-foreground font-normal">× {item.quantity}</span>}</td>
+                                                                            <td className="px-4 py-3 text-[10px] text-muted-foreground font-mono">
+                                                                                {item.shift_id ? `#${item.shift_id.slice(0, 8)}` : '—'}
+                                                                            </td>
+                                                                            <td className="px-4 py-3 text-right font-bold text-red-600 text-xs">-{formatCurrency(item.amount)}</td>
+                                                                            <td className="px-4 py-3 text-right">
+                                                                                <Button
+                                                                                    variant="ghost"
+                                                                                    size="icon"
+                                                                                    className="h-6 w-6 text-muted-foreground hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                                                    onClick={(e) => { e.stopPropagation(); handleDeleteBarPurchase(item.id); }}
+                                                                                >
+                                                                                    <Trash2 className="h-3 w-3" />
+                                                                                </Button>
+                                                                            </td>
                                                                         </tr>
                                                                     ))}
-                                                                {!(employee.shifts || []).some(s => (Number((s as any).metrics?.bar_purchases) || 0) > 0) && (
+                                                                {(!employee.bar_details || employee.bar_details.length === 0) && (
                                                                     <tr>
                                                                         <td colSpan={3} className="px-4 py-8 text-center text-muted-foreground italic">
                                                                             В этом месяце покупок не было

@@ -10,9 +10,9 @@ import { Label } from "@/components/ui/label"
 import { 
     Loader2, Trash2, Search, Camera, 
     ArrowLeft, ArrowRight, CheckCircle2, ShoppingCart, 
-    Ban, Wallet
+    Ban, Wallet, Warehouse, Plus
 } from "lucide-react"
-import { getProducts, createWriteOff, getProductByBarcode } from "@/app/clubs/[clubId]/inventory/actions"
+import { getProducts, createWriteOff, getProductByBarcode, getWarehouses, type Warehouse as WarehouseType } from "@/app/clubs/[clubId]/inventory/actions"
 import { 
     Table, TableBody, TableCell, TableRow 
 } from "@/components/ui/table"
@@ -41,6 +41,8 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
     const [step, setStep] = useState(1) // 1: Items, 2: Final Details
     const [items, setItems] = useState<WriteOffItem[]>([])
     const [allProducts, setAllProducts] = useState<any[]>([])
+    const [warehouses, setWarehouses] = useState<WarehouseType[]>([])
+    const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>("")
     const [isPending, startTransition] = useTransition()
     
     // UI States
@@ -55,6 +57,11 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
     useEffect(() => {
         if (isOpen) {
             getProducts(clubId).then(setAllProducts)
+            getWarehouses(clubId).then(whs => {
+                setWarehouses(whs)
+                const def = whs.find(w => w.is_default) || whs[0]
+                if (def) setSelectedWarehouseId(def.id.toString())
+            })
         }
     }, [isOpen, clubId])
 
@@ -115,6 +122,10 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
 
     const handleFinalize = () => {
         if (items.length === 0) return
+        if (!selectedWarehouseId) {
+            alert("Выберите склад")
+            return
+        }
         startTransition(async () => {
             try {
                 await createWriteOff(clubId, userId, {
@@ -124,7 +135,8 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
                         type: i.type
                     })),
                     notes: notes,
-                    shift_id: activeShiftId
+                    shift_id: activeShiftId,
+                    warehouse_id: Number(selectedWarehouseId)
                 })
                 alert("Списание успешно оформлено")
                 handleClose()
@@ -156,25 +168,53 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
     return (
         <>
             <Dialog open={isOpen} onOpenChange={handleClose}>
-                <DialogContent className="max-w-2xl bg-slate-950 border-slate-800 text-white p-0 overflow-hidden flex flex-col h-[90vh]">
-                    <DialogHeader className="p-6 border-b border-slate-800">
-                        <DialogTitle className="flex items-center gap-2">
-                            <Ban className="h-5 w-5 text-red-400" />
-                            {step === 1 ? "Списание товара" : "Причина списания"}
-                        </DialogTitle>
-                        <DialogDescription className="text-slate-400">
-                            {step === 1 ? (
-                                <span>
-                                    Выберите товары для списания. 
-                                    {currentSalary > 0 && <span className="ml-1 text-emerald-400">Доступно из ЗП: {currentSalary.toLocaleString()} ₽</span>}
-                                </span>
-                            ) : "Укажите причину (брак, просрочка и т.д.)"}
-                        </DialogDescription>
+                <DialogContent className="max-w-none w-screen h-screen m-0 p-0 rounded-none bg-slate-950 border-none text-white overflow-hidden flex flex-col">
+                    <DialogHeader className="p-6 border-b border-slate-800 flex-row items-center justify-between space-y-0">
+                        <div className="space-y-1">
+                            <DialogTitle className="flex items-center gap-2">
+                                <Ban className="h-5 w-5 text-red-400" />
+                                {step === 1 ? "Списание товара" : "Причина списания"}
+                            </DialogTitle>
+                            <DialogDescription className="text-slate-400">
+                                {step === 1 ? (
+                                    <span>
+                                        Выберите товары для списания. 
+                                        {currentSalary > 0 && <span className="ml-1 text-emerald-400">Доступно из ЗП: {currentSalary.toLocaleString()} ₽</span>}
+                                    </span>
+                                ) : "Укажите причину (брак, просрочка и т.д.)"}
+                            </DialogDescription>
+                        </div>
                     </DialogHeader>
 
-                    <div className="flex-1 overflow-y-auto p-6">
+                    <div className="flex-1 overflow-y-auto p-4 md:p-8 max-w-4xl mx-auto w-full">
                         {step === 1 ? (
                             <div className="space-y-6">
+                                {/* Warehouse Selector */}
+                                <div className="space-y-2">
+                                    <Label className="text-xs text-slate-500 uppercase tracking-wider flex items-center gap-2">
+                                        <Warehouse className="h-3 w-3" />
+                                        Списать со склада
+                                    </Label>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        {warehouses.map(wh => (
+                                            <Button
+                                                key={wh.id}
+                                                variant="outline"
+                                                className={cn(
+                                                    "h-12 border-slate-800 bg-slate-900/50 hover:bg-slate-800 text-xs justify-start px-4",
+                                                    selectedWarehouseId === wh.id.toString() && "border-red-500 bg-red-500/10 text-red-400"
+                                                )}
+                                                onClick={() => setSelectedWarehouseId(wh.id.toString())}
+                                            >
+                                                <div className="flex flex-col items-start truncate">
+                                                    <span className="truncate">{wh.name}</span>
+                                                    {wh.is_default && <span className="text-[8px] opacity-50 uppercase">Основной</span>}
+                                                </div>
+                                            </Button>
+                                        ))}
+                                    </div>
+                                </div>
+
                                 <div className="grid grid-cols-2 gap-3">
                                     <Button 
                                         variant="outline" 
@@ -343,15 +383,15 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
                                 onChange={e => setSearchQuery(e.target.value)}
                             />
                         </div>
-                        <div className="max-h-[200px] overflow-y-auto space-y-1 pr-2">
+                        <div className="max-h-[300px] overflow-y-auto space-y-1.5 pr-2 custom-scrollbar">
                             {filteredProducts.map(p => (
                                 <button
                                     key={p.id}
                                     className={cn(
-                                        "w-full text-left p-3 rounded-xl transition-all text-sm border",
+                                        "w-full text-left p-4 rounded-2xl transition-all text-sm border",
                                         selectedProductId === p.id.toString() 
-                                            ? "bg-red-600/20 border-red-500 text-red-400" 
-                                            : "hover:bg-slate-900 border-transparent text-slate-300"
+                                            ? "bg-red-500/10 border-red-500/50 text-red-400 font-bold" 
+                                            : "bg-slate-900/30 border-slate-800/50 text-slate-400 hover:bg-slate-900 hover:border-slate-700"
                                     )}
                                     onClick={() => setSelectedProductId(p.id.toString())}
                                 >
@@ -361,47 +401,63 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
                         </div>
 
                         {selectedProductId && (
-                            <div className="space-y-4 pt-4 border-t border-slate-800">
-                                <div className="space-y-2">
-                                    <Label className="text-[10px] uppercase text-slate-500 font-bold">Количество</Label>
-                                    <Input 
-                                        type="number" 
-                                        value={itemQty} 
-                                        onChange={e => setItemQty(e.target.value)}
-                                        className="bg-slate-900 border-slate-800 h-12 text-lg font-bold"
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label className="text-[10px] uppercase text-slate-500 font-bold">Тип списания</Label>
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <Button 
-                                            variant={writeOffType === 'WASTE' ? 'default' : 'outline'}
-                                            className={cn(
-                                                "h-12 rounded-xl text-xs",
-                                                writeOffType === 'WASTE' ? "bg-red-600 text-white" : "border-slate-800 text-slate-400"
-                                            )}
-                                            onClick={() => setWriteOffType('WASTE')}
-                                        >
-                                            Списание (брак)
-                                        </Button>
-                                        <Button 
-                                            variant={writeOffType === 'SALARY_DEDUCTION' ? 'default' : 'outline'}
-                                            className={cn(
-                                                "h-12 rounded-xl text-xs",
-                                                writeOffType === 'SALARY_DEDUCTION' ? "bg-amber-600 text-white" : "border-slate-800 text-slate-400"
-                                            )}
-                                            onClick={() => setWriteOffType('SALARY_DEDUCTION')}
-                                        >
-                                            В счет ЗП
-                                        </Button>
+                            <div className="space-y-6 pt-6 border-t border-slate-800/50">
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <Label className="text-[10px] uppercase text-slate-500 font-bold tracking-wider">Количество</Label>
+                                        <Input 
+                                            type="number" 
+                                            value={itemQty} 
+                                            onChange={e => setItemQty(e.target.value)}
+                                            className="bg-slate-900/50 border-slate-800 h-14 text-xl font-black text-center rounded-2xl focus:ring-red-500/20 focus:border-red-500/50 transition-all"
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label className="text-[10px] uppercase text-slate-500 font-bold tracking-wider">Тип списания</Label>
+                                        <div className="grid grid-cols-1 gap-2">
+                                            <button
+                                                onClick={() => setWriteOffType(writeOffType === 'WASTE' ? 'SALARY_DEDUCTION' : 'WASTE')}
+                                                className={cn(
+                                                    "h-14 rounded-2xl border transition-all flex items-center justify-center gap-3 px-4",
+                                                    writeOffType === 'WASTE' 
+                                                        ? "bg-red-500/10 border-red-500/50 text-red-400" 
+                                                        : "bg-amber-500/10 border-amber-500/50 text-amber-400"
+                                                )}
+                                            >
+                                                {writeOffType === 'WASTE' ? (
+                                                    <>
+                                                        <Trash2 className="h-4 w-4" />
+                                                        <span className="text-xs font-bold uppercase">Списание (брак)</span>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <Wallet className="h-4 w-4" />
+                                                        <span className="text-xs font-bold uppercase">В счет ЗП</span>
+                                                    </>
+                                                )}
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
                         )}
                     </div>
-                    <DialogFooter className="flex-row gap-3">
-                        <Button variant="outline" onClick={() => setIsAddDialogOpen(false)} className="flex-1 border-slate-800 h-12 rounded-xl">Отмена</Button>
-                        <Button onClick={handleAddProduct} disabled={!selectedProductId} className="flex-1 bg-red-600 h-12 rounded-xl">Добавить</Button>
+                    <DialogFooter className="flex-row gap-3 p-6 pt-2 border-t border-slate-800/50">
+                        <Button 
+                            variant="ghost" 
+                            onClick={() => setIsAddDialogOpen(false)} 
+                            className="flex-1 h-12 rounded-xl text-slate-500 hover:text-slate-300 hover:bg-slate-900 transition-colors"
+                        >
+                            Отмена
+                        </Button>
+                        <Button 
+                            onClick={handleAddProduct} 
+                            disabled={!selectedProductId} 
+                            className="flex-1 bg-red-600 hover:bg-red-700 text-white h-12 rounded-xl font-bold shadow-lg shadow-red-900/20 transition-all active:scale-[0.98]"
+                        >
+                            <Plus className="h-4 w-4 mr-2" />
+                            Добавить
+                        </Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
