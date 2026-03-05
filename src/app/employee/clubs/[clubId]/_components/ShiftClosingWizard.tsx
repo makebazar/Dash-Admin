@@ -306,7 +306,14 @@ export function ShiftClosingWizard({
     // Step 2: Inventory Count
     const handleStockChange = (itemId: number, val: string) => {
         const numVal = val === "" ? null : parseInt(val)
-        setInventoryItems(prev => prev.map(i => i.id === itemId ? { ...i, actual_stock: numVal } : i))
+        setInventoryItems(prev => prev.map(i => {
+            if (i.id === itemId) {
+                // Если ввели число >= 0, помечаем товар как видимый навсегда
+                const isVisible = numVal !== null ? true : i.is_visible
+                return { ...i, actual_stock: numVal, is_visible: isVisible }
+            }
+            return i
+        }))
     }
 
     const visibleItems = useMemo(() => {
