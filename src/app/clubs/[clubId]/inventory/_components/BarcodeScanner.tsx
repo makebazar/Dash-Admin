@@ -57,7 +57,7 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
 
                 // This call triggers the browser camera permission request
                 await scannerRef.current.start(
-                    { facingMode: { ideal: "environment" } }, // Use 'ideal' to allow fallback on PC
+                    { facingMode: "environment" }, // Must be a string for this library
                     config,
                     (decodedText) => {
                         const now = Date.now()
