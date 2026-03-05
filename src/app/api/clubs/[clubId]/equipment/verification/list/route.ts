@@ -54,7 +54,7 @@ export async function GET(
              LEFT JOIN users vu ON t.verified_by = vu.id
              WHERE e.club_id = $1 
                AND ${statusFilter}
-             ORDER BY t.completed_at DESC`,
+             ORDER BY COALESCE(t.completed_at, t.verified_at) DESC`,
             [clubId]
         );
 

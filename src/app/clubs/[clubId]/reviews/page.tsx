@@ -422,7 +422,10 @@ export default function ChecklistsPage({ params, searchParams }: { params: Promi
     }, [tasks])
 
     const employees = useMemo(() => {
-        const unique = new Set(tasks.map(t => t.completed_by_name || 'Неизвестный'))
+        const unique = new Set(tasks.map(t => {
+            const name = t.completed_by_name || (t.verification_status === 'REJECTED' ? 'На доработке' : 'Неизвестный')
+            return name
+        }))
         return Array.from(unique).sort()
     }, [tasks])
 
@@ -746,10 +749,12 @@ export default function ChecklistsPage({ params, searchParams }: { params: Promi
                                                                 </div>
 
                                                                 <div className="flex items-center justify-between sm:justify-end gap-6 sm:mr-4 w-full sm:w-auto border-t sm:border-t-0 pt-3 sm:pt-0 mt-1 sm:mt-0">
-                                                                    <div className="flex flex-row sm:flex-col items-center sm:items-end gap-3 sm:gap-0 text-left sm:text-right">
-                                                                        <div className="flex items-center gap-2 mb-0.5">
-                                                                            <span className="text-sm font-medium text-slate-700">{task.completed_by_name?.split(' ')[0]}</span>
-                                                                        </div>
+                                                                        <div className="flex flex-row sm:flex-col items-center sm:items-end gap-3 sm:gap-0 text-left sm:text-right">
+                                                                            <div className="flex items-center gap-2 mb-0.5">
+                                                                                <span className="text-sm font-medium text-slate-700">
+                                                                                    {task.completed_by_name?.split(' ')[0] || (task.verification_status === 'REJECTED' ? 'На доработке' : '—')}
+                                                                                </span>
+                                                                            </div>
                                                                         <div className="flex items-center gap-2 text-xs text-slate-400">
                                                                             <span>
                                                                                 {task.completed_at 
