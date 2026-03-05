@@ -1039,7 +1039,19 @@ export async function createInventory(clubId: string, userId: string, targetMetr
     try {
         await client.query('BEGIN')
 
-        // 1. Check if an OPEN inventory for this shift already exists
+        // 1. Resolve warehouse if not provided
+        let targetWarehouseId = warehouseId
+        if (!targetWarehouseId) {
+            const defaultWh = await client.query('SELECT id FROM warehouses WHERE club_id = $1 AND is_default = true LIMIT 1', [clubId])
+            targetWarehouseId = defaultWh.rows[0]?.id
+            
+            if (!targetWarehouseId) {
+                const anyWh = await client.query('SELECT id FROM warehouses WHERE club_id = $1 LIMIT 1', [clubId])
+                targetWarehouseId = anyWh.rows[0]?.id
+            }
+        }
+
+        // 2. Check if an OPEN inventory for this shift already exists
         if (shiftId) {
             const existingInv = await client.query(`
                 SELECT id FROM warehouse_inventories 
@@ -1053,19 +1065,19 @@ export async function createInventory(clubId: string, userId: string, targetMetr
             }
         }
 
-        // 2. Create Inventory Header
+        // 3. Create Inventory Header
         const invRes = await client.query(`
             INSERT INTO warehouse_inventories (club_id, created_by, status, target_metric_key, warehouse_id, shift_id)
             VALUES ($1, $2, 'OPEN', $3, $4, $5)
             RETURNING id
-        `, [clubId, userId, targetMetricKey, warehouseId, shiftId])
+        `, [clubId, userId, targetMetricKey, targetWarehouseId, shiftId])
         const inventoryId = invRes.rows[0].id
 
-        // 2. Snapshot current stock
+        // 4. Snapshot current stock
         let query = ''
         const params: any[] = [clubId]
         
-        if (warehouseId) {
+        if (targetWarehouseId) {
             // Specific Warehouse Snapshot
             // Include ALL active products from this club, showing 0 if no stock in this warehouse
             query = `
@@ -1077,7 +1089,7 @@ export async function createInventory(clubId: string, userId: string, targetMetr
                 LEFT JOIN warehouse_stock ws ON p.id = ws.product_id AND ws.warehouse_id = $2
                 WHERE p.club_id = $1 AND p.is_active = true
             `
-            params.push(warehouseId)
+            params.push(targetWarehouseId)
             
             if (categoryId) {
                 query += ` AND p.category_id = $3`
@@ -1133,10 +1145,22 @@ export async function addProductToInventory(inventoryId: number, productId: numb
 
         // Get product details and current stock in that warehouse (even if 0)
         // We need to know which warehouse this inventory is for
-        const inv = await client.query(`SELECT warehouse_id FROM warehouse_inventories WHERE id = $1`, [inventoryId])
-        const warehouseId = inv.rows[0]?.warehouse_id
+        const inv = await client.query(`SELECT warehouse_id, club_id FROM warehouse_inventories WHERE id = $1`, [inventoryId])
+        let warehouseId = inv.rows[0]?.warehouse_id
+        const currentClubId = inv.rows[0]?.club_id
 
-        if (!warehouseId) throw new Error("Инвентаризация не привязана к складу")
+        if (!warehouseId) {
+             // Fallback: Use default or any warehouse if not specified
+             const defaultWh = await client.query('SELECT id FROM warehouses WHERE club_id = $1 AND is_default = true LIMIT 1', [currentClubId])
+             warehouseId = defaultWh.rows[0]?.id
+
+             if (!warehouseId) {
+                 const anyWh = await client.query('SELECT id FROM warehouses WHERE club_id = $1 LIMIT 1', [currentClubId])
+                 warehouseId = anyWh.rows[0]?.id
+             }
+        }
+
+        if (!warehouseId) throw new Error("Инвентаризация не привязана к складу и склад не найден")
 
         const productRes = await client.query(`
             SELECT p.cost_price, p.selling_price, COALESCE(ws.quantity, 0) as current_stock
@@ -1245,9 +1269,15 @@ export async function closeInventory(inventoryId: number, clubId: string, report
         const userId = invHeader.rows[0]?.created_by
 
         if (!warehouseId) {
-             // Fallback to default warehouse (Legacy)
+             // Fallback 1: Default warehouse
              const defaultWh = await client.query('SELECT id FROM warehouses WHERE club_id = $1 AND is_default = true LIMIT 1', [clubId])
              warehouseId = defaultWh.rows[0]?.id
+
+             if (!warehouseId) {
+                 // Fallback 2: Any first available warehouse for this club
+                 const anyWh = await client.query('SELECT id FROM warehouses WHERE club_id = $1 LIMIT 1', [clubId])
+                 warehouseId = anyWh.rows[0]?.id
+             }
         }
 
         if (!warehouseId) throw new Error("Не найден склад для корректировки остатков")

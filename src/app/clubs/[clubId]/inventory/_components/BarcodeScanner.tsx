@@ -59,6 +59,9 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
                 scannerRef.current = new Html5Qrcode("barcode-reader")
             }
 
+            // Identify if it's likely a back camera by label or index
+            const isBackCamera = /back|rear|основная/i.test(cameras.find(c => c.id === cameraId)?.label || '') || cameras.length > 1
+
             const config = {
                 fps: 30,
                 qrbox: (viewfinderWidth: number, viewFinderHeight: number) => {
@@ -68,6 +71,8 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
                 },
                 aspectRatio: 1.0,
                 videoConstraints: {
+                    deviceId: { exact: cameraId },
+                    facingMode: isBackCamera ? "environment" : "user",
                     focusMode: "continuous",
                     width: { min: 640, ideal: 1280, max: 1920 },
                     height: { min: 480, ideal: 720, max: 1080 }
@@ -194,17 +199,31 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
         setTimeout(() => ripple.remove(), 600)
 
         try {
+            // Advanced focus for S23 and others
             // @ts-ignore
-            const capabilities: any = scannerRef.current.getRunningTrackCapabilities()
+            const track = scannerRef.current?.getRunningTrack?.()
+            if (!track) return
+
+            // @ts-ignore
+            const capabilities: any = track.getCapabilities?.() || {}
+            
             if (capabilities.focusMode) {
-                // Try to force a re-focus by switching modes
-                await scannerRef.current.applyVideoConstraints({
-                    // @ts-ignore
-                    advanced: [{ focusMode: "manual" }, { focusMode: "continuous" }]
+                // For modern Androids: try to apply "single-shot" then back to "continuous"
+                await track.applyConstraints({
+                    advanced: [
+                        { focusMode: capabilities.focusMode.includes("single-shot") ? "single-shot" : "continuous" },
+                        { focusDistance: 0.1 }
+                    ]
                 })
+                
+                setTimeout(async () => {
+                    await track.applyConstraints({
+                        advanced: [{ focusMode: "continuous" }]
+                    })
+                }, 500)
             }
         } catch (e) {
-            console.warn("Manual focus not supported", e)
+            console.warn("Manual focus nudge failed", e)
         }
     }
 
