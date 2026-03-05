@@ -1067,15 +1067,15 @@ export async function createInventory(clubId: string, userId: string, targetMetr
         
         if (warehouseId) {
             // Specific Warehouse Snapshot
-            // ONLY include items that have stock > 0 in this warehouse
+            // Include ALL active products from this club, showing 0 if no stock in this warehouse
             query = `
                 SELECT p.id, 
-                       ws.quantity as current_stock, 
+                       COALESCE(ws.quantity, 0) as current_stock, 
                        p.cost_price, 
                        p.selling_price 
                 FROM warehouse_products p
-                JOIN warehouse_stock ws ON p.id = ws.product_id AND ws.warehouse_id = $2
-                WHERE p.club_id = $1 AND p.is_active = true AND ws.quantity > 0
+                LEFT JOIN warehouse_stock ws ON p.id = ws.product_id AND ws.warehouse_id = $2
+                WHERE p.club_id = $1 AND p.is_active = true
             `
             params.push(warehouseId)
             
@@ -1084,16 +1084,18 @@ export async function createInventory(clubId: string, userId: string, targetMetr
                 params.push(categoryId)
             }
         } else {
-            // Legacy: Aggregate Snapshot (Sum of all warehouses)
-            // Ideally we should deprecate this or force warehouse selection
+            // Aggregate Snapshot (Sum of all warehouses)
             query = `
-                SELECT id, current_stock, cost_price, selling_price 
-                FROM warehouse_products 
-                WHERE club_id = $1 AND is_active = true
+                SELECT p.id, 
+                       COALESCE((SELECT SUM(quantity) FROM warehouse_stock WHERE product_id = p.id), 0) as current_stock, 
+                       p.cost_price, 
+                       p.selling_price 
+                FROM warehouse_products p
+                WHERE p.club_id = $1 AND p.is_active = true
             `
             
             if (categoryId) {
-                query += ` AND category_id = $2`
+                query += ` AND p.category_id = $2`
                 params.push(categoryId)
             }
         }

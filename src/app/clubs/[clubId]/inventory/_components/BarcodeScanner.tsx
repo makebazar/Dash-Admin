@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 
 interface BarcodeScannerProps {
-    onScan: (barcode: string) => void
+    onScan: (barcode: string) => Promise<boolean>
     onClose: () => void
     isOpen: boolean
 }
@@ -16,9 +16,20 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
     const scannerRef = useRef<Html5Qrcode | null>(null)
     const lastScannedRef = useRef<{ code: string, time: number } | null>(null)
     const [error, setError] = useState<string | null>(null)
+    const [scanStatus, setScanStatus] = useState<{ type: 'success' | 'error' | 'idle', message?: string }>({ type: 'idle' })
     const [isInitializing, setIsInitializing] = useState(false)
     const [isTorchOn, setIsTorchOn] = useState(false)
     const [hasTorch, setHasTorch] = useState(false)
+
+    // Clear scan status after some time
+    useEffect(() => {
+        if (scanStatus.type !== 'idle') {
+            const timer = setTimeout(() => {
+                setScanStatus({ type: 'idle' })
+            }, 2000)
+            return () => clearTimeout(timer)
+        }
+    }, [scanStatus])
 
     useEffect(() => {
         let isMounted = true
@@ -92,9 +103,9 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
                 startPromise = scannerRef.current.start(
                     cameraId,
                     config,
-                    (decodedText) => {
+                    async (decodedText) => {
                         const now = Date.now()
-                        if (lastScannedRef.current?.code === decodedText && now - lastScannedRef.current.time < 1500) {
+                        if (lastScannedRef.current?.code === decodedText && now - lastScannedRef.current.time < 2000) {
                             return
                         }
                         lastScannedRef.current = { code: decodedText, time: now }
@@ -103,8 +114,14 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
                             window.navigator.vibrate(100)
                         }
 
-                        onClose()
-                        onScan(decodedText)
+                        // Try to process the scan without closing
+                        const success = await onScan(decodedText)
+                        
+                        if (success) {
+                            setScanStatus({ type: 'success', message: 'Товар добавлен' })
+                        } else {
+                            setScanStatus({ type: 'error', message: 'Товар не найден' })
+                        }
                     },
                     () => {}
                 )
@@ -155,7 +172,7 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
             cleanup()
             scannerRef.current = null
         }
-    }, [isOpen, onScan])
+    }, [isOpen]) // Remove onScan from dependencies to avoid restarts when parent state changes
 
     const toggleTorch = async () => {
         if (!scannerRef.current || !scannerRef.current.isScanning) return
@@ -245,6 +262,28 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
                     {/* Simple Indicator Overlay */}
                     {!isInitializing && !error && (
                         <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center">
+                            {/* Target Frame */}
+                            <div className="w-64 h-40 border-2 border-blue-500/30 rounded-2xl relative">
+                                <div className="absolute top-0 left-0 w-4 h-4 border-t-2 border-l-2 border-blue-500 rounded-tl-lg" />
+                                <div className="absolute top-0 right-0 w-4 h-4 border-t-2 border-r-2 border-blue-500 rounded-tr-lg" />
+                                <div className="absolute bottom-0 left-0 w-4 h-4 border-b-2 border-l-2 border-blue-500 rounded-bl-lg" />
+                                <div className="absolute bottom-0 right-0 w-4 h-4 border-b-2 border-r-2 border-blue-500 rounded-br-lg" />
+                                
+                                {/* Scan Line Animation */}
+                                <div className="absolute top-0 left-0 right-0 h-0.5 bg-blue-500/50 shadow-[0_0_10px_rgba(59,130,246,0.5)] animate-scan-line" />
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Scan Status Feedback */}
+                    {scanStatus.type !== 'idle' && (
+                        <div className={`absolute bottom-10 left-1/2 -translate-x-1/2 px-6 py-3 rounded-2xl flex items-center gap-2 animate-in zoom-in slide-in-from-bottom-4 duration-300 z-50 shadow-2xl ${
+                            scanStatus.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'
+                        }`}>
+                            <div className="bg-white/20 p-1 rounded-full">
+                                <Barcode className="h-4 w-4" />
+                            </div>
+                            <span className="font-bold text-sm whitespace-nowrap">{scanStatus.message}</span>
                         </div>
                     )}
                 </div>
@@ -257,10 +296,15 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
                 #barcode-reader video { width: 100% !important; height: 100% !important; object-fit: cover !important; }
                 #barcode-reader__scan_region { display: flex !important; align-items: center !important; justify-content: center !important; }
                 #barcode-reader__scan_region svg { 
-                    width: 240px !important; 
-                    height: 160px !important; 
-                    stroke: #3b82f6 !important; 
-                    stroke-width: 2px !important;
+                    display: none !important;
+                }
+                @keyframes scan-line {
+                    0% { top: 0; }
+                    50% { top: 100%; }
+                    100% { top: 0; }
+                }
+                .animate-scan-line {
+                    animation: scan-line 3s infinite ease-in-out;
                 }
             `}</style>
         </Dialog>

@@ -388,32 +388,33 @@ export function ShiftClosingWizard({
                 return i
             }))
             setScannedItemId(item.id)
-            return
+            return true
         }
 
         try {
             const product = await getProductByBarcode(clubId, barcode)
             if (product) {
-                if (confirm(`Товар "${product.name}" не в списке инвентаризации. Добавить?`)) {
-                    await addProductToInventory(inventoryId!, product.id)
-                    const invItems = await getInventoryItems(inventoryId!)
-                    setInventoryItems(invItems.map(i => {
-                        const isNew = i.product_id === product.id
-                        const oldItem = inventoryItems.find(old => old.id === i.id)
-                        return { 
-                            ...i, 
-                            actual_stock: isNew ? 1 : i.actual_stock,
-                            is_visible: isNew ? true : oldItem?.is_visible || false 
-                        }
-                    }))
-                    const newItem = invItems.find(i => i.product_id === product.id)
-                    if (newItem) setScannedItemId(newItem.id)
-                }
+                // No confirm, just add and highlight
+                await addProductToInventory(inventoryId!, product.id)
+                const invItems = await getInventoryItems(inventoryId!)
+                setInventoryItems(invItems.map(i => {
+                    const isNew = i.product_id === product.id
+                    const oldItem = inventoryItems.find(old => old.id === i.id)
+                    return { 
+                        ...i, 
+                        actual_stock: isNew ? 1 : i.actual_stock,
+                        is_visible: isNew ? true : oldItem?.is_visible || false 
+                    }
+                }))
+                const newItem = invItems.find(i => i.product_id === product.id)
+                if (newItem) setScannedItemId(newItem.id)
+                return true
             } else {
-                alert(`Товар со штрихкодом ${barcode} не найден.`)
+                return false
             }
         } catch (e) {
             console.error(e)
+            return false
         }
     }, [inventoryItems, clubId, inventoryId])
 
@@ -873,6 +874,29 @@ export function ShiftClosingWizard({
                                 <span className="text-2xl font-black">{calculationResult.diff.toLocaleString()} ₽</span>
                             </div>
                         </div>
+
+                        {/* Alerts for unaccounted supplies */}
+                        {inventoryItems.some(item => (item.expected_stock || 0) === 0 && (item.actual_stock || 0) > 0) && (
+                            <div className="bg-blue-900/20 border border-blue-500/30 p-4 rounded-2xl space-y-3">
+                                <div className="flex items-center gap-2 text-blue-400">
+                                    <AlertTriangle className="h-5 w-5" />
+                                    <h4 className="font-bold">Неучтенные поступления</h4>
+                                </div>
+                                <div className="space-y-2">
+                                    {inventoryItems.filter(item => (item.expected_stock || 0) === 0 && (item.actual_stock || 0) > 0).map(item => (
+                                        <div key={item.id} className="flex justify-between items-center text-sm">
+                                            <span className="text-slate-300">{item.product_name}</span>
+                                            <span className="font-mono bg-blue-500/20 px-2 py-0.5 rounded text-blue-300">
+                                                +{item.actual_stock} шт. (было 0)
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+                                <p className="text-xs text-blue-400/60 pt-2 border-t border-blue-500/20">
+                                    Эти товары появились на складе без оформления накладной. Система автоматически зафиксирует их наличие.
+                                </p>
+                            </div>
+                        )}
 
                         {calculationResult.diff !== 0 && (
                             <div className="space-y-3">
