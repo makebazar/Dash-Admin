@@ -168,30 +168,30 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
     return (
         <>
             <Dialog open={isOpen} onOpenChange={handleClose}>
-                <DialogContent className="max-w-none w-screen h-screen m-0 p-0 rounded-none bg-slate-950 border-none text-white overflow-hidden flex flex-col">
-                    <DialogHeader className="p-6 border-b border-slate-800 flex-row items-center justify-between space-y-0">
-                        <div className="space-y-1">
-                            <DialogTitle className="flex items-center gap-2">
-                                <Ban className="h-5 w-5 text-red-400" />
+                <DialogContent className="max-w-none w-screen h-[100dvh] m-0 p-0 rounded-none bg-slate-950 border-none text-white overflow-hidden flex flex-col fixed inset-0">
+                    <DialogHeader className="p-4 border-b border-slate-800 flex-row items-center justify-between space-y-0 shrink-0">
+                        <div className="space-y-0.5">
+                            <DialogTitle className="flex items-center gap-2 text-base">
+                                <Ban className="h-4 w-4 text-red-400" />
                                 {step === 1 ? "Списание товара" : "Причина списания"}
                             </DialogTitle>
-                            <DialogDescription className="text-slate-400">
+                            <DialogDescription className="text-slate-400 text-[10px] leading-tight">
                                 {step === 1 ? (
-                                    <span>
-                                        Выберите товары для списания. 
-                                        {currentSalary > 0 && <span className="ml-1 text-emerald-400">Доступно из ЗП: {currentSalary.toLocaleString()} ₽</span>}
+                                    <span className="flex flex-wrap items-center gap-x-1">
+                                        Выберите товары. 
+                                        {currentSalary > 0 && <span className="text-emerald-400 font-medium">Доступно: {currentSalary.toLocaleString()} ₽</span>}
                                     </span>
                                 ) : "Укажите причину (брак, просрочка и т.д.)"}
                             </DialogDescription>
                         </div>
                     </DialogHeader>
 
-                    <div className="flex-1 overflow-y-auto p-4 md:p-8 max-w-4xl mx-auto w-full">
+                    <div className="flex-1 overflow-y-auto p-4 w-full max-w-4xl mx-auto space-y-4">
                         {step === 1 ? (
-                            <div className="space-y-6">
+                            <div className="space-y-4 pb-4">
                                 {/* Warehouse Selector */}
                                 <div className="space-y-2">
-                                    <Label className="text-xs text-slate-500 uppercase tracking-wider flex items-center gap-2">
+                                    <Label className="text-[10px] text-slate-500 uppercase tracking-wider flex items-center gap-2">
                                         <Warehouse className="h-3 w-3" />
                                         Списать со склада
                                     </Label>
@@ -201,36 +201,36 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
                                                 key={wh.id}
                                                 variant="outline"
                                                 className={cn(
-                                                    "h-12 border-slate-800 bg-slate-900/50 hover:bg-slate-800 text-xs justify-start px-4",
+                                                    "h-10 border-slate-800 bg-slate-900/50 hover:bg-slate-800 text-[10px] justify-start px-3",
                                                     selectedWarehouseId === wh.id.toString() && "border-red-500 bg-red-500/10 text-red-400"
                                                 )}
                                                 onClick={() => setSelectedWarehouseId(wh.id.toString())}
                                             >
                                                 <div className="flex flex-col items-start truncate">
                                                     <span className="truncate">{wh.name}</span>
-                                                    {wh.is_default && <span className="text-[8px] opacity-50 uppercase">Основной</span>}
+                                                    {wh.is_default && <span className="text-[7px] opacity-50 uppercase">Основной</span>}
                                                 </div>
                                             </Button>
                                         ))}
                                     </div>
                                 </div>
 
-                                <div className="grid grid-cols-2 gap-3">
+                                <div className="grid grid-cols-2 gap-2">
                                     <Button 
                                         variant="outline" 
-                                        className="h-14 border-slate-800 bg-slate-900/50 hover:bg-slate-800"
+                                        className="h-12 border-slate-800 bg-slate-900/50 hover:bg-slate-800 text-xs"
                                         onClick={() => setIsScannerOpen(true)}
                                     >
-                                        <Camera className="mr-2 h-5 w-5 text-red-400" />
-                                        Сканировать
+                                        <Camera className="mr-2 h-4 w-4 text-red-400" />
+                                        Сканер
                                     </Button>
                                     <Button 
                                         variant="outline" 
-                                        className="h-14 border-slate-800 bg-slate-900/50 hover:bg-slate-800"
+                                        className="h-12 border-slate-800 bg-slate-900/50 hover:bg-slate-800 text-xs"
                                         onClick={() => setIsAddDialogOpen(true)}
                                     >
-                                        <Search className="mr-2 h-5 w-5 text-red-400" />
-                                        Найти товар
+                                        <Search className="mr-2 h-4 w-4 text-red-400" />
+                                        Поиск
                                     </Button>
                                 </div>
 
