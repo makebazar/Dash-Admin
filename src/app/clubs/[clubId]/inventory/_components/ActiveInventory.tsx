@@ -190,14 +190,6 @@ export function ActiveInventory({ inventoryId, onClose, isOwner }: ActiveInvento
         })
     }, [items, searchQuery])
 
-    if (isLoading) {
-        return <div className="flex justify-center p-12"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
-    }
-
-    if (!inventory) return <div>Инвентаризация не найдена</div>
-
-    const isClosed = inventory.status === 'CLOSED'
-
     useEffect(() => {
         if (scannedItem) {
             const input = document.getElementById(`input-${scannedItem.id}`)
@@ -208,6 +200,14 @@ export function ActiveInventory({ inventoryId, onClose, isOwner }: ActiveInvento
             }
         }
     }, [scannedItem])
+
+    if (isLoading) {
+        return <div className="flex justify-center p-12"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
+    }
+
+    if (!inventory) return <div>Инвентаризация не найдена</div>
+
+    const isClosed = inventory.status === 'CLOSED'
 
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
