@@ -94,18 +94,23 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
 
     return (
         <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-            <DialogContent className="sm:max-w-[500px] p-0 overflow-hidden bg-black border-none z-[10000]">
-                <DialogHeader className="p-4 bg-white/10 backdrop-blur-md absolute top-0 left-0 right-0 z-[10001] flex-row items-center justify-between space-y-0">
-                    <DialogTitle className="text-white flex items-center gap-2">
+            <DialogContent className="w-[95vw] sm:max-w-[500px] p-0 overflow-hidden bg-black border-slate-800 z-[10000] rounded-3xl border">
+                <DialogHeader className="p-4 bg-slate-900/90 backdrop-blur-md sticky top-0 left-0 right-0 z-[10001] flex-row items-center justify-between space-y-0 border-b border-slate-800">
+                    <DialogTitle className="text-white text-base font-bold flex items-center gap-2">
                         <Camera className="h-5 w-5 text-blue-400" />
-                        Сканирование штрихкода
+                        Сканирование
                     </DialogTitle>
-                    <Button variant="ghost" size="icon" onClick={onClose} className="text-white hover:bg-white/20">
+                    <Button 
+                        variant="outline" 
+                        size="icon" 
+                        onClick={onClose} 
+                        className="text-slate-400 hover:text-white border-slate-800 bg-slate-800/50 h-9 w-9 rounded-xl"
+                    >
                         <X className="h-5 w-5" />
                     </Button>
                 </DialogHeader>
 
-                <div className="relative w-full aspect-[4/3] bg-black flex items-center justify-center pt-14 min-h-[300px]">
+                <div className="relative w-full aspect-square bg-black flex items-center justify-center overflow-hidden">
                     <div id="barcode-reader" className="w-full h-full"></div>
                     
                     {isInitializing && (
@@ -129,25 +134,29 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
                     {/* Custom Overlay for better UX */}
                     {!isInitializing && !error && (
                         <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center">
-                            <div className="w-[250px] h-[150px] border-2 border-blue-500/50 rounded-lg relative">
+                            <div className="w-[200px] h-[200px] border-2 border-blue-500/50 rounded-2xl relative">
                                 {/* Corner markers */}
-                                <div className="absolute -top-1 -left-1 w-4 h-4 border-t-2 border-l-2 border-blue-400"></div>
-                                <div className="absolute -top-1 -right-1 w-4 h-4 border-t-2 border-r-2 border-blue-400"></div>
-                                <div className="absolute -bottom-1 -left-1 w-4 h-4 border-b-2 border-l-2 border-blue-400"></div>
-                                <div className="absolute -bottom-1 -right-1 w-4 h-4 border-b-2 border-r-2 border-blue-400"></div>
+                                <div className="absolute -top-1 -left-1 w-6 h-6 border-t-2 border-l-2 border-blue-400 rounded-tl-xl"></div>
+                                <div className="absolute -top-1 -right-1 w-6 h-6 border-t-2 border-r-2 border-blue-400 rounded-tr-xl"></div>
+                                <div className="absolute -bottom-1 -left-1 w-6 h-6 border-b-2 border-l-2 border-blue-400 rounded-bl-xl"></div>
+                                <div className="absolute -bottom-1 -right-1 w-6 h-6 border-b-2 border-r-2 border-blue-400 rounded-br-xl"></div>
                                 
                                 {/* Scanning line animation */}
                                 <div className="absolute top-0 left-0 right-0 h-0.5 bg-blue-400/50 shadow-[0_0_8px_rgba(96,165,250,0.8)] animate-scan"></div>
                             </div>
-                            <p className="text-white/70 text-xs mt-6 px-4 text-center bg-black/40 py-2 rounded-full backdrop-blur-sm">
-                                Наведите камеру на штрихкод товара
+                            <p className="text-white/70 text-[10px] uppercase tracking-widest font-bold mt-8 px-4 text-center bg-black/40 py-2 rounded-full backdrop-blur-sm">
+                                Наведите на штрихкод
                             </p>
                         </div>
                     )}
                 </div>
 
-                <div className="p-6 bg-slate-900 flex justify-center">
-                    <Button variant="outline" onClick={() => window.location.reload()} className="bg-white/5 border-white/10 text-white hover:bg-white/10">
+                <div className="p-4 bg-slate-900/50 border-t border-slate-800 flex justify-center">
+                    <Button 
+                        variant="outline" 
+                        onClick={() => window.location.reload()} 
+                        className="bg-slate-800/50 border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white h-10 px-6 rounded-xl text-xs"
+                    >
                         <RefreshCcw className="mr-2 h-4 w-4" />
                         Сбросить камеру
                     </Button>
