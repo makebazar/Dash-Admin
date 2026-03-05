@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useTransition, useEffect, useMemo, useCallback } from "react"
-import { Loader2, ArrowRight, CheckCircle2, AlertTriangle, Package, Camera, Search, Barcode, X, Plus, Trash2, ArrowLeft } from "lucide-react"
+import { Loader2, ArrowRight, CheckCircle2, AlertTriangle, Package, Camera, Search, Barcode, X, Plus, Trash2, ArrowLeft, RefreshCcw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -63,6 +63,7 @@ export function ShiftClosingWizard({
     const [allProducts, setAllProducts] = useState<{ id: number, name: string }[]>([])
     const [selectedProductToAdd, setSelectedProductToAdd] = useState("")
     const [searchQuery, setSearchQuery] = useState("")
+    const [isRefreshingCatalog, setIsRefreshingCatalog] = useState(false)
 
     // Persistence key
     const persistenceKey = `shift_closing_${activeShiftId}`
@@ -463,9 +464,18 @@ export function ShiftClosingWizard({
 
     const openAddDialog = async () => {
         setIsAddDialogOpen(true)
-        if (allProducts.length === 0) {
+        refreshProductCatalog()
+    }
+
+    const refreshProductCatalog = async () => {
+        setIsRefreshingCatalog(true)
+        try {
             const products = await getProducts(clubId)
             setAllProducts(products.map(p => ({ id: p.id, name: p.name })))
+        } catch (e) {
+            console.error('Failed to refresh products', e)
+        } finally {
+            setIsRefreshingCatalog(false)
         }
     }
 
@@ -845,10 +855,18 @@ export function ShiftClosingWizard({
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
                             <Input 
                                 placeholder="Поиск по названию или штрихкоду..."
-                                className="pl-10 bg-slate-900 border-slate-800 h-12 rounded-xl focus:ring-2 focus:ring-blue-500 transition-all"
+                                className="pl-10 pr-10 bg-slate-900 border-slate-800 h-12 rounded-xl focus:ring-2 focus:ring-blue-500 transition-all"
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                             />
+                            <button 
+                                onClick={refreshProductCatalog}
+                                disabled={isRefreshingCatalog}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-slate-500 hover:text-blue-400 disabled:opacity-50 transition-colors"
+                                title="Обновить список товаров"
+                            >
+                                <RefreshCcw className={`h-4 w-4 ${isRefreshingCatalog ? 'animate-spin' : ''}`} />
+                            </button>
                         </div>
 
                         {visibleItems.length === 0 ? (
