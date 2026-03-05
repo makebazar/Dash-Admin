@@ -642,9 +642,9 @@ export async function deleteStockMovement(id: number, clubId: string) {
         // If we deleted a SUPPLY (+10), we need to subtract -10
         const revertAmount = -move.change_amount
         
-        // Find warehouse (try to guess from reason or related entity, or use default)
-        const defaultWh = await client.query('SELECT id FROM warehouses WHERE club_id = $1 AND is_default = true LIMIT 1', [clubId])
-        const warehouseId = defaultWh.rows[0]?.id
+        // Find warehouse (fallback to any if no default)
+        const whRes = await client.query('SELECT id FROM warehouses WHERE club_id = $1 ORDER BY is_default DESC LIMIT 1', [clubId])
+        const warehouseId = whRes.rows[0]?.id
 
         if (warehouseId) {
             await client.query(`
@@ -697,10 +697,16 @@ export async function createWriteOff(clubId: string, userId: string, data: { ite
     try {
         await client.query('BEGIN')
 
-        // Find default warehouse
-        const defaultWh = await client.query('SELECT id FROM warehouses WHERE club_id = $1 AND is_default = true LIMIT 1', [clubId])
-        const warehouseId = defaultWh.rows[0]?.id
-        if (!warehouseId) throw new Error("Склад по умолчанию не найден")
+        // Find default warehouse (or fallback to first available)
+        const whRes = await client.query(`
+            SELECT id FROM warehouses 
+            WHERE club_id = $1 
+            ORDER BY is_default DESC, created_at ASC 
+            LIMIT 1
+        `, [clubId])
+        
+        const warehouseId = whRes.rows[0]?.id
+        if (!warehouseId) throw new Error("В клубе не создано ни одного склада")
 
         for (const item of data.items) {
             // 1. Get current stock
@@ -815,10 +821,10 @@ export async function createProduct(clubId: string, userId: string, data: { name
         
         const productId = res.rows[0].id
 
-        // 2. Add Stock to Default Warehouse
+        // 2. Add Stock to Warehouse (default or fallback)
         if (data.current_stock > 0) {
-            const defaultWh = await client.query('SELECT id FROM warehouses WHERE club_id = $1 AND is_default = true LIMIT 1', [clubId])
-            const warehouseId = defaultWh.rows[0]?.id
+            const whRes = await client.query('SELECT id FROM warehouses WHERE club_id = $1 ORDER BY is_default DESC LIMIT 1', [clubId])
+            const warehouseId = whRes.rows[0]?.id
             
             if (warehouseId) {
                 await client.query(`
@@ -1091,10 +1097,10 @@ export async function createSupply(clubId: string, userId: string, data: { suppl
             // 3. Add Items & Update Stock
             let warehouseId = data.warehouse_id
             
-            // If no warehouse specified, try to find default
+            // If no warehouse specified, try to find default or fallback
             if (!warehouseId) {
-                const defaultWh = await client.query('SELECT id FROM warehouses WHERE club_id = $1 AND is_default = true LIMIT 1', [clubId])
-                warehouseId = defaultWh.rows[0]?.id
+                const whRes = await client.query('SELECT id FROM warehouses WHERE club_id = $1 ORDER BY is_default DESC LIMIT 1', [clubId])
+                warehouseId = whRes.rows[0]?.id
             }
 
             for (const item of data.items) {
@@ -1202,13 +1208,8 @@ export async function createInventory(clubId: string, userId: string, targetMetr
         // 1. Resolve warehouse if not provided
         let targetWarehouseId = warehouseId
         if (!targetWarehouseId) {
-            const defaultWh = await client.query('SELECT id FROM warehouses WHERE club_id = $1 AND is_default = true LIMIT 1', [clubId])
-            targetWarehouseId = defaultWh.rows[0]?.id
-            
-            if (!targetWarehouseId) {
-                const anyWh = await client.query('SELECT id FROM warehouses WHERE club_id = $1 LIMIT 1', [clubId])
-                targetWarehouseId = anyWh.rows[0]?.id
-            }
+            const whRes = await client.query('SELECT id FROM warehouses WHERE club_id = $1 ORDER BY is_default DESC LIMIT 1', [clubId])
+            targetWarehouseId = whRes.rows[0]?.id
         }
 
         // 2. Check if an OPEN inventory for this shift already exists
@@ -1311,13 +1312,8 @@ export async function addProductToInventory(inventoryId: number, productId: numb
 
         if (!warehouseId) {
              // Fallback: Use default or any warehouse if not specified
-             const defaultWh = await client.query('SELECT id FROM warehouses WHERE club_id = $1 AND is_default = true LIMIT 1', [currentClubId])
-             warehouseId = defaultWh.rows[0]?.id
-
-             if (!warehouseId) {
-                 const anyWh = await client.query('SELECT id FROM warehouses WHERE club_id = $1 LIMIT 1', [currentClubId])
-                 warehouseId = anyWh.rows[0]?.id
-             }
+             const whRes = await client.query('SELECT id FROM warehouses WHERE club_id = $1 ORDER BY is_default DESC LIMIT 1', [currentClubId])
+             warehouseId = whRes.rows[0]?.id
         }
 
         if (!warehouseId) throw new Error("Инвентаризация не привязана к складу и склад не найден")
@@ -1440,15 +1436,9 @@ export async function closeInventory(
         const userId = invHeader.rows[0]?.created_by
 
         if (!warehouseId) {
-             // Fallback 1: Default warehouse
-             const defaultWh = await client.query('SELECT id FROM warehouses WHERE club_id = $1 AND is_default = true LIMIT 1', [clubId])
-             warehouseId = defaultWh.rows[0]?.id
-
-             if (!warehouseId) {
-                 // Fallback 2: Any first available warehouse for this club
-                 const anyWh = await client.query('SELECT id FROM warehouses WHERE club_id = $1 LIMIT 1', [clubId])
-                 warehouseId = anyWh.rows[0]?.id
-             }
+             // Fallback: Default or any warehouse
+             const whRes = await client.query('SELECT id FROM warehouses WHERE club_id = $1 ORDER BY is_default DESC LIMIT 1', [clubId])
+             warehouseId = whRes.rows[0]?.id
         }
 
         if (!warehouseId) throw new Error("Не найден склад для корректировки остатков")
