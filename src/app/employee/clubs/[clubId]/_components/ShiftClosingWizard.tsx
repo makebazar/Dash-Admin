@@ -392,31 +392,37 @@ export function ShiftClosingWizard({
                     onClose={() => setIsScannerOpen(false)} 
                 />
                 
-                <header className="px-6 py-4 border-b border-slate-800 bg-slate-900/50 backdrop-blur-md sticky top-0 z-50">
-                    <div className="flex items-center justify-between mb-2">
-                        <h2 className="text-xl font-bold">Инвентаризация</h2>
+                <header className="px-4 py-4 border-b border-slate-800 bg-slate-900/50 backdrop-blur-md sticky top-0 z-50">
+                    <div className="space-y-3">
+                        <div className="flex items-center justify-between gap-4">
+                            <h2 className="text-lg font-bold truncate">Инвентаризация</h2>
+                            <div className="flex items-center gap-2 shrink-0">
+                                <Button 
+                                    variant="outline" 
+                                    size="sm" 
+                                    onClick={() => setIsScannerOpen(true)}
+                                    className="bg-blue-600/20 border-blue-500/30 text-blue-400 hover:bg-blue-600/30 h-8 px-2.5"
+                                >
+                                    <Camera className="h-3.5 w-3.5 mr-1.5" />
+                                    <span className="text-[11px] font-medium">Сканер</span>
+                                </Button>
+                                <Button 
+                                    variant="outline" 
+                                    size="icon" 
+                                    onClick={openAddDialog}
+                                    className="bg-slate-800 border-slate-700 text-slate-300 h-8 w-8"
+                                >
+                                    <Plus className="h-4 w-4" />
+                                </Button>
+                            </div>
+                        </div>
                         <div className="flex items-center gap-2">
-                            <Button 
-                                variant="outline" 
-                                size="sm" 
-                                onClick={() => setIsScannerOpen(true)}
-                                className="bg-blue-600/20 border-blue-500/30 text-blue-400 hover:bg-blue-600/30"
-                            >
-                                <Camera className="h-4 w-4 mr-2" />
-                                Сканировать
-                            </Button>
-                            <Button 
-                                variant="outline" 
-                                size="sm" 
-                                onClick={openAddDialog}
-                                className="bg-slate-800 border-slate-700 text-slate-300"
-                            >
-                                <Plus className="h-4 w-4 mr-2" />
-                                Добавить
-                            </Button>
+                            <div className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse" />
+                            <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold">
+                                Шаг 2 из 3: Внесите остатки
+                            </p>
                         </div>
                     </div>
-                    <p className="text-xs text-slate-400">Шаг 2 из 3: Сканируйте штрихкод или найдите товар через поиск</p>
                 </header>
 
                 <main className="flex-1 overflow-y-auto px-4 py-6 space-y-6">
@@ -490,25 +496,29 @@ export function ShiftClosingWizard({
                     )}
                 </main>
 
-                <footer className="p-6 border-t border-slate-800 bg-slate-900/80 backdrop-blur-md sticky bottom-0">
-                    <Button onClick={handleInventorySubmit} disabled={isPending} className="w-full h-14 text-lg font-bold bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-900/20">
+                <footer className="p-4 border-t border-slate-800 bg-slate-900/80 backdrop-blur-md sticky bottom-0">
+                    <Button 
+                        onClick={handleInventorySubmit} 
+                        disabled={isPending} 
+                        className="w-full h-12 text-base font-bold bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-900/20 rounded-xl"
+                    >
                         {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                        Далее: Сверка итогов <ArrowRight className="ml-2 h-5 w-5" />
+                        Далее: Сверка итогов <ArrowRight className="ml-2 h-4 w-4" />
                     </Button>
                 </footer>
 
                 {/* Add Product Manually Dialog */}
                 <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-                    <DialogContent className="bg-slate-950 border-slate-800 text-white">
+                    <DialogContent className="bg-slate-950 border-slate-800 text-white max-w-[90vw] rounded-2xl">
                         <DialogHeader>
                             <DialogTitle>Добавить товар</DialogTitle>
                         </DialogHeader>
-                        <div className="py-4 space-y-4">
-                            <div className="space-y-2">
-                                <Label>Выберите товар</Label>
+                        <div className="py-6 space-y-4">
+                            <div className="space-y-3">
+                                <Label className="text-slate-400 text-xs uppercase tracking-wider">Выберите товар из списка</Label>
                                 <Select value={selectedProductToAdd} onValueChange={setSelectedProductToAdd}>
-                                    <SelectTrigger className="bg-slate-900 border-slate-800">
-                                        <SelectValue placeholder="Поиск по списку..." />
+                                    <SelectTrigger className="bg-slate-900 border-slate-800 h-12 rounded-xl">
+                                        <SelectValue placeholder="Начните вводить название..." />
                                     </SelectTrigger>
                                     <SelectContent className="bg-slate-900 border-slate-800 text-white max-h-[300px]">
                                         {allProducts.map(p => (
@@ -518,9 +528,9 @@ export function ShiftClosingWizard({
                                 </Select>
                             </div>
                         </div>
-                        <DialogFooter>
-                            <Button variant="outline" onClick={() => setIsAddDialogOpen(false)} className="border-slate-800">Отмена</Button>
-                            <Button onClick={handleAddProductManually} disabled={!selectedProductToAdd || isPending} className="bg-blue-600">
+                        <DialogFooter className="flex-row gap-3 pt-2">
+                            <Button variant="outline" onClick={() => setIsAddDialogOpen(false)} className="flex-1 border-slate-800 h-12 rounded-xl">Отмена</Button>
+                            <Button onClick={handleAddProductManually} disabled={!selectedProductToAdd || isPending} className="flex-1 bg-blue-600 h-12 rounded-xl">
                                 {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                                 Добавить
                             </Button>
