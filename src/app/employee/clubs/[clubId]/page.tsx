@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {
     Clock, Loader2, LogIn, LogOut, Wallet, Activity, Calendar,
-    TrendingUp, Target, Zap, ChevronRight, Trophy, Brush, ClipboardCheck, Monitor, AlertCircle, Ban
+    TrendingUp, Target, Zap, ChevronRight, Trophy, Brush, ClipboardCheck, Monitor, AlertCircle, Ban, ShoppingCart
 } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -36,6 +36,8 @@ interface ActiveShift {
     id: string | number
     check_in: string
     total_hours: number
+    hourly_rate: number
+    bar_purchases: number
     report_data?: any
 }
 
@@ -223,7 +225,11 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
             const shiftData = await shiftRes.json()
 
             if (shiftRes.ok && shiftData.shift) {
-                setActiveShift(shiftData.shift)
+                setActiveShift({
+                    ...shiftData.shift,
+                    bar_purchases: parseFloat(shiftData.shift.bar_purchases || '0'),
+                    hourly_rate: parseFloat(shiftData.shift.hourly_rate || '150')
+                })
             } else {
                 setActiveShift(null)
             }
@@ -564,14 +570,28 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                                                 </p>
 
                                                 {/* Live Earnings */}
-                                                <div className="mt-4 px-4 py-2 rounded-xl bg-white/10 backdrop-blur border border-white/10">
-                                                    <div className="flex items-center gap-2">
-                                                        <Zap className="h-4 w-4 text-yellow-400" />
-                                                        <span className="text-xs text-white/70">Заработано за смену:</span>
-                                                        <span className="text-lg font-bold text-emerald-400">
-                                                            +{formatCurrency(currentEarnings)}
-                                                        </span>
+                                                <div className="mt-4 flex flex-col items-center gap-2">
+                                                    <div className="px-4 py-2 rounded-xl bg-white/10 backdrop-blur border border-white/10">
+                                                        <div className="flex items-center gap-2">
+                                                            <Zap className="h-4 w-4 text-yellow-400" />
+                                                            <span className="text-xs text-white/70">Заработано за смену:</span>
+                                                            <span className="text-lg font-bold text-emerald-400">
+                                                                +{formatCurrency(currentEarnings)}
+                                                            </span>
+                                                        </div>
                                                     </div>
+                                                    
+                                                    {activeShift.bar_purchases > 0 && (
+                                                        <div className="px-4 py-1.5 rounded-lg bg-red-500/10 border border-red-500/20">
+                                                            <div className="flex items-center gap-2">
+                                                                <ShoppingCart className="h-3 w-3 text-red-400" />
+                                                                <span className="text-[10px] text-white/60">Покупки в баре:</span>
+                                                                <span className="text-sm font-bold text-red-400">
+                                                                    -{formatCurrency(activeShift.bar_purchases)}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
 
@@ -960,6 +980,9 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                 clubId={clubId}
                 userId={currentUserId}
                 activeShiftId={activeShift?.id?.toString()}
+                shiftEarnings={currentEarnings}
+                shiftDeductions={activeShift?.bar_purchases || 0}
+                onComplete={() => fetchData(clubId)}
             />
 
             {/* Intermediate Indicators Modal */}

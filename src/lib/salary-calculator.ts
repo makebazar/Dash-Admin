@@ -27,6 +27,7 @@ interface SalaryScheme {
 interface ShiftData {
     id: string;
     total_hours: number;
+    bar_purchases?: number;
     report_data?: any;
     evaluations?: any[]; // Added to support checklist bonuses
 }
@@ -328,6 +329,17 @@ export async function calculateSalary(
 
         // Добавляем только к зарплате (REAL_MONEY)
         total += amount;
+    }
+
+    // 5. Bar Purchases Deduction
+    const barPurchases = Number(shift.bar_purchases || 0);
+    if (barPurchases > 0) {
+        breakdown.penalties.push({
+            name: 'Покупки в баре',
+            type: 'BAR_PURCHASE',
+            amount: -parseFloat(barPurchases.toFixed(2))
+        });
+        total -= barPurchases;
     }
 
     breakdown.total = parseFloat(total.toFixed(2));

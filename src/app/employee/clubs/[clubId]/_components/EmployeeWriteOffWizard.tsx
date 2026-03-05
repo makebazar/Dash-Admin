@@ -23,9 +23,12 @@ import { cn } from "@/lib/utils"
 interface EmployeeWriteOffWizardProps {
     isOpen: boolean
     onClose: () => void
+    onComplete?: () => void
     clubId: string
     userId: string
     activeShiftId?: string
+    shiftEarnings?: number
+    shiftDeductions?: number
 }
 
 interface WriteOffItem {
@@ -36,7 +39,7 @@ interface WriteOffItem {
     price: number
 }
 
-export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, activeShiftId }: EmployeeWriteOffWizardProps) {
+export function EmployeeWriteOffWizard({ isOpen, onClose, onComplete, clubId, userId, activeShiftId, shiftEarnings = 0, shiftDeductions = 0 }: EmployeeWriteOffWizardProps) {
     const [step, setStep] = useState(1) // 1: Items, 2: Final Details
     const [items, setItems] = useState<WriteOffItem[]>([])
     const [allProducts, setAllProducts] = useState<any[]>([])
@@ -51,6 +54,8 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
     const [writeOffType, setWriteOffType] = useState<'WASTE' | 'SALARY_DEDUCTION'>('WASTE')
     const [notes, setNotes] = useState("")
 
+    const availableFromShift = Math.max(0, shiftEarnings - shiftDeductions)
+
     useEffect(() => {
         if (isOpen) {
             getProducts(clubId).then(setAllProducts)
@@ -61,18 +66,32 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
         const product = allProducts.find(p => p.id === Number(selectedProductId))
         if (!product) return
 
+        const price = product.selling_price || 0
+        const qty = Number(itemQty)
+
+        if (writeOffType === 'SALARY_DEDUCTION') {
+            const currentTotalDeduction = items
+                .filter(i => i.type === 'SALARY_DEDUCTION')
+                .reduce((acc, i) => acc + (i.quantity * i.price), 0)
+            
+            if (currentTotalDeduction + (qty * price) > availableFromShift) {
+                alert(`Недостаточно средств в текущей смене. Доступно: ${Math.floor(availableFromShift)} ₽.`)
+                return
+            }
+        }
+
         const existingIdx = items.findIndex(i => i.product_id === product.id && i.type === writeOffType)
         if (existingIdx > -1) {
             const newItems = [...items]
-            newItems[existingIdx].quantity += Number(itemQty)
+            newItems[existingIdx].quantity += qty
             setItems(newItems)
         } else {
             setItems(prev => [...prev, {
                 product_id: product.id,
                 name: product.name,
-                quantity: Number(itemQty),
+                quantity: qty,
                 type: writeOffType,
-                price: product.selling_price || 0
+                price: price
             }])
         }
 
@@ -85,6 +104,13 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
         try {
             const product = await getProductByBarcode(clubId, barcode)
             if (product) {
+                const price = product.selling_price || 0
+                const currentTotalDeduction = items
+                    .filter(i => i.type === 'SALARY_DEDUCTION')
+                    .reduce((acc, i) => acc + (i.quantity * i.price), 0)
+
+                // For barcode scan, default to WASTE if no funds, or just add as WASTE
+                // Here we default to WASTE since we can't easily ask type in scanner
                 const existingIdx = items.findIndex(i => i.product_id === product.id && i.type === 'WASTE')
                 if (existingIdx > -1) {
                     const newItems = [...items]
@@ -96,7 +122,7 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
                         name: product.name,
                         quantity: 1,
                         type: 'WASTE',
-                        price: product.selling_price || 0
+                        price: price
                     }])
                 }
                 return true
@@ -114,6 +140,16 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
 
     const handleFinalize = () => {
         if (items.length === 0) return
+        
+        const totalDeduction = items
+            .filter(i => i.type === 'SALARY_DEDUCTION')
+            .reduce((acc, i) => acc + (i.quantity * i.price), 0)
+
+        if (totalDeduction > availableFromShift) {
+            alert(`Сумма покупок превышает заработок за смену!`)
+            return
+        }
+
         startTransition(async () => {
             try {
                 await createWriteOff(clubId, userId, {
@@ -126,10 +162,11 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
                     shift_id: activeShiftId
                 })
                 alert("Списание успешно оформлено")
+                if (onComplete) onComplete()
                 handleClose()
-            } catch (e) {
+            } catch (e: any) {
                 console.error(e)
-                alert("Ошибка при оформлении списания")
+                alert(e.message || "Ошибка при оформлении списания")
             }
         })
     }
@@ -253,8 +290,9 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
                                     <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl flex items-center gap-3">
                                         <Wallet className="h-6 w-6 text-amber-500" />
                                         <div>
-                                            <p className="text-sm font-bold text-amber-500">Будет вычтено из зарплаты:</p>
+                                            <p className="text-sm font-bold text-amber-500">Будет вычтено из текущей смены:</p>
                                             <p className="text-xl font-black text-white">{totalDeduction.toLocaleString()} ₽</p>
+                                            <p className="text-[10px] text-slate-400 mt-1">Доступно: {Math.floor(availableFromShift)} ₽</p>
                                         </div>
                                     </div>
                                 )}
