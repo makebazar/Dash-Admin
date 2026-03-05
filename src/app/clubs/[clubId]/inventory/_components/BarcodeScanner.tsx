@@ -17,38 +17,53 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
     const [error, setError] = useState<string | null>(null)
 
     useEffect(() => {
-        if (isOpen && !scannerRef.current) {
-            const scanner = new Html5QrcodeScanner(
-                "barcode-reader",
-                { 
-                    fps: 10, 
-                    qrbox: { width: 250, height: 150 },
-                    aspectRatio: 1.777778, // 16:9 for landscape-ish scan area
-                    showTorchButtonIfSupported: true,
-                    rememberLastUsedCamera: true,
-                    supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA]
-                },
-                /* verbose= */ false
-            )
+        let isMounted = true
+        
+        const initScanner = async () => {
+            if (!isOpen) return
 
-            scanner.render(
-                (decodedText) => {
-                    // Success!
-                    onScan(decodedText)
-                    // We don't close automatically to allow multiple scans if needed, 
-                    // but usually for inventory we find one and focus on input.
-                    // The parent component will handle the logic.
-                },
-                (errorMessage) => {
-                    // This is called on every frame where no code is found, so we don't alert
-                    // console.log(errorMessage)
-                }
-            )
+            // Wait a bit for Dialog to animate and element to be in DOM
+            await new Promise(resolve => setTimeout(resolve, 300))
+            
+            if (!isMounted || !isOpen) return
 
-            scannerRef.current = scanner
+            const element = document.getElementById("barcode-reader")
+            if (!element) {
+                console.error("barcode-reader element not found")
+                return
+            }
+
+            if (!scannerRef.current) {
+                const scanner = new Html5QrcodeScanner(
+                    "barcode-reader",
+                    { 
+                        fps: 10, 
+                        qrbox: { width: 250, height: 150 },
+                        aspectRatio: 1.777778,
+                        showTorchButtonIfSupported: true,
+                        rememberLastUsedCamera: true,
+                        supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA]
+                    },
+                    /* verbose= */ false
+                )
+
+                scanner.render(
+                    (decodedText) => {
+                        onScan(decodedText)
+                    },
+                    (errorMessage) => {
+                        // ignore
+                    }
+                )
+
+                scannerRef.current = scanner
+            }
         }
 
+        initScanner()
+
         return () => {
+            isMounted = false
             if (scannerRef.current) {
                 scannerRef.current.clear().catch(err => console.error("Failed to clear scanner", err))
                 scannerRef.current = null
