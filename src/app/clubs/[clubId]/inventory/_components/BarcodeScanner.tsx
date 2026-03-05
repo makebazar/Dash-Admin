@@ -91,15 +91,15 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
 
         return () => {
             isMounted = false
-            if (scannerRef.current && scannerRef.current.isScanning) {
-                scannerRef.current.stop()
+            const scanner = scannerRef.current
+            scannerRef.current = null
+            
+            if (scanner && scanner.isScanning) {
+                scanner.stop()
                     .then(() => {
                         console.log("Scanner stopped")
-                        scannerRef.current = null
                     })
                     .catch(err => console.error("Failed to stop scanner", err))
-            } else {
-                scannerRef.current = null
             }
         }
     }, [isOpen, onScan])
