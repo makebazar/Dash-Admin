@@ -387,8 +387,8 @@ export function ShiftClosingWizard({
         <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
             <DialogContent className={`
                 bg-slate-950 border-slate-800 text-white flex flex-col transition-all duration-300
-                ${step === 2 ? 'fixed inset-0 max-w-none w-screen h-screen m-0 rounded-none' : 'max-w-4xl max-h-[90vh] overflow-hidden'}
-            `}>
+                ${step === 2 ? 'fixed inset-0 max-w-none w-screen h-[100dvh] m-0 rounded-none z-[9999]' : 'max-w-4xl max-h-[90vh] overflow-hidden'}
+            `} style={step === 2 ? { width: '100vw', height: '100dvh', maxWidth: 'none' } : {}}>
                 <BarcodeScanner 
                     isOpen={isScannerOpen} 
                     onScan={handleBarcodeScan} 
