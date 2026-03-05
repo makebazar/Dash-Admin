@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useTransition } from "react"
-import { Plus, Search, Filter, MoreVertical, Pencil, Trash2, LayoutGrid, Box, RefreshCw, Layers } from "lucide-react"
+import { Plus, Search, Filter, MoreVertical, Pencil, Trash2, LayoutGrid, Box, RefreshCw, Layers, Barcode } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -56,7 +56,9 @@ export function ProductsTab({ products, categories, warehouses, currentUserId }:
 
     // Filter Logic
     const filteredProducts = products.filter(p => {
-        const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase())
+        const matchesSearch = 
+            p.name.toLowerCase().includes(search.toLowerCase()) || 
+            (p.barcode && p.barcode.includes(search))
         const matchesCategory = categoryFilter === "all" || (p.category_id?.toString() === categoryFilter)
         return matchesSearch && matchesCategory
     })
@@ -165,6 +167,7 @@ export function ProductsTab({ products, categories, warehouses, currentUserId }:
                 if (editingProduct.id) {
                     await updateProduct(editingProduct.id, clubId, currentUserId, {
                         name: editingProduct.name!,
+                        barcode: editingProduct.barcode || null,
                         category_id: editingProduct.category_id || null,
                         cost_price: Number(editingProduct.cost_price) || 0,
                         selling_price: Number(editingProduct.selling_price) || 0,
@@ -174,6 +177,7 @@ export function ProductsTab({ products, categories, warehouses, currentUserId }:
                 } else {
                     await createProduct(clubId, currentUserId, {
                         name: editingProduct.name!,
+                        barcode: editingProduct.barcode || null,
                         category_id: editingProduct.category_id || null,
                         cost_price: Number(editingProduct.cost_price) || 0,
                         selling_price: Number(editingProduct.selling_price) || 0,
@@ -327,7 +331,15 @@ export function ProductsTab({ products, categories, warehouses, currentUserId }:
                                         />
                                     </TableCell>
                                     <TableCell className="font-medium">
-                                        {product.name}
+                                        <div className="flex flex-col">
+                                            <span>{product.name}</span>
+                                            {product.barcode && (
+                                                <span className="text-[10px] text-muted-foreground flex items-center gap-1 mt-0.5 font-mono">
+                                                    <Barcode className="h-2.5 w-2.5" />
+                                                    {product.barcode}
+                                                </span>
+                                            )}
+                                        </div>
                                         {isLowStock && <span className="ml-2 text-xs text-red-600 font-bold">!</span>}
                                     </TableCell>
                                     <TableCell>
@@ -449,6 +461,12 @@ export function ProductsTab({ products, categories, warehouses, currentUserId }:
                                     />
                                     <div>
                                         <h3 className="font-bold text-base leading-tight">{product.name}</h3>
+                                        {product.barcode && (
+                                            <div className="flex items-center gap-1 text-[10px] text-muted-foreground font-mono mt-0.5">
+                                                <Barcode className="h-2.5 w-2.5" />
+                                                {product.barcode}
+                                            </div>
+                                        )}
                                         <div className="flex items-center gap-2 mt-1">
                                             {product.category_name && (
                                                 <Badge variant="outline" className="text-[10px] h-4 px-1 leading-none uppercase tracking-wider font-bold border-slate-200 text-slate-500">
@@ -527,6 +545,17 @@ export function ProductsTab({ products, categories, warehouses, currentUserId }:
                                 value={editingProduct?.name || ''} 
                                 onChange={e => setEditingProduct(prev => ({ ...prev!, name: e.target.value }))}
                                 required
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label className="flex items-center gap-2">
+                                <Barcode className="h-4 w-4" />
+                                Штрихкод
+                            </Label>
+                            <Input 
+                                value={editingProduct?.barcode || ''} 
+                                onChange={e => setEditingProduct(prev => ({ ...prev!, barcode: e.target.value }))}
+                                placeholder="Отсканируйте или введите вручную"
                             />
                         </div>
                         <div className="grid grid-cols-2 gap-4">

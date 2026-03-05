@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useTransition, useEffect, useMemo } from "react"
-import { ArrowLeft, CheckCircle2, AlertTriangle, Loader2, Save, X, Search } from "lucide-react"
+import { ArrowLeft, CheckCircle2, AlertTriangle, Loader2, Save, X, Search, Camera, Barcode } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -9,10 +9,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
-import { getInventory, getInventoryItems, updateInventoryItem, closeInventory, Inventory, InventoryItem, addProductToInventory, getProducts } from "../actions"
+import { getInventory, getInventoryItems, updateInventoryItem, closeInventory, Inventory, InventoryItem, addProductToInventory, getProducts, getProductByBarcode } from "../actions"
 import { useParams } from "next/navigation"
 import { Plus } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { BarcodeScanner } from "./BarcodeScanner"
 
 interface ActiveInventoryProps {
     inventoryId: number
@@ -41,6 +42,10 @@ export function ActiveInventory({ inventoryId, onClose, isOwner }: ActiveInvento
 
     // Search & Filter
     const [searchQuery, setSearchQuery] = useState("")
+
+    // Barcode Scanner State
+    const [isScannerOpen, setIsScannerOpen] = useState(false)
+    const [scannedItem, setScannedItem] = useState<InventoryItem | null>(null)
 
     useEffect(() => {
         const loadData = async () => {
@@ -118,6 +123,45 @@ export function ActiveInventory({ inventoryId, onClose, isOwner }: ActiveInvento
         }
     }
 
+    const handleBarcodeScan = async (barcode: string) => {
+        setIsScannerOpen(false)
+        
+        // 1. Find item in the current inventory list
+        const existingItem = items.find(i => i.barcode === barcode)
+        
+        if (existingItem) {
+            setScannedItem(existingItem)
+            return
+        }
+
+        // 2. If not in current list, try to find in general products
+        try {
+            const product = await getProductByBarcode(clubId, barcode)
+            if (product) {
+                // Confirm if user wants to add this product to current inventory
+                if (confirm(`Товар "${product.name}" не в списке инвентаризации. Добавить?`)) {
+                    await addProductToInventory(inventoryId, product.id)
+                    const invItems = await getInventoryItems(inventoryId)
+                    setItems(invItems)
+                    
+                    const newItem = invItems.find(i => i.product_id === product.id)
+                    if (newItem) setScannedItem(newItem)
+                }
+            } else {
+                alert(`Товар со штрихкодом ${barcode} не найден в базе.`)
+            }
+        } catch (e) {
+            console.error(e)
+            alert("Ошибка при поиске товара")
+        }
+    }
+
+    const handleScannedStockSave = async () => {
+        if (!scannedItem) return
+        await handleBlur(scannedItem.id, scannedItem.actual_stock)
+        setScannedItem(null)
+    }
+
     // Filter and Group Items
     const groupedItems = useMemo(() => {
         let filtered = items
@@ -154,8 +198,24 @@ export function ActiveInventory({ inventoryId, onClose, isOwner }: ActiveInvento
 
     const isClosed = inventory.status === 'CLOSED'
 
+    useEffect(() => {
+        if (scannedItem) {
+            const input = document.getElementById(`input-${scannedItem.id}`)
+            if (input) {
+                input.focus()
+                // @ts-ignore
+                input.select()
+            }
+        }
+    }, [scannedItem])
+
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+            <BarcodeScanner 
+                isOpen={isScannerOpen} 
+                onScan={handleBarcodeScan} 
+                onClose={() => setIsScannerOpen(false)} 
+            />
             {/* Header */}
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div className="flex items-center gap-4">
@@ -187,6 +247,10 @@ export function ActiveInventory({ inventoryId, onClose, isOwner }: ActiveInvento
                     </div>
                     {!isClosed && (
                         <>
+                            <Button variant="outline" onClick={() => setIsScannerOpen(true)} className="bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100">
+                                <Camera className="h-4 w-4 md:mr-2" />
+                                <span className="hidden md:inline">Сканировать</span>
+                            </Button>
                             <Button variant="outline" onClick={openAddDialog}>
                                 <Plus className="h-4 w-4 md:mr-2" />
                                 <span className="hidden md:inline">Добавить товар</span>
@@ -241,8 +305,18 @@ export function ActiveInventory({ inventoryId, onClose, isOwner }: ActiveInvento
                                         const revenue = difference * item.selling_price_snapshot
                                         
                                         return (
-                                            <TableRow key={item.id} className={isClosed && difference !== 0 ? "bg-slate-50" : ""}>
-                                                <TableCell className="font-medium pl-8">{item.product_name}</TableCell>
+                                            <TableRow key={item.id} className={isClosed && difference !== 0 ? "bg-slate-50" : scannedItem?.id === item.id ? "bg-blue-50 ring-2 ring-blue-500 ring-inset" : ""}>
+                                                <TableCell className="font-medium pl-8">
+                                                    <div className="flex flex-col">
+                                                        <span>{item.product_name}</span>
+                                                        {item.barcode && (
+                                                            <span className="text-[10px] text-muted-foreground font-mono flex items-center gap-1">
+                                                                <Barcode className="h-2.5 w-2.5" />
+                                                                {item.barcode}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </TableCell>
                                                 <TableCell className="text-right">{item.selling_price_snapshot} ₽</TableCell>
                                                 
                                                 {(isClosed || isOwner) && (
@@ -257,6 +331,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner }: ActiveInvento
                                                     ) : (
                                                         <Input 
                                                             type="number" 
+                                                            id={`input-${item.id}`}
                                                             className="text-right w-24 ml-auto"
                                                             value={item.actual_stock === null ? "" : item.actual_stock}
                                                             onChange={(e) => handleStockChange(item.id, e.target.value)}
