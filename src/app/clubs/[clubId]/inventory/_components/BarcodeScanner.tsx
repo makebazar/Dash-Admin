@@ -14,6 +14,7 @@ interface BarcodeScannerProps {
 
 export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps) {
     const scannerRef = useRef<Html5QrcodeScanner | null>(null)
+    const lastScannedRef = useRef<{ code: string, time: number } | null>(null)
     const [error, setError] = useState<string | null>(null)
     const [isInitializing, setIsInitializing] = useState(false)
 
@@ -62,6 +63,12 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
 
                     await scanner.render(
                         (decodedText) => {
+                            const now = Date.now()
+                            // Cooldown 1.5s for same barcode to prevent accidental multiple increments
+                            if (lastScannedRef.current?.code === decodedText && now - lastScannedRef.current.time < 1500) {
+                                return
+                            }
+                            lastScannedRef.current = { code: decodedText, time: now }
                             onScan(decodedText)
                         },
                         (errorMessage) => {

@@ -124,13 +124,18 @@ export function ActiveInventory({ inventoryId, onClose, isOwner }: ActiveInvento
     }
 
     const handleBarcodeScan = async (barcode: string) => {
-        setIsScannerOpen(false)
-        
         // 1. Find item in the current inventory list
         const existingItem = items.find(i => i.barcode === barcode)
         
         if (existingItem) {
+            const newStock = (existingItem.actual_stock || 0) + 1
+            setItems(prev => prev.map(i => i.id === existingItem.id ? { ...i, actual_stock: newStock } : i))
             setScannedItem(existingItem)
+            
+            // Save immediately
+            await handleBlur(existingItem.id, newStock)
+            
+            // We don't close the scanner to allow multiple scans
             return
         }
 
@@ -140,12 +145,19 @@ export function ActiveInventory({ inventoryId, onClose, isOwner }: ActiveInvento
             if (product) {
                 // Confirm if user wants to add this product to current inventory
                 if (confirm(`Товар "${product.name}" не в списке инвентаризации. Добавить?`)) {
+                    setIsScannerOpen(false) // Close scanner to show confirm/dialog
                     await addProductToInventory(inventoryId, product.id)
                     const invItems = await getInventoryItems(inventoryId)
-                    setItems(invItems)
                     
-                    const newItem = invItems.find(i => i.product_id === product.id)
-                    if (newItem) setScannedItem(newItem)
+                    // Set initial stock to 1 for the new item
+                    const updatedItems = invItems.map(i => i.product_id === product.id ? { ...i, actual_stock: 1 } : i)
+                    setItems(updatedItems)
+                    
+                    const newItem = updatedItems.find(i => i.product_id === product.id)
+                    if (newItem) {
+                        setScannedItem(newItem)
+                        await handleBlur(newItem.id, 1)
+                    }
                 }
             } else {
                 alert(`Товар со штрихкодом ${barcode} не найден в базе.`)

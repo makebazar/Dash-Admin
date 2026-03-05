@@ -230,12 +230,19 @@ export function ShiftClosingWizard({
     }
 
     const handleBarcodeScan = async (barcode: string) => {
-        setIsScannerOpen(false)
         const item = inventoryItems.find(i => i.barcode === barcode)
         
         if (item) {
-            setInventoryItems(prev => prev.map(i => i.id === item.id ? { ...i, is_visible: true } : i))
+            setInventoryItems(prev => prev.map(i => {
+                if (i.id === item.id) {
+                    const currentStock = i.actual_stock || 0
+                    return { ...i, actual_stock: currentStock + 1, is_visible: true }
+                }
+                return i
+            }))
             setScannedItemId(item.id)
+            // Мы НЕ закрываем сканер здесь (setIsScannerOpen(false)), 
+            // чтобы сотрудник мог отсканировать несколько штук подряд (+1, +1, +1)
             return
         }
 
@@ -246,10 +253,16 @@ export function ShiftClosingWizard({
                 if (confirm(`Товар "${product.name}" не в списке инвентаризации. Добавить?`)) {
                     await addProductToInventory(inventoryId!, product.id)
                     const invItems = await getInventoryItems(inventoryId!)
-                    setInventoryItems(invItems.map(i => ({ 
-                        ...i, 
-                        is_visible: i.product_id === product.id ? true : inventoryItems.find(old => old.id === i.id)?.is_visible || false 
-                    })))
+                    setInventoryItems(invItems.map(i => {
+                        const isNew = i.product_id === product.id
+                        const oldItem = inventoryItems.find(old => old.id === i.id)
+                        return { 
+                            ...i, 
+                            // Если это новый товар, ставим 1 и делаем видимым
+                            actual_stock: isNew ? 1 : i.actual_stock,
+                            is_visible: isNew ? true : oldItem?.is_visible || false 
+                        }
+                    }))
                     const newItem = invItems.find(i => i.product_id === product.id)
                     if (newItem) setScannedItemId(newItem.id)
                 }
