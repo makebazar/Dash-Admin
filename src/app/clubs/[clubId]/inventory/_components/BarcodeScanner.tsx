@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { Html5QrcodeScanner, Html5QrcodeScanType } from "html5-qrcode"
+import { Html5Qrcode, Html5QrcodeScanType } from "html5-qrcode"
 import { X, Camera, RefreshCcw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -13,7 +13,7 @@ interface BarcodeScannerProps {
 }
 
 export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps) {
-    const scannerRef = useRef<Html5QrcodeScanner | null>(null)
+    const scannerRef = useRef<Html5Qrcode | null>(null)
     const lastScannedRef = useRef<{ code: string, time: number } | null>(null)
     const [error, setError] = useState<string | null>(null)
     const [isInitializing, setIsInitializing] = useState(false)
@@ -21,14 +21,15 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
     useEffect(() => {
         let isMounted = true
         
-        const initScanner = async () => {
+        const startScanner = async () => {
             if (!isOpen) return
             
             setIsInitializing(true)
-            console.log("Initializing scanner...")
+            setError(null)
+            console.log("Starting scanner engine...")
 
             // Wait for Dialog to animate and element to be in DOM
-            await new Promise(resolve => setTimeout(resolve, 400))
+            await new Promise(resolve => setTimeout(resolve, 500))
             
             if (!isMounted || !isOpen) {
                 setIsInitializing(false)
@@ -38,63 +39,67 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
             const element = document.getElementById("barcode-reader")
             if (!element) {
                 console.error("barcode-reader element not found")
-                // Try one more time after a short delay
-                await new Promise(resolve => setTimeout(resolve, 200))
-                if (!document.getElementById("barcode-reader")) {
-                    setIsInitializing(false)
-                    return
-                }
+                setIsInitializing(false)
+                return
             }
 
             try {
+                // Use Html5Qrcode instead of Html5QrcodeScanner for better control over camera request
                 if (!scannerRef.current) {
-                    const scanner = new Html5QrcodeScanner(
-                        "barcode-reader",
-                        { 
-                            fps: 10, 
-                            qrbox: { width: 250, height: 150 },
-                            aspectRatio: 1.777778,
-                            showTorchButtonIfSupported: true,
-                            rememberLastUsedCamera: true,
-                            supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA]
-                        },
-                        /* verbose= */ false
-                    )
-
-                    await scanner.render(
-                        (decodedText) => {
-                            const now = Date.now()
-                            // Cooldown 1.5s for same barcode to prevent accidental multiple increments
-                            if (lastScannedRef.current?.code === decodedText && now - lastScannedRef.current.time < 1500) {
-                                return
-                            }
-                            lastScannedRef.current = { code: decodedText, time: now }
-                            onScan(decodedText)
-                        },
-                        (errorMessage) => {
-                            // ignore
-                        }
-                    )
-
-                    scannerRef.current = scanner
-                    console.log("Scanner initialized successfully")
+                    scannerRef.current = new Html5Qrcode("barcode-reader")
                 }
-            } catch (err) {
-                console.error("Failed to start scanner:", err)
-                setError("Не удалось запустить камеру")
+
+                const config = {
+                    fps: 10,
+                    qrbox: { width: 250, height: 250 },
+                    aspectRatio: 1.0
+                }
+
+                // This call triggers the browser camera permission request
+                await scannerRef.current.start(
+                    { facingMode: "environment" }, // Prefer back camera
+                    config,
+                    (decodedText) => {
+                        const now = Date.now()
+                        if (lastScannedRef.current?.code === decodedText && now - lastScannedRef.current.time < 1500) {
+                            return
+                        }
+                        lastScannedRef.current = { code: decodedText, time: now }
+                        onScan(decodedText)
+                    },
+                    (errorMessage) => {
+                        // ignore scan errors
+                    }
+                )
+
+                console.log("Scanner started successfully")
+            } catch (err: any) {
+                console.error("Camera access error:", err)
+                if (err?.name === "NotAllowedError" || err?.name === "PermissionDeniedError") {
+                    setError("Доступ к камере отклонен. Пожалуйста, разрешите доступ в настройках браузера.")
+                } else if (err?.name === "NotFoundError") {
+                    setError("Камера не найдена на вашем устройстве.")
+                } else {
+                    setError(`Ошибка камеры: ${err?.message || "Неизвестная ошибка"}`)
+                }
             } finally {
-                setIsInitializing(false)
+                if (isMounted) setIsInitializing(false)
             }
         }
 
-        initScanner()
+        startScanner()
 
         return () => {
             isMounted = false
-            if (scannerRef.current) {
-                const scanner = scannerRef.current
+            if (scannerRef.current && scannerRef.current.isScanning) {
+                scannerRef.current.stop()
+                    .then(() => {
+                        console.log("Scanner stopped")
+                        scannerRef.current = null
+                    })
+                    .catch(err => console.error("Failed to stop scanner", err))
+            } else {
                 scannerRef.current = null
-                scanner.clear().catch(err => console.error("Failed to clear scanner", err))
             }
         }
     }, [isOpen, onScan])
