@@ -246,6 +246,8 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
                 #barcode-reader__video_flow_container { width: 100% !important; height: 100% !important; }
                 #barcode-reader video { width: 100% !important; height: 100% !important; object-fit: cover !important; }
                 #barcode-reader__scan_region { display: none !important; }
+                #barcode-reader__scan_region svg { display: none !important; }
+                #barcode-reader__video_flow_container > div { display: none !important; }
                 @keyframes scan-fast {
                     0% { top: 0%; opacity: 0; }
                     10% { opacity: 1; }
