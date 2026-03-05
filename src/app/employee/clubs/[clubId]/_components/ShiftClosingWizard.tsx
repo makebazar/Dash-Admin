@@ -394,15 +394,22 @@ export function ShiftClosingWizard({
         try {
             const product = await getProductByBarcode(clubId, barcode)
             if (product) {
+                // Keep track of current counts before re-fetching
+                const currentCounts = inventoryItems.reduce((acc, i) => {
+                    if (i.actual_stock !== null) acc[i.id] = i.actual_stock
+                    return acc
+                }, {} as Record<number, number>)
+
                 // No confirm, just add and highlight
                 await addProductToInventory(inventoryId!, product.id)
                 const invItems = await getInventoryItems(inventoryId!)
+                
                 setInventoryItems(invItems.map(i => {
                     const isNew = i.product_id === product.id
                     const oldItem = inventoryItems.find(old => old.id === i.id)
                     return { 
                         ...i, 
-                        actual_stock: isNew ? 1 : i.actual_stock,
+                        actual_stock: isNew ? 1 : (currentCounts[i.id] ?? i.actual_stock),
                         is_visible: isNew ? true : oldItem?.is_visible || false 
                     }
                 }))
@@ -418,18 +425,32 @@ export function ShiftClosingWizard({
         }
     }, [inventoryItems, clubId, inventoryId])
 
-    const handleAddProductManually = async () => {
-        if (!selectedProductToAdd) return
+    const handleAddProductManually = async (productId?: number) => {
+        const idToAdd = productId || Number(selectedProductToAdd)
+        if (!idToAdd) return
+
         startTransition(async () => {
             try {
-                await addProductToInventory(inventoryId!, Number(selectedProductToAdd))
+                // Keep track of current counts before re-fetching
+                const currentCounts = inventoryItems.reduce((acc, i) => {
+                    if (i.actual_stock !== null) acc[i.id] = i.actual_stock
+                    return acc
+                }, {} as Record<number, number>)
+
+                await addProductToInventory(inventoryId!, idToAdd)
                 const invItems = await getInventoryItems(inventoryId!)
-                setInventoryItems(invItems.map(i => ({ 
-                    ...i, 
-                    is_visible: i.product_id === Number(selectedProductToAdd) ? true : inventoryItems.find(old => old.id === i.id)?.is_visible || false 
-                })))
                 
-                const newItem = invItems.find(i => i.product_id === Number(selectedProductToAdd))
+                setInventoryItems(invItems.map(i => {
+                    const isNew = i.product_id === idToAdd
+                    const oldItem = inventoryItems.find(old => old.id === i.id)
+                    return { 
+                        ...i, 
+                        actual_stock: isNew ? (currentCounts[i.id] ?? 1) : (currentCounts[i.id] ?? i.actual_stock),
+                        is_visible: isNew ? true : oldItem?.is_visible || false 
+                    }
+                }))
+                
+                const newItem = invItems.find(i => i.product_id === idToAdd)
                 if (newItem) setScannedItemId(newItem.id)
                 
                 setIsAddDialogOpen(false)
@@ -506,7 +527,8 @@ export function ShiftClosingWizard({
     const visibleItems = useMemo(() => {
         const queries = translateLayout(searchQuery)
         
-        return inventoryItems.filter(i => {
+        // 1. Existing inventory items that match
+        const existingMatches = inventoryItems.filter(i => {
             if (i.is_visible) return true
             if (!searchQuery) return false
 
@@ -519,7 +541,32 @@ export function ShiftClosingWizard({
             
             return matchOriginal || matchRu || matchEn
         })
-    }, [inventoryItems, searchQuery])
+
+        // 2. If searching, also look into all products to find items NOT yet in inventory
+        if (searchQuery && allProducts.length > 0) {
+            const inventoryProductIds = new Set(inventoryItems.map(i => i.product_id))
+            
+            const externalMatches = allProducts
+                .filter(p => !inventoryProductIds.has(p.id))
+                .filter(p => {
+                    const name = p.name.toLowerCase()
+                    return name.includes(queries.original) || name.includes(queries.ru) || name.includes(queries.en)
+                })
+                .map(p => ({
+                    id: -p.id, // Temporary ID for UI
+                    product_id: p.id,
+                    product_name: p.name,
+                    is_external: true,
+                    actual_stock: null,
+                    expected_stock: 0,
+                    is_visible: false
+                }))
+
+            return [...existingMatches, ...externalMatches]
+        }
+
+        return existingMatches
+    }, [inventoryItems, searchQuery, allProducts])
 
     const handleInventorySubmit = () => {
         startTransition(async () => {
@@ -823,17 +870,19 @@ export function ShiftClosingWizard({
                                             <TableRow key={item.id} className={`border-slate-800 ${scannedItemId === item.id ? 'bg-blue-900/20' : ''}`}>
                                                 <TableCell className="py-4 pl-6">
                                                     <div className="flex items-center gap-3">
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="icon"
-                                                            onClick={() => handleRemoveItem(item.id)}
-                                                            className="h-8 w-8 text-slate-500 hover:text-red-400 hover:bg-red-400/10 shrink-0"
-                                                        >
-                                                            <Trash2 className="h-4 w-4" />
-                                                        </Button>
+                                                        {!("is_external" in item) && !searchQuery && (
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                onClick={() => handleRemoveItem(item.id)}
+                                                                className="h-8 w-8 text-slate-500 hover:text-red-400 hover:bg-red-400/10 shrink-0"
+                                                            >
+                                                                <Trash2 className="h-4 w-4" />
+                                                            </Button>
+                                                        )}
                                                         <div className="flex flex-col">
                                                             <span className="font-bold text-slate-200">{item.product_name}</span>
-                                                            {item.barcode && <span className="text-[10px] text-slate-500 font-mono">{item.barcode}</span>}
+                                                            {("barcode" in item && item.barcode) && <span className="text-[10px] text-slate-500 font-mono">{item.barcode}</span>}
                                                         </div>
                                                     </div>
                                                 </TableCell>
@@ -843,7 +892,13 @@ export function ShiftClosingWizard({
                                                         id={`inventory-input-${item.id}`}
                                                         className="bg-slate-900 border-slate-800 text-right w-20 ml-auto font-bold h-10 rounded-lg"
                                                         value={item.actual_stock === null ? "" : item.actual_stock}
-                                                        onChange={(e) => handleStockChange(item.id, e.target.value)}
+                                                        onChange={(e) => {
+                                                            if ("is_external" in item) {
+                                                                handleAddProductManually(item.product_id)
+                                                            } else {
+                                                                handleStockChange(item.id, e.target.value)
+                                                            }
+                                                        }}
                                                     />
                                                 </TableCell>
                                             </TableRow>
@@ -982,7 +1037,7 @@ export function ShiftClosingWizard({
                     </div>
                     <DialogFooter className="flex-row gap-3">
                         <Button variant="outline" onClick={() => setIsAddDialogOpen(false)} className="flex-1 border-slate-800 h-12 rounded-xl">Отмена</Button>
-                        <Button onClick={handleAddProductManually} disabled={!selectedProductToAdd || isPending} className="flex-1 bg-blue-600 h-12 rounded-xl">Добавить</Button>
+                        <Button onClick={() => handleAddProductManually()} disabled={!selectedProductToAdd || isPending} className="flex-1 bg-blue-600 h-12 rounded-xl">Добавить</Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
