@@ -157,7 +157,7 @@ export function SalesTab({ sales, shifts, clubId }: SalesTabProps) {
                                         </div>
                                         <div className="flex items-center gap-2 text-[10px] text-slate-500">
                                             <Calendar className="h-3 w-3" />
-                                            <span>{new Date(s.check_in).toLocaleString()}</span>
+                                            <span>{new Date(s.check_in).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
                                         </div>
                                     </DropdownMenuItem>
                                 ))}
@@ -210,7 +210,9 @@ export function SalesTab({ sales, shifts, clubId }: SalesTabProps) {
                                             {!isUnassigned && (
                                                 <div className="flex items-center gap-1">
                                                     <Calendar className="h-3.5 w-3.5 opacity-60" />
-                                                    <span className="font-medium">{new Date(group.shift.start).toLocaleDateString()} {new Date(group.shift.start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                                    <span className="font-medium">
+                                                        {new Date(group.shift.start).toLocaleDateString('ru-RU')} {new Date(group.shift.start).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
+                                                    </span>
                                                 </div>
                                             )}
                                             <div className="flex items-center gap-1">
@@ -294,7 +296,7 @@ export function SalesTab({ sales, shifts, clubId }: SalesTabProps) {
                                                     </TableCell>
                                                     <TableCell className="text-right py-2">
                                                         <span className="text-[11px] text-slate-500">
-                                                            {new Date(sale.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                            {new Date(sale.created_at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
                                                         </span>
                                                     </TableCell>
                                                     <TableCell className="text-right py-2">
@@ -311,7 +313,7 @@ export function SalesTab({ sales, shifts, clubId }: SalesTabProps) {
                                                                         <span>Отвязать от смены</span>
                                                                     </DropdownMenuItem>
                                                                     <div className="h-px bg-slate-100 my-1" />
-                                                                    {shifts.map(s => (
+                                                                        {shifts.map(s => (
                                                                         <DropdownMenuItem key={s.id} onClick={() => handleAssignShift(sale.id, s.id)} className="flex flex-col items-start gap-1 py-2">
                                                                             <div className="flex justify-between w-full">
                                                                                 <span className="font-bold text-xs">{s.employee_name}</span>
@@ -319,7 +321,7 @@ export function SalesTab({ sales, shifts, clubId }: SalesTabProps) {
                                                                             </div>
                                                                             <div className="flex items-center gap-2 text-[10px] text-slate-500">
                                                                                 <Calendar className="h-3 w-3" />
-                                                                                <span>{new Date(s.check_in).toLocaleString()}</span>
+                                                                                <span>{new Date(s.check_in).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
                                                                             </div>
                                                                         </DropdownMenuItem>
                                                                     ))}
