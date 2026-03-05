@@ -383,52 +383,168 @@ export function ShiftClosingWizard({
         })
     }
 
-    return (
-        <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-            <DialogContent className={`
-                bg-slate-950 border-slate-800 text-white flex flex-col transition-all duration-300
-                ${step === 2 ? 'fixed inset-0 max-w-none w-screen h-[100dvh] m-0 rounded-none z-[9999]' : 'max-w-4xl max-h-[90vh] overflow-hidden'}
-            `} style={step === 2 ? { width: '100vw', height: '100dvh', maxWidth: 'none' } : {}}>
+    if (step === 2) {
+        return (
+            <div className="fixed inset-0 bg-slate-950 text-white flex flex-col z-[9999] animate-in fade-in duration-300">
                 <BarcodeScanner 
                     isOpen={isScannerOpen} 
                     onScan={handleBarcodeScan} 
                     onClose={() => setIsScannerOpen(false)} 
                 />
                 
-                <DialogHeader className={step === 2 ? 'px-6 pt-6' : ''}>
-                    <DialogTitle className="flex items-center justify-between">
-                        <span>{skipInventory ? "Закрытие смены" : `Закрытие смены: Шаг ${step} из 3`}</span>
-                        {step === 2 && (
-                            <div className="flex items-center gap-2">
-                                <Button 
-                                    variant="outline" 
-                                    size="sm" 
-                                    onClick={() => setIsScannerOpen(true)}
-                                    className="bg-blue-600/20 border-blue-500/30 text-blue-400 hover:bg-blue-600/30"
-                                >
-                                    <Camera className="h-4 w-4 mr-2" />
-                                    Сканировать
-                                </Button>
-                                <Button 
-                                    variant="outline" 
-                                    size="sm" 
-                                    onClick={openAddDialog}
-                                    className="bg-slate-800 border-slate-700 text-slate-300"
-                                >
-                                    <Plus className="h-4 w-4 mr-2" />
-                                    Добавить товар
-                                </Button>
+                <header className="px-6 py-4 border-b border-slate-800 bg-slate-900/50 backdrop-blur-md sticky top-0 z-50">
+                    <div className="flex items-center justify-between mb-2">
+                        <h2 className="text-xl font-bold">Инвентаризация</h2>
+                        <div className="flex items-center gap-2">
+                            <Button 
+                                variant="outline" 
+                                size="sm" 
+                                onClick={() => setIsScannerOpen(true)}
+                                className="bg-blue-600/20 border-blue-500/30 text-blue-400 hover:bg-blue-600/30"
+                            >
+                                <Camera className="h-4 w-4 mr-2" />
+                                Сканировать
+                            </Button>
+                            <Button 
+                                variant="outline" 
+                                size="sm" 
+                                onClick={openAddDialog}
+                                className="bg-slate-800 border-slate-700 text-slate-300"
+                            >
+                                <Plus className="h-4 w-4 mr-2" />
+                                Добавить
+                            </Button>
+                        </div>
+                    </div>
+                    <p className="text-xs text-slate-400">Шаг 2 из 3: Сканируйте штрихкод или найдите товар через поиск</p>
+                </header>
+
+                <main className="flex-1 overflow-y-auto px-4 py-6 space-y-6">
+                    <div className="flex flex-col gap-4 md:flex-row md:items-center">
+                        <div className="relative flex-1">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+                            <Input 
+                                placeholder="Поиск по названию или штрихкоду..."
+                                className="pl-10 bg-slate-900 border-slate-800 h-12 focus:border-blue-500 transition-all"
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                            />
+                        </div>
+                    </div>
+
+                    {visibleItems.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-20 bg-slate-900/30 border-2 border-dashed border-slate-800 rounded-2xl">
+                            <div className="bg-slate-800/50 p-6 rounded-full mb-4">
+                                <Barcode className="h-12 w-12 text-slate-600" />
                             </div>
-                        )}
+                            <h3 className="text-lg font-medium text-slate-300">Список пуст</h3>
+                            <p className="text-sm text-slate-500 mt-2 text-center max-w-xs">
+                                Начните сканировать товары или воспользуйтесь поиском выше.
+                            </p>
+                            <Button onClick={() => setIsScannerOpen(true)} className="mt-8 bg-blue-600 hover:bg-blue-700 px-8">
+                                <Camera className="h-4 w-4 mr-2" />
+                                Сканировать
+                            </Button>
+                        </div>
+                    ) : (
+                        <div className="border border-slate-800 rounded-xl overflow-hidden bg-slate-900/50">
+                            <Table>
+                                <TableHeader className="bg-slate-900">
+                                    <TableRow className="border-slate-800 hover:bg-transparent">
+                                        <TableHead className="text-slate-300 py-4">Товар</TableHead>
+                                        <TableHead className="text-right text-slate-300 py-4">Кол-во</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {visibleItems.map(item => (
+                                        <TableRow 
+                                            key={item.id} 
+                                            className={`border-slate-800 transition-colors ${scannedItemId === item.id ? 'bg-blue-950/30' : 'hover:bg-slate-800/30'}`}
+                                        >
+                                            <TableCell className="py-4">
+                                                <div className="flex flex-col">
+                                                    <span className="font-medium text-slate-200">{item.product_name}</span>
+                                                    {item.barcode && (
+                                                        <span className="text-[10px] text-slate-500 font-mono mt-1 flex items-center gap-1">
+                                                            <Barcode className="h-2.5 w-2.5" />
+                                                            {item.barcode}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </TableCell>
+                                            <TableCell className="text-right py-4">
+                                                <Input 
+                                                    type="number" 
+                                                    id={`inventory-input-${item.id}`}
+                                                    className={`bg-slate-900 border-slate-700 text-right w-24 ml-auto font-bold text-lg h-11 focus:ring-2 focus:ring-blue-500 transition-all ${scannedItemId === item.id ? 'border-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.2)]' : ''}`}
+                                                    placeholder="0"
+                                                    value={item.actual_stock === null ? "" : item.actual_stock}
+                                                    onChange={(e) => handleStockChange(item.id, e.target.value)}
+                                                />
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    )}
+                </main>
+
+                <footer className="p-6 border-t border-slate-800 bg-slate-900/80 backdrop-blur-md sticky bottom-0">
+                    <Button onClick={handleInventorySubmit} disabled={isPending} className="w-full h-14 text-lg font-bold bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-900/20">
+                        {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        Далее: Сверка итогов <ArrowRight className="ml-2 h-5 w-5" />
+                    </Button>
+                </footer>
+
+                {/* Add Product Manually Dialog */}
+                <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+                    <DialogContent className="bg-slate-950 border-slate-800 text-white">
+                        <DialogHeader>
+                            <DialogTitle>Добавить товар</DialogTitle>
+                        </DialogHeader>
+                        <div className="py-4 space-y-4">
+                            <div className="space-y-2">
+                                <Label>Выберите товар</Label>
+                                <Select value={selectedProductToAdd} onValueChange={setSelectedProductToAdd}>
+                                    <SelectTrigger className="bg-slate-900 border-slate-800">
+                                        <SelectValue placeholder="Поиск по списку..." />
+                                    </SelectTrigger>
+                                    <SelectContent className="bg-slate-900 border-slate-800 text-white max-h-[300px]">
+                                        {allProducts.map(p => (
+                                            <SelectItem key={p.id} value={p.id.toString()}>{p.name}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        </div>
+                        <DialogFooter>
+                            <Button variant="outline" onClick={() => setIsAddDialogOpen(false)} className="border-slate-800">Отмена</Button>
+                            <Button onClick={handleAddProductManually} disabled={!selectedProductToAdd || isPending} className="bg-blue-600">
+                                {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                Добавить
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+            </div>
+        )
+    }
+
+    return (
+        <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+            <DialogContent className="max-w-4xl bg-slate-950 border-slate-800 text-white max-h-[90vh] overflow-hidden flex flex-col">
+                <DialogHeader>
+                    <DialogTitle>
+                        {skipInventory ? "Закрытие смены" : `Закрытие смены: Шаг ${step} из 3`}
                     </DialogTitle>
                     <DialogDescription className="text-slate-400">
                         {step === 1 && "Заполните финансовый отчет"}
-                        {!skipInventory && step === 2 && "Инвентаризация: сканируйте штрихкод или найдите товар через поиск"}
                         {!skipInventory && step === 3 && "Сверка итогов"}
                     </DialogDescription>
                 </DialogHeader>
 
-                <div className={`flex-1 overflow-y-auto py-4 ${step === 2 ? 'px-6' : 'pr-2'}`}>
+                <div className="flex-1 overflow-y-auto py-4 pr-2">
                     {/* STEP 1: REPORT FORM + CHECKLIST */}
                     {step === 1 && (
                         <div className="space-y-6">
@@ -575,95 +691,6 @@ export function ShiftClosingWizard({
                         </div>
                     )}
 
-                    {/* STEP 2: INVENTORY */}
-                    {step === 2 && (
-                        <div className="space-y-6">
-                            <div className="flex flex-col gap-4 md:flex-row md:items-center">
-                                <div className="relative flex-1">
-                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
-                                    <Input 
-                                        placeholder="Поиск по названию или штрихкоду..."
-                                        className="pl-10 bg-slate-900 border-slate-800 focus:border-blue-500 transition-all"
-                                        value={searchQuery}
-                                        onChange={(e) => setSearchQuery(e.target.value)}
-                                    />
-                                </div>
-                                {visibleItems.length > 0 && (
-                                    <p className="text-xs text-slate-500 whitespace-nowrap">
-                                        Показано: {visibleItems.length} из {inventoryItems.length}
-                                    </p>
-                                )}
-                            </div>
-
-                            {visibleItems.length === 0 ? (
-                                <div className="flex flex-col items-center justify-center py-20 bg-slate-900/30 border-2 border-dashed border-slate-800 rounded-2xl animate-in fade-in zoom-in duration-300">
-                                    <div className="bg-slate-800/50 p-6 rounded-full mb-4">
-                                        <Barcode className="h-12 w-12 text-slate-600" />
-                                    </div>
-                                    <h3 className="text-lg font-medium text-slate-300">Список пуст</h3>
-                                    <p className="text-sm text-slate-500 mt-2 text-center max-w-xs">
-                                        Начните сканировать товары или воспользуйтесь поиском выше, чтобы внести остатки.
-                                    </p>
-                                    <div className="flex gap-3 mt-8">
-                                        <Button onClick={() => setIsScannerOpen(true)} className="bg-blue-600 hover:bg-blue-700">
-                                            <Camera className="h-4 w-4 mr-2" />
-                                            Сканировать штрихкод
-                                        </Button>
-                                    </div>
-                                </div>
-                            ) : (
-                                <div className="border border-slate-800 rounded-xl overflow-hidden bg-slate-900/50">
-                                    <Table>
-                                        <TableHeader className="bg-slate-900">
-                                            <TableRow className="border-slate-800 hover:bg-transparent">
-                                                <TableHead className="text-slate-300 py-4">Товар</TableHead>
-                                                {inventorySettings?.blind_inventory_enabled === false && (
-                                                    <TableHead className="text-right text-slate-300 py-4">Ожидалось</TableHead>
-                                                )}
-                                                <TableHead className="text-right text-slate-300 py-4">Фактически</TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {visibleItems.map(item => (
-                                                <TableRow 
-                                                    key={item.id} 
-                                                    className={`border-slate-800 transition-colors ${scannedItemId === item.id ? 'bg-blue-950/30' : 'hover:bg-slate-800/30'}`}
-                                                >
-                                                    <TableCell className="py-4">
-                                                        <div className="flex flex-col">
-                                                            <span className="font-medium text-slate-200">{item.product_name}</span>
-                                                            {item.barcode && (
-                                                                <span className="text-[10px] text-slate-500 font-mono mt-1 flex items-center gap-1">
-                                                                    <Barcode className="h-2.5 w-2.5" />
-                                                                    {item.barcode}
-                                                                </span>
-                                                            )}
-                                                        </div>
-                                                    </TableCell>
-                                                    {inventorySettings?.blind_inventory_enabled === false && (
-                                                        <TableCell className="text-right text-slate-400 font-mono py-4">
-                                                            {item.expected_stock}
-                                                        </TableCell>
-                                                    )}
-                                                    <TableCell className="text-right py-4">
-                                                        <Input 
-                                                            type="number" 
-                                                            id={`inventory-input-${item.id}`}
-                                                            className={`bg-slate-900 border-slate-700 text-right w-24 ml-auto font-bold text-lg h-11 focus:ring-2 focus:ring-blue-500 transition-all ${scannedItemId === item.id ? 'border-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.2)]' : ''}`}
-                                                            placeholder="0"
-                                                            value={item.actual_stock === null ? "" : item.actual_stock}
-                                                            onChange={(e) => handleStockChange(item.id, e.target.value)}
-                                                        />
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))}
-                                        </TableBody>
-                                    </Table>
-                                </div>
-                            )}
-                        </div>
-                    )}
-
                     {/* STEP 3: SUMMARY */}
                     {step === 3 && calculationResult && (
                         <div className="space-y-6">
@@ -714,7 +741,7 @@ export function ShiftClosingWizard({
                     )}
                 </div>
 
-                <DialogFooter className={`mt-4 border-t border-slate-800 pt-4 ${step === 2 ? 'px-6 pb-6' : ''}`}>
+                <DialogFooter className="mt-4 border-t border-slate-800 pt-4">
                     {step === 1 && (
                         <Button onClick={handleStep1Submit} className="w-full bg-purple-600 hover:bg-purple-700">
                             {skipInventory ? (
@@ -729,12 +756,6 @@ export function ShiftClosingWizard({
                             )}
                         </Button>
                     )}
-                    {step === 2 && (
-                        <Button onClick={handleInventorySubmit} disabled={isPending} className="w-full bg-blue-600 hover:bg-blue-700">
-                            {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                            Далее: Сверка итогов <ArrowRight className="ml-2 h-4 w-4" />
-                        </Button>
-                    )}
                     {step === 3 && (
                         <Button onClick={handleFinalize} disabled={isPending} className="w-full bg-emerald-600 hover:bg-emerald-700">
                             {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -742,37 +763,6 @@ export function ShiftClosingWizard({
                         </Button>
                     )}
                 </DialogFooter>
-
-                {/* Add Product Manually Dialog */}
-                <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-                    <DialogContent className="bg-slate-950 border-slate-800 text-white">
-                        <DialogHeader>
-                            <DialogTitle>Добавить товар</DialogTitle>
-                        </DialogHeader>
-                        <div className="py-4 space-y-4">
-                            <div className="space-y-2">
-                                <Label>Выберите товар</Label>
-                                <Select value={selectedProductToAdd} onValueChange={setSelectedProductToAdd}>
-                                    <SelectTrigger className="bg-slate-900 border-slate-800">
-                                        <SelectValue placeholder="Поиск по списку..." />
-                                    </SelectTrigger>
-                                    <SelectContent className="bg-slate-900 border-slate-800 text-white max-h-[300px]">
-                                        {allProducts.map(p => (
-                                            <SelectItem key={p.id} value={p.id.toString()}>{p.name}</SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                        </div>
-                        <DialogFooter>
-                            <Button variant="outline" onClick={() => setIsAddDialogOpen(false)} className="border-slate-800">Отмена</Button>
-                            <Button onClick={handleAddProductManually} disabled={!selectedProductToAdd || isPending} className="bg-blue-600">
-                                {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                Добавить
-                            </Button>
-                        </DialogFooter>
-                    </DialogContent>
-                </Dialog>
             </DialogContent>
         </Dialog>
     )
