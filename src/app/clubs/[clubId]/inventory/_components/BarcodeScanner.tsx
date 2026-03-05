@@ -20,16 +20,20 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
 
     useEffect(() => {
         let isMounted = true
+        let startPromise: Promise<any> | null = null
         
         const startScanner = async () => {
             if (!isOpen) return
+            
+            // Если уже инициализируем или сканируем, не запускаем заново
+            if (scannerRef.current?.isScanning || isInitializing) return
             
             setIsInitializing(true)
             setError(null)
             console.log("Starting scanner engine...")
 
             // Wait for Dialog to animate and element to be in DOM
-            await new Promise(resolve => setTimeout(resolve, 500))
+            await new Promise(resolve => setTimeout(resolve, 600))
             
             if (!isMounted || !isOpen) {
                 setIsInitializing(false)
@@ -44,7 +48,6 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
             }
 
             try {
-                // Use Html5Qrcode instead of Html5QrcodeScanner for better control over camera request
                 if (!scannerRef.current) {
                     scannerRef.current = new Html5Qrcode("barcode-reader")
                 }
@@ -55,9 +58,8 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
                     aspectRatio: 1.0
                 }
 
-                // This call triggers the browser camera permission request
-                await scannerRef.current.start(
-                    { facingMode: "environment" }, // Must be a string for this library
+                startPromise = scannerRef.current.start(
+                    { facingMode: "environment" },
                     config,
                     (decodedText) => {
                         const now = Date.now()
@@ -67,11 +69,10 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
                         lastScannedRef.current = { code: decodedText, time: now }
                         onScan(decodedText)
                     },
-                    (errorMessage) => {
-                        // ignore scan errors
-                    }
+                    () => {}
                 )
 
+                await startPromise
                 console.log("Scanner started successfully")
             } catch (err: any) {
                 console.error("Camera access error:", err)
@@ -92,17 +93,25 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
         return () => {
             isMounted = false
             const scanner = scannerRef.current
-            scannerRef.current = null
             
-            if (scanner && scanner.isScanning) {
-                scanner.stop()
-                    .then(() => {
+            const cleanup = async () => {
+                if (startPromise) {
+                    try { await startPromise } catch (e) {}
+                }
+                if (scanner && scanner.isScanning) {
+                    try {
+                        await scanner.stop()
                         console.log("Scanner stopped")
-                    })
-                    .catch(err => console.error("Failed to stop scanner", err))
+                    } catch (err) {
+                        console.error("Failed to stop scanner", err)
+                    }
+                }
             }
+            
+            cleanup()
+            scannerRef.current = null
         }
-    }, [isOpen, onScan])
+    }, [isOpen]) // Убрал onScan из зависимостей, чтобы избежать циклической перезагрузки
 
     return (
         <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
