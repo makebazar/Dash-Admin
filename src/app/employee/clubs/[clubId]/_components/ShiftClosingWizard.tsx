@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useTransition, useEffect, useMemo, useCallback } from "react"
-import { Loader2, ArrowRight, CheckCircle2, AlertTriangle, Package, Camera, Search, Barcode, X, Plus } from "lucide-react"
+import { Loader2, ArrowRight, CheckCircle2, AlertTriangle, Package, Camera, Search, Barcode, X, Plus, Trash2, ArrowLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -44,16 +44,17 @@ export function ShiftClosingWizard({
     checklistTemplates = [],
     inventorySettings
 }: ShiftClosingWizardProps) {
-    const [step, setStep] = useState<0 | 1 | 2 | 3>(1)
+    const [step, setStep] = useState<1 | 2 | 3>(1)
     const [reportData, setReportData] = useState<any>({})
     const [inventoryId, setInventoryId] = useState<number | null>(null)
     const [inventoryItems, setInventoryItems] = useState<ExtendedInventoryItem[]>([])
     const [isPending, startTransition] = useTransition()
     const [calculationResult, setCalculationResult] = useState<{ reported: number, calculated: number, diff: number } | null>(null)
     const [requiredChecklist, setRequiredChecklist] = useState<any>(null)
-    const [checklistResponses, setChecklistResponses] = useState<Record<number, { score: number, comment: string, selected_workstations?: string[] }>>({})
+    const [checklistResponses, setChecklistResponses] = useState<Record<number, { score: number, comment: string, photo_urls?: string[], selected_workstations?: string[] }>>({})
     const [workstations, setWorkstations] = useState<any[]>([])
     const [problematicItems, setProblematicItems] = useState<Record<number, string[]>>({})
+    const [uploadingState, setUploadingState] = useState<Record<number, boolean>>({})
 
     // New states for barcode scanner and manual adding
     const [isScannerOpen, setIsScannerOpen] = useState(false)
@@ -63,37 +64,86 @@ export function ShiftClosingWizard({
     const [selectedProductToAdd, setSelectedProductToAdd] = useState("")
     const [searchQuery, setSearchQuery] = useState("")
 
-    // Reset state when opening
+    // Persistence key
+    const persistenceKey = `shift_closing_${activeShiftId}`
+
+    // Load persisted state
+    useEffect(() => {
+        if (isOpen && activeShiftId) {
+            const saved = localStorage.getItem(persistenceKey)
+            if (saved) {
+                try {
+                    const data = JSON.parse(saved)
+                    setStep(data.step || 1)
+                    setReportData(data.reportData || {})
+                    setInventoryId(data.inventoryId || null)
+                    setInventoryItems(data.inventoryItems || [])
+                    setChecklistResponses(data.checklistResponses || {})
+                    setProblematicItems(data.problematicItems || {})
+                    setCalculationResult(data.calculationResult || null)
+                    console.log('Restored state from localStorage')
+                } catch (e) {
+                    console.error('Failed to parse saved state', e)
+                }
+            }
+        }
+    }, [isOpen, activeShiftId, persistenceKey])
+
+    // Save state on changes
+    useEffect(() => {
+        if (isOpen && activeShiftId) {
+            const stateToSave = {
+                step,
+                reportData,
+                inventoryId,
+                inventoryItems,
+                checklistResponses,
+                problematicItems,
+                calculationResult
+            }
+            localStorage.setItem(persistenceKey, JSON.stringify(stateToSave))
+        }
+    }, [step, reportData, inventoryId, inventoryItems, checklistResponses, problematicItems, calculationResult, isOpen, activeShiftId, persistenceKey])
+
+    // Reset state only if NO saved data exists when opening
     useEffect(() => {
         if (isOpen) {
-            console.log('Wizard opened, resetting state')
-            setReportData({})
-            setInventoryId(null)
-            setInventoryItems([])
-            setCalculationResult(null)
-            setChecklistResponses({})
-            setProblematicItems({})
-            setScannedItemId(null)
-            setSearchQuery("")
-            
-            const mandatory = checklistTemplates?.find((t: any) => 
-                t.type === 'shift_handover' && t.settings?.block_shift_close
-            )
-            
-            if (mandatory) {
-                setRequiredChecklist(mandatory)
-                const initial: Record<number, { score: number, comment: string, selected_workstations?: string[] }> = {}
-                mandatory.items?.forEach((item: any) => {
-                    // For standard items, default to 1 (Yes). For workstation items, we wait for fetch.
-                    if (item.related_entity_type !== 'workstations') {
-                        initial[item.id] = { score: 1, comment: '', selected_workstations: [] }
-                    }
-                })
-                setChecklistResponses(initial)
+            const saved = localStorage.getItem(persistenceKey)
+            if (!saved) {
+                console.log('Wizard opened, no saved state, initializing')
+                setReportData({})
+                setInventoryId(null)
+                setInventoryItems([])
+                setCalculationResult(null)
+                setChecklistResponses({})
+                setProblematicItems({})
+                setScannedItemId(null)
+                setSearchQuery("")
+                
+                const mandatory = checklistTemplates?.find((t: any) => 
+                    t.type === 'shift_handover' && t.settings?.block_shift_close
+                )
+                
+                if (mandatory) {
+                    setRequiredChecklist(mandatory)
+                    const initial: Record<number, { score: number, comment: string, photo_urls: string[], selected_workstations?: string[] }> = {}
+                    mandatory.items?.forEach((item: any) => {
+                        if (item.related_entity_type !== 'workstations') {
+                            initial[item.id] = { score: 1, comment: '', photo_urls: [], selected_workstations: [] }
+                        }
+                    })
+                    setChecklistResponses(initial)
+                } else {
+                    setRequiredChecklist(null)
+                }
+                setStep(1)
             } else {
-                setRequiredChecklist(null)
+                // If saved, still need to set requiredChecklist for the UI
+                const mandatory = checklistTemplates?.find((t: any) => 
+                    t.type === 'shift_handover' && t.settings?.block_shift_close
+                )
+                if (mandatory) setRequiredChecklist(mandatory)
             }
-            setStep(1)
 
             // Fetch workstations
             if (clubId) {
@@ -102,31 +152,46 @@ export function ShiftClosingWizard({
                     .then(data => {
                         if (Array.isArray(data)) {
                             setWorkstations(data)
-                            // Set initial scores for workstation items to 10 (Max)
-                            if (mandatory) {
-                                setChecklistResponses(prev => {
-                                    const next = { ...prev }
-                                    mandatory.items?.forEach((item: any) => {
-                                        if (item.related_entity_type === 'workstations') {
-                                            // Default score is always 10 for workstation checks
-                                            next[item.id] = { score: 10, comment: '', selected_workstations: [] }
-                                        }
+                            // Initial scores for workstations if no saved data
+                            const saved = localStorage.getItem(persistenceKey)
+                            if (!saved) {
+                                const mandatory = checklistTemplates?.find((t: any) => 
+                                    t.type === 'shift_handover' && t.settings?.block_shift_close
+                                )
+                                if (mandatory) {
+                                    setChecklistResponses(prev => {
+                                        const next = { ...prev }
+                                        mandatory.items?.forEach((item: any) => {
+                                            if (item.related_entity_type === 'workstations') {
+                                                next[item.id] = { score: 10, comment: '', photo_urls: [], selected_workstations: [] }
+                                            }
+                                        })
+                                        return next
                                     })
-                                    return next
-                                })
+                                }
                             }
                         }
                     })
                     .catch(console.error)
             }
         }
-    }, [isOpen]) // Only reset when isOpen transitions to true
+    }, [isOpen])
 
-    // Step 1: Financial Report + Checklist
     const handleStep1Submit = () => {
         const requiredFields = reportTemplate?.schema.filter((f: any) => f.is_required).map((f: any) => f.metric_key) || []
         const missing = requiredFields.filter((key: string) => !reportData[key])
         if (missing.length > 0) return alert(`Заполните обязательные поля отчета`)
+        
+        // Validation for checklist photos
+        if (requiredChecklist?.items) {
+            for (const item of requiredChecklist.items) {
+                const response = checklistResponses[item.id]
+                if (item.is_photo_required && (!response?.photo_urls || response.photo_urls.length < (item.min_photos || 1))) {
+                    return alert(`Загрузите фото для пункта: ${item.content}`)
+                }
+            }
+        }
+
         if (requiredChecklist?.items?.length) {
             const missingWorkstationComment = requiredChecklist.items.some((item: any) => {
                 if (item.related_entity_type !== 'workstations') return false
@@ -141,7 +206,7 @@ export function ShiftClosingWizard({
         }
 
         if (skipInventory) {
-            onComplete({ ...reportData, checklistResponses, checklistId: requiredChecklist?.id })
+            onFinalComplete()
             return
         }
         
@@ -149,10 +214,86 @@ export function ShiftClosingWizard({
         startInventory()
     }
 
+    const onFinalComplete = () => {
+        localStorage.removeItem(persistenceKey)
+        onComplete({ ...reportData, checklistResponses, checklistId: requiredChecklist?.id })
+    }
+
     const handleChecklistChange = (itemId: number, score: number) => {
         setChecklistResponses(prev => ({
             ...prev,
             [itemId]: { ...prev[itemId], score }
+        }))
+    }
+
+    const compressImage = async (file: File): Promise<Blob> => {
+        return new Promise((resolve, reject) => {
+            const img = new Image()
+            const reader = new FileReader()
+            reader.onload = (e) => { img.src = e.target?.result as string }
+            img.onload = () => {
+                const canvas = document.createElement('canvas')
+                const ctx = canvas.getContext('2d')
+                const MAX_WIDTH = 1200
+                const MAX_HEIGHT = 1200
+                let width = img.width
+                let height = img.height
+                if (width > height) {
+                    if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH }
+                } else {
+                    if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT }
+                }
+                canvas.width = width
+                canvas.height = height
+                ctx?.drawImage(img, 0, 0, width, height)
+                canvas.toBlob((blob) => {
+                    if (blob) resolve(blob)
+                    else reject(new Error('Canvas to Blob failed'))
+                }, 'image/jpeg', 0.7)
+            }
+            reader.onerror = (err) => reject(err)
+            reader.readAsDataURL(file)
+        })
+    }
+
+    const handlePhotoUpload = async (itemId: number, e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = e.target.files
+        if (!files || files.length === 0) return
+        setUploadingState(prev => ({ ...prev, [itemId]: true }))
+        try {
+            const uploadPromises = Array.from(files).map(async (file) => {
+                const compressedBlob = await compressImage(file)
+                const compressedFile = new File([compressedBlob], file.name.replace(/\.[^/.]+$/, "") + ".jpg", { type: 'image/jpeg' })
+                const formData = new FormData()
+                formData.append('file', compressedFile)
+                const res = await fetch('/api/upload', { method: 'POST', body: formData })
+                if (!res.ok) throw new Error('Upload failed')
+                const data = await res.json()
+                return data.url
+            })
+            const urls = await Promise.all(uploadPromises)
+            setChecklistResponses(prev => ({
+                ...prev,
+                [itemId]: { 
+                    ...prev[itemId], 
+                    photo_urls: [...(prev[itemId]?.photo_urls || []), ...urls]
+                }
+            }))
+        } catch (error) {
+            console.error('Failed to upload file:', error)
+            alert('Не удалось загрузить фото')
+        } finally {
+            setUploadingState(prev => ({ ...prev, [itemId]: false }))
+        }
+    }
+
+    const removePhoto = (itemId: number, urlToRemove: string) => {
+        setChecklistResponses(prev => ({
+            ...prev,
+            [itemId]: { 
+                ...prev[itemId], 
+                photo_urls: (prev[itemId]?.photo_urls || []).filter(url => url !== urlToRemove)
+            }
         }))
     }
 
@@ -179,8 +320,8 @@ export function ShiftClosingWizard({
             setChecklistResponses(r => ({
                 ...r,
                 [itemId]: {
+                    ...r[itemId],
                     score: newScore,
-                    comment: r[itemId]?.comment || '',
                     selected_workstations: workstationNames
                 }
             }))
@@ -190,6 +331,12 @@ export function ShiftClosingWizard({
     }
 
     const startInventory = () => {
+        // If inventoryId already exists (from persistence), don't restart
+        if (inventoryId) {
+            console.log('Restoring existing inventory:', inventoryId)
+            return
+        }
+
         startTransition(async () => {
             try {
                 // 1. Determine target metric key
@@ -325,12 +472,51 @@ export function ShiftClosingWizard({
         }))
     }
 
+    const handleRemoveItem = (itemId: number) => {
+        setInventoryItems(prev => prev.map(i => {
+            if (i.id === itemId) {
+                return { ...i, actual_stock: null, is_visible: false }
+            }
+            return i
+        }))
+    }
+
+    const translateLayout = (text: string) => {
+        const ru = "йцукенгшщзхъфывапролджэячсмитьбю.ЙЦУКЕНГШЩЗХЪФЫВАПРОЛДЖЭЯЧСМИТЬБЮ,"
+        const en = "qwertyuiop[]asdfghjkl;'zxcvbnm,./QWERTYUIOP{}ASDFGHJKL:\"ZXCVBNM<>?"
+        
+        const toRu = (s: string) => s.split('').map(c => {
+            const i = en.indexOf(c)
+            return i !== -1 ? ru[i] : c
+        }).join('')
+        
+        const toEn = (s: string) => s.split('').map(c => {
+            const i = ru.indexOf(c)
+            return i !== -1 ? en[i] : c
+        }).join('')
+
+        return {
+            original: text.toLowerCase(),
+            ru: toRu(text).toLowerCase(),
+            en: toEn(text).toLowerCase()
+        }
+    }
+
     const visibleItems = useMemo(() => {
+        const queries = translateLayout(searchQuery)
+        
         return inventoryItems.filter(i => {
             if (i.is_visible) return true
-            if (searchQuery && i.product_name.toLowerCase().includes(searchQuery.toLowerCase())) return true
-            if (searchQuery && i.barcode && i.barcode.includes(searchQuery)) return true
-            return false
+            if (!searchQuery) return false
+
+            const name = i.product_name.toLowerCase()
+            const barcode = i.barcode || ""
+            
+            const matchOriginal = name.includes(queries.original) || barcode.includes(queries.original)
+            const matchRu = name.includes(queries.ru)
+            const matchEn = name.includes(queries.en)
+            
+            return matchOriginal || matchRu || matchEn
         })
     }, [inventoryItems, searchQuery])
 
@@ -391,12 +577,18 @@ export function ShiftClosingWizard({
                 await closeInventory(inventoryId, clubId, calculationResult.reported)
                 
                 // Complete shift closing
-                onComplete({ ...reportData, checklistResponses, checklistId: requiredChecklist?.id })
+                onFinalComplete()
             } catch (e) {
                 console.error(e)
                 alert("Ошибка завершения")
             }
         })
+    }
+
+    const handleBack = () => {
+        if (step > 1) {
+            setStep((prev) => (prev - 1) as 1 | 2 | 3)
+        }
     }
 
     if (!isOpen) return null
@@ -436,7 +628,7 @@ export function ShiftClosingWizard({
                                 <div 
                                     key={i} 
                                     className={`flex-1 rounded-full transition-all duration-500 ${
-                                        i < step ? 'bg-green-500' : 
+                                        i < (step as number) ? 'bg-green-500' : 
                                         i === step ? 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]' : 
                                         'bg-slate-800'
                                     }`}
@@ -502,7 +694,7 @@ export function ShiftClosingWizard({
                                          }
 
                                         return (
-                                            <div key={item.id} className="space-y-2">
+                                            <div key={item.id} className="space-y-4 py-2 border-b border-orange-900/20 last:border-0">
                                                 <div className="flex items-center justify-between gap-4">
                                                     <span className="text-sm font-medium text-slate-200">{item.content}</span>
                                                     <div className="flex gap-1 bg-slate-900 p-1 rounded-lg border border-slate-800 shrink-0">
@@ -524,6 +716,47 @@ export function ShiftClosingWizard({
                                                         </Button>
                                                     </div>
                                                 </div>
+
+                                                {/* Photos & Camera */}
+                                                {(item.is_photo_required || checklistResponses[item.id]?.score === 0 || (checklistResponses[item.id]?.photo_urls?.length || 0) > 0) && (
+                                                    <div className="space-y-3">
+                                                        {checklistResponses[item.id]?.photo_urls && checklistResponses[item.id].photo_urls!.length > 0 && (
+                                                            <div className="grid grid-cols-3 gap-2">
+                                                                {checklistResponses[item.id].photo_urls!.map((url, idx) => (
+                                                                    <div key={idx} className="relative rounded-lg overflow-hidden border border-slate-800 aspect-square group">
+                                                                        <img src={url} alt="Attach" className="h-full w-full object-cover" />
+                                                                        <button 
+                                                                            onClick={() => removePhoto(item.id, url)}
+                                                                            className="absolute top-1 right-1 p-1.5 bg-black/50 hover:bg-red-600 text-white rounded-full backdrop-blur-sm transition-colors"
+                                                                        >
+                                                                            <Trash2 className="h-3 w-3" />
+                                                                        </button>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                        
+                                                        <label className={`
+                                                            flex items-center justify-center gap-2 p-3 rounded-xl border border-dashed transition-all cursor-pointer
+                                                            ${item.is_photo_required && (checklistResponses[item.id]?.photo_urls?.length || 0) < (item.min_photos || 1)
+                                                                ? 'border-orange-500/50 bg-orange-500/5' : 'border-slate-800 bg-slate-900/30'}
+                                                        `}>
+                                                            {uploadingState[item.id] ? <Loader2 className="h-4 w-4 animate-spin text-orange-400" /> : <Camera className="h-4 w-4 text-orange-400" />}
+                                                            <span className="text-xs font-medium text-orange-200">
+                                                                {uploadingState[item.id] ? 'Загрузка...' : 'Добавить фото'}
+                                                            </span>
+                                                            <input 
+                                                                type="file" 
+                                                                accept="image/*" 
+                                                                multiple 
+                                                                capture="environment" 
+                                                                className="hidden" 
+                                                                onChange={(e) => handlePhotoUpload(item.id, e)}
+                                                                disabled={uploadingState[item.id]}
+                                                            />
+                                                        </label>
+                                                    </div>
+                                                )}
                                             </div>
                                         )})}
                                 </div>
@@ -588,9 +821,19 @@ export function ShiftClosingWizard({
                                         {visibleItems.map(item => (
                                             <TableRow key={item.id} className={`border-slate-800 ${scannedItemId === item.id ? 'bg-blue-900/20' : ''}`}>
                                                 <TableCell className="py-4 pl-6">
-                                                    <div className="flex flex-col">
-                                                        <span className="font-bold text-slate-200">{item.product_name}</span>
-                                                        {item.barcode && <span className="text-[10px] text-slate-500 font-mono">{item.barcode}</span>}
+                                                    <div className="flex items-center gap-3">
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            onClick={() => handleRemoveItem(item.id)}
+                                                            className="h-8 w-8 text-slate-500 hover:text-red-400 hover:bg-red-400/10 shrink-0"
+                                                        >
+                                                            <Trash2 className="h-4 w-4" />
+                                                        </Button>
+                                                        <div className="flex flex-col">
+                                                            <span className="font-bold text-slate-200">{item.product_name}</span>
+                                                            {item.barcode && <span className="text-[10px] text-slate-500 font-mono">{item.barcode}</span>}
+                                                        </div>
                                                     </div>
                                                 </TableCell>
                                                 <TableCell className="text-right py-4 pr-6">
@@ -662,16 +905,36 @@ export function ShiftClosingWizard({
                             <Camera className="mr-2 h-6 w-6" />
                             Открыть Сканер
                         </Button>
-                        <Button onClick={handleInventorySubmit} disabled={isPending} className="w-full h-14 text-lg font-bold bg-blue-600 hover:bg-blue-700 rounded-2xl shadow-lg shadow-blue-900/20">
-                            Далее: Сверка итогов
-                            <ArrowRight className="ml-2 h-5 w-5" />
-                        </Button>
+                        <div className="flex gap-3">
+                            <Button 
+                                variant="outline"
+                                size="icon"
+                                onClick={handleBack}
+                                className="h-14 w-14 border-slate-800 text-slate-400 hover:bg-slate-800 rounded-2xl shrink-0"
+                            >
+                                <ArrowLeft className="h-6 w-6" />
+                            </Button>
+                            <Button onClick={handleInventorySubmit} disabled={isPending} className="flex-1 h-14 text-lg font-bold bg-blue-600 hover:bg-blue-700 rounded-2xl shadow-lg shadow-blue-900/20">
+                                Далее
+                                <ArrowRight className="ml-2 h-5 w-5" />
+                            </Button>
+                        </div>
                     </div>
                 )}
                 {step === 3 && (
-                    <Button onClick={handleFinalize} disabled={isPending} className="w-full h-14 text-lg font-bold bg-green-600 hover:bg-green-700 rounded-2xl shadow-lg shadow-green-900/20">
-                        Подтвердить и закрыть
-                    </Button>
+                    <div className="flex gap-3">
+                        <Button 
+                            variant="outline"
+                            size="icon"
+                            onClick={handleBack}
+                            className="h-14 w-14 border-slate-800 text-slate-400 hover:bg-slate-800 rounded-2xl shrink-0"
+                        >
+                            <ArrowLeft className="h-6 w-6" />
+                        </Button>
+                        <Button onClick={handleFinalize} disabled={isPending} className="flex-1 h-14 text-lg font-bold bg-green-600 hover:bg-green-700 rounded-2xl shadow-lg shadow-green-900/20">
+                            Подтвердить
+                        </Button>
+                    </div>
                 )}
             </footer>
 

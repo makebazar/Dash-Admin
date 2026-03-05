@@ -1039,7 +1039,21 @@ export async function createInventory(clubId: string, userId: string, targetMetr
     try {
         await client.query('BEGIN')
 
-        // 1. Create Inventory Header
+        // 1. Check if an OPEN inventory for this shift already exists
+        if (shiftId) {
+            const existingInv = await client.query(`
+                SELECT id FROM warehouse_inventories 
+                WHERE club_id = $1 AND shift_id = $2 AND status = 'OPEN'
+                LIMIT 1
+            `, [clubId, shiftId])
+            
+            if (existingInv.rowCount && existingInv.rowCount > 0) {
+                await client.query('ROLLBACK')
+                return existingInv.rows[0].id
+            }
+        }
+
+        // 2. Create Inventory Header
         const invRes = await client.query(`
             INSERT INTO warehouse_inventories (club_id, created_by, status, target_metric_key, warehouse_id, shift_id)
             VALUES ($1, $2, 'OPEN', $3, $4, $5)
