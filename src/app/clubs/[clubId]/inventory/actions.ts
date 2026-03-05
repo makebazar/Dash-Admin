@@ -1236,7 +1236,12 @@ export async function bulkUpdateInventoryItems(items: { id: number, actual_stock
     revalidatePath(`/clubs/${clubId}/inventory`)
 }
 
-export async function closeInventory(inventoryId: number, clubId: string, reportedRevenue: number) {
+export async function closeInventory(
+    inventoryId: number, 
+    clubId: string, 
+    reportedRevenue: number,
+    unaccountedSales: { product_id: number, quantity: number, selling_price: number, cost_price: number }[] = []
+) {
     const client = await import("@/db").then(m => m.getClient())
     try {
         await client.query('BEGIN')
@@ -1252,15 +1257,18 @@ export async function closeInventory(inventoryId: number, clubId: string, report
             WHERE inventory_id = $1
         `, [inventoryId])
 
-        // 2. Calculate total revenue
+        // 2. Calculate total revenue (Standard Sales + Unaccounted Sales)
         const sumRes = await client.query(`
             SELECT SUM(calculated_revenue) as total_rev
             FROM warehouse_inventory_items
             WHERE inventory_id = $1
         `, [inventoryId])
         
-        const calculatedRevenue = sumRes.rows[0].total_rev || 0
-        const diff = reportedRevenue - calculatedRevenue 
+        const standardCalculatedRevenue = Number(sumRes.rows[0].total_rev || 0)
+        const unaccountedRevenue = unaccountedSales.reduce((acc, s) => acc + (s.quantity * s.selling_price), 0)
+        
+        const totalCalculatedRevenue = standardCalculatedRevenue + unaccountedRevenue
+        const diff = reportedRevenue - totalCalculatedRevenue 
         
         // 3. Update Stock Levels to Actual and Log Movements
         // Strategy: Adjust stock in the Inventoried Warehouse (or Default if legacy)
@@ -1285,6 +1293,7 @@ export async function closeInventory(inventoryId: number, clubId: string, report
 
         if (!warehouseId) throw new Error("Не найден склад для корректировки остатков")
 
+        // --- PART A: Handle Standard Inventory Items (Sales and Excesses) ---
         const diffItems = await client.query(`
             SELECT ii.product_id, ii.expected_stock, ii.actual_stock, ii.cost_price_snapshot
             FROM warehouse_inventory_items ii
@@ -1320,14 +1329,33 @@ export async function closeInventory(inventoryId: number, clubId: string, report
             await logStockMovement(client, clubId, userId, item.product_id, diffAmount, item.expected_stock, item.actual_stock, type, reason, 'INVENTORY', inventoryId, shiftId)
         }
 
-        // Create automatic supply for unaccounted items (Draft status, BUT update stock immediately)
+        // --- PART B: Handle Unaccounted Sales (Sold items that weren't in stock at all) ---
+        // For each unaccounted sale:
+        // 1. Create a DRAFT Supply (to fix the balance)
+        // 2. The SALE is already "calculated" in revenue, and we log it as a sale.
+        // Actually, to keep it simple: we add these to the Auto-Supply list as well!
+        for (const sale of unaccountedSales) {
+            itemsForAutoSupply.push({
+                product_id: sale.product_id,
+                quantity: sale.quantity,
+                cost_price: sale.cost_price
+            })
+            
+            // Also log the SALE movement for these unaccounted items
+            // They start at 0 (effectively), get supplied (+qty), then sold (-qty)
+            // But since they were sold, the net change for THIS inventory is just the revenue.
+            // However, to be accurate in logs:
+            await logStockMovement(client, clubId, userId, sale.product_id, -sale.quantity, 0, 0, 'SALE', `Продажа неучтенного товара (инвентаризация #${inventoryId})`, 'INVENTORY', inventoryId, shiftId)
+        }
+
+        // Create automatic supply for all excess/unaccounted items
         if (itemsForAutoSupply.length > 0) {
             const totalAutoCost = itemsForAutoSupply.reduce((acc, item) => acc + (item.quantity * item.cost_price), 0)
             const supplyRes = await client.query(`
                 INSERT INTO warehouse_supplies (club_id, supplier_name, notes, total_cost, created_by, status)
                 VALUES ($1, $2, $3, $4, $5, 'DRAFT')
                 RETURNING id
-            `, [clubId, 'Авто-поступление (Инвентаризация)', `Автоматически создано при закрытии инвентаризации #${inventoryId}. Остатки обновлены. ТРЕБУЕТ ПРОВЕРКИ ЦЕН.`, totalAutoCost, userId])
+            `, [clubId, 'Авто-поступление (Инвентаризация)', `Автоматически создано при закрытии инвентаризации #${inventoryId}. Включает излишки и неучтенные продажи. ТРЕБУЕТ ПРОВЕРКИ ЦЕН.`, totalAutoCost, userId])
             const supplyId = supplyRes.rows[0].id
 
             for (const item of itemsForAutoSupply) {
@@ -1336,8 +1364,8 @@ export async function closeInventory(inventoryId: number, clubId: string, report
                     VALUES ($1, $2, $3, $4, $5)
                 `, [supplyId, item.product_id, item.quantity, item.cost_price, item.quantity * item.cost_price])
 
-                // UPDATE warehouse_stock IMMEDIATELY even if supply is DRAFT
-                // This ensures the next shift starts with correct actual stock
+                // UPDATE warehouse_stock IMMEDIATELY for the supply part
+                // This ensures the stock is "reconstituted"
                 await client.query(`
                     INSERT INTO warehouse_stock (warehouse_id, product_id, quantity)
                     VALUES ($1, $2, $3)
@@ -1364,7 +1392,7 @@ export async function closeInventory(inventoryId: number, clubId: string, report
                 calculated_revenue = $3,
                 revenue_difference = $4
             WHERE id = $1
-        `, [inventoryId, reportedRevenue, calculatedRevenue, diff])
+        `, [inventoryId, reportedRevenue, totalCalculatedRevenue, diff])
 
         await client.query('COMMIT')
 

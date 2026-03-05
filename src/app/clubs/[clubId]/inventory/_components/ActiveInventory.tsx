@@ -34,10 +34,14 @@ export function ActiveInventory({ inventoryId, onClose, isOwner }: ActiveInvento
     // Close Dialog State
     const [isCloseDialogOpen, setIsCloseDialogOpen] = useState(false)
     const [reportedRevenue, setReportedRevenue] = useState("")
+    const [unaccountedSales, setUnaccountedSales] = useState<{ product_id: number, quantity: number, selling_price: number, cost_price: number, name: string }[]>([])
+    const [isUnaccountedDialogOpen, setIsUnaccountedDialogOpen] = useState(false)
+    const [selectedUnaccountedProduct, setSelectedUnaccountedProduct] = useState("")
+    const [unaccountedQty, setUnaccountedQty] = useState("1")
     
     // Add Item State
     const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
-    const [allProducts, setAllProducts] = useState<{ id: number, name: string }[]>([])
+    const [allProducts, setAllProducts] = useState<{ id: number, name: string, selling_price?: number, cost_price?: number }[]>([])
     const [selectedProductToAdd, setSelectedProductToAdd] = useState("")
 
     // Search & Filter
@@ -87,7 +91,17 @@ export function ActiveInventory({ inventoryId, onClose, isOwner }: ActiveInvento
 
         startTransition(async () => {
             try {
-                await closeInventory(inventoryId, clubId, metricRequired ? Number(reportedRevenue) : 0)
+                await closeInventory(
+                    inventoryId, 
+                    clubId, 
+                    metricRequired ? Number(reportedRevenue) : 0,
+                    unaccountedSales.map(s => ({
+                        product_id: s.product_id,
+                        quantity: s.quantity,
+                        selling_price: s.selling_price,
+                        cost_price: s.cost_price
+                    }))
+                )
                 setIsCloseDialogOpen(false)
                 onClose() // Go back to list
             } catch (e) {
@@ -95,6 +109,29 @@ export function ActiveInventory({ inventoryId, onClose, isOwner }: ActiveInvento
                 alert("Ошибка при закрытии инвентаризации")
             }
         })
+    }
+
+    const addUnaccountedSale = () => {
+        const product = allProducts.find(p => p.id === Number(selectedUnaccountedProduct))
+        if (!product || !unaccountedQty) return
+
+        setUnaccountedSales(prev => [
+            ...prev,
+            {
+                product_id: product.id,
+                name: product.name,
+                quantity: Number(unaccountedQty),
+                selling_price: product.selling_price || 0,
+                cost_price: product.cost_price || 0
+            }
+        ])
+        setSelectedUnaccountedProduct("")
+        setUnaccountedQty("1")
+        setIsUnaccountedDialogOpen(false)
+    }
+
+    const removeUnaccountedSale = (productId: number) => {
+        setUnaccountedSales(prev => prev.filter(s => s.product_id !== productId))
     }
 
     const handleAddProduct = async () => {
@@ -119,11 +156,16 @@ export function ActiveInventory({ inventoryId, onClose, isOwner }: ActiveInvento
         setIsAddDialogOpen(true)
         if (allProducts.length === 0) {
             const products = await getProducts(clubId)
-            setAllProducts(products.map(p => ({ id: p.id, name: p.name })))
+            setAllProducts(products.map(p => ({ 
+                id: p.id, 
+                name: p.name,
+                selling_price: p.selling_price,
+                cost_price: p.cost_price
+            })))
         }
     }
 
-    const handleBarcodeScan = useCallback(async (barcode: string) => {
+    const handleBarcodeScan = useCallback(async (barcode: string): Promise<boolean> => {
         // 1. Find item in the current inventory list
         const existingItem = items.find(i => i.barcode === barcode)
         
@@ -136,7 +178,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner }: ActiveInvento
             await handleBlur(existingItem.id, newStock)
             
             // We don't close the scanner to allow multiple scans
-            return
+            return true
         }
 
         // 2. If not in current list, try to find in general products
@@ -158,6 +200,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner }: ActiveInvento
                         setScannedItem(newItem)
                         await handleBlur(newItem.id, 1)
                     }
+                    return true
                 }
             } else {
                 alert(`Товар со штрихкодом ${barcode} не найден в базе.`)
@@ -166,6 +209,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner }: ActiveInvento
             console.error(e)
             alert("Ошибка при поиске товара")
         }
+        return false
     }, [items, clubId, inventoryId])
 
     const handleScannedStockSave = async () => {
@@ -452,6 +496,54 @@ export function ActiveInventory({ inventoryId, onClose, isOwner }: ActiveInvento
                                     className="text-lg font-bold"
                                 />
                             </div>
+
+                            {/* Unaccounted Sales Section */}
+                            <div className="pt-4 border-t">
+                                <div className="flex items-center justify-between mb-2">
+                                    <Label className="text-sm font-semibold">Неучтенные продажи</Label>
+                                    <Button 
+                                        type="button" 
+                                        variant="outline" 
+                                        size="sm" 
+                                        onClick={() => {
+                                            openAddDialog()
+                                            setIsUnaccountedDialogOpen(true)
+                                        }}
+                                        className="h-8 text-xs bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-100"
+                                    >
+                                        <Plus className="h-3 w-3 mr-1" /> Добавить
+                                    </Button>
+                                </div>
+                                
+                                {unaccountedSales.length === 0 ? (
+                                    <p className="text-[10px] text-muted-foreground italic">
+                                        Если вы продавали товар, которого не было в системе, добавьте его здесь для правильной сверки.
+                                    </p>
+                                ) : (
+                                    <div className="space-y-2">
+                                        {unaccountedSales.map(sale => (
+                                            <div key={sale.product_id} className="flex items-center justify-between bg-slate-50 p-2 rounded-md text-xs border border-slate-100">
+                                                <div className="flex flex-col">
+                                                    <span className="font-medium">{sale.name}</span>
+                                                    <span className="text-muted-foreground">{sale.quantity} шт × {sale.selling_price} ₽ = {sale.quantity * sale.selling_price} ₽</span>
+                                                </div>
+                                                <Button 
+                                                    variant="ghost" 
+                                                    size="icon" 
+                                                    onClick={() => removeUnaccountedSale(sale.product_id)}
+                                                    className="h-6 w-6 text-red-400 hover:text-red-600 hover:bg-red-50"
+                                                >
+                                                    <X className="h-3 w-3" />
+                                                </Button>
+                                            </div>
+                                        ))}
+                                        <div className="flex justify-between items-center px-2 py-1 bg-blue-50/50 rounded text-[11px] font-bold text-blue-700">
+                                            <span>ИТОГО НЕУЧТЕННЫХ ПРОДАЖ:</span>
+                                            <span>{unaccountedSales.reduce((acc, s) => acc + (s.quantity * s.selling_price), 0)} ₽</span>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     )}
 
@@ -469,6 +561,47 @@ export function ActiveInventory({ inventoryId, onClose, isOwner }: ActiveInvento
                             {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                             {inventory.target_metric_key ? "Сверить и закрыть" : "Обновить остатки"}
                         </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Unaccounted Product Dialog */}
+            <Dialog open={isUnaccountedDialogOpen} onOpenChange={setIsUnaccountedDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Добавить неучтенную продажу</DialogTitle>
+                        <DialogDescription>
+                            Выберите товар, который был продан без остатка в системе.
+                        </DialogDescription>
+                    </DialogHeader>
+                    
+                    <div className="space-y-4 py-4">
+                        <div className="space-y-2">
+                            <Label>Товар</Label>
+                            <Select value={selectedUnaccountedProduct} onValueChange={setSelectedUnaccountedProduct}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Выберите товар" />
+                                </SelectTrigger>
+                                <SelectContent className="max-h-[300px]">
+                                    {allProducts.map(p => (
+                                        <SelectItem key={p.id} value={p.id.toString()}>{p.name}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Количество</Label>
+                            <Input 
+                                type="number" 
+                                value={unaccountedQty}
+                                onChange={e => setUnaccountedQty(e.target.value)}
+                            />
+                        </div>
+                    </div>
+
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setIsUnaccountedDialogOpen(false)}>Отмена</Button>
+                        <Button onClick={addUnaccountedSale} disabled={!selectedUnaccountedProduct || !unaccountedQty}>Добавить</Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
