@@ -1283,16 +1283,29 @@ export async function closeInventory(inventoryId: number, clubId: string, report
         if (!warehouseId) throw new Error("Не найден склад для корректировки остатков")
 
         const diffItems = await client.query(`
-            SELECT ii.product_id, ii.expected_stock, ii.actual_stock
+            SELECT ii.product_id, ii.expected_stock, ii.actual_stock, ii.cost_price_snapshot
             FROM warehouse_inventory_items ii
             WHERE ii.inventory_id = $1 AND ii.actual_stock IS NOT NULL AND ii.actual_stock != ii.expected_stock
         `, [inventoryId])
 
+        // Group items for a potential automatic supply (if expected was 0 and actual > 0)
+        const itemsForAutoSupply: { product_id: number, quantity: number, cost_price: number }[] = []
+
         for (const item of diffItems.rows) {
             const diffAmount = item.actual_stock - item.expected_stock
             
+            // If actual > 0 and expected was 0, it's an UNACCOUNTED supply
+            if (item.expected_stock === 0 && item.actual_stock > 0) {
+                itemsForAutoSupply.push({
+                    product_id: item.product_id,
+                    quantity: item.actual_stock,
+                    cost_price: item.cost_price_snapshot || 0
+                })
+                continue // Skip regular inventory adjustment for these items, we'll create a Supply
+            }
+
             // If actual < expected, it's a SALE (negative diff in stock)
-            // If actual > expected, it's an ADJUSTMENT (positive diff in stock)
+            // If actual > expected (but expected was NOT 0), it's an ADJUSTMENT (positive diff in stock)
             const type = diffAmount < 0 ? 'SALE' : 'INVENTORY_ADJUSTMENT'
             const reason = diffAmount < 0 ? `Продажа за смену (инвентаризация #${inventoryId})` : `Корректировка инвентаризацией #${inventoryId}`
 
@@ -1303,6 +1316,33 @@ export async function closeInventory(inventoryId: number, clubId: string, report
             `, [warehouseId, item.product_id, diffAmount])
 
             await logStockMovement(client, clubId, userId, item.product_id, diffAmount, item.expected_stock, item.actual_stock, type, reason, 'INVENTORY', inventoryId, shiftId)
+        }
+
+        // Create automatic supply for unaccounted items
+        if (itemsForAutoSupply.length > 0) {
+            const totalAutoCost = itemsForAutoSupply.reduce((acc, item) => acc + (item.quantity * item.cost_price), 0)
+            const supplyRes = await client.query(`
+                INSERT INTO warehouse_supplies (club_id, supplier_name, notes, total_cost, created_by, status)
+                VALUES ($1, $2, $3, $4, $5, 'COMPLETED')
+                RETURNING id
+            `, [clubId, 'Авто-поступление (Инвентаризация)', `Автоматически создано при закрытии инвентаризации #${inventoryId}`, totalAutoCost, userId])
+            const supplyId = supplyRes.rows[0].id
+
+            for (const item of itemsForAutoSupply) {
+                await client.query(`
+                    INSERT INTO warehouse_supply_items (supply_id, product_id, quantity, cost_price, total_cost)
+                    VALUES ($1, $2, $3, $4, $5)
+                `, [supplyId, item.product_id, item.quantity, item.cost_price, item.quantity * item.cost_price])
+
+                // Update stock for auto-supply
+                await client.query(`
+                    INSERT INTO warehouse_stock (warehouse_id, product_id, quantity)
+                    VALUES ($1, $2, $3)
+                    ON CONFLICT (warehouse_id, product_id) DO UPDATE SET quantity = warehouse_stock.quantity + $3
+                `, [warehouseId, item.product_id, item.quantity])
+
+                await logStockMovement(client, clubId, userId, item.product_id, item.quantity, 0, item.quantity, 'SUPPLY', `Авто-поступление #${supplyId} (Инвентаризация #${inventoryId})`, 'SUPPLY', supplyId, shiftId)
+            }
         }
 
         // Update Cache
