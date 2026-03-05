@@ -63,7 +63,8 @@ interface VerificationTask {
     status: string
     verification_status: string
     due_date: string
-    completed_at: string
+    completed_at: string | null
+    verified_at?: string | null
     completed_by_name: string | null
     verified_by_name?: string | null
     photos: string[] | null
@@ -138,6 +139,12 @@ export default function ChecklistsPage({ params, searchParams }: { params: Promi
             }
         })
     }, [params, searchParams])
+
+    useEffect(() => {
+        setFilterStatus("all")
+        setFilterZone("all")
+        setFilterEmployee("all")
+    }, [equipmentTab])
 
     const handleTabChange = (value: string) => {
         setActiveTab(value)
@@ -573,20 +580,6 @@ export default function ChecklistsPage({ params, searchParams }: { params: Promi
                                     <ToolbarGroup className="w-full sm:w-auto">
                                         <div className="flex flex-col sm:flex-row gap-2 w-full">
                                             <div className="flex items-center gap-2 w-full sm:w-auto">
-                                            {equipmentTab === 'active' ? (
-                                                <Select value={filterZone} onValueChange={setFilterZone}>
-                                                    <SelectTrigger className="w-full sm:w-[180px] h-9 text-sm bg-muted/50 border-transparent hover:bg-muted transition-colors flex-1 min-w-0">
-                                                        <div className="flex items-center truncate">
-                                                            <Layers className="mr-2 h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                                                            <SelectValue placeholder="Зона" />
-                                                        </div>
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="all">Все зоны</SelectItem>
-                                                        {zones.map(z => <SelectItem key={z} value={z}>{z}</SelectItem>)}
-                                                    </SelectContent>
-                                                </Select>
-                                            ) : (
                                                 <Select value={filterStatus} onValueChange={setFilterStatus}>
                                                     <SelectTrigger className="w-full sm:w-[180px] h-9 text-sm bg-muted/50 border-transparent hover:bg-muted transition-colors flex-1 min-w-0">
                                                         <div className="flex items-center truncate">
@@ -596,24 +589,46 @@ export default function ChecklistsPage({ params, searchParams }: { params: Promi
                                                     </SelectTrigger>
                                                     <SelectContent>
                                                         <SelectItem value="all">Все статусы</SelectItem>
-                                                        <SelectItem value="APPROVED">Одобрено</SelectItem>
-                                                        <SelectItem value="REJECTED">Отклонено</SelectItem>
+                                                        {equipmentTab === 'active' ? (
+                                                            <>
+                                                                <SelectItem value="PENDING">Ожидает</SelectItem>
+                                                                <SelectItem value="REJECTED">На доработке</SelectItem>
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <SelectItem value="APPROVED">Одобрено</SelectItem>
+                                                            </>
+                                                        )}
                                                     </SelectContent>
                                                 </Select>
-                                            )}
 
-                                            <Select value={filterEmployee} onValueChange={setFilterEmployee}>
-                                                <SelectTrigger className="w-full sm:w-[180px] h-9 text-sm bg-muted/50 border-transparent hover:bg-muted transition-colors flex-1 min-w-0">
-                                                    <div className="flex items-center truncate">
-                                                        <User className="mr-2 h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                                                        <SelectValue placeholder="Сотрудник" />
-                                                    </div>
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem value="all">Все сотрудники</SelectItem>
-                                                    {employees.map(e => <SelectItem key={e} value={e}>{e}</SelectItem>)}
-                                                </SelectContent>
-                                            </Select>
+                                                {equipmentTab === 'active' && (
+                                                    <Select value={filterZone} onValueChange={setFilterZone}>
+                                                        <SelectTrigger className="w-full sm:w-[180px] h-9 text-sm bg-muted/50 border-transparent hover:bg-muted transition-colors flex-1 min-w-0">
+                                                            <div className="flex items-center truncate">
+                                                                <Layers className="mr-2 h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                                                <SelectValue placeholder="Зона" />
+                                                            </div>
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            <SelectItem value="all">Все зоны</SelectItem>
+                                                            {zones.map(z => <SelectItem key={z} value={z}>{z}</SelectItem>)}
+                                                        </SelectContent>
+                                                    </Select>
+                                                )}
+
+                                                <Select value={filterEmployee} onValueChange={setFilterEmployee}>
+                                                    <SelectTrigger className="w-full sm:w-[180px] h-9 text-sm bg-muted/50 border-transparent hover:bg-muted transition-colors flex-1 min-w-0">
+                                                        <div className="flex items-center truncate">
+                                                            <User className="mr-2 h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                                            <SelectValue placeholder="Сотрудник" />
+                                                        </div>
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="all">Все сотрудники</SelectItem>
+                                                        {employees.map(e => <SelectItem key={e} value={e}>{e}</SelectItem>)}
+                                                    </SelectContent>
+                                                </Select>
                                             </div>
                                             {equipmentTab === 'history' && (
                                                 <div className="flex items-center justify-between rounded-md bg-muted/50 px-3 h-9 border border-transparent w-full sm:w-[280px]">
@@ -736,7 +751,13 @@ export default function ChecklistsPage({ params, searchParams }: { params: Promi
                                                                             <span className="text-sm font-medium text-slate-700">{task.completed_by_name?.split(' ')[0]}</span>
                                                                         </div>
                                                                         <div className="flex items-center gap-2 text-xs text-slate-400">
-                                                                            <span>{task.completed_at ? format(new Date(task.completed_at), 'dd.MM в HH:mm', { locale: ru }) : '-'}</span>
+                                                                            <span>
+                                                                                {task.completed_at 
+                                                                                    ? format(new Date(task.completed_at), 'dd.MM в HH:mm', { locale: ru }) 
+                                                                                    : task.verified_at
+                                                                                        ? `Отклонен ${format(new Date(task.verified_at), 'dd.MM в HH:mm', { locale: ru })}`
+                                                                                        : '-'}
+                                                                            </span>
                                                                         </div>
                                                                         {task.verification_status === 'APPROVED' && (
                                                                             <div className="mt-1">
@@ -747,8 +768,15 @@ export default function ChecklistsPage({ params, searchParams }: { params: Promi
                                                                         )}
                                                                         {task.verification_status === 'REJECTED' && (
                                                                             <div className="mt-1">
-                                                                                <Badge variant="destructive" className="bg-red-100 text-red-700 hover:bg-red-100 border-0 h-5 px-1.5 text-[10px]">
-                                                                                    <XCircle className="h-3 w-3 mr-1" /> Отклонено
+                                                                                <Badge variant="destructive" className="bg-amber-100 text-amber-700 hover:bg-amber-100 border-0 h-5 px-1.5 text-[10px]">
+                                                                                    <RotateCcw className="h-3 w-3 mr-1" /> На доработке
+                                                                                </Badge>
+                                                                            </div>
+                                                                        )}
+                                                                        {task.verification_status === 'PENDING' && (
+                                                                            <div className="mt-1">
+                                                                                <Badge variant="outline" className="text-blue-600 border-blue-200 bg-blue-50 h-5 px-1.5 text-[10px]">
+                                                                                    <History className="h-3 w-3 mr-1" /> Ожидает
                                                                                 </Badge>
                                                                             </div>
                                                                         )}
@@ -813,6 +841,13 @@ export default function ChecklistsPage({ params, searchParams }: { params: Promi
                                                                                 <div className="bg-white p-3 rounded-lg border shadow-sm">
                                                                                     <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Комментарий сотрудника</div>
                                                                                     <p className="text-sm text-slate-700 italic">"{task.notes}"</p>
+                                                                                </div>
+                                                                            )}
+
+                                                                            {task.verification_status === 'REJECTED' && task.rejection_reason && (
+                                                                                <div className="bg-amber-50 p-3 rounded-lg border border-amber-100 shadow-sm">
+                                                                                    <div className="text-[10px] text-amber-600 uppercase tracking-wider mb-1 font-bold">Ранее отправлено на доработку</div>
+                                                                                    <p className="text-sm text-amber-800 italic">"{task.rejection_reason}"</p>
                                                                                 </div>
                                                                             )}
 

@@ -18,11 +18,11 @@ export async function GET(
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        // Default to PENDING if no status provided or status is not history
-        let statusFilter = "t.verification_status = 'PENDING'";
+        // Default to active (PENDING or REJECTED) if no status provided or status is not history
+        let statusFilter = "t.verification_status IN ('PENDING', 'REJECTED')";
         
         if (status === 'history') {
-            statusFilter = "t.verification_status IN ('APPROVED', 'REJECTED')";
+            statusFilter = "t.verification_status = 'APPROVED'";
         }
 
         const result = await query(
@@ -38,6 +38,7 @@ export async function GET(
                 t.verification_status,
                 t.due_date,
                 t.completed_at,
+                t.verified_at,
                 u.full_name as completed_by_name,
                 vu.full_name as verified_by_name,
                 t.photos,
