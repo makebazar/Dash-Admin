@@ -432,7 +432,146 @@ export function ShiftClosingWizard({
                     {/* STEP 1: REPORT FORM + CHECKLIST */}
                     {step === 1 && (
                         <div className="space-y-6">
-                            {/* ... existing Step 1 content ... */}
+                            {/* Checklist Section if Required */}
+                            {requiredChecklist && (
+                                <div className="bg-orange-900/10 border border-orange-900/30 p-4 rounded-lg space-y-4">
+                                    <div className="flex items-start gap-3">
+                                        <div className="bg-orange-100/10 p-2 rounded-full">
+                                            <CheckCircle2 className="h-5 w-5 text-orange-400" />
+                                        </div>
+                                        <div>
+                                            <h4 className="font-medium text-orange-100">Обязательный чеклист: {requiredChecklist.name}</h4>
+                                            <p className="text-sm text-orange-200/70">Необходимо заполнить перед закрытием смены</p>
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-3 pl-2 border-l-2 border-orange-800/30 ml-4">
+                                        {requiredChecklist.items?.map((item: any) => {
+                                             // Workstation Checklist Logic
+                                             if (item.related_entity_type === 'workstations') {
+                                                 const targetWs = workstations.filter(w => w.is_active && (!item.target_zone || item.target_zone === 'all' || w.zone === item.target_zone))
+                                                 const maxScore = 10 // Fixed max score for workstation zones
+                                                 const currentProblematic = problematicItems[item.id] || []
+                                                 
+                                                 // Calculate current score
+                                                 const errorPrice = targetWs.length > 0 ? 10 / targetWs.length : 0
+                                                 const rawScore = 10 - (currentProblematic.length * errorPrice)
+                                                 const currentScore = Math.max(0, Math.round(rawScore * 10) / 10)
+                                                 
+                                                 return (
+                                                     <div key={item.id} className="space-y-2 py-2 border-b border-orange-800/20 last:border-0">
+                                                         <div className="flex flex-col gap-2">
+                                                             <div className="flex items-center justify-between">
+                                                                 <span className="text-sm font-medium text-slate-200">{item.content}</span>
+                                                                 <div className="text-xs font-mono bg-slate-900 px-2 py-1 rounded text-slate-400 border border-slate-800">
+                                                                     <span className={currentScore < 10 ? "text-red-400" : "text-green-400"}>{currentScore}</span>
+                                                                     <span className="opacity-50 mx-1">/</span>
+                                                                     <span>10</span>
+                                                                 </div>
+                                                             </div>
+                                                             <p className="text-xs text-slate-400 -mt-1">
+                                                                 Отметьте проблемные места (штраф -{Math.round(errorPrice * 10) / 10}):
+                                                             </p>
+                                                             {targetWs.length > 0 ? (
+                                                                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-1">
+                                                                     {targetWs.map(ws => {
+                                                                         const isProblematic = currentProblematic.includes(ws.id)
+                                                                         return (
+                                                                             <Button
+                                                                                 key={ws.id}
+                                                                                 variant="outline"
+                                                                                 size="sm"
+                                                                                 className={`h-9 text-xs justify-start px-2 transition-all ${isProblematic 
+                                                                                     ? 'bg-red-950/50 border-red-800 text-red-200 hover:bg-red-900/60 hover:text-red-100 hover:border-red-700' 
+                                                                                     : 'bg-slate-900 border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white'}`}
+                                                                                 onClick={() => toggleProblematicWorkstation(item.id, ws.id, 10, targetWs)}
+                                                                             >
+                                                                                 <div className={`w-2 h-2 rounded-full mr-2 shrink-0 ${isProblematic ? 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]' : 'bg-green-500/50'}`} />
+                                                                                 <span className="truncate">{ws.name}</span>
+                                                                             </Button>
+                                                                         )
+                                                                     })}
+                                                                 </div>
+                                                             ) : (
+                                                                 <div className="text-xs text-slate-500 italic bg-slate-900/50 p-2 rounded">
+                                                                     Нет рабочих мест в зоне "{item.target_zone}"
+                                                                 </div>
+                                                             )}
+                                                            {currentProblematic.length > 0 && (
+                                                                <Input
+                                                                    placeholder="Комментарий по проблемным местам (обязательно)"
+                                                                    className={`h-8 text-xs bg-slate-900 border-slate-700 ${!checklistResponses[item.id]?.comment ? 'border-amber-500' : ''}`}
+                                                                    value={checklistResponses[item.id]?.comment || ''}
+                                                                    onChange={(e) => setChecklistResponses(prev => ({
+                                                                        ...prev,
+                                                                        [item.id]: { ...prev[item.id], comment: e.target.value }
+                                                                    }))}
+                                                                />
+                                                            )}
+                                                         </div>
+                                                     </div>
+                                                 )
+                                             }
+
+                                            // Standard Logic
+                                            return (
+                                            <div key={item.id} className="space-y-2">
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-sm font-medium text-slate-200">{item.content}</span>
+                                                    <div className="flex gap-1 bg-slate-900 p-1 rounded-md border border-slate-800">
+                                                        <Button 
+                                                            variant={checklistResponses[item.id]?.score === 1 ? 'default' : 'ghost'} 
+                                                            size="sm"
+                                                            className={`h-7 px-3 text-xs ${checklistResponses[item.id]?.score === 1 ? 'bg-green-600 hover:bg-green-700' : 'text-slate-400'}`}
+                                                            onClick={() => handleChecklistChange(item.id, 1)}
+                                                        >
+                                                            Да
+                                                        </Button>
+                                                        <Button 
+                                                            variant={checklistResponses[item.id]?.score === 0 ? 'default' : 'ghost'} 
+                                                            size="sm"
+                                                            className={`h-7 px-3 text-xs ${checklistResponses[item.id]?.score === 0 ? 'bg-red-600 hover:bg-red-700' : 'text-slate-400'}`}
+                                                            onClick={() => handleChecklistChange(item.id, 0)}
+                                                        >
+                                                            Нет
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                                {checklistResponses[item.id]?.score === 0 && (
+                                                    <Input 
+                                                        placeholder="Комментарий (обязательно при отказе)..."
+                                                        className="h-8 text-xs bg-slate-900 border-slate-700"
+                                                        value={checklistResponses[item.id]?.comment || ''}
+                                                        onChange={(e) => setChecklistResponses(prev => ({
+                                                            ...prev,
+                                                            [item.id]: { ...prev[item.id], comment: e.target.value }
+                                                        }))}
+                                                    />
+                                                )}
+                                            </div>
+                                        )})}
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="space-y-4">
+                                <h4 className="font-medium text-slate-200">Финансовый отчет</h4>
+                                {reportTemplate?.schema.map((field: any, idx: number) => (
+                                    <div key={idx} className="space-y-2">
+                                        <Label>
+                                            {field.custom_label}
+                                            {field.is_required && <span className="text-red-500 ml-1">*</span>}
+                                        </Label>
+                                        <Input
+                                            required={field.is_required}
+                                            type={field.metric_key.includes('comment') ? 'text' : 'number'}
+                                            className="bg-slate-900 border-slate-700"
+                                            value={reportData[field.metric_key] || ''}
+                                            onChange={(e) => setReportData({ ...reportData, [field.metric_key]: e.target.value })}
+                                        />
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     )}
 
@@ -528,13 +667,80 @@ export function ShiftClosingWizard({
                     {/* STEP 3: SUMMARY */}
                     {step === 3 && calculationResult && (
                         <div className="space-y-6">
-                            {/* ... existing Step 3 content ... */}
+                            <div className="grid grid-cols-3 gap-4">
+                                <div className="bg-slate-900 p-4 rounded-lg border border-slate-800 text-center">
+                                    <p className="text-xs text-slate-400 uppercase">Заявлено в отчете</p>
+                                    <p className="text-2xl font-bold mt-1">{calculationResult.reported.toLocaleString()} ₽</p>
+                                </div>
+                                <div className="bg-slate-900 p-4 rounded-lg border border-slate-800 text-center">
+                                    <p className="text-xs text-slate-400 uppercase">Расчет по товарам</p>
+                                    <p className="text-2xl font-bold mt-1">{calculationResult.calculated.toLocaleString()} ₽</p>
+                                </div>
+                                <div className={`p-4 rounded-lg border text-center ${
+                                    calculationResult.diff === 0 ? 'bg-emerald-900/20 border-emerald-900/50 text-emerald-400' : 
+                                    calculationResult.diff > 0 ? 'bg-emerald-900/20 border-emerald-900/50 text-emerald-400' :
+                                    'bg-red-900/20 border-red-900/50 text-red-400'
+                                }`}>
+                                    <p className="text-xs opacity-80 uppercase">Разница</p>
+                                    <p className="text-2xl font-bold mt-1">
+                                        {calculationResult.diff > 0 ? '+' : ''}{calculationResult.diff.toLocaleString()} ₽
+                                    </p>
+                                </div>
+                            </div>
+
+                            {calculationResult.diff !== 0 && (
+                                <div className="bg-red-900/20 border border-red-900/50 p-4 rounded-lg flex items-start gap-3">
+                                    <AlertTriangle className="h-5 w-5 text-red-400 mt-0.5" />
+                                    <div>
+                                        <h4 className="font-medium text-red-100">Внимание! Расхождение</h4>
+                                        <p className="text-sm text-red-300/80">
+                                            Сумма в кассе не сходится с проданными товарами. 
+                                            Пожалуйста, перепроверьте данные или укажите причину в комментарии к смене.
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="space-y-2">
+                                <Label>Комментарий к закрытию (если есть расхождения)</Label>
+                                <Input 
+                                    className="bg-slate-900 border-slate-700"
+                                    placeholder="Обоснование недостачи/излишков..."
+                                    value={reportData['shift_comment'] || ''}
+                                    onChange={(e) => setReportData({ ...reportData, 'shift_comment': e.target.value })}
+                                />
+                            </div>
                         </div>
                     )}
                 </div>
 
                 <DialogFooter className={`mt-4 border-t border-slate-800 pt-4 ${step === 2 ? 'px-6 pb-6' : ''}`}>
-                    {/* ... existing Footer content ... */}
+                    {step === 1 && (
+                        <Button onClick={handleStep1Submit} className="w-full bg-purple-600 hover:bg-purple-700">
+                            {skipInventory ? (
+                                <>
+                                    <CheckCircle2 className="mr-2 h-4 w-4" />
+                                    Завершить смену
+                                </>
+                            ) : (
+                                <>
+                                    Далее: Инвентаризация <ArrowRight className="ml-2 h-4 w-4" />
+                                </>
+                            )}
+                        </Button>
+                    )}
+                    {step === 2 && (
+                        <Button onClick={handleInventorySubmit} disabled={isPending} className="w-full bg-blue-600 hover:bg-blue-700">
+                            {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            Далее: Сверка итогов <ArrowRight className="ml-2 h-4 w-4" />
+                        </Button>
+                    )}
+                    {step === 3 && (
+                        <Button onClick={handleFinalize} disabled={isPending} className="w-full bg-emerald-600 hover:bg-emerald-700">
+                            {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            <CheckCircle2 className="mr-2 h-4 w-4" /> Подтвердить и закрыть смену
+                        </Button>
+                    )}
                 </DialogFooter>
 
                 {/* Add Product Manually Dialog */}
