@@ -84,6 +84,33 @@ export function ActiveInventory({ inventoryId, onClose, isOwner }: ActiveInvento
         }
     }
 
+    // Calculate Sales Summary for Preview
+    const salesPreview = useMemo(() => {
+        const standardSales = items
+            .filter(i => i.actual_stock !== null && (i.expected_stock || 0) > (i.actual_stock || 0))
+            .map(i => ({
+                id: i.id,
+                name: i.product_name,
+                qty: (i.expected_stock || 0) - (i.actual_stock || 0),
+                price: i.selling_price_snapshot,
+                total: ((i.expected_stock || 0) - (i.actual_stock || 0)) * i.selling_price_snapshot,
+                isUnaccounted: false
+            }))
+
+        const manualSales = unaccountedSales.map(s => ({
+            id: s.product_id,
+            name: s.name,
+            qty: s.quantity,
+            price: s.selling_price,
+            total: s.quantity * s.selling_price,
+            isUnaccounted: true
+        }))
+
+        return [...standardSales, ...manualSales]
+    }, [items, unaccountedSales])
+
+    const totalSalesRevenue = salesPreview.reduce((acc, s) => acc + s.total, 0)
+
     const handleCloseInventory = async () => {
         // If owner didn't select a metric (metric is null), we don't need reported revenue
         const metricRequired = !!inventory?.target_metric_key
@@ -466,41 +493,73 @@ export function ActiveInventory({ inventoryId, onClose, isOwner }: ActiveInvento
 
             {/* Close Dialog */}
             <Dialog open={isCloseDialogOpen} onOpenChange={setIsCloseDialogOpen}>
-                <DialogContent>
+                <DialogContent className="max-w-[500px]">
                     <DialogHeader>
                         <DialogTitle>Завершение инвентаризации</DialogTitle>
                         <DialogDescription>
                             {inventory.target_metric_key 
-                                ? `Введите сумму из отчета (поле: ${inventory.target_metric_key}) для сверки.` 
+                                ? `Сверьте продажи со склада с кассой за смену.` 
                                 : "Подтвердите обновление остатков на складе."}
                         </DialogDescription>
                     </DialogHeader>
                     
                     {inventory.target_metric_key && (
-                        <div className="space-y-4 py-4">
-                            <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
-                                <p className="text-sm text-blue-800 font-medium">Как это работает?</p>
-                                <p className="text-xs text-blue-600 mt-1">
-                                    Мы посчитаем разницу остатков (Было - Стало) и умножим на цену продажи.
-                                    Полученная сумма должна совпасть с тем, что в кассе/отчете.
-                                </p>
-                            </div>
-
-                            <div className="space-y-2">
-                                <Label>Сумма по отчету (₽)</Label>
-                                <Input 
-                                    type="number" 
-                                    placeholder="0.00"
-                                    value={reportedRevenue}
-                                    onChange={e => setReportedRevenue(e.target.value)}
-                                    className="text-lg font-bold"
-                                />
+                        <div className="space-y-4 py-2">
+                            {/* Sales Summary Section */}
+                            <div className="border rounded-lg overflow-hidden">
+                                <div className="bg-muted/50 p-2 text-xs font-bold border-b flex justify-between">
+                                    <span>ПРОДАНО ЗА СМЕНУ (СИСТЕМА)</span>
+                                    <span>СУММА: {totalSalesRevenue} ₽</span>
+                                </div>
+                                <div className="max-h-[200px] overflow-y-auto">
+                                    {salesPreview.length === 0 ? (
+                                        <div className="p-4 text-center text-xs text-muted-foreground">
+                                            Продаж не обнаружено.
+                                        </div>
+                                    ) : (
+                                        <Table>
+                                            <TableBody>
+                                                {salesPreview.map((s, idx) => (
+                                                    <TableRow key={`${s.id}-${idx}`} className="text-[11px] h-8">
+                                                        <TableCell className="py-1">
+                                                            <div className="flex items-center gap-1">
+                                                                {s.isUnaccounted && <Badge variant="outline" className="text-[9px] h-4 px-1 bg-blue-50 text-blue-600 border-blue-100">Неучт.</Badge>}
+                                                                <span className="truncate max-w-[150px]">{s.name}</span>
+                                                            </div>
+                                                        </TableCell>
+                                                        <TableCell className="text-right py-1 font-mono">{s.qty} шт</TableCell>
+                                                        <TableCell className="text-right py-1 font-bold">{s.total} ₽</TableCell>
+                                                    </TableRow>
+                                                ))}
+                                            </TableBody>
+                                        </Table>
+                                    )}
+                                </div>
+                                <div className="bg-blue-50 p-3 border-t flex items-center justify-between">
+                                    <div className="flex flex-col">
+                                        <span className="text-[10px] text-blue-600 font-bold uppercase">Итого к сдаче:</span>
+                                        <span className="text-xl font-black text-blue-700">{totalSalesRevenue} ₽</span>
+                                    </div>
+                                    <div className="text-right flex flex-col items-end">
+                                        <span className="text-[10px] text-blue-600 opacity-70">Сумма в кассе:</span>
+                                        <div className="flex items-center gap-2">
+                                            <Input 
+                                                type="number" 
+                                                placeholder="0.00"
+                                                value={reportedRevenue}
+                                                onChange={e => setReportedRevenue(e.target.value)}
+                                                className="w-24 h-8 text-right font-bold text-sm bg-white"
+                                            />
+                                            <span className="text-sm font-bold text-blue-700">₽</span>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
 
                             {/* Unaccounted Sales Section */}
-                            <div className="pt-4 border-t">
+                            <div className="pt-2 border-t">
                                 <div className="flex items-center justify-between mb-2">
-                                    <Label className="text-sm font-semibold">Неучтенные продажи</Label>
+                                    <Label className="text-xs font-semibold">Добавить неучтенную продажу</Label>
                                     <Button 
                                         type="button" 
                                         variant="outline" 
@@ -509,41 +568,51 @@ export function ActiveInventory({ inventoryId, onClose, isOwner }: ActiveInvento
                                             openAddDialog()
                                             setIsUnaccountedDialogOpen(true)
                                         }}
-                                        className="h-8 text-xs bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-100"
+                                        className="h-7 text-[10px] bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-100"
                                     >
                                         <Plus className="h-3 w-3 mr-1" /> Добавить
                                     </Button>
                                 </div>
                                 
-                                {unaccountedSales.length === 0 ? (
-                                    <p className="text-[10px] text-muted-foreground italic">
-                                        Если вы продавали товар, которого не было в системе, добавьте его здесь для правильной сверки.
-                                    </p>
-                                ) : (
-                                    <div className="space-y-2">
+                                {unaccountedSales.length > 0 && (
+                                    <div className="flex flex-wrap gap-2">
                                         {unaccountedSales.map(sale => (
-                                            <div key={sale.product_id} className="flex items-center justify-between bg-slate-50 p-2 rounded-md text-xs border border-slate-100">
-                                                <div className="flex flex-col">
-                                                    <span className="font-medium">{sale.name}</span>
-                                                    <span className="text-muted-foreground">{sale.quantity} шт × {sale.selling_price} ₽ = {sale.quantity * sale.selling_price} ₽</span>
-                                                </div>
-                                                <Button 
-                                                    variant="ghost" 
-                                                    size="icon" 
+                                            <div key={sale.product_id} className="flex items-center gap-1 bg-slate-100 px-2 py-1 rounded-full text-[10px] border border-slate-200">
+                                                <span>{sale.name} ({sale.quantity} шт)</span>
+                                                <X 
+                                                    className="h-3 w-3 cursor-pointer text-red-500 hover:text-red-700" 
                                                     onClick={() => removeUnaccountedSale(sale.product_id)}
-                                                    className="h-6 w-6 text-red-400 hover:text-red-600 hover:bg-red-50"
-                                                >
-                                                    <X className="h-3 w-3" />
-                                                </Button>
+                                                />
                                             </div>
                                         ))}
-                                        <div className="flex justify-between items-center px-2 py-1 bg-blue-50/50 rounded text-[11px] font-bold text-blue-700">
-                                            <span>ИТОГО НЕУЧТЕННЫХ ПРОДАЖ:</span>
-                                            <span>{unaccountedSales.reduce((acc, s) => acc + (s.quantity * s.selling_price), 0)} ₽</span>
-                                        </div>
                                     </div>
                                 )}
                             </div>
+
+                            {/* Revenue Difference Warning */}
+                            {reportedRevenue && Number(reportedRevenue) !== totalSalesRevenue && (
+                                <div className={`p-3 rounded-lg border flex items-start gap-3 ${
+                                    Number(reportedRevenue) > totalSalesRevenue 
+                                        ? 'bg-amber-50 border-amber-200 text-amber-800' 
+                                        : 'bg-red-50 border-red-200 text-red-800'
+                                }`}>
+                                    <div className="bg-white/50 p-1 rounded">
+                                        <AlertTriangle className="h-4 w-4" />
+                                    </div>
+                                    <div className="flex flex-col">
+                                        <span className="text-xs font-bold">
+                                            {Number(reportedRevenue) > totalSalesRevenue 
+                                                ? `Излишек в кассе: +${Number(reportedRevenue) - totalSalesRevenue} ₽` 
+                                                : `Недостача в кассе: -${totalSalesRevenue - Number(reportedRevenue)} ₽`}
+                                        </span>
+                                        <p className="text-[10px] opacity-80 leading-tight mt-1">
+                                            {Number(reportedRevenue) > totalSalesRevenue 
+                                                ? "Сумма в кассе больше, чем проданных товаров со склада. Проверьте, все ли продажи зафиксированы в системе." 
+                                                : "Денег в кассе меньше, чем должно быть по остаткам склада. Проверьте правильность подсчета товара."}
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     )}
 
