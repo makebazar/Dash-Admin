@@ -1116,7 +1116,9 @@ export function ShiftClosingWizard({
                                     {forgottenItems.map(item => (
                                         <div key={item.id} className="flex justify-between items-center text-[11px]">
                                             <span className="text-slate-300">{item.product_name}</span>
-                                            <span className="text-slate-500 italic">Ожидалось: {item.expected_stock} шт.</span>
+                                            {!inventorySettings?.blind_inventory_enabled && (
+                                                <span className="text-slate-500 italic">Ожидалось: {item.expected_stock} шт.</span>
+                                            )}
                                         </div>
                                     ))}
                                 </div>
@@ -1207,7 +1209,7 @@ export function ShiftClosingWizard({
                                         <div key={item.id} className="flex justify-between items-center text-xs">
                                             <span className="text-slate-300">{item.product_name}</span>
                                             <span className="font-mono bg-blue-500/20 px-2 py-0.5 rounded text-blue-300">
-                                                +{item.actual_stock} шт.
+                                                {!inventorySettings?.blind_inventory_enabled ? `+${item.actual_stock} шт.` : 'Обнаружено наличие'}
                                             </span>
                                         </div>
                                     ))}
