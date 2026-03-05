@@ -27,7 +27,13 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
         const startScanner = async () => {
             if (!isOpen) return
             
-            // Если уже инициализируем или сканируем, не запускаем заново
+            // Проверка на HTTPS (обязательно для мобильных камер)
+            if (typeof window !== 'undefined' && window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
+                setError("Доступ к камере заблокирован браузером (требуется HTTPS).")
+                setIsInitializing(false)
+                return
+            }
+            
             if (scannerRef.current?.isScanning || isInitializing) return
             
             setIsInitializing(true)
