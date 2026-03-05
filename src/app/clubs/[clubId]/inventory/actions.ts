@@ -1245,7 +1245,10 @@ export async function closeInventory(inventoryId: number, clubId: string, report
         await client.query(`
             UPDATE warehouse_inventory_items
             SET difference = expected_stock - actual_stock,
-                calculated_revenue = (expected_stock - actual_stock) * selling_price_snapshot
+                calculated_revenue = CASE 
+                    WHEN actual_stock < expected_stock THEN (expected_stock - actual_stock) * selling_price_snapshot 
+                    ELSE 0 
+                END
             WHERE inventory_id = $1
         `, [inventoryId])
 
@@ -1288,26 +1291,25 @@ export async function closeInventory(inventoryId: number, clubId: string, report
             WHERE ii.inventory_id = $1 AND ii.actual_stock IS NOT NULL AND ii.actual_stock != ii.expected_stock
         `, [inventoryId])
 
-        // Group items for a potential automatic supply (if expected was 0 and actual > 0)
+        // Group items for a potential automatic supply (any excess: actual > expected)
         const itemsForAutoSupply: { product_id: number, quantity: number, cost_price: number }[] = []
 
         for (const item of diffItems.rows) {
             const diffAmount = item.actual_stock - item.expected_stock
             
-            // If actual > 0 and expected was 0, it's an UNACCOUNTED supply
-            if (item.expected_stock === 0 && item.actual_stock > 0) {
+            // If we found MORE than expected, it's an UNACCOUNTED supply
+            if (diffAmount > 0) {
                 itemsForAutoSupply.push({
                     product_id: item.product_id,
-                    quantity: item.actual_stock,
+                    quantity: diffAmount,
                     cost_price: item.cost_price_snapshot || 0
                 })
-                continue // Skip regular inventory adjustment for these items, we'll create a Supply
+                continue // Skip regular inventory adjustment for these items, we'll create a Supply for the difference
             }
 
             // If actual < expected, it's a SALE (negative diff in stock)
-            // If actual > expected (but expected was NOT 0), it's an ADJUSTMENT (positive diff in stock)
-            const type = diffAmount < 0 ? 'SALE' : 'INVENTORY_ADJUSTMENT'
-            const reason = diffAmount < 0 ? `Продажа за смену (инвентаризация #${inventoryId})` : `Корректировка инвентаризацией #${inventoryId}`
+            const type = 'SALE'
+            const reason = `Продажа за смену (инвентаризация #${inventoryId})`
 
             await client.query(`
                 INSERT INTO warehouse_stock (warehouse_id, product_id, quantity)
