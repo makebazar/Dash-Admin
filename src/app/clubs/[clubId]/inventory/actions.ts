@@ -692,6 +692,86 @@ export async function massAssignShiftToMovements(movementIds: number[], shiftId:
     revalidatePath(`/clubs/${clubId}/inventory`)
 }
 
+export async function createWriteOff(clubId: string, userId: string, data: { items: { product_id: number, quantity: number, type: 'WASTE' | 'SALARY_DEDUCTION' }[], notes: string, shift_id?: string }) {
+    const client = await import("@/db").then(m => m.getClient())
+    try {
+        await client.query('BEGIN')
+
+        // Find default warehouse
+        const defaultWh = await client.query('SELECT id FROM warehouses WHERE club_id = $1 AND is_default = true LIMIT 1', [clubId])
+        const warehouseId = defaultWh.rows[0]?.id
+        if (!warehouseId) throw new Error("Склад по умолчанию не найден")
+
+        for (const item of data.items) {
+            // 1. Get current stock
+            const stockRes = await client.query('SELECT quantity FROM warehouse_stock WHERE warehouse_id = $1 AND product_id = $2', [warehouseId, item.product_id])
+            const previousStock = stockRes.rows[0]?.quantity || 0
+            const newStock = previousStock - item.quantity
+
+            // 2. Update stock
+            await client.query(`
+                UPDATE warehouse_stock 
+                SET quantity = $1 
+                WHERE warehouse_id = $2 AND product_id = $3
+            `, [newStock, warehouseId, item.product_id])
+
+            // 3. Update product cache
+            await client.query(`
+                UPDATE warehouse_products
+                SET current_stock = (SELECT COALESCE(SUM(quantity), 0) FROM warehouse_stock WHERE product_id = $1)
+                WHERE id = $1
+            `, [item.product_id])
+
+            // 4. Log movement
+            const reason = item.type === 'SALARY_DEDUCTION' ? `В счет ЗП: ${data.notes}` : `Списание: ${data.notes}`
+            const movementType = item.type === 'SALARY_DEDUCTION' ? 'SALE' : 'ADJUSTMENT' // SALARY_DEDUCTION is essentially a sale to employee
+            
+            await logStockMovement(
+                client, 
+                clubId, 
+                userId, 
+                item.product_id, 
+                -item.quantity, 
+                previousStock, 
+                newStock, 
+                movementType, 
+                reason, 
+                'WRITE_OFF', 
+                null, 
+                data.shift_id || null
+            )
+
+            // 5. If Salary Deduction, deduct from Virtual Balance
+            if (item.type === 'SALARY_DEDUCTION') {
+                const prodRes = await client.query('SELECT selling_price FROM warehouse_products WHERE id = $1', [item.product_id])
+                const price = prodRes.rows[0]?.selling_price || 0
+                const totalDeduction = price * item.quantity
+
+                // Insert negative transaction to virtual balance
+                await client.query(`
+                    INSERT INTO virtual_balance_transactions (club_id, user_id, amount, type, description, related_entity_type, related_entity_id)
+                    VALUES ($1, $2, $3, 'DEBIT', $4, 'PRODUCT_WRITE_OFF', $5)
+                `, [clubId, userId, -totalDeduction, `Списание товара в счет ЗП (${item.quantity} шт.)`, item.product_id])
+
+                // Update user balance
+                await client.query(`
+                    INSERT INTO virtual_balances (club_id, user_id, balance)
+                    VALUES ($1, $2, $3)
+                    ON CONFLICT (club_id, user_id) DO UPDATE SET balance = virtual_balances.balance + $3
+                `, [clubId, userId, -totalDeduction])
+            }
+        }
+
+        await client.query('COMMIT')
+        revalidatePath(`/clubs/${clubId}/inventory`)
+    } catch (e) {
+        await client.query('ROLLBACK')
+        throw e
+    } finally {
+        client.release()
+    }
+}
+
 export async function getProducts(clubId: string) {
     const client = await import("@/db").then(m => m.getClient())
     try {

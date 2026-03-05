@@ -8,15 +8,17 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {
     Clock, Loader2, LogIn, LogOut, Wallet, Activity, Calendar,
-    TrendingUp, Target, Zap, ChevronRight, Trophy, Brush, ClipboardCheck, Monitor, AlertCircle
+    TrendingUp, Target, Zap, ChevronRight, Trophy, Brush, ClipboardCheck, Monitor, AlertCircle, Ban
 } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
 import { KpiOverview, ChecklistKpiCard, MaintenanceKpiCard } from "@/components/employee/kpi/KpiOverview"
-import { ShiftClosingWizard } from "@/app/employee/clubs/[clubId]/_components/ShiftClosingWizard"
-import { ShiftOpeningWizard } from "@/app/employee/clubs/[clubId]/_components/ShiftOpeningWizard"
+import { ShiftClosingWizard } from "./_components/ShiftClosingWizard"
+import { ShiftOpeningWizard } from "./_components/ShiftOpeningWizard"
+import { EmployeeSupplyWizard } from "./_components/EmployeeSupplyWizard"
+import { EmployeeWriteOffWizard } from "./_components/EmployeeWriteOffWizard"
 import { VirtualBalanceCard } from "@/components/employee/VirtualBalanceCard"
 
 interface ClubInfo {
@@ -107,6 +109,8 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
 
     // Indicators Modal State
     const [isIndicatorsModalOpen, setIsIndicatorsModalOpen] = useState(false)
+    const [isSupplyWizardOpen, setIsSupplyWizardOpen] = useState(false)
+    const [isWriteOffWizardOpen, setIsWriteOffWizardOpen] = useState(false)
 
     // Live timer
     const [liveSeconds, setLiveSeconds] = useState(0)
@@ -594,6 +598,25 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                                                 <Target className="mr-2 h-4 w-4 shrink-0" />
                                                 <span className="text-center">Внести промежуточные показатели</span>
                                             </Button>
+
+                                            <div className="pt-2 border-t border-white/10 mt-2 grid grid-cols-2 gap-2">
+                                                <Button
+                                                    variant="ghost"
+                                                    className="w-full h-12 text-sm text-purple-300 hover:text-white hover:bg-purple-500/20 rounded-xl transition-all"
+                                                    onClick={() => setIsSupplyWizardOpen(true)}
+                                                >
+                                                    <Zap className="mr-2 h-4 w-4" />
+                                                    Поставка
+                                                </Button>
+                                                <Button
+                                                    variant="ghost"
+                                                    className="w-full h-12 text-sm text-red-300 hover:text-white hover:bg-red-500/20 rounded-xl transition-all"
+                                                    onClick={() => setIsWriteOffWizardOpen(true)}
+                                                >
+                                                    <Ban className="mr-2 h-4 w-4" />
+                                                    Списание
+                                                </Button>
+                                            </div>
                                         </div>
                                     ) : (
                                         <div className="py-6 space-y-4">
@@ -920,6 +943,24 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                     inventorySettings={club.inventory_settings}
                 />
             )}
+
+            {/* Supply Wizard */}
+            <EmployeeSupplyWizard
+                isOpen={isSupplyWizardOpen}
+                onClose={() => setIsSupplyWizardOpen(false)}
+                clubId={clubId}
+                userId={currentUserId}
+                activeShiftId={activeShift?.id?.toString()}
+            />
+
+            {/* Write-off Wizard */}
+            <EmployeeWriteOffWizard
+                isOpen={isWriteOffWizardOpen}
+                onClose={() => setIsWriteOffWizardOpen(false)}
+                clubId={clubId}
+                userId={currentUserId}
+                activeShiftId={activeShift?.id?.toString()}
+            />
 
             {/* Intermediate Indicators Modal */}
             <Dialog open={isIndicatorsModalOpen} onOpenChange={setIsIndicatorsModalOpen}>
