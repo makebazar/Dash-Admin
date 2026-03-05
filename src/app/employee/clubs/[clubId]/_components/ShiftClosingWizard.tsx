@@ -390,6 +390,8 @@ export function ShiftClosingWizard({
         })
     }
 
+    if (!isOpen) return null
+
     return (
         <div className="fixed inset-0 bg-slate-950 text-white flex flex-col z-[9999] animate-in fade-in duration-300 overflow-hidden">
             {step === 2 && (
@@ -427,7 +429,12 @@ export function ShiftClosingWizard({
                                 </Button>
                             </div>
                         )}
-                        <Button variant="ghost" size="icon" onClick={onClose} className="text-slate-500 hover:text-white">
+                        <Button 
+                            variant="outline" 
+                            size="icon" 
+                            onClick={onClose} 
+                            className="text-slate-400 hover:text-white border-slate-800 hover:bg-slate-800 shrink-0 h-10 w-10"
+                        >
                             <X className="h-5 w-5" />
                         </Button>
                     </div>
