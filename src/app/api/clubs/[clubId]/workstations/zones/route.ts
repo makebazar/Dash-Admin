@@ -63,6 +63,27 @@ export async function PATCH(
                      ) AND status = 'PENDING'`,
                     [assignedUserId, workstationIds]
                 );
+
+                // 3. Trigger generation for equipment that doesn't have active tasks
+                if (assignedUserId) {
+                    const today = new Date().toISOString().split('T')[0];
+                    try {
+                        await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/clubs/${clubId}/equipment/maintenance`, {
+                            method: 'POST',
+                            headers: { 
+                                'Content-Type': 'application/json',
+                                'Cookie': (await cookies()).toString()
+                            },
+                            body: JSON.stringify({
+                                date_from: today,
+                                date_to: today,
+                                workstation_ids: workstationIds // Add support for this in the API if needed, or get IDs
+                            })
+                        });
+                    } catch (e) {
+                        console.error('Zone auto-generation failed:', e);
+                    }
+                }
             }
         }
 

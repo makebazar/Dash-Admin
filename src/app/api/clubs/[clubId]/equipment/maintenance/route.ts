@@ -218,7 +218,7 @@ export async function POST(
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
-        const { date_from, date_to, equipment_ids, task_type = 'CLEANING' } = body;
+        const { date_from, date_to, equipment_ids, workstation_ids, task_type = 'CLEANING' } = body;
 
         if (!date_from || !date_to) {
             return NextResponse.json({ error: 'date_from and date_to are required' }, { status: 400 });
@@ -254,53 +254,6 @@ export async function POST(
             return null;
         };
 
-        let equipmentSql = `
-            SELECT 
-                e.id, 
-                e.name, 
-                e.cleaning_interval_days, 
-                e.last_cleaned_at, 
-                e.workstation_id, 
-                e.assigned_user_id,
-                (
-                    SELECT MAX(due_date) 
-                    FROM equipment_maintenance_tasks 
-                    WHERE equipment_id = e.id 
-                      AND task_type = $3
-                ) as last_task_due_date
-            FROM equipment e
-            WHERE e.club_id = $1
-              AND e.is_active = TRUE
-              AND (e.maintenance_enabled IS NULL OR e.maintenance_enabled = TRUE)
-        `;
-        const eqParams: any[] = [clubId, equipment_ids, task_type];
-
-        if (equipment_ids && equipment_ids.length > 0) {
-            // Adjust parameter index for equipment_ids since we added task_type at $3
-            // Actually, we need to be careful with parameter indices.
-            // Let's rewrite the query construction slightly to be safer.
-            equipmentSql = `
-                SELECT 
-                    e.id, 
-                    e.name, 
-                    e.cleaning_interval_days, 
-                    e.last_cleaned_at, 
-                    e.workstation_id, 
-                    e.assigned_user_id,
-                    (
-                        SELECT MAX(due_date) 
-                        FROM equipment_maintenance_tasks 
-                        WHERE equipment_id = e.id 
-                          AND task_type = $2
-                    ) as last_task_due_date
-                FROM equipment e
-                WHERE e.club_id = $1
-                  AND e.is_active = TRUE
-                  AND (e.maintenance_enabled IS NULL OR e.maintenance_enabled = TRUE)
-            `;
-            // Reset params to match the new base query
-        }
-        
         // Re-construct params correctly
         const baseParams = [clubId, task_type];
         let queryStr = `
@@ -326,6 +279,9 @@ export async function POST(
         if (equipment_ids && equipment_ids.length > 0) {
             queryStr += ` AND e.id = ANY($3)`;
             baseParams.push(equipment_ids);
+        } else if (workstation_ids && workstation_ids.length > 0) {
+            queryStr += ` AND e.workstation_id = ANY($3)`;
+            baseParams.push(workstation_ids);
         }
 
         const equipmentResult = await query(queryStr, baseParams);

@@ -172,8 +172,50 @@ export async function PATCH(
             values
         );
 
-        // SYNC: Update all PENDING maintenance tasks for this equipment if assigned user changed
-        if (body.assigned_user_id !== undefined) {
+        const updatedEquipment = result.rows[0];
+
+        // SYNC & AUTO-GENERATE: If maintenance is enabled and assigned user is set, ensure task exists
+        if (updatedEquipment.maintenance_enabled && updatedEquipment.assigned_user_id) {
+            // 1. First, update existing PENDING tasks
+            await query(
+                `UPDATE equipment_maintenance_tasks 
+                 SET assigned_user_id = $1
+                 WHERE equipment_id = $2 AND status = 'PENDING'`,
+                [updatedEquipment.assigned_user_id, equipmentId]
+            );
+
+            // 2. Check if ANY active task exists (PENDING/IN_PROGRESS)
+            const activeTaskCheck = await query(
+                `SELECT id FROM equipment_maintenance_tasks 
+                 WHERE equipment_id = $1 AND status IN ('PENDING', 'IN_PROGRESS')
+                 LIMIT 1`,
+                [equipmentId]
+            );
+
+            // 3. If no active task exists, trigger generation for this specific equipment
+            if (activeTaskCheck.rowCount === 0) {
+                const today = new Date().toISOString().split('T')[0];
+                try {
+                    // We call the internal maintenance generation logic via a fetch to our own API
+                    // This ensures the "Smart Horizon" logic is applied
+                    await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/clubs/${clubId}/equipment/maintenance`, {
+                        method: 'POST',
+                        headers: { 
+                            'Content-Type': 'application/json',
+                            'Cookie': (await cookies()).toString() // Pass cookies for auth
+                        },
+                        body: JSON.stringify({
+                            date_from: today,
+                            date_to: today,
+                            equipment_ids: [equipmentId]
+                        })
+                    });
+                } catch (e) {
+                    console.error('Auto-generation failed:', e);
+                }
+            }
+        } else if (body.assigned_user_id !== undefined) {
+            // Just sync if maintenance_enabled wasn't part of the trigger but assigned_user_id changed
             await query(
                 `UPDATE equipment_maintenance_tasks 
                  SET assigned_user_id = $1
