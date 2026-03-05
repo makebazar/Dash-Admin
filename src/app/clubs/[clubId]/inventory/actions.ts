@@ -1318,14 +1318,14 @@ export async function closeInventory(inventoryId: number, clubId: string, report
             await logStockMovement(client, clubId, userId, item.product_id, diffAmount, item.expected_stock, item.actual_stock, type, reason, 'INVENTORY', inventoryId, shiftId)
         }
 
-        // Create automatic supply for unaccounted items (Draft status, no immediate stock update)
+        // Create automatic supply for unaccounted items (Draft status, BUT update stock immediately)
         if (itemsForAutoSupply.length > 0) {
             const totalAutoCost = itemsForAutoSupply.reduce((acc, item) => acc + (item.quantity * item.cost_price), 0)
             const supplyRes = await client.query(`
                 INSERT INTO warehouse_supplies (club_id, supplier_name, notes, total_cost, created_by, status)
                 VALUES ($1, $2, $3, $4, $5, 'DRAFT')
                 RETURNING id
-            `, [clubId, 'Авто-поступление (Инвентаризация)', `Автоматически создано при закрытии инвентаризации #${inventoryId}. ТРЕБУЕТ ПОДТВЕРЖДЕНИЯ ЦЕН.`, totalAutoCost, userId])
+            `, [clubId, 'Авто-поступление (Инвентаризация)', `Автоматически создано при закрытии инвентаризации #${inventoryId}. Остатки обновлены. ТРЕБУЕТ ПРОВЕРКИ ЦЕН.`, totalAutoCost, userId])
             const supplyId = supplyRes.rows[0].id
 
             for (const item of itemsForAutoSupply) {
@@ -1334,8 +1334,15 @@ export async function closeInventory(inventoryId: number, clubId: string, report
                     VALUES ($1, $2, $3, $4, $5)
                 `, [supplyId, item.product_id, item.quantity, item.cost_price, item.quantity * item.cost_price])
 
-                // NOTE: We DO NOT update warehouse_stock here because the supply is in DRAFT status.
-                // Stock will be updated when an admin confirms the supply.
+                // UPDATE warehouse_stock IMMEDIATELY even if supply is DRAFT
+                // This ensures the next shift starts with correct actual stock
+                await client.query(`
+                    INSERT INTO warehouse_stock (warehouse_id, product_id, quantity)
+                    VALUES ($1, $2, $3)
+                    ON CONFLICT (warehouse_id, product_id) DO UPDATE SET quantity = warehouse_stock.quantity + $3
+                `, [warehouseId, item.product_id, item.quantity])
+
+                await logStockMovement(client, clubId, userId, item.product_id, item.quantity, 0, item.quantity, 'SUPPLY', `Авто-поступление #${supplyId} (Инвентаризация #${inventoryId})`, 'SUPPLY', supplyId, shiftId)
             }
         }
 
