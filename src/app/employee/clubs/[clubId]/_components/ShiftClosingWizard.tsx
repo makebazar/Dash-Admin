@@ -412,28 +412,38 @@ export function ShiftClosingWizard({
             )}
             
             <header className="px-4 py-4 border-b border-slate-800 bg-slate-900/50 backdrop-blur-md sticky top-0 z-50">
-                <div className="flex flex-col gap-3">
+                <div className="space-y-4">
                     <div className="flex items-center justify-between gap-4">
                         <h2 className="text-lg font-bold truncate">
-                            {skipInventory ? "Закрытие смены" : `Закрытие смены: Шаг ${step} из 3`}
+                            {skipInventory ? "Закрытие смены" : 
+                             step === 1 ? "Финансовый отчет" :
+                             step === 2 ? "Инвентаризация" : "Сверка итогов"}
                         </h2>
                         <Button 
                             variant="outline" 
                             size="icon" 
                             onClick={onClose} 
-                            className="text-slate-400 hover:text-white border-slate-800 hover:bg-slate-800 shrink-0 h-10 w-10"
+                            className="text-slate-400 hover:text-white border-slate-800 hover:bg-slate-800 shrink-0 h-10 w-10 rounded-xl"
                         >
                             <X className="h-5 w-5" />
                         </Button>
                     </div>
-                    <div className="flex items-center gap-2">
-                        <div className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse" />
-                        <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold">
-                            {step === 1 && "Заполните финансовый отчет"}
-                            {step === 2 && "Внесите остатки на складе"}
-                            {step === 3 && "Сверка итогов"}
-                        </p>
-                    </div>
+                    
+                    {/* Lightweight Step Progress Bar */}
+                    {!skipInventory && (
+                        <div className="flex gap-1.5 h-1.5 w-full">
+                            {[1, 2, 3].map((i) => (
+                                <div 
+                                    key={i} 
+                                    className={`flex-1 rounded-full transition-all duration-500 ${
+                                        i < step ? 'bg-green-500' : 
+                                        i === step ? 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]' : 
+                                        'bg-slate-800'
+                                    }`}
+                                />
+                            ))}
+                        </div>
+                    )}
                 </div>
             </header>
 
