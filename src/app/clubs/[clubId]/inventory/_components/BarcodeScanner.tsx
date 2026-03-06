@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import { Html5Qrcode, Html5QrcodeScanType, Html5QrcodeSupportedFormats } from "html5-qrcode"
-import { X, Camera, RefreshCcw, Zap, ZapOff, Barcode, ChevronDown } from "lucide-react"
+import { X, Camera, RefreshCcw, Zap, ZapOff, Barcode, ChevronDown, CheckCircle2, AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
@@ -397,18 +397,15 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
                          </div>
                      )}
 
-                     {/* Scan status indicator */}
+                     {/* Scan status indicator - Mini version */}
                      {scanStatus.type !== 'idle' && (
-                        <div className={cn(
-                            "absolute inset-0 z-10 flex items-center justify-center backdrop-blur-[2px] transition-all duration-300",
-                            scanStatus.type === 'success' ? "bg-green-500/20" : "bg-red-500/20"
-                        )}>
+                        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[10002] animate-in slide-in-from-top-2 duration-300">
                             <div className={cn(
-                                "px-6 py-3 rounded-2xl border-2 flex items-center gap-3 animate-in zoom-in-95 duration-200",
-                                scanStatus.type === 'success' ? "bg-green-600 border-green-400 text-white" : "bg-red-600 border-red-400 text-white"
+                                "px-4 py-2 rounded-full border shadow-lg flex items-center gap-2 backdrop-blur-md",
+                                scanStatus.type === 'success' ? "bg-green-500/90 border-green-400 text-white" : "bg-red-500/90 border-red-400 text-white"
                             )}>
-                                {scanStatus.type === 'success' ? <Barcode className="h-6 w-6" /> : <X className="h-6 w-6" />}
-                                <span className="font-black text-lg uppercase tracking-tight">{scanStatus.message}</span>
+                                {scanStatus.type === 'success' ? <CheckCircle2 className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />}
+                                <span className="font-bold text-xs uppercase tracking-wider">{scanStatus.message}</span>
                             </div>
                         </div>
                     )}

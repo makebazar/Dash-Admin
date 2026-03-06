@@ -44,6 +44,27 @@ export function ShiftOpeningWizard({
     const [currentStep, setCurrentStep] = useState(-1) // Start at -1 for Shift Selection Step
     const totalSteps = checklistTemplate?.items?.length || 0
 
+    // iOS Scroll Lock
+    useEffect(() => {
+        if (isOpen) {
+            document.body.style.overflow = 'hidden'
+            document.body.style.position = 'fixed'
+            document.body.style.width = '100%'
+            document.body.style.height = '100%'
+        } else {
+            document.body.style.overflow = ''
+            document.body.style.position = ''
+            document.body.style.width = ''
+            document.body.style.height = ''
+        }
+        return () => {
+            document.body.style.overflow = ''
+            document.body.style.position = ''
+            document.body.style.width = ''
+            document.body.style.height = ''
+        }
+    }, [isOpen])
+
     // Shift Selection State
     const [shifts, setShifts] = useState<any[]>([])
     const [selectedShiftId, setSelectedShiftId] = useState<string | null>(null)
@@ -650,7 +671,7 @@ export function ShiftOpeningWizard({
                                     <Label className="text-xs text-slate-400 mb-2 block">Комментарий</Label>
                                     <Input 
                                         placeholder={checklistResponses[currentItem.id]?.is_issue_reported ? "Опишите проблему..." : "Комментарий (опционально)..."}
-                                        className="bg-slate-900 border-slate-700 focus-visible:ring-purple-500"
+                                        className="bg-slate-900 border-slate-700 focus-visible:ring-purple-500 text-base"
                                         value={checklistResponses[currentItem.id]?.comment || ''}
                                         onChange={(e) => setChecklistResponses(prev => ({
                                             ...prev,

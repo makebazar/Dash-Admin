@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState, useTransition, useEffect, useMemo, useCallback } from "react"
-import { ArrowLeft, CheckCircle2, AlertTriangle, Loader2, Save, X, Search, Camera, Barcode } from "lucide-react"
+import { ArrowLeft, CheckCircle2, AlertTriangle, Loader2, Save, X, Search, Camera, Barcode, RefreshCcw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -14,6 +14,7 @@ import { useParams } from "next/navigation"
 import { Plus, Pencil } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { BarcodeScanner } from "./BarcodeScanner"
+import { cn } from "@/lib/utils"
 
 interface ActiveInventoryProps {
     inventoryId: number
@@ -43,6 +44,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
     // Add Item State
     const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
     const [allProducts, setAllProducts] = useState<{ id: number, name: string, selling_price?: number, cost_price?: number }[]>([])
+    const [isRefreshingProducts, setIsRefreshingProducts] = useState(false)
     const [selectedProductToAdd, setSelectedProductToAdd] = useState("")
 
     // Search & Filter
@@ -62,18 +64,20 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
         if (isNaN(val)) return
         
         startTransition(async () => {
-            const res = await correctInventoryItem(inventoryId, productId, val, clubId, currentUserId)
-            if (res.success) {
-                // Refresh data
-                const [inv, invItems] = await Promise.all([
-                    getInventory(inventoryId),
-                    getInventoryItems(inventoryId)
-                ])
-                setInventory(inv)
-                setItems(invItems)
-                setEditingItemId(null)
-            } else {
-                alert("Ошибка при сохранении: " + res.error)
+            try {
+                const res = await correctInventoryItem(inventoryId, productId, val, clubId, currentUserId)
+                if (res.success) {
+                    // Refresh data
+                    const [inv, invItems] = await Promise.all([
+                        getInventory(inventoryId),
+                        getInventoryItems(inventoryId)
+                    ])
+                    setInventory(inv)
+                    setItems(invItems)
+                    setEditingItemId(null)
+                }
+            } catch (err: any) {
+                alert("Ошибка при сохранении: " + (err.message || "Неизвестная ошибка"))
             }
         })
     }
@@ -224,7 +228,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
     }
 
     const handleBarcodeScan = useCallback(async (barcode: string): Promise<boolean> => {
-        // 1. Find item in the current inventory list
+        // 1. First, check our local list (might have stale barcodes)
         const existingItem = items.find(i => 
             i.barcode === barcode || 
             (i.barcodes && i.barcodes.includes(barcode))
@@ -232,23 +236,50 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
         
         if (existingItem) {
             const newStock = (existingItem.actual_stock || 0) + 1
-            setItems(prev => prev.map(i => i.id === existingItem.id ? { ...i, actual_stock: newStock } : i))
+            setItems(prev => prev.map(i => i.id === existingItem.id ? { ...i, actual_stock: newStock, last_modified: Date.now() } : i))
             setScannedItem(existingItem)
             
             // Save immediately
             await handleBlur(existingItem.id, newStock)
             
-            setIsScannerOpen(false) // Close scanner when item is found
+            setIsScannerOpen(false) 
             return true
         }
 
-        // 2. If not in current list, try to find in general products
+        // 2. Not in local list with this barcode? Check the server (Admin might have added a barcode)
         try {
             const product = await getProductByBarcode(clubId, barcode)
             if (product) {
-                // Confirm if user wants to add this product to current inventory
+                // Is this product already in our inventory list?
+                const alreadyInList = items.find(i => i.product_id === product.id)
+                
+                if (alreadyInList) {
+                    // It's already here! Just the barcode was new. Update the item's barcodes and count it.
+                    const newStock = (alreadyInList.actual_stock || 0) + 1
+                    setItems(prev => prev.map(i => {
+                        if (i.product_id === product.id) {
+                            return { 
+                                ...i, 
+                                actual_stock: newStock, 
+                                last_modified: Date.now(),
+                                barcode: product.barcode, // Sync fresh barcodes
+                                barcodes: product.barcodes 
+                            }
+                        }
+                        return i
+                    }))
+                    
+                    const updatedItem = { ...alreadyInList, actual_stock: newStock }
+                    setScannedItem(updatedItem as InventoryItem)
+                    await handleBlur(alreadyInList.id, newStock)
+                    
+                    setIsScannerOpen(false)
+                    return true
+                }
+
+                // If truly not in list, confirm if user wants to add it
                 if (confirm(`Товар "${product.name}" не в списке инвентаризации. Добавить?`)) {
-                    setIsScannerOpen(false) // Close scanner to show confirm/dialog
+                    setIsScannerOpen(false) 
                     await addProductToInventory(inventoryId, product.id)
                     const invItems = await getInventoryItems(inventoryId)
                     
@@ -364,7 +395,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
     const isClosed = inventory.status === 'CLOSED'
 
     return (
-        <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+        <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300 overscroll-none">
             <BarcodeScanner 
                 isOpen={isScannerOpen} 
                 onScan={handleBarcodeScan} 
@@ -396,8 +427,24 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                             placeholder="Поиск товара..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            className="pl-8"
+                            className="pl-8 text-base"
                         />
+                        <button 
+                            onClick={async () => {
+                                setIsLoading(true)
+                                try {
+                                    const invItems = await getInventoryItems(inventoryId)
+                                    setItems(invItems)
+                                } finally {
+                                    setIsLoading(false)
+                                }
+                            }}
+                            disabled={isLoading}
+                            className="absolute right-2 top-2.5 text-muted-foreground hover:text-blue-500 transition-colors"
+                            title="Синхронизировать с базой"
+                        >
+                            <RefreshCcw className={cn("h-4 w-4", isLoading && "animate-spin")} />
+                        </button>
                     </div>
                     {!isClosed && (
                         <>
@@ -495,7 +542,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                                                             <div className="flex items-center justify-end gap-1">
                                                                 <Input 
                                                                     type="number" 
-                                                                    className="h-7 w-20 text-right text-xs"
+                                                                    className="h-7 w-20 text-right text-base"
                                                                     value={correctionStock}
                                                                     onChange={e => setCorrectionStock(e.target.value)}
                                                                 />
@@ -669,7 +716,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                                                 placeholder="0.00"
                                                 value={reportedRevenue}
                                                 onChange={e => setReportedRevenue(e.target.value)}
-                                                className="w-24 h-8 text-right font-bold text-sm bg-white"
+                                                className="w-24 h-8 text-right font-bold text-base bg-white"
                                             />
                                             <span className="text-sm font-bold text-blue-700">₽</span>
                                         </div>

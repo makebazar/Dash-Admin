@@ -50,6 +50,27 @@ export function EmployeeSupplyWizard({ isOpen, onClose, clubId, userId, activeSh
     const [supplierName, setSupplierName] = useState("")
     const [notes, setNotes] = useState("")
 
+    // iOS Scroll Lock
+    useEffect(() => {
+        if (isOpen) {
+            document.body.style.overflow = 'hidden'
+            document.body.style.position = 'fixed'
+            document.body.style.width = '100%'
+            document.body.style.height = '100%'
+        } else {
+            document.body.style.overflow = ''
+            document.body.style.position = ''
+            document.body.style.width = ''
+            document.body.style.height = ''
+        }
+        return () => {
+            document.body.style.overflow = ''
+            document.body.style.position = ''
+            document.body.style.width = ''
+            document.body.style.height = ''
+        }
+    }, [isOpen])
+
     // Load products
     useEffect(() => {
         if (isOpen) {
@@ -390,7 +411,7 @@ export function EmployeeSupplyWizard({ isOpen, onClose, clubId, userId, activeSh
                                         type="number" 
                                         value={itemQty} 
                                         onChange={e => setItemQty(e.target.value)}
-                                        className="bg-slate-900 border-slate-800 h-12 text-lg font-bold"
+                                        className="bg-slate-900 border-slate-800 h-12 text-lg font-bold text-base"
                                     />
                                 </div>
                                 <div className="space-y-2">

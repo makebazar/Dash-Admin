@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useTransition, useEffect, useMemo, useCallback } from "react"
-import { Loader2, ArrowRight, CheckCircle2, AlertTriangle, Package, Camera, Search, Barcode, X, Plus, Trash2, ArrowLeft, RefreshCcw } from "lucide-react"
+import { Loader2, ArrowRight, CheckCircle2, AlertTriangle, Package, Camera, Search, Barcode, X, Plus, Trash2, ArrowLeft, RefreshCcw, AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { BarcodeScanner } from "@/app/clubs/[clubId]/inventory/_components/BarcodeScanner"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { cn } from "@/lib/utils"
 
 interface ShiftClosingWizardProps {
     isOpen: boolean
@@ -105,6 +106,27 @@ export function ShiftClosingWizard({
     const forgottenItems = useMemo(() => {
         return inventoryItems.filter(i => (i.expected_stock || 0) > 0 && i.actual_stock === null)
     }, [inventoryItems])
+
+    // Lock scroll when open
+    useEffect(() => {
+        if (isOpen) {
+            document.body.style.overflow = 'hidden'
+            document.body.style.position = 'fixed'
+            document.body.style.width = '100%'
+            document.body.style.height = '100%'
+        } else {
+            document.body.style.overflow = ''
+            document.body.style.position = ''
+            document.body.style.width = ''
+            document.body.style.height = ''
+        }
+        return () => {
+            document.body.style.overflow = ''
+            document.body.style.position = ''
+            document.body.style.width = ''
+            document.body.style.height = ''
+        }
+    }, [isOpen])
 
     // Load persisted state
     useEffect(() => {
@@ -419,6 +441,7 @@ export function ShiftClosingWizard({
     }
 
     const handleBarcodeScan = useCallback(async (barcode: string) => {
+        // 1. First, check our local list (might have stale barcodes)
         const item = inventoryItems.find(i => 
             i.barcode === barcode || 
             (i.barcodes && i.barcodes.includes(barcode))
@@ -433,20 +456,44 @@ export function ShiftClosingWizard({
                 return i
             }))
             setScannedItemId(item.id)
-            setIsScannerOpen(false) // Close scanner when item is found
+            setIsScannerOpen(false) 
             return true
         }
 
+        // 2. Not in local list with this barcode? Check the server (Admin might have added a barcode)
         try {
             const product = await getProductByBarcode(clubId, barcode)
             if (product) {
-                // Keep track of current counts before re-fetching
+                // Is this product already in our inventory list?
+                const existingInList = inventoryItems.find(i => i.product_id === product.id)
+                
+                if (existingInList) {
+                    // It's already here! Just the barcode was new. Update the item's barcodes and count it.
+                    setInventoryItems(prev => prev.map(i => {
+                        if (i.product_id === product.id) {
+                            const currentStock = i.actual_stock || 0
+                            return { 
+                                ...i, 
+                                actual_stock: currentStock + 1, 
+                                is_visible: true, 
+                                last_modified: Date.now(),
+                                barcode: product.barcode, // Sync fresh barcodes
+                                barcodes: product.barcodes 
+                            }
+                        }
+                        return i
+                    }))
+                    setScannedItemId(existingInList.id)
+                    setIsScannerOpen(false)
+                    return true
+                }
+
+                // If truly not in list, add it
                 const currentCounts = inventoryItems.reduce((acc, i) => {
                     if (i.actual_stock !== null) acc[i.id] = i.actual_stock
                     return acc
                 }, {} as Record<number, number>)
 
-                // No confirm, just add and highlight
                 await addProductToInventory(inventoryId!, product.id)
                 const invItems = await getInventoryItems(inventoryId!)
                 
@@ -462,7 +509,7 @@ export function ShiftClosingWizard({
                 }))
                 const newItem = invItems.find(i => i.product_id === product.id)
                 if (newItem) setScannedItemId(newItem.id)
-                setIsScannerOpen(false) // Close scanner when item is added
+                setIsScannerOpen(false) 
                 return true
             } else {
                 return false
@@ -513,6 +560,27 @@ export function ShiftClosingWizard({
     const openAddDialog = async () => {
         setIsAddDialogOpen(true)
         refreshProductCatalog()
+    }
+
+    const refreshInventoryList = async () => {
+        if (!inventoryId) return
+        startTransition(async () => {
+            try {
+                const items = await getInventoryItems(inventoryId)
+                // Merge with current counts to not lose unsaved work
+                setInventoryItems(prev => items.map(newItem => {
+                    const existing = prev.find(p => p.id === newItem.id)
+                    return {
+                        ...newItem,
+                        actual_stock: existing?.actual_stock ?? newItem.actual_stock,
+                        is_visible: existing?.is_visible ?? (newItem.actual_stock !== null),
+                        last_modified: existing?.last_modified
+                    }
+                }))
+            } catch (e) {
+                console.error('Failed to refresh inventory list', e)
+            }
+        })
     }
 
     const refreshProductCatalog = async () => {
@@ -828,7 +896,7 @@ export function ShiftClosingWizard({
     if (!isOpen) return null
 
     return (
-        <div className="fixed inset-0 bg-slate-950 text-white flex flex-col z-[9999] animate-in fade-in duration-300 overflow-hidden">
+        <div className="fixed inset-0 h-[100dvh] bg-slate-950 text-white flex flex-col z-[9999] animate-in fade-in duration-300 overflow-hidden overscroll-none">
             {step === 2 && (
                 <BarcodeScanner 
                     isOpen={isScannerOpen} 
@@ -1031,17 +1099,20 @@ export function ShiftClosingWizard({
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
                             <Input 
                                 placeholder="Поиск по названию или штрихкоду..."
-                                className="pl-10 pr-10 bg-slate-900 border-slate-800 h-12 rounded-xl focus:ring-2 focus:ring-blue-500 transition-all"
+                                className="pl-10 pr-10 bg-slate-900 border-slate-800 h-12 rounded-xl focus:ring-2 focus:ring-blue-500 transition-all text-base"
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                             />
                             <button 
-                                onClick={refreshProductCatalog}
-                                disabled={isRefreshingCatalog}
+                                onClick={async () => {
+                                    await refreshInventoryList()
+                                    await refreshProductCatalog()
+                                }}
+                                disabled={isPending || isRefreshingCatalog}
                                 className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-slate-500 hover:text-blue-400 disabled:opacity-50 transition-colors"
-                                title="Обновить список товаров"
+                                title="Синхронизировать с базой"
                             >
-                                <RefreshCcw className={`h-4 w-4 ${isRefreshingCatalog ? 'animate-spin' : ''}`} />
+                                <RefreshCcw className={cn("h-4 w-4", (isPending || isRefreshingCatalog) && "animate-spin")} />
                             </button>
                         </div>
 
@@ -1084,7 +1155,7 @@ export function ShiftClosingWizard({
                                                     <Input 
                                                         type="number" 
                                                         id={`inventory-input-${item.id}`}
-                                                        className="bg-slate-900 border-slate-800 text-right w-20 ml-auto font-bold h-10 rounded-lg"
+                                                        className="bg-slate-900 border-slate-800 text-right w-20 ml-auto font-bold h-10 rounded-lg text-base"
                                                         value={item.actual_stock === null ? "" : item.actual_stock}
                                                         onChange={(e) => {
                                                             if ("is_external" in item) {
@@ -1261,7 +1332,7 @@ export function ShiftClosingWizard({
                             <div className="space-y-3">
                                 <Label className="text-slate-400 text-xs uppercase tracking-wider ml-1">Причина расхождения</Label>
                                 <Input 
-                                    className="bg-slate-900 border-slate-800 h-14 rounded-xl focus:ring-2 focus:ring-blue-500 transition-all"
+                                    className="bg-slate-900 border-slate-800 h-14 rounded-xl focus:ring-2 focus:ring-blue-500 transition-all text-base"
                                     placeholder="Укажите причину..."
                                     value={reportData['shift_comment'] || ''}
                                     onChange={(e) => setReportData({ ...reportData, 'shift_comment': e.target.value })}
@@ -1272,7 +1343,7 @@ export function ShiftClosingWizard({
                 )}
             </main>
 
-            <footer className="p-4 border-t border-slate-800 bg-slate-900/80 backdrop-blur-md sticky bottom-0 z-50">
+            <footer className="p-4 pb-safe border-t border-slate-800 bg-slate-900/80 backdrop-blur-md sticky bottom-0 z-50">
                 {step === 1 && (
                     <Button onClick={handleStep1Submit} className="w-full h-14 text-lg font-bold bg-purple-600 hover:bg-purple-700 rounded-2xl shadow-lg shadow-purple-900/20">
                         {skipInventory ? "Завершить смену" : "Далее: Инвентаризация"}

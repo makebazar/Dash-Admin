@@ -54,7 +54,7 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
     }
 
     return (
-        <div className="flex min-h-screen bg-background relative overflow-x-hidden">
+        <div className="flex min-h-[100dvh] bg-background relative overflow-x-hidden">
             {showMobileHeader && (
                 <div className="md:hidden fixed top-0 left-0 right-0 h-16 border-b bg-card flex items-center justify-between px-4 z-40">
                     <Link href="/employee/dashboard" className="flex items-center gap-2">
@@ -79,7 +79,7 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
 
             {/* Sidebar */}
             <aside className={cn(
-                "fixed left-0 top-0 h-screen w-64 border-r border-border bg-card z-50 transition-transform duration-300 ease-in-out",
+                "fixed left-0 top-0 h-[100dvh] w-64 border-r border-border bg-card z-50 transition-transform duration-300 ease-in-out",
                 isMobileMenuOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
             )}>
                 <div className="flex h-full flex-col">

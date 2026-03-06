@@ -60,6 +60,27 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
     const [writeOffType, setWriteOffType] = useState<'WASTE' | 'SALARY_DEDUCTION'>('WASTE')
     const [notes, setNotes] = useState("")
 
+    // iOS Scroll Lock
+    useEffect(() => {
+        if (isOpen) {
+            document.body.style.overflow = 'hidden'
+            document.body.style.position = 'fixed'
+            document.body.style.width = '100%'
+            document.body.style.height = '100%'
+        } else {
+            document.body.style.overflow = ''
+            document.body.style.position = ''
+            document.body.style.width = ''
+            document.body.style.height = ''
+        }
+        return () => {
+            document.body.style.overflow = ''
+            document.body.style.position = ''
+            document.body.style.width = ''
+            document.body.style.height = ''
+        }
+    }, [isOpen])
+
     useEffect(() => {
         if (isOpen) {
             getProducts(clubId).then(setAllProducts)
@@ -437,7 +458,7 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
                                             type="number" 
                                             value={itemQty} 
                                             onChange={e => setItemQty(e.target.value)}
-                                            className="bg-slate-900/50 border-slate-800 h-14 text-xl font-black text-center rounded-2xl focus:ring-red-500/20 focus:border-red-500/50 transition-all"
+                                            className="bg-slate-900/50 border-slate-800 h-14 text-xl font-black text-center rounded-2xl focus:ring-red-500/20 focus:border-red-500/50 transition-all text-base"
                                         />
                                     </div>
                                     <div className="space-y-2">
