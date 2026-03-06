@@ -141,7 +141,7 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
                             id: shiftId,
                             start: sale.shift_start,
                             end: sale.shift_end,
-                            employee: sale.user_name,
+                            employee: sale.shift_employee_name || sale.user_name,
                             reported: Number(sale.shift_reported_revenue || 0),
                             calculated: Number(sale.shift_calculated_revenue || 0),
                             difference: Number(sale.shift_revenue_difference || 0)
@@ -397,7 +397,14 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
                                                     </TableCell>
                                                     <TableCell className="py-2">
                                                         <div className="flex flex-col">
-                                                            <span className="text-sm font-semibold text-slate-800">{sale.product_name}</span>
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="text-sm font-semibold text-slate-800">{sale.product_name}</span>
+                                                                {sale.shift_employee_name && sale.user_name !== sale.shift_employee_name && (
+                                                                    <Badge variant="outline" className="text-[9px] h-4 px-1 border-slate-200 text-slate-400 font-normal">
+                                                                        от {sale.user_name.split(' ')[0]}
+                                                                    </Badge>
+                                                                )}
+                                                            </div>
                                                             {editingId === sale.id ? (
                                                                 <Input 
                                                                     value={editReason} 

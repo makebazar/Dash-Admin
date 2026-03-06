@@ -6,6 +6,7 @@ import { X, Camera, RefreshCcw, Zap, ZapOff, Barcode, ChevronDown } from "lucide
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { cn } from "@/lib/utils"
 
 interface BarcodeScannerProps {
     onScan: (barcode: string) => Promise<boolean>
@@ -23,6 +24,8 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
     const [hasTorch, setHasTorch] = useState(false)
     const [cameras, setCameras] = useState<{ id: string, label: string }[]>([])
     const [currentCameraId, setCurrentCameraId] = useState<string | null>(null)
+    const [zoom, setZoom] = useState(1)
+    const [maxZoom, setMaxZoom] = useState(1)
 
     const cycleCamera = () => {
         if (cameras.length <= 1) return
@@ -81,25 +84,20 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
             const isBackCamera = /back|rear|основная/i.test(cameras.find(c => c.id === cameraId)?.label || '') || cameras.length > 1
 
             const config = {
-                fps: 25,
+                fps: 20,
                 qrbox: (viewfinderWidth: number, viewFinderHeight: number) => {
-                    const minEdge = Math.min(viewfinderWidth, viewFinderHeight);
                     const qrboxWidth = Math.floor(viewfinderWidth * 0.85);
-                    const qrboxHeight = Math.floor(viewFinderHeight * 0.4);
+                    const qrboxHeight = Math.min(Math.floor(viewFinderHeight * 0.3), 160);
                     return { width: qrboxWidth, height: qrboxHeight };
                 },
-                aspectRatio: 1.0,
+                aspectRatio: 1.777778,
                 videoConstraints: {
                     deviceId: cameraId,
                     facingMode: isBackCamera ? { ideal: "environment" } : "user",
-                    width: { min: 1280, ideal: 1920 },
-                    height: { min: 720, ideal: 1080 },
+                    width: { ideal: 1920 },
+                    height: { ideal: 1080 },
                     // @ts-ignore
-                    focusMode: "continuous",
-                    // @ts-ignore
-                    whiteBalanceMode: "continuous",
-                    // @ts-ignore
-                    exposureMode: "continuous"
+                    focusMode: { ideal: "continuous" }
                 }
             }
 
@@ -132,6 +130,13 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
                 const capabilities = scannerRef.current.getRunningTrackCapabilities()
                 // @ts-ignore
                 setHasTorch(!!capabilities.torch)
+                // @ts-ignore
+                if (capabilities.zoom) {
+                    // @ts-ignore
+                    setMaxZoom(capabilities.zoom.max || 1)
+                    // @ts-ignore
+                    setZoom(capabilities.zoom.min || 1)
+                }
             } catch (e) {
                 setHasTorch(false)
             }
@@ -217,6 +222,20 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
             setIsTorchOn(nextState)
         } catch (e) {
             console.error("Failed to toggle torch", e)
+        }
+    }
+
+    const handleZoomChange = async (value: number[]) => {
+        if (!scannerRef.current || !scannerRef.current.isScanning) return
+        try {
+            const nextZoom = value[0]
+            await scannerRef.current.applyVideoConstraints({
+                // @ts-ignore
+                advanced: [{ zoom: nextZoom }]
+            })
+            setZoom(nextZoom)
+        } catch (e) {
+            console.error("Failed to apply zoom", e)
         }
     }
 
@@ -346,12 +365,54 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
                     </div>
                 </DialogHeader>
 
-                <div 
-                    className="relative w-full aspect-square bg-black flex items-center justify-center overflow-hidden cursor-crosshair"
-                    onClick={triggerFocus}
-                >
-                    <div id="barcode-reader" className="w-full h-full"></div>
+                <div className="relative aspect-[16/9] w-full bg-black flex items-center justify-center overflow-hidden">
+                    <div id="barcode-reader" className="w-full h-full [&_video]:object-cover" onClick={triggerFocus}></div>
                     
+                    {/* Scanner Overlay UI */}
+                    <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center">
+                        {/* Scanning Guide Line */}
+                        <div className="w-[85%] h-[2px] bg-red-500/60 shadow-[0_0_8px_rgba(239,68,68,0.8)] animate-pulse" />
+                        
+                        {/* Corner Markers */}
+                        <div className="absolute top-[35%] left-[7.5%] w-6 h-6 border-t-2 border-l-2 border-white/80 rounded-tl-lg" />
+                        <div className="absolute top-[35%] right-[7.5%] w-6 h-6 border-t-2 border-r-2 border-white/80 rounded-tr-lg" />
+                        <div className="absolute bottom-[35%] left-[7.5%] w-6 h-6 border-b-2 border-l-2 border-white/80 rounded-bl-lg" />
+                        <div className="absolute bottom-[35%] right-[7.5%] w-6 h-6 border-b-2 border-r-2 border-white/80 rounded-br-lg" />
+                    </div>
+
+                    {/* Zoom Control Overlay */}
+                     {maxZoom > 1 && (
+                         <div className="absolute bottom-4 left-1/2 -translate-x-1/2 w-[60%] bg-black/40 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 flex items-center gap-3 pointer-events-auto">
+                             <span className="text-[10px] text-white/60 font-bold">1x</span>
+                             <input 
+                                 type="range" 
+                                 min={1} 
+                                 max={maxZoom} 
+                                 step={0.1} 
+                                 value={zoom}
+                                 onChange={(e) => handleZoomChange([parseFloat(e.target.value)])}
+                                 className="flex-1 h-1 bg-white/20 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                             />
+                             <span className="text-[10px] text-white/60 font-bold">{Math.round(maxZoom)}x</span>
+                         </div>
+                     )}
+
+                     {/* Scan status indicator */}
+                     {scanStatus.type !== 'idle' && (
+                        <div className={cn(
+                            "absolute inset-0 z-10 flex items-center justify-center backdrop-blur-[2px] transition-all duration-300",
+                            scanStatus.type === 'success' ? "bg-green-500/20" : "bg-red-500/20"
+                        )}>
+                            <div className={cn(
+                                "px-6 py-3 rounded-2xl border-2 flex items-center gap-3 animate-in zoom-in-95 duration-200",
+                                scanStatus.type === 'success' ? "bg-green-600 border-green-400 text-white" : "bg-red-600 border-red-400 text-white"
+                            )}>
+                                {scanStatus.type === 'success' ? <Barcode className="h-6 w-6" /> : <X className="h-6 w-6" />}
+                                <span className="font-black text-lg uppercase tracking-tight">{scanStatus.message}</span>
+                            </div>
+                        </div>
+                    )}
+
                     {isInitializing && (
                         <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 z-20">
                             <RefreshCcw className="h-8 w-8 text-blue-500 animate-spin mb-4" />
@@ -368,22 +429,6 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
                             <Button variant="outline" onClick={() => window.location.reload()} className="mt-4 bg-white/10 border-white/20 text-white rounded-xl">
                                 Обновить страницу
                             </Button>
-                        </div>
-                    )}
-
-                    {/* Simple Indicator Overlay */}
-                    {!isInitializing && !error && (
-                        <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center">
-                            {/* Target Frame */}
-                            <div className="w-64 h-40 border-2 border-blue-500/30 rounded-2xl relative">
-                                <div className="absolute top-0 left-0 w-4 h-4 border-t-2 border-l-2 border-blue-500 rounded-tl-lg" />
-                                <div className="absolute top-0 right-0 w-4 h-4 border-t-2 border-r-2 border-blue-500 rounded-tr-lg" />
-                                <div className="absolute bottom-0 left-0 w-4 h-4 border-b-2 border-l-2 border-blue-500 rounded-bl-lg" />
-                                <div className="absolute bottom-0 right-0 w-4 h-4 border-b-2 border-r-2 border-blue-500 rounded-br-lg" />
-                                
-                                {/* Scan Line Animation */}
-                                <div className="absolute top-0 left-0 right-0 h-0.5 bg-blue-500/50 shadow-[0_0_10px_rgba(59,130,246,0.5)] animate-scan-line" />
-                            </div>
                         </div>
                     )}
 

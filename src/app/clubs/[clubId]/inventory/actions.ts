@@ -771,6 +771,7 @@ export async function getSalesAnalytics(clubId: string, limit: number = 200) {
                p.selling_price as current_price,
                COALESCE(sm.price_at_time, p.selling_price) as price_at_time,
                u.full_name as user_name,
+               su.full_name as shift_employee_name,
                s.check_in as shift_start,
                s.check_out as shift_end,
                s.id as shift_id_raw,
@@ -781,6 +782,7 @@ export async function getSalesAnalytics(clubId: string, limit: number = 200) {
         JOIN warehouse_products p ON sm.product_id = p.id
         LEFT JOIN users u ON sm.user_id = u.id
         LEFT JOIN shifts s ON sm.shift_id = s.id
+        LEFT JOIN users su ON s.user_id = su.id
         LEFT JOIN warehouse_inventories inv ON s.id = inv.shift_id
         WHERE sm.club_id = $1 AND sm.type = 'SALE'
         ORDER BY sm.created_at DESC
@@ -818,28 +820,31 @@ export async function correctInventoryItem(inventoryId: number, productId: numbe
         if (itemRes.rows.length === 0) throw new Error("Позиция не найдена")
         const item = itemRes.rows[0]
 
-        const oldActualStock = Number(item.actual_stock)
-        const diffInActual = newActualStock - oldActualStock
-        if (diffInActual === 0) {
-            await client.query('COMMIT')
-            return { success: true }
-        }
+        const oldActualStock = item.actual_stock !== null ? Number(item.actual_stock) : null
+        const expectedStock = Number(item.expected_stock)
+        const price = Number(item.selling_price_snapshot)
 
-        const newDifference = item.expected_stock - newActualStock
-        const oldDifference = item.expected_stock - oldActualStock
-        const changeInDifference = newDifference - oldDifference // If we found more stock, difference decreases
+        // 2. Calculate New Stats for the Item
+        const newDifference = expectedStock - newActualStock
+        const newCalculatedRevenue = newActualStock < expectedStock ? (expectedStock - newActualStock) * price : 0
 
-        // 2. Update inventory item
+        // 3. Calculate Deltas for the Header
+        const oldCalculatedRevenue = (oldActualStock !== null && oldActualStock < expectedStock) 
+            ? (expectedStock - oldActualStock) * price 
+            : 0
+        
+        const revenueChange = newCalculatedRevenue - oldCalculatedRevenue
+
+        // 4. Update inventory item
         await client.query(`
             UPDATE warehouse_inventory_items 
             SET actual_stock = $1::integer, 
                 difference = $2::integer, 
-                calculated_revenue = ($2::numeric * selling_price_snapshot)::numeric
-            WHERE inventory_id = $3 AND product_id = $4
-        `, [newActualStock, newDifference, inventoryId, productId])
+                calculated_revenue = $3::numeric
+            WHERE inventory_id = $4 AND product_id = $5
+        `, [newActualStock, newDifference, newCalculatedRevenue, inventoryId, productId])
 
-        // 3. Update inventory header totals
-        const revenueChange = changeInDifference * item.selling_price_snapshot
+        // 5. Update inventory header totals
         await client.query(`
             UPDATE warehouse_inventories 
             SET calculated_revenue = (calculated_revenue + $1::numeric)::numeric,
@@ -847,71 +852,68 @@ export async function correctInventoryItem(inventoryId: number, productId: numbe
             WHERE id = $2
         `, [revenueChange, inventoryId])
 
-        // 4. Update stock and movements if inventory is closed
+        // 6. Update physical stock and movements if inventory is closed
         if (inventory.status === 'CLOSED') {
-            const stockDiff = newActualStock - oldActualStock
-            
-            // Fallback for warehouse_id if missing (legacy)
-            let warehouseId = inventory.warehouse_id
-            if (!warehouseId) {
-                const whRes = await client.query('SELECT id FROM warehouses WHERE club_id = $1 ORDER BY is_default DESC LIMIT 1', [clubId])
-                warehouseId = whRes.rows[0]?.id
+            // Calculate delta to apply to current warehouse stock
+            // If item wasn't counted (null), the previous adjustment was 0 (relative to expected)
+            // If item was counted, the previous adjustment was (actual - expected)
+            const oldAdjustment = oldActualStock !== null ? (oldActualStock - expectedStock) : 0
+            const newAdjustment = newActualStock - expectedStock
+            const stockDelta = newAdjustment - oldAdjustment
+
+            if (stockDelta !== 0) {
+                let warehouseId = inventory.warehouse_id
+                if (!warehouseId) {
+                    const whRes = await client.query('SELECT id FROM warehouses WHERE club_id = $1 ORDER BY is_default DESC LIMIT 1', [clubId])
+                    warehouseId = whRes.rows[0]?.id
+                }
+
+                if (!warehouseId) throw new Error("Не найден склад для корректировки остатков")
+
+                // Update physical stock in the warehouse
+                await client.query(`
+                    INSERT INTO warehouse_stock (warehouse_id, product_id, quantity)
+                    VALUES ($1, $2, $3)
+                    ON CONFLICT (warehouse_id, product_id) 
+                    DO UPDATE SET quantity = warehouse_stock.quantity + EXCLUDED.quantity
+                `, [warehouseId, productId, stockDelta])
+
+                // Update product cache (sum of all warehouses)
+                await client.query(`
+                    UPDATE warehouse_products
+                    SET current_stock = (SELECT COALESCE(SUM(quantity), 0) FROM warehouse_stock WHERE product_id = $1)
+                    WHERE id = $1
+                `, [productId])
+
+                // Log the correction movement
+                const totalStockRes = await client.query('SELECT current_stock FROM warehouse_products WHERE id = $1', [productId])
+                const currentTotalStock = Number(totalStockRes.rows[0]?.current_stock || 0)
+                
+                await logStockMovement(
+                    client, 
+                    clubId, 
+                    userId, 
+                    productId, 
+                    stockDelta, 
+                    currentTotalStock - stockDelta, 
+                    currentTotalStock, 
+                    'ADJUSTMENT', 
+                    `Корректировка инвентаризации #${inventoryId}`, 
+                    'INVENTORY', 
+                    inventoryId, 
+                    null, 
+                    warehouseId
+                )
             }
-
-            if (!warehouseId) throw new Error("Не найден склад для корректировки остатков")
-
-            // 5. Update physical stock
-            // We ALWAYS update the warehouse stock for the specific warehouse of this inventory
-            // to ensure it matches the corrected actual stock.
-            // Note: We use EXCLUDED.quantity which is the stockDiff.
-            await client.query(`
-                INSERT INTO warehouse_stock (warehouse_id, product_id, quantity)
-                VALUES ($1, $2, $3)
-                ON CONFLICT (warehouse_id, product_id) 
-                DO UPDATE SET quantity = warehouse_stock.quantity + EXCLUDED.quantity
-            `, [warehouseId, productId, stockDiff])
-
-            // Update product cache (sum of all warehouses)
-            await client.query(`
-                UPDATE warehouse_products
-                SET current_stock = (SELECT COALESCE(SUM(quantity), 0) FROM warehouse_stock WHERE product_id = $1)
-                WHERE id = $1
-            `, [productId])
-
-            // 6. Log the correction movement
-            // Get current total stock for logging
-            const totalStockRes = await client.query('SELECT current_stock FROM warehouse_products WHERE id = $1', [productId])
-            const currentTotalStock = Number(totalStockRes.rows[0]?.current_stock || 0)
-            
-            await logStockMovement(
-                client, 
-                clubId, 
-                userId, 
-                productId, 
-                stockDiff, 
-                currentTotalStock - stockDiff, 
-                currentTotalStock, 
-                'ADJUSTMENT', 
-                `Корректировка инвентаризации #${inventoryId}`, 
-                'INVENTORY', 
-                inventoryId, 
-                null, 
-                warehouseId
-            )
         }
 
         await client.query('COMMIT')
-        
-        // Comprehensive revalidation
         revalidatePath(`/clubs/${clubId}/inventory`)
-        revalidatePath(`/clubs/${clubId}/inventory`, 'layout')
-        revalidatePath(`/clubs/${clubId}/inventory/products`) 
-        
         return { success: true }
     } catch (e: any) {
         await client.query('ROLLBACK')
-        console.error('Error correcting inventory item:', e)
-        return { success: false, error: e.message }
+        console.error('Inventory correction error:', e)
+        throw e
     } finally {
         client.release()
     }
