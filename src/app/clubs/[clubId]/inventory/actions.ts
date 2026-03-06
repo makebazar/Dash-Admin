@@ -13,6 +13,7 @@ export type Product = {
     category_id: number | null
     name: string
     barcode?: string | null
+    barcodes?: string[]
     cost_price: number
     selling_price: number
     current_stock: number
@@ -38,6 +39,7 @@ export type Product = {
     
     // Calculated Runway (Days left)
     days_of_stock?: number
+    price_history?: { cost_price: number, created_at: string, supplier_name: string, supply_id: number }[]
 }
 
 export type Category = {
@@ -65,11 +67,24 @@ export type Warehouse = {
 export type Supply = {
     id: number
     supplier_name: string
+    supplier_id?: number | null
     notes: string
     total_cost: number
+    status: 'DRAFT' | 'COMPLETED'
+    warehouse_id?: number | null
     created_at: string
     created_by_name?: string
     items_count?: number
+}
+
+export type SupplyItem = {
+    id: number
+    supply_id: number
+    product_id: number
+    product_name: string
+    quantity: number
+    cost_price: number
+    total_cost: number
 }
 
 export type Inventory = {
@@ -1166,7 +1181,23 @@ export async function getProducts(clubId: string) {
                 FROM warehouse_stock ws
                 JOIN warehouses w ON ws.warehouse_id = w.id
                 WHERE ws.product_id = p.id
-            ) as stocks
+            ) as stocks,
+            (
+                SELECT json_agg(json_build_object(
+                    'cost_price', si.cost_price,
+                    'created_at', s.created_at,
+                    'supplier_name', s.supplier_name,
+                    'supply_id', s.id
+                ))
+                FROM (
+                    SELECT si.cost_price, s.created_at, s.supplier_name, s.id
+                    FROM warehouse_supply_items si
+                    JOIN warehouse_supplies s ON si.supply_id = s.id
+                    WHERE si.product_id = p.id AND s.status = 'COMPLETED'
+                    ORDER BY s.created_at DESC
+                    LIMIT 5
+                ) s
+            ) as price_history
             FROM warehouse_products p 
             LEFT JOIN warehouse_categories c ON p.category_id = c.id 
             WHERE p.club_id = $1 
@@ -1176,24 +1207,25 @@ export async function getProducts(clubId: string) {
         return res.rows.map(row => ({
             ...row,
             current_stock: Number(row.total_stock) || 0, // Override with sum from warehouse_stock
-            stocks: row.stocks || []
+            stocks: row.stocks || [],
+            price_history: row.price_history || []
         })) as Product[]
     } finally {
         client.release()
     }
 }
 
-export async function createProduct(clubId: string, userId: string, data: { name: string, barcode?: string | null, category_id: number | null, cost_price: number, selling_price: number, current_stock: number, min_stock_level?: number }) {
+export async function createProduct(clubId: string, userId: string, data: { name: string, barcode?: string | null, barcodes?: string[], category_id: number | null, cost_price: number, selling_price: number, current_stock: number, min_stock_level?: number }) {
     const client = await import("@/db").then(m => m.getClient())
     try {
         await client.query('BEGIN')
         
         // 1. Create Product
         const res = await client.query(`
-            INSERT INTO warehouse_products (club_id, category_id, name, barcode, cost_price, selling_price, current_stock, min_stock_level)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            INSERT INTO warehouse_products (club_id, category_id, name, barcode, barcodes, cost_price, selling_price, current_stock, min_stock_level)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             RETURNING id
-        `, [clubId, data.category_id, data.name, data.barcode || null, data.cost_price, data.selling_price, data.current_stock, data.min_stock_level || 0])
+        `, [clubId, data.category_id, data.name, data.barcode || null, data.barcodes || [], data.cost_price, data.selling_price, data.current_stock, data.min_stock_level || 0])
         
         const productId = res.rows[0].id
 
@@ -1223,16 +1255,16 @@ export async function createProduct(clubId: string, userId: string, data: { name
     revalidatePath(`/clubs/${clubId}/inventory`)
 }
 
-export async function updateProduct(id: number, clubId: string, userId: string, data: { name: string, barcode?: string | null, category_id: number | null, cost_price: number, selling_price: number, min_stock_level?: number, is_active: boolean }) {
+export async function updateProduct(id: number, clubId: string, userId: string, data: { name: string, barcode?: string | null, barcodes?: string[], category_id: number | null, cost_price: number, selling_price: number, min_stock_level?: number, is_active: boolean }) {
     const client = await import("@/db").then(m => m.getClient())
     try {
         await client.query('BEGIN')
         
         await client.query(`
             UPDATE warehouse_products 
-            SET name = $1, barcode = $2, category_id = $3, cost_price = $4, selling_price = $5, min_stock_level = $6, is_active = $7
-            WHERE id = $8
-        `, [data.name, data.barcode || null, data.category_id, data.cost_price, data.selling_price, data.min_stock_level || 0, data.is_active, id])
+            SET name = $1, barcode = $2, barcodes = $3, category_id = $4, cost_price = $5, selling_price = $6, min_stock_level = $7, is_active = $8
+            WHERE id = $9
+        `, [data.name, data.barcode || null, data.barcodes || [], data.category_id, data.cost_price, data.selling_price, data.min_stock_level || 0, data.is_active, id])
         
         await client.query('COMMIT')
         await logOperation(clubId, userId, 'UPDATE_PRODUCT', 'PRODUCT', id, data)
@@ -1442,7 +1474,7 @@ export async function getSupplies(clubId: string) {
     return res.rows as Supply[]
 }
 
-export async function createSupply(clubId: string, userId: string, data: { supplier_name: string, notes: string, items: { product_id: number, quantity: number, cost_price: number }[], warehouse_id?: number }) {
+export async function createSupply(clubId: string, userId: string, data: { supplier_name: string, notes: string, items: { product_id: number, quantity: number, cost_price: number }[], warehouse_id?: number, status?: 'DRAFT' | 'COMPLETED' }) {
     const client = await import("@/db").then(m => m.getClient())
     try {
         await client.query('BEGIN')
@@ -1462,51 +1494,49 @@ export async function createSupply(clubId: string, userId: string, data: { suppl
         }
 
         // 2. Create Supply
+        const status = data.status || 'COMPLETED'
         const totalCost = data.items.reduce((acc, item) => acc + (item.quantity * item.cost_price), 0)
+        
+        let warehouseId = data.warehouse_id
+        if (!warehouseId) {
+            const whRes = await client.query('SELECT id FROM warehouses WHERE club_id = $1 ORDER BY is_default DESC LIMIT 1', [clubId])
+            warehouseId = whRes.rows[0]?.id
+        }
+
         const supplyRes = await client.query(`
-            INSERT INTO warehouse_supplies (club_id, supplier_name, supplier_id, notes, total_cost, created_by)
-            VALUES ($1, $2, $3, $4, $5, $6)
+            INSERT INTO warehouse_supplies (club_id, supplier_name, supplier_id, notes, total_cost, created_by, status, warehouse_id)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             RETURNING id
-        `, [clubId, data.supplier_name, supplierId, data.notes, totalCost, userId])
+        `, [clubId, data.supplier_name, supplierId, data.notes, totalCost, userId, status, warehouseId])
         const supplyId = supplyRes.rows[0].id
 
-            // 3. Add Items & Update Stock
-            let warehouseId = data.warehouse_id
-            
-            // If no warehouse specified, try to find default or fallback
-            if (!warehouseId) {
-                const whRes = await client.query('SELECT id FROM warehouses WHERE club_id = $1 ORDER BY is_default DESC LIMIT 1', [clubId])
-                warehouseId = whRes.rows[0]?.id
-            }
+        // 3. Add Items & Update Stock if COMPLETED
+        for (const item of data.items) {
+            await client.query(`
+                INSERT INTO warehouse_supply_items (supply_id, product_id, quantity, cost_price, total_cost)
+                VALUES ($1, $2, $3, $4, $5)
+            `, [supplyId, item.product_id, item.quantity, item.cost_price, item.quantity * item.cost_price])
 
-            for (const item of data.items) {
+            if (status === 'COMPLETED' && warehouseId) {
                 await client.query(`
-                    INSERT INTO warehouse_supply_items (supply_id, product_id, quantity, cost_price, total_cost)
-                    VALUES ($1, $2, $3, $4, $5)
-                `, [supplyId, item.product_id, item.quantity, item.cost_price, item.quantity * item.cost_price])
-
-                // Update product stock and cost price (last price)
-                if (warehouseId) {
-                    await client.query(`
-                        INSERT INTO warehouse_stock (warehouse_id, product_id, quantity)
-                        VALUES ($1, $2, $3)
-                        ON CONFLICT (warehouse_id, product_id) DO UPDATE SET quantity = warehouse_stock.quantity + $3
-                    `, [warehouseId, item.product_id, item.quantity])
-                    
-                    // Update cache
-                    await client.query(`
-                        UPDATE warehouse_products
-                        SET current_stock = (SELECT COALESCE(SUM(quantity), 0) FROM warehouse_stock WHERE product_id = $1),
-                            cost_price = $2
-                        WHERE id = $1
-                    `, [item.product_id, item.cost_price])
-                    
-                    await logStockMovement(client, clubId, userId, item.product_id, item.quantity, 0, 0, 'SUPPLY', `Supply #${supplyId}`, 'SUPPLY', supplyId, null, warehouseId)
-                }
+                    INSERT INTO warehouse_stock (warehouse_id, product_id, quantity)
+                    VALUES ($1, $2, $3)
+                    ON CONFLICT (warehouse_id, product_id) DO UPDATE SET quantity = warehouse_stock.quantity + $3
+                `, [warehouseId, item.product_id, item.quantity])
+                
+                await client.query(`
+                    UPDATE warehouse_products
+                    SET current_stock = (SELECT COALESCE(SUM(quantity), 0) FROM warehouse_stock WHERE product_id = $1),
+                        cost_price = $2
+                    WHERE id = $1
+                `, [item.product_id, item.cost_price])
+                
+                await logStockMovement(client, clubId, userId, item.product_id, item.quantity, 0, 0, 'SUPPLY', `Supply #${supplyId}`, 'SUPPLY', supplyId, null, warehouseId)
             }
+        }
 
         await client.query('COMMIT')
-        await logOperation(clubId, userId, 'CREATE_SUPPLY', 'SUPPLY', supplyId, { itemsCount: data.items.length, totalCost, warehouseId })
+        await logOperation(clubId, userId, 'CREATE_SUPPLY', 'SUPPLY', supplyId, { itemsCount: data.items.length, totalCost, warehouseId, status })
     } catch (e) {
         await client.query('ROLLBACK')
         throw e
@@ -1514,6 +1544,85 @@ export async function createSupply(clubId: string, userId: string, data: { suppl
         client.release()
     }
     revalidatePath(`/clubs/${clubId}/inventory`)
+}
+
+export async function getSupplyItems(supplyId: number) {
+    const res = await query(`
+        SELECT si.*, p.name as product_name
+        FROM warehouse_supply_items si
+        JOIN warehouse_products p ON si.product_id = p.id
+        WHERE si.supply_id = $1
+        ORDER BY p.name
+    `, [supplyId])
+    return res.rows as SupplyItem[]
+}
+
+export async function deleteSupply(supplyId: number, clubId: string, userId: string) {
+    const client = await import("@/db").then(m => m.getClient())
+    try {
+        await client.query('BEGIN')
+        
+        const supplyRes = await client.query('SELECT * FROM warehouse_supplies WHERE id = $1', [supplyId])
+        if (supplyRes.rows.length === 0) throw new Error('Поставка не найдена')
+        const supply = supplyRes.rows[0]
+        
+        if (supply.status === 'COMPLETED') {
+            const itemsRes = await client.query('SELECT * FROM warehouse_supply_items WHERE supply_id = $1', [supplyId])
+            const warehouseId = supply.warehouse_id
+
+            for (const item of itemsRes.rows) {
+                // Check for later inventories
+                const laterInvRes = await client.query(`
+                    SELECT id FROM warehouse_inventories 
+                    WHERE club_id = $1 AND status = 'CLOSED' AND closed_at > $2
+                    LIMIT 1
+                `, [clubId, supply.created_at])
+
+                if (laterInvRes.rows.length === 0 && warehouseId) {
+                    await client.query(`
+                        UPDATE warehouse_stock 
+                        SET quantity = GREATEST(0, quantity - $1)
+                        WHERE warehouse_id = $2 AND product_id = $3
+                    `, [item.quantity, warehouseId, item.product_id])
+                    
+                    await client.query(`
+                        UPDATE warehouse_products
+                        SET current_stock = (SELECT COALESCE(SUM(quantity), 0) FROM warehouse_stock WHERE product_id = $1)
+                        WHERE id = $1
+                    `, [item.product_id])
+                }
+                
+                // Delete movement
+                await client.query(`
+                    DELETE FROM warehouse_stock_movements 
+                    WHERE related_entity_type = 'SUPPLY' AND related_entity_id = $1 AND product_id = $2
+                `, [supplyId, item.product_id])
+            }
+        }
+        
+        await client.query('DELETE FROM warehouse_supplies WHERE id = $1', [supplyId])
+        await logOperation(clubId, userId, 'DELETE_SUPPLY', 'SUPPLY', supplyId)
+        
+        await client.query('COMMIT')
+    } catch (e) {
+        await client.query('ROLLBACK')
+        throw e
+    } finally {
+        client.release()
+    }
+    revalidatePath(`/clubs/${clubId}/inventory`)
+}
+
+export async function getProductPriceHistory(productId: number, clubId: string) {
+    const res = await query(`
+        SELECT si.cost_price, s.created_at, s.supplier_name, s.id as supply_id
+        FROM warehouse_supply_items si
+        JOIN warehouse_supplies s ON si.supply_id = s.id
+        WHERE si.product_id = $1 AND s.club_id = $2 AND s.status = 'COMPLETED'
+        ORDER BY s.created_at DESC
+        LIMIT 10
+    `, [productId, clubId])
+    return res.rows as { cost_price: number, created_at: string, supplier_name: string, supply_id: number }[]
 }
 
 // --- INVENTORIES ---
@@ -1574,6 +1683,16 @@ export async function getClubSettings(clubId: string) {
             employee_default_metric_key?: string 
         } 
     }
+}
+
+export async function getUserRoleInClub(clubId: string, userId: string) {
+    const res = await query(`
+        SELECT role FROM club_employees 
+        WHERE club_id = $1 AND user_id = $2 AND is_active = true
+    `, [clubId, userId])
+    
+    if (res.rows.length === 0) return null
+    return res.rows[0].role as string
 }
 
 export async function createInventory(clubId: string, userId: string, targetMetricKey: string | null, categoryId?: number | null, warehouseId?: number | null, shiftId: string | null = null) {
@@ -1729,11 +1848,11 @@ export async function deleteInventory(inventoryId: number, clubId: string, userI
 
 export async function getProductByBarcode(clubId: string, barcode: string) {
     const res = await query(`
-        SELECT id, name, barcode, selling_price, current_stock
+        SELECT id, name, barcode, barcodes, selling_price, current_stock
         FROM warehouse_products
-        WHERE club_id = $1 AND barcode = $2 AND is_active = true
+        WHERE club_id = $1 AND ($2 = ANY(barcodes) OR barcode = $2) AND is_active = true
     `, [clubId, barcode])
-    return res.rows[0] as { id: number, name: string, barcode: string, selling_price: number, current_stock: number } | null
+    return res.rows[0] as { id: number, name: string, barcode: string, barcodes: string[], selling_price: number, current_stock: number } | null
 }
 
 export async function updateInventoryItem(itemId: number, actualStock: number | null, clubId: string) {

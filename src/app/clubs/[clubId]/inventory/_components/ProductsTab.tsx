@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useTransition } from "react"
-import { Plus, Search, Filter, MoreVertical, Pencil, Trash2, LayoutGrid, Box, RefreshCw, Layers, Barcode } from "lucide-react"
+import { Plus, Search, Filter, MoreVertical, Pencil, Trash2, LayoutGrid, Box, RefreshCw, Layers, Barcode, History, TrendingUp, TrendingDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -51,6 +51,7 @@ export function ProductsTab({ products, categories, warehouses, currentUserId }:
 
     // History state
     const [historyDialog, setHistoryDialog] = useState<{ isOpen: boolean, product: Product | null, logs: any[] }>({ isOpen: false, product: null, logs: [] })
+    const [isPriceHistoryOpen, setIsPriceHistoryOpen] = useState(false)
 
     const [isPending, startTransition] = useTransition()
 
@@ -58,7 +59,8 @@ export function ProductsTab({ products, categories, warehouses, currentUserId }:
     const filteredProducts = products.filter(p => {
         const matchesSearch = 
             p.name.toLowerCase().includes(search.toLowerCase()) || 
-            (p.barcode && p.barcode.includes(search))
+            (p.barcode && p.barcode.includes(search)) ||
+            (p.barcodes && p.barcodes.some(b => b.includes(search)))
         const matchesCategory = categoryFilter === "all" || (p.category_id?.toString() === categoryFilter)
         return matchesSearch && matchesCategory
     })
@@ -168,6 +170,7 @@ export function ProductsTab({ products, categories, warehouses, currentUserId }:
                     await updateProduct(editingProduct.id, clubId, currentUserId, {
                         name: editingProduct.name!,
                         barcode: editingProduct.barcode || null,
+                        barcodes: (editingProduct.barcodes || []).filter(b => b.trim() !== ""),
                         category_id: editingProduct.category_id || null,
                         cost_price: Number(editingProduct.cost_price) || 0,
                         selling_price: Number(editingProduct.selling_price) || 0,
@@ -178,6 +181,7 @@ export function ProductsTab({ products, categories, warehouses, currentUserId }:
                     await createProduct(clubId, currentUserId, {
                         name: editingProduct.name!,
                         barcode: editingProduct.barcode || null,
+                        barcodes: (editingProduct.barcodes || []).filter(b => b.trim() !== ""),
                         category_id: editingProduct.category_id || null,
                         cost_price: Number(editingProduct.cost_price) || 0,
                         selling_price: Number(editingProduct.selling_price) || 0,
@@ -333,11 +337,21 @@ export function ProductsTab({ products, categories, warehouses, currentUserId }:
                                     <TableCell className="font-medium">
                                         <div className="flex flex-col">
                                             <span>{product.name}</span>
-                                            {product.barcode && (
-                                                <span className="text-[10px] text-muted-foreground flex items-center gap-1 mt-0.5 font-mono">
-                                                    <Barcode className="h-2.5 w-2.5" />
-                                                    {product.barcode}
-                                                </span>
+                                            {(product.barcode || (product.barcodes && product.barcodes.length > 0)) && (
+                                                <div className="flex flex-wrap gap-1 mt-1">
+                                                    {product.barcode && (
+                                                        <span className="text-[9px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono flex items-center gap-1">
+                                                            <Barcode className="h-2 w-2" />
+                                                            {product.barcode}
+                                                        </span>
+                                                    )}
+                                                    {product.barcodes?.filter(b => b !== product.barcode).map((bc, idx) => (
+                                                        <span key={idx} className="text-[9px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded font-mono flex items-center gap-1">
+                                                            <Barcode className="h-2 w-2" />
+                                                            {bc}
+                                                        </span>
+                                                    ))}
+                                                </div>
                                             )}
                                         </div>
                                         {isLowStock && <span className="ml-2 text-xs text-red-600 font-bold">!</span>}
@@ -412,6 +426,12 @@ export function ProductsTab({ products, categories, warehouses, currentUserId }:
                                                 </DropdownMenuItem>
                                                 <DropdownMenuItem onClick={() => setManageStockDialog({ isOpen: true, product })}>
                                                     <Box className="mr-2 h-4 w-4" /> Управление остатками
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem onClick={() => {
+                                                    setEditingProduct({ ...product, price_history: product.price_history })
+                                                    setIsPriceHistoryOpen(true)
+                                                }}>
+                                                    <TrendingUp className="mr-2 h-4 w-4" /> История цен
                                                 </DropdownMenuItem>
                                                 <DropdownMenuItem onClick={() => openReplenishment(product)}>
                                                     <RefreshCw className="mr-2 h-4 w-4" /> Правила пополнения
@@ -550,13 +570,46 @@ export function ProductsTab({ products, categories, warehouses, currentUserId }:
                         <div className="space-y-2">
                             <Label className="flex items-center gap-2">
                                 <Barcode className="h-4 w-4" />
-                                Штрихкод
+                                Штрихкоды
                             </Label>
-                            <Input 
-                                value={editingProduct?.barcode || ''} 
-                                onChange={e => setEditingProduct(prev => ({ ...prev!, barcode: e.target.value }))}
-                                placeholder="Отсканируйте или введите вручную"
-                            />
+                            <div className="space-y-2">
+                                {(editingProduct?.barcodes || []).map((bc, idx) => (
+                                    <div key={idx} className="flex gap-2">
+                                        <Input 
+                                            value={bc} 
+                                            onChange={e => {
+                                                const newBarcodes = [...(editingProduct?.barcodes || [])]
+                                                newBarcodes[idx] = e.target.value
+                                                setEditingProduct(prev => ({ ...prev!, barcodes: newBarcodes }))
+                                            }}
+                                            placeholder="Штрихкод"
+                                        />
+                                        <Button 
+                                            type="button" 
+                                            variant="ghost" 
+                                            size="icon" 
+                                            onClick={() => {
+                                                const newBarcodes = (editingProduct?.barcodes || []).filter((_, i) => i !== idx)
+                                                setEditingProduct(prev => ({ ...prev!, barcodes: newBarcodes }))
+                                            }}
+                                        >
+                                            <Trash2 className="h-4 w-4 text-red-500" />
+                                        </Button>
+                                    </div>
+                                ))}
+                                <Button 
+                                    type="button" 
+                                    variant="outline" 
+                                    size="sm" 
+                                    className="w-full border-dashed"
+                                    onClick={() => {
+                                        const newBarcodes = [...(editingProduct?.barcodes || []), ""]
+                                        setEditingProduct(prev => ({ ...prev!, barcodes: newBarcodes }))
+                                    }}
+                                >
+                                    <Plus className="h-3 w-3 mr-2" /> Добавить штрихкод
+                                </Button>
+                            </div>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
@@ -1064,6 +1117,99 @@ export function ProductsTab({ products, categories, warehouses, currentUserId }:
                             </TableBody>
                         </Table>
                     </div>
+                </DialogContent>
+            </Dialog>
+
+            {/* Price History Dialog */}
+            <Dialog open={isPriceHistoryOpen} onOpenChange={setIsPriceHistoryOpen}>
+                <DialogContent className="max-w-2xl">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <TrendingUp className="h-5 w-5 text-blue-500" />
+                            История закупочных цен
+                        </DialogTitle>
+                        <DialogDescription>
+                            {editingProduct?.name} — Динамика изменений по последним поставкам
+                        </DialogDescription>
+                    </DialogHeader>
+                    
+                    <div className="py-4">
+                        <div className="rounded-xl border border-slate-100 overflow-hidden shadow-sm bg-white">
+                            <Table>
+                                <TableHeader className="bg-slate-50/50">
+                                    <TableRow className="hover:bg-transparent">
+                                        <TableHead className="text-[10px] uppercase font-black text-slate-400">Дата</TableHead>
+                                        <TableHead className="text-[10px] uppercase font-black text-slate-400">Поставщик</TableHead>
+                                        <TableHead className="text-right text-[10px] uppercase font-black text-slate-400">Цена закупа</TableHead>
+                                        <TableHead className="text-right text-[10px] uppercase font-black text-slate-400">Динамика</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {!editingProduct?.price_history || editingProduct.price_history.length === 0 ? (
+                                        <TableRow>
+                                            <TableCell colSpan={4} className="h-32 text-center text-slate-400 italic text-sm">
+                                                История закупок пока пуста
+                                            </TableCell>
+                                        </TableRow>
+                                    ) : (
+                                        editingProduct.price_history.map((entry, idx) => {
+                                            const prevEntry = editingProduct.price_history![idx + 1]
+                                            const diff = prevEntry ? entry.cost_price - prevEntry.cost_price : 0
+                                            const percentDiff = prevEntry ? (diff / prevEntry.cost_price * 100) : 0
+                                            
+                                            return (
+                                                <TableRow key={idx} className="hover:bg-slate-50/50">
+                                                    <TableCell className="text-sm font-medium text-slate-700">
+                                                        {new Date(entry.created_at).toLocaleDateString()}
+                                                    </TableCell>
+                                                    <TableCell className="text-sm text-slate-600 font-semibold">
+                                                        {entry.supplier_name}
+                                                    </TableCell>
+                                                    <TableCell className="text-right font-black text-slate-900">
+                                                        {entry.cost_price.toLocaleString()} ₽
+                                                    </TableCell>
+                                                    <TableCell className="text-right">
+                                                        {idx < editingProduct.price_history!.length - 1 ? (
+                                                            <div className={cn(
+                                                                "flex items-center justify-end gap-1 text-xs font-bold",
+                                                                diff > 0 ? "text-red-500" : diff < 0 ? "text-green-500" : "text-slate-400"
+                                                            )}>
+                                                                {diff > 0 ? <TrendingUp className="h-3 w-3" /> : diff < 0 ? <TrendingDown className="h-3 w-3" /> : null}
+                                                                {diff !== 0 && `${Math.abs(percentDiff).toFixed(1)}%`}
+                                                                {diff === 0 && "—"}
+                                                            </div>
+                                                        ) : (
+                                                            <span className="text-[10px] text-slate-300 font-bold uppercase tracking-tighter">Первая</span>
+                                                        )}
+                                                    </TableCell>
+                                                </TableRow>
+                                            )
+                                        })
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </div>
+                        
+                        <div className="mt-6 p-4 bg-blue-50/50 rounded-xl border border-blue-100/50">
+                            <div className="flex justify-between items-center">
+                                <div>
+                                    <p className="text-[10px] uppercase font-black text-blue-400 tracking-wider">Текущая цена в каталоге</p>
+                                    <p className="text-2xl font-black text-blue-600">{editingProduct?.cost_price?.toLocaleString()} ₽</p>
+                                </div>
+                                <div className="text-right">
+                                    <p className="text-[10px] uppercase font-black text-slate-400 tracking-wider">Средняя за 5 запок</p>
+                                    <p className="text-lg font-bold text-slate-700">
+                                        {editingProduct?.price_history && editingProduct.price_history.length > 0
+                                            ? (editingProduct.price_history.reduce((acc, curr) => acc + Number(curr.cost_price), 0) / editingProduct.price_history.length).toLocaleString(undefined, { maximumFractionDigits: 0 })
+                                            : 0} ₽
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" className="w-full h-11" onClick={() => setIsPriceHistoryOpen(false)}>Понятно</Button>
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
         </div>

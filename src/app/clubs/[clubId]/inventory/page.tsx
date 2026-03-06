@@ -1,5 +1,5 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { getProducts, getCategories, getSupplies, getInventories, getWarehouses, getEmployees, getClubTasks, getProcurementLists, getSuppliersForSelect, getClubSettings, manualTriggerReplenishment, getSalesAnalytics, getActiveShiftsForClub } from "./actions"
+import { getProducts, getCategories, getSupplies, getInventories, getWarehouses, getEmployees, getClubTasks, getProcurementLists, getSuppliersForSelect, getClubSettings, manualTriggerReplenishment, getSalesAnalytics, getActiveShiftsForClub, getUserRoleInClub } from "./actions"
 import { ProductsTab } from "./_components/ProductsTab"
 import { SalesTab } from "./_components/SalesTab"
 import { TasksTab } from "./_components/TasksTab"
@@ -26,7 +26,7 @@ export default async function InventoryPage({ params }: { params: Promise<{ club
         revalidatePath(`/clubs/${clubId}/inventory`)
     }
 
-    const [products, categories, supplies, inventories, warehouses, employees, tasks, procurementLists, suppliers, clubSettings, sales, shifts] = await Promise.all([
+    const [products, categories, supplies, inventories, warehouses, employees, tasks, procurementLists, suppliers, clubSettings, sales, shifts, userRole] = await Promise.all([
         getProducts(clubId),
         getCategories(clubId),
         getSupplies(clubId),
@@ -38,8 +38,13 @@ export default async function InventoryPage({ params }: { params: Promise<{ club
         getSuppliersForSelect(clubId),
         getClubSettings(clubId),
         getSalesAnalytics(clubId),
-        getActiveShiftsForClub(clubId)
+        getActiveShiftsForClub(clubId),
+        getUserRoleInClub(clubId, userId)
     ])
+
+    const isOwner = clubSettings.owner_id === userId
+    const isManager = userRole?.toLowerCase() === 'управляющий'
+    const hasAdminPrivileges = isOwner || isManager
 
     return (
         <div className="p-4 md:p-8 max-w-[1600px] mx-auto space-y-4 md:space-y-6">
@@ -161,7 +166,7 @@ export default async function InventoryPage({ params }: { params: Promise<{ club
                         categories={categories} 
                         warehouses={warehouses}
                         currentUserId={userId} 
-                        isOwner={clubSettings.owner_id === userId}
+                        isOwner={hasAdminPrivileges}
                         inventorySettings={clubSettings.inventory_settings}
                     />
                 </TabsContent>
