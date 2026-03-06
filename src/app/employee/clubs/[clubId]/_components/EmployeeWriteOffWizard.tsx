@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label"
 import { 
     Loader2, Trash2, Search, Camera, 
     ArrowLeft, ArrowRight, CheckCircle2, ShoppingCart, 
-    Ban, Wallet, Warehouse, Plus
+    Ban, Wallet, Warehouse, Plus, Percent
 } from "lucide-react"
 import { 
     getProducts, createWriteOff, getProductByBarcode, getWarehouses, getClubSettings, 

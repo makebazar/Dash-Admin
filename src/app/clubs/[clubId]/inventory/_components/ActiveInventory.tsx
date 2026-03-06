@@ -103,7 +103,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
 
     const handleStockChange = (itemId: number, val: string) => {
         const numVal = val === "" ? null : parseInt(val)
-        setItems(prev => prev.map(i => i.id === itemId ? { ...i, actual_stock: numVal } : i))
+        setItems(prev => prev.map(i => i.id === itemId ? { ...i, actual_stock: numVal, last_modified: numVal !== null ? Date.now() : i.last_modified } : i))
     }
 
     // Saves to server only when user leaves the field
@@ -253,7 +253,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                     const invItems = await getInventoryItems(inventoryId)
                     
                     // Set initial stock to 1 for the new item
-                    const updatedItems = invItems.map(i => i.product_id === product.id ? { ...i, actual_stock: 1 } : i)
+                    const updatedItems = invItems.map(i => i.product_id === product.id ? { ...i, actual_stock: 1, last_modified: Date.now() } : i)
                     setItems(updatedItems)
                     
                     const newItem = updatedItems.find(i => i.product_id === product.id)
@@ -281,7 +281,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
 
     // Filter and Group Items
     const groupedItems = useMemo(() => {
-        let filtered = items
+        let filtered = [...items]
         
         if (searchQuery) {
             const q = searchQuery.toLowerCase()
@@ -289,6 +289,32 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                 i.product_name.toLowerCase().includes(q) || 
                 (i.category_name && i.category_name.toLowerCase().includes(q))
             )
+            
+            // Sort to put exact name matches and matches at start of string first
+            filtered.sort((a, b) => {
+                const aName = a.product_name.toLowerCase()
+                const bName = b.product_name.toLowerCase()
+                
+                const aExact = aName === q
+                const bExact = bName === q
+                if (aExact && !bExact) return -1
+                if (!aExact && bExact) return 1
+                
+                // Priority: Recently modified items (during this search)
+                const aMod = a.last_modified || 0
+                const bMod = b.last_modified || 0
+                if (aMod !== bMod) return bMod - aMod
+
+                const aStarts = aName.startsWith(q)
+                const bStarts = bName.startsWith(q)
+                if (aStarts && !bStarts) return -1
+                if (!aStarts && bStarts) return 1
+                
+                return aName.localeCompare(bName)
+            })
+
+            // When searching, don't group by category, just return flat list
+            return [["Результаты поиска", filtered]] as [string, InventoryItem[]][]
         }
 
         // Group by category
@@ -299,6 +325,17 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
             groups[cat].push(item)
         })
         
+        // Sort items within each category: recently changed or newly added first (by timestamp)
+        Object.keys(groups).forEach(cat => {
+            groups[cat].sort((a, b) => {
+                const aMod = a.last_modified || 0
+                const bMod = b.last_modified || 0
+                if (aMod !== bMod) return bMod - aMod
+                
+                return a.product_name.localeCompare(b.product_name)
+            })
+        })
+
         // Sort categories (put "No Category" last)
         return Object.entries(groups).sort((a, b) => {
             if (a[0] === "Без категории") return 1

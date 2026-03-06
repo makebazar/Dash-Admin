@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useTransition } from "react"
-import { Plus, Search, Filter, MoreVertical, Pencil, Trash2, LayoutGrid, Box, RefreshCw, Layers, Barcode, History, TrendingUp, TrendingDown } from "lucide-react"
+import { Plus, Search, Filter, MoreVertical, Pencil, Trash2, LayoutGrid, Box, RefreshCw, Layers, Barcode, History, TrendingUp, TrendingDown, Percent } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -14,6 +14,7 @@ import { createProduct, updateProduct, deleteProduct, bulkUpdatePrices, writeOff
 import { useParams } from "next/navigation"
 import { format } from "date-fns"
 import { ru } from "date-fns/locale"
+import { cn } from "@/lib/utils"
 
 interface ProductsTabProps {
     products: Product[]
@@ -28,6 +29,7 @@ export function ProductsTab({ products, categories, warehouses, currentUserId }:
     
     const [search, setSearch] = useState("")
     const [categoryFilter, setCategoryFilter] = useState("all")
+    const [abcFilter, setAbcFilter] = useState("all")
     const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
     
     const [isDialogOpen, setIsDialogOpen] = useState(false)
@@ -62,7 +64,8 @@ export function ProductsTab({ products, categories, warehouses, currentUserId }:
             (p.barcode && p.barcode.includes(search)) ||
             (p.barcodes && p.barcodes.some(b => b.includes(search)))
         const matchesCategory = categoryFilter === "all" || (p.category_id?.toString() === categoryFilter)
-        return matchesSearch && matchesCategory
+        const matchesAbc = abcFilter === "all" || p.abc_category === abcFilter
+        return matchesSearch && matchesCategory && matchesAbc
     })
 
     // Price Calculation Logic
@@ -267,7 +270,7 @@ export function ProductsTab({ products, categories, warehouses, currentUserId }:
                         />
                     </div>
                     <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                        <SelectTrigger className="w-full sm:w-[180px] h-10 md:h-9">
+                        <SelectTrigger className="w-full sm:w-[150px] h-10 md:h-9">
                             <SelectValue placeholder="Категория" />
                         </SelectTrigger>
                         <SelectContent>
@@ -275,6 +278,17 @@ export function ProductsTab({ products, categories, warehouses, currentUserId }:
                             {categories.map(c => (
                                 <SelectItem key={c.id} value={c.id.toString()}>{c.name}</SelectItem>
                             ))}
+                        </SelectContent>
+                    </Select>
+                    <Select value={abcFilter} onValueChange={setAbcFilter}>
+                        <SelectTrigger className="w-full sm:w-[130px] h-10 md:h-9">
+                            <SelectValue placeholder="ABC Анализ" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">Весь ABC</SelectItem>
+                            <SelectItem value="A">Категория A (Топ)</SelectItem>
+                            <SelectItem value="B">Категория B (Средние)</SelectItem>
+                            <SelectItem value="C">Категория C (Низкие)</SelectItem>
                         </SelectContent>
                     </Select>
                 </div>
@@ -336,7 +350,21 @@ export function ProductsTab({ products, categories, warehouses, currentUserId }:
                                     </TableCell>
                                     <TableCell className="font-medium">
                                         <div className="flex flex-col">
-                                            <span>{product.name}</span>
+                                            <div className="flex items-center gap-2">
+                                                <span>{product.name}</span>
+                                                {product.abc_category && (
+                                                    <Badge 
+                                                        className={cn(
+                                                            "h-4 px-1 text-[9px] font-black uppercase",
+                                                            product.abc_category === 'A' ? "bg-green-500 hover:bg-green-600" :
+                                                            product.abc_category === 'B' ? "bg-amber-500 hover:bg-amber-600" :
+                                                            "bg-slate-400 hover:bg-slate-500"
+                                                        )}
+                                                    >
+                                                        {product.abc_category}
+                                                    </Badge>
+                                                )}
+                                            </div>
                                             {(product.barcode || (product.barcodes && product.barcodes.length > 0)) && (
                                                 <div className="flex flex-wrap gap-1 mt-1">
                                                     {product.barcode && (
@@ -480,7 +508,21 @@ export function ProductsTab({ products, categories, warehouses, currentUserId }:
                                         onChange={() => toggleSelection(product.id)}
                                     />
                                     <div>
-                                        <h3 className="font-bold text-base leading-tight">{product.name}</h3>
+                                        <div className="flex items-center gap-2">
+                                            <h3 className="font-bold text-base leading-tight">{product.name}</h3>
+                                            {product.abc_category && (
+                                                <Badge 
+                                                    className={cn(
+                                                        "h-4 px-1 text-[9px] font-black uppercase",
+                                                        product.abc_category === 'A' ? "bg-green-500 hover:bg-green-600" :
+                                                        product.abc_category === 'B' ? "bg-amber-500 hover:bg-amber-600" :
+                                                        "bg-slate-400 hover:bg-slate-500"
+                                                    )}
+                                                >
+                                                    {product.abc_category}
+                                                </Badge>
+                                            )}
+                                        </div>
                                         {product.barcode && (
                                             <div className="flex items-center gap-1 text-[10px] text-muted-foreground font-mono mt-0.5">
                                                 <Barcode className="h-2.5 w-2.5" />

@@ -31,6 +31,7 @@ interface ShiftClosingWizardProps {
 
 interface ExtendedInventoryItem extends InventoryItem {
     is_visible?: boolean
+    last_modified?: number
 }
 
 export function ShiftClosingWizard({
@@ -65,7 +66,7 @@ export function ShiftClosingWizard({
     const [isScannerOpen, setIsScannerOpen] = useState(false)
     const [scannedItemId, setScannedItemId] = useState<number | null>(null)
     const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
-    const [allProducts, setAllProducts] = useState<{ id: number, name: string }[]>([])
+    const [allProducts, setAllProducts] = useState<{ id: number, name: string, barcode?: string | null, barcodes?: string[] | null }[]>([])
     const [selectedProductToAdd, setSelectedProductToAdd] = useState("")
     const [searchQuery, setSearchQuery] = useState("")
     const [isRefreshingCatalog, setIsRefreshingCatalog] = useState(false)
@@ -454,7 +455,8 @@ export function ShiftClosingWizard({
                     return { 
                         ...i, 
                         actual_stock: isNew ? 1 : (currentCounts[i.id] ?? i.actual_stock),
-                        is_visible: isNew ? true : oldItem?.is_visible || false 
+                        is_visible: isNew ? true : oldItem?.is_visible || false,
+                        last_modified: isNew ? Date.now() : oldItem?.last_modified
                     }
                 }))
                 const newItem = invItems.find(i => i.product_id === product.id)
@@ -490,7 +492,8 @@ export function ShiftClosingWizard({
                     return { 
                         ...i, 
                         actual_stock: isNew ? (currentCounts[i.id] ?? 1) : (currentCounts[i.id] ?? i.actual_stock),
-                        is_visible: isNew ? true : oldItem?.is_visible || false 
+                        is_visible: isNew ? true : oldItem?.is_visible || false,
+                        last_modified: isNew ? Date.now() : oldItem?.last_modified
                     }
                 }))
                 
@@ -517,6 +520,8 @@ export function ShiftClosingWizard({
             setAllProducts(products.map(p => ({ 
                 id: p.id, 
                 name: p.name,
+                barcode: p.barcode,
+                barcodes: p.barcodes,
                 // @ts-ignore
                 selling_price: p.selling_price,
                 // @ts-ignore
@@ -548,7 +553,12 @@ export function ShiftClosingWizard({
             if (i.id === itemId) {
                 // Если ввели число >= 0, помечаем товар как видимый навсегда
                 const isVisible = numVal !== null ? true : i.is_visible
-                return { ...i, actual_stock: numVal, is_visible: isVisible }
+                return { 
+                    ...i, 
+                    actual_stock: numVal, 
+                    is_visible: isVisible,
+                    last_modified: numVal !== null ? Date.now() : i.last_modified
+                }
             }
             return i
         }))
@@ -586,49 +596,94 @@ export function ShiftClosingWizard({
 
     const visibleItems = useMemo(() => {
         const queries = translateLayout(searchQuery)
+        const q = searchQuery.toLowerCase()
         
-        // 1. Existing inventory items that match
-        const existingMatches = inventoryItems.filter(i => {
-            if (i.is_visible) return true
-            if (!searchQuery) return false
+        // 1. Filter items
+        let filtered: ExtendedInventoryItem[] = []
 
-            const name = i.product_name.toLowerCase()
-            const barcode = i.barcode || ""
-            const barcodes = i.barcodes || []
-            
-            const matchOriginal = name.includes(queries.original) || 
-                                 barcode.includes(queries.original) || 
-                                 barcodes.some(bc => bc.includes(queries.original))
-            const matchRu = name.includes(queries.ru)
-            const matchEn = name.includes(queries.en)
-            
-            return matchOriginal || matchRu || matchEn
-        })
+        if (q) {
+            // When searching, show ONLY items that match the search (regardless of is_visible)
+            const inventoryMatches = inventoryItems.filter(i => {
+                const name = i.product_name.toLowerCase()
+                const barcode = i.barcode || ""
+                const barcodes = i.barcodes || []
+                
+                return name.includes(queries.original) || 
+                       barcode.includes(queries.original) || 
+                       barcodes.some(bc => bc.includes(queries.original)) ||
+                       name.includes(queries.ru) || 
+                       name.includes(queries.en)
+            })
 
-        // 2. If searching, also look into all products to find items NOT yet in inventory
-        if (searchQuery && allProducts.length > 0) {
+            // Also find products NOT yet in inventory
             const inventoryProductIds = new Set(inventoryItems.map(i => i.product_id))
-            
             const externalMatches = allProducts
                 .filter(p => !inventoryProductIds.has(p.id))
                 .filter(p => {
                     const name = p.name.toLowerCase()
-                    return name.includes(queries.original) || name.includes(queries.ru) || name.includes(queries.en)
+                    const barcode = p.barcode || ""
+                    const barcodes = p.barcodes || []
+                    return name.includes(queries.original) || 
+                           name.includes(queries.ru) || 
+                           name.includes(queries.en) ||
+                           barcode.includes(queries.original) ||
+                           barcodes.some(bc => bc.includes(queries.original))
                 })
                 .map(p => ({
-                    id: -p.id, // Temporary ID for UI
+                    id: -p.id,
                     product_id: p.id,
                     product_name: p.name,
                     is_external: true,
                     actual_stock: null,
                     expected_stock: 0,
-                    is_visible: false
-                }))
+                    is_visible: false,
+                    difference: null,
+                    cost_price_snapshot: 0,
+                    selling_price_snapshot: 0,
+                    calculated_revenue: null
+                } as ExtendedInventoryItem))
 
-            return [...existingMatches, ...externalMatches]
+            filtered = [...inventoryMatches, ...externalMatches]
+
+            // Sort by relevance
+            filtered.sort((a, b) => {
+                // Priority 1: Exact match
+                const aName = a.product_name.toLowerCase()
+                const bName = b.product_name.toLowerCase()
+                const aExact = aName === q
+                const bExact = bName === q
+                if (aExact && !bExact) return -1
+                if (!aExact && bExact) return 1
+
+                // Priority 2: Recently modified items (during this search)
+                const aMod = a.last_modified || 0
+                const bMod = b.last_modified || 0
+                if (aMod !== bMod) return bMod - aMod
+
+                // Priority 3: Start match
+                const aStarts = aName.startsWith(q)
+                const bStarts = bName.startsWith(q)
+                if (aStarts && !bStarts) return -1
+                if (!aStarts && bStarts) return 1
+
+                return aName.localeCompare(bName)
+            })
+        } else {
+            // When NOT searching, show only items that were already made visible (counted or added)
+            filtered = inventoryItems.filter(i => i.is_visible)
+            
+            // Sort by: most recently added/changed first (by timestamp)
+            filtered.sort((a, b) => {
+                const aMod = a.last_modified || 0
+                const bMod = b.last_modified || 0
+                if (aMod !== bMod) return bMod - aMod
+                
+                // If both never modified, sort alphabetically
+                return a.product_name.localeCompare(b.product_name)
+            })
         }
 
-        return existingMatches
+        return filtered
     }, [inventoryItems, searchQuery, allProducts])
 
     const handleInventorySubmit = () => {

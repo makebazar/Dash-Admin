@@ -116,6 +116,7 @@ export type InventoryItem = {
     cost_price_snapshot: number
     selling_price_snapshot: number
     calculated_revenue: number | null
+    last_modified?: number
 }
 
 // --- CATEGORIES ---
@@ -562,11 +563,50 @@ export async function calculateAnalytics(clubId: string) {
             WHERE club_id = $1
         `, [clubId])
         
-        // 2. ABC Analysis (Simplified)
-        // A: Top 20% by revenue (velocity * price)
-        // B: Next 30%
-        // C: Bottom 50%
-        // For now, let's skip complex ABC updates and rely on manual or simple velocity check
+        // 2. ABC Analysis (By Revenue over last 30 days)
+        // Revenue = SUM(ABS(change_amount) * selling_price_snapshot)
+        const revenueData = await client.query(`
+            WITH ProductRevenue AS (
+                SELECT 
+                    p.id as product_id,
+                    COALESCE(SUM(ABS(m.change_amount) * p.selling_price), 0) as total_revenue
+                FROM warehouse_products p
+                LEFT JOIN warehouse_stock_movements m ON p.id = m.product_id 
+                    AND m.type = 'SALE' 
+                    AND m.created_at > NOW() - INTERVAL '30 days'
+                WHERE p.club_id = $1 AND p.is_active = true
+                GROUP BY p.id
+            ),
+            TotalStats AS (
+                SELECT SUM(total_revenue) as grand_total FROM ProductRevenue
+            ),
+            RankedProducts AS (
+                SELECT 
+                    product_id,
+                    total_revenue,
+                    SUM(total_revenue) OVER (ORDER BY total_revenue DESC) as running_total,
+                    (SELECT grand_total FROM TotalStats) as grand_total
+                FROM ProductRevenue
+            )
+            SELECT 
+                product_id,
+                total_revenue,
+                CASE 
+                    WHEN grand_total = 0 THEN 'C'
+                    WHEN running_total <= grand_total * 0.8 THEN 'A'
+                    WHEN running_total <= grand_total * 0.95 THEN 'B'
+                    ELSE 'C'
+                END as new_abc_category
+            FROM RankedProducts
+        `, [clubId])
+
+        for (const row of revenueData.rows) {
+            await client.query(`
+                UPDATE warehouse_products 
+                SET abc_category = $1 
+                WHERE id = $2
+            `, [row.new_abc_category, row.product_id])
+        }
         
         await client.query('COMMIT')
     } catch (e) {
@@ -1871,13 +1911,73 @@ export async function deleteInventory(inventoryId: number, clubId: string, userI
     revalidatePath(`/clubs/${clubId}/inventory`)
 }
 
+export async function getAbcAnalysisData(clubId: string) {
+    const client = await getClient()
+    try {
+        const res = await client.query(`
+            WITH ProductRevenue AS (
+                SELECT 
+                    p.id as product_id,
+                    p.name,
+                    p.abc_category,
+                    COALESCE(SUM(ABS(m.change_amount) * p.selling_price), 0) as total_revenue
+                FROM warehouse_products p
+                LEFT JOIN warehouse_stock_movements m ON p.id = m.product_id 
+                    AND m.type = 'SALE' 
+                    AND m.created_at > NOW() - INTERVAL '30 days'
+                WHERE p.club_id = $1 AND p.is_active = true
+                GROUP BY p.id, p.name, p.abc_category
+            ),
+            TotalStats AS (
+                SELECT SUM(total_revenue) as grand_total FROM ProductRevenue
+            ),
+            RankedProducts AS (
+                SELECT 
+                    product_id,
+                    name,
+                    abc_category,
+                    total_revenue,
+                    (SELECT grand_total FROM TotalStats) as grand_total,
+                    SUM(total_revenue) OVER (ORDER BY total_revenue DESC) as running_total
+                FROM ProductRevenue
+            )
+            SELECT 
+                product_id,
+                name,
+                abc_category,
+                total_revenue,
+                grand_total,
+                CASE 
+                    WHEN grand_total = 0 THEN 0
+                    ELSE ROUND((total_revenue / grand_total * 100)::numeric, 2)
+                END as revenue_share
+            FROM RankedProducts
+            ORDER BY total_revenue DESC
+        `, [clubId])
+        
+        return res.rows as {
+            product_id: number
+            name: string
+            abc_category: string
+            total_revenue: number
+            grand_total: number
+            revenue_share: number
+        }[]
+    } catch (err) {
+        console.error(err)
+        return []
+    } finally {
+        client.release()
+    }
+}
+
 export async function getProductByBarcode(clubId: string, barcode: string) {
     const res = await query(`
-        SELECT id, name, barcode, barcodes, selling_price, current_stock
+        SELECT id, name, barcode, barcodes, selling_price, cost_price, current_stock
         FROM warehouse_products
         WHERE club_id = $1 AND ($2 = ANY(barcodes) OR barcode = $2) AND is_active = true
     `, [clubId, barcode])
-    return res.rows[0] as { id: number, name: string, barcode: string, barcodes: string[], selling_price: number, current_stock: number } | null
+    return res.rows[0] as { id: number, name: string, barcode: string, barcodes: string[], selling_price: number, cost_price: number, current_stock: number } | null
 }
 
 export async function updateInventoryItem(itemId: number, actualStock: number | null, clubId: string) {

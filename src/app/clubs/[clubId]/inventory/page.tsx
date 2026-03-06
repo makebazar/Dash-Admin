@@ -8,6 +8,7 @@ import { SuppliesTab } from "./_components/SuppliesTab"
 import { ProcurementTab } from "./_components/ProcurementTab"
 import { InventoryTab } from "./_components/InventoryTab"
 import { SettingsTab } from "./_components/SettingsTab"
+import { AbcAnalysisTab } from "./_components/AbcAnalysisTab"
 import { InventoryTabsWrapper } from "./_components/InventoryTabsWrapper"
 import { cookies } from "next/headers"
 import { Button } from "@/components/ui/button"
@@ -109,6 +110,12 @@ export default async function InventoryPage({ params, searchParams }: { params: 
                             Инвентаризации
                         </TabsTrigger>
                         <TabsTrigger 
+                            value="abc-analysis" 
+                            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:shadow-none px-0 py-3 bg-transparent font-medium"
+                        >
+                            Аналитика
+                        </TabsTrigger>
+                        <TabsTrigger 
                             value="settings" 
                             className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:shadow-none px-0 py-3 bg-transparent font-medium"
                         >
@@ -157,6 +164,10 @@ export default async function InventoryPage({ params, searchParams }: { params: 
                         isOwner={hasAdminPrivileges}
                         inventorySettings={clubSettings.inventory_settings}
                     />
+                </TabsContent>
+
+                <TabsContent value="abc-analysis" className="mt-0">
+                    <AbcAnalysisTab clubId={clubId} />
                 </TabsContent>
 
                 <TabsContent value="settings" className="mt-0">
