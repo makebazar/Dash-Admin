@@ -722,7 +722,7 @@ export async function getSalesAnalytics(clubId: string, limit: number = 200) {
         LEFT JOIN users u ON sm.user_id = u.id
         LEFT JOIN shifts s ON sm.shift_id = s.id
         LEFT JOIN warehouse_inventories inv ON s.id = inv.shift_id
-        WHERE sm.club_id = $1 AND sm.type = 'SALE'
+        WHERE sm.club_id = $1 AND sm.type = 'SALE' AND sm.shift_id IS NOT NULL
         ORDER BY sm.created_at DESC
         LIMIT $2
     `, [clubId, limit])
@@ -1765,6 +1765,11 @@ export async function closeInventory(
         // Group items for a potential automatic supply (any excess: actual > expected)
         const itemsForAutoSupply: { product_id: number, quantity: number, cost_price: number }[] = []
 
+        // If inventory has no shiftId (owner inventory/revision), we use a different reason
+        const isRevision = !shiftId
+        const reasonPrefix = isRevision ? `Ревизия (инвентаризация #${inventoryId})` : `Продажа за смену (инвентаризация #${inventoryId})`
+        const movementType = isRevision ? 'ADJUSTMENT' : 'SALE'
+
         for (const item of diffItems.rows) {
             const diffAmount = item.actual_stock - item.expected_stock
             
@@ -1778,9 +1783,9 @@ export async function closeInventory(
                 continue // Skip regular inventory adjustment for these items, we'll create a Supply for the difference
             }
 
-            // If actual < expected, it's a SALE (negative diff in stock)
-            const type = 'SALE'
-            const reason = `Продажа за смену (инвентаризация #${inventoryId})`
+            // If actual < expected, it's an ADJUSTMENT (for revisions) or SALE (for shifts)
+            const type = movementType
+            const reason = reasonPrefix
 
             await client.query(`
                 INSERT INTO warehouse_stock (warehouse_id, product_id, quantity)
@@ -1803,11 +1808,12 @@ export async function closeInventory(
                 cost_price: sale.cost_price
             })
             
-            // Also log the SALE movement for these unaccounted items
-            // They start at 0 (effectively), get supplied (+qty), then sold (-qty)
-            // But since they were sold, the net change for THIS inventory is just the revenue.
-            // However, to be accurate in logs:
-            await logStockMovement(client, clubId, userId, sale.product_id, -sale.quantity, 0, 0, 'SALE', `Продажа неучтенного товара (инвентаризация #${inventoryId})`, 'INVENTORY', inventoryId, shiftId, warehouseId)
+            // Also log the movement for these unaccounted items
+            const saleReason = isRevision 
+                ? `Неучтенный товар (ревизия #${inventoryId})` 
+                : `Продажа неучтенного товара (инвентаризация #${inventoryId})`
+            
+            await logStockMovement(client, clubId, userId, sale.product_id, -sale.quantity, 0, 0, movementType, saleReason, 'INVENTORY', inventoryId, shiftId, warehouseId)
         }
 
         // Create automatic supply for all excess/unaccounted items
