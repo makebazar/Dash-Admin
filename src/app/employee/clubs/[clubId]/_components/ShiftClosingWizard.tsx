@@ -704,9 +704,9 @@ export function ShiftClosingWizard({
                 
                 // Complete shift closing
                 onFinalComplete()
-            } catch (e) {
-                console.error(e)
-                alert("Ошибка завершения")
+            } catch (e: any) {
+                console.error('Error closing inventory:', e)
+                alert(`Ошибка завершения: ${e.message || 'Неизвестная ошибка'}`)
             }
         })
     }

@@ -1622,11 +1622,18 @@ export async function closeInventory(
         if (itemsForAutoSupply.length > 0) {
             const totalAutoCost = itemsForAutoSupply.reduce((acc, item) => acc + (item.quantity * item.cost_price), 0)
             const supplyRes = await client.query(`
-                INSERT INTO warehouse_supplies (club_id, supplier_name, notes, total_cost, created_by, status)
-                VALUES ($1, $2, $3, $4, $5, 'DRAFT')
+                INSERT INTO warehouse_supplies (club_id, supplier_name, notes, total_cost, created_by)
+                VALUES ($1, $2, $3, $4, $5)
                 RETURNING id
             `, [clubId, 'Авто-поступление (Инвентаризация)', `Автоматически создано при закрытии инвентаризации #${inventoryId}. Включает излишки и неучтенные продажи. ТРЕБУЕТ ПРОВЕРКИ ЦЕН.`, totalAutoCost, userId])
             const supplyId = supplyRes.rows[0].id
+
+            // Try to set status to DRAFT if the column exists (resilient approach)
+            try {
+                await client.query(`UPDATE warehouse_supplies SET status = 'DRAFT' WHERE id = $1`, [supplyId]);
+            } catch (statusError) {
+                console.warn("Could not set supply status to DRAFT, column might be missing:", statusError);
+            }
 
             for (const item of itemsForAutoSupply) {
                 await client.query(`

@@ -3,19 +3,19 @@ import dotenv from 'dotenv';
 import path from 'path';
 import fs from 'fs';
 
-// Explicitly load .env.local first (higher priority), then .env
+// Explicitly load .env first, then .env.local (higher priority)
 // This matches Next.js behavior
-const envLocalPath = path.resolve(process.cwd(), '.env.local');
 const envPath = path.resolve(process.cwd(), '.env');
+const envLocalPath = path.resolve(process.cwd(), '.env.local');
 
-// Load .env.local if exists
-if (fs.existsSync(envLocalPath)) {
-    dotenv.config({ path: envLocalPath });
-}
-
-// Load .env if exists (will be overridden by .env.local values)
+// Load .env if exists
 if (fs.existsSync(envPath)) {
     dotenv.config({ path: envPath });
+}
+
+// Load .env.local if exists (will override .env values)
+if (fs.existsSync(envLocalPath)) {
+    dotenv.config({ path: envLocalPath, override: true });
 }
 
 // Fallback to default dotenv.config() which loads .env

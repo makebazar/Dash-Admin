@@ -317,6 +317,7 @@ CREATE TABLE IF NOT EXISTS warehouse_supplies (
     notes TEXT,
     total_cost DECIMAL(10, 2) DEFAULT 0,
     created_by UUID REFERENCES users(id),
+    status VARCHAR(20) DEFAULT 'COMPLETED', -- COMPLETED, DRAFT
     created_at TIMESTAMP DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_warehouse_supplies_club ON warehouse_supplies(club_id);
