@@ -1184,17 +1184,17 @@ export async function getProducts(clubId: string) {
             ) as stocks,
             (
                 SELECT json_agg(json_build_object(
-                    'cost_price', si.cost_price,
+                    'cost_price', s.cost_price,
                     'created_at', s.created_at,
                     'supplier_name', s.supplier_name,
                     'supply_id', s.id
                 ))
                 FROM (
-                    SELECT si.cost_price, s.created_at, s.supplier_name, s.id
+                    SELECT si.cost_price, sup.created_at, sup.supplier_name, sup.id
                     FROM warehouse_supply_items si
-                    JOIN warehouse_supplies s ON si.supply_id = s.id
-                    WHERE si.product_id = p.id AND s.status = 'COMPLETED'
-                    ORDER BY s.created_at DESC
+                    JOIN warehouse_supplies sup ON si.supply_id = sup.id
+                    WHERE si.product_id = p.id AND sup.status = 'COMPLETED'
+                    ORDER BY sup.created_at DESC
                     LIMIT 5
                 ) s
             ) as price_history
