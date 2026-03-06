@@ -9,9 +9,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
-import { getInventory, getInventoryItems, updateInventoryItem, closeInventory, Inventory, InventoryItem, addProductToInventory, getProducts, getProductByBarcode } from "../actions"
+import { getInventory, getInventoryItems, updateInventoryItem, closeInventory, Inventory, InventoryItem, addProductToInventory, getProducts, getProductByBarcode, correctInventoryItem } from "../actions"
 import { useParams } from "next/navigation"
-import { Plus } from "lucide-react"
+import { Plus, Pencil } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { BarcodeScanner } from "./BarcodeScanner"
 
@@ -46,6 +46,36 @@ export function ActiveInventory({ inventoryId, onClose, isOwner }: ActiveInvento
 
     // Search & Filter
     const [searchQuery, setSearchQuery] = useState("")
+
+    // Correction state for closed inventory
+    const [editingItemId, setEditingItemId] = useState<number | null>(null)
+    const [correctionStock, setCorrectionStock] = useState<string>("")
+
+    const handleStartCorrection = (item: InventoryItem) => {
+        setEditingItemId(item.id)
+        setCorrectionStock(item.actual_stock?.toString() || "0")
+    }
+
+    const handleSaveCorrection = async (productId: number) => {
+        const val = parseInt(correctionStock)
+        if (isNaN(val)) return
+        
+        startTransition(async () => {
+            const res = await correctInventoryItem(inventoryId, productId, val, clubId)
+            if (res.success) {
+                // Refresh data
+                const [inv, invItems] = await Promise.all([
+                    getInventory(inventoryId),
+                    getInventoryItems(inventoryId)
+                ])
+                setInventory(inv)
+                setItems(invItems)
+                setEditingItemId(null)
+            } else {
+                alert("Ошибка при сохранении: " + res.error)
+            }
+        })
+    }
 
     // Barcode Scanner State
     const [isScannerOpen, setIsScannerOpen] = useState(false)
@@ -410,7 +440,47 @@ export function ActiveInventory({ inventoryId, onClose, isOwner }: ActiveInvento
 
                                                 <TableCell className="text-right">
                                                     {isClosed ? (
-                                                        <span className="font-bold">{item.actual_stock}</span>
+                                                        editingItemId === item.id ? (
+                                                            <div className="flex items-center justify-end gap-1">
+                                                                <Input 
+                                                                    type="number" 
+                                                                    className="h-7 w-20 text-right text-xs"
+                                                                    value={correctionStock}
+                                                                    onChange={e => setCorrectionStock(e.target.value)}
+                                                                />
+                                                                <Button 
+                                                                    size="icon" 
+                                                                    variant="ghost" 
+                                                                    className="h-7 w-7 text-green-600"
+                                                                    onClick={() => handleSaveCorrection(item.product_id)}
+                                                                    disabled={isPending}
+                                                                >
+                                                                    <Save className="h-3 w-3" />
+                                                                </Button>
+                                                                <Button 
+                                                                    size="icon" 
+                                                                    variant="ghost" 
+                                                                    className="h-7 w-7 text-slate-400"
+                                                                    onClick={() => setEditingItemId(null)}
+                                                                >
+                                                                    <X className="h-3 w-3" />
+                                                                </Button>
+                                                            </div>
+                                                        ) : (
+                                                            <div className="flex items-center justify-end gap-2 group/cell">
+                                                                <span className="font-bold">{item.actual_stock}</span>
+                                                                {isOwner && (
+                                                                    <Button 
+                                                                        variant="ghost" 
+                                                                        size="icon" 
+                                                                        className="h-6 w-6 opacity-0 group-hover/cell:opacity-100 text-slate-400 hover:text-blue-500"
+                                                                        onClick={() => handleStartCorrection(item)}
+                                                                    >
+                                                                        <Pencil className="h-3 w-3" />
+                                                                    </Button>
+                                                                )}
+                                                            </div>
+                                                        )
                                                     ) : (
                                                         <Input 
                                                             type="number" 
