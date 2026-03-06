@@ -428,11 +428,12 @@ export function ShiftClosingWizard({
             setInventoryItems(prev => prev.map(i => {
                 if (i.id === item.id) {
                     const currentStock = i.actual_stock || 0
-                    return { ...i, actual_stock: currentStock + 1, is_visible: true }
+                    return { ...i, actual_stock: currentStock + 1, is_visible: true, last_modified: Date.now() }
                 }
                 return i
             }))
             setScannedItemId(item.id)
+            setIsScannerOpen(false) // Close scanner when item is found
             return true
         }
 
@@ -461,6 +462,7 @@ export function ShiftClosingWizard({
                 }))
                 const newItem = invItems.find(i => i.product_id === product.id)
                 if (newItem) setScannedItemId(newItem.id)
+                setIsScannerOpen(false) // Close scanner when item is added
                 return true
             } else {
                 return false

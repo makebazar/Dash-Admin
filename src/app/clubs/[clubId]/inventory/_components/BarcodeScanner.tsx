@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { Html5Qrcode, Html5QrcodeScanType } from "html5-qrcode"
+import { Html5Qrcode, Html5QrcodeScanType, Html5QrcodeSupportedFormats } from "html5-qrcode"
 import { X, Camera, RefreshCcw, Zap, ZapOff, Barcode, ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -63,26 +63,43 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
             }
             
             if (!scannerRef.current) {
-                scannerRef.current = new Html5Qrcode("barcode-reader")
+                scannerRef.current = new Html5Qrcode("barcode-reader", {
+                    formatsToSupport: [
+                        Html5QrcodeSupportedFormats.EAN_13,
+                        Html5QrcodeSupportedFormats.EAN_8,
+                        Html5QrcodeSupportedFormats.CODE_128,
+                        Html5QrcodeSupportedFormats.CODE_39,
+                        Html5QrcodeSupportedFormats.UPC_A,
+                        Html5QrcodeSupportedFormats.UPC_E,
+                        Html5QrcodeSupportedFormats.QR_CODE
+                    ],
+                    verbose: false
+                })
             }
 
             // Identify if it's likely a back camera by label or index
             const isBackCamera = /back|rear|основная/i.test(cameras.find(c => c.id === cameraId)?.label || '') || cameras.length > 1
 
             const config = {
-                fps: 30,
+                fps: 25,
                 qrbox: (viewfinderWidth: number, viewFinderHeight: number) => {
                     const minEdge = Math.min(viewfinderWidth, viewFinderHeight);
-                    const qrboxSize = Math.floor(minEdge * 0.8);
-                    return { width: qrboxSize, height: Math.floor(qrboxSize * 0.5) };
+                    const qrboxWidth = Math.floor(viewfinderWidth * 0.85);
+                    const qrboxHeight = Math.floor(viewFinderHeight * 0.4);
+                    return { width: qrboxWidth, height: qrboxHeight };
                 },
                 aspectRatio: 1.0,
                 videoConstraints: {
-                    deviceId: { exact: cameraId },
-                    facingMode: isBackCamera ? "environment" : "user",
+                    deviceId: cameraId,
+                    facingMode: isBackCamera ? { ideal: "environment" } : "user",
+                    width: { min: 1280, ideal: 1920 },
+                    height: { min: 720, ideal: 1080 },
+                    // @ts-ignore
                     focusMode: "continuous",
-                    width: { min: 640, ideal: 1280, max: 1920 },
-                    height: { min: 480, ideal: 720, max: 1080 }
+                    // @ts-ignore
+                    whiteBalanceMode: "continuous",
+                    // @ts-ignore
+                    exposureMode: "continuous"
                 }
             }
 
@@ -220,7 +237,6 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
         setTimeout(() => ripple.remove(), 600)
 
         try {
-            // Advanced focus for S23 and others
             // @ts-ignore
             const track = scannerRef.current?.getRunningTrack?.()
             if (!track) return
@@ -228,20 +244,20 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
             // @ts-ignore
             const capabilities: any = track.getCapabilities?.() || {}
             
+            // For iPhone: specifically try to use focusDistance if focusMode is available
+            const constraints: any = { advanced: [] }
+            
             if (capabilities.focusMode) {
-                // For modern Androids: try to apply "single-shot" then back to "continuous"
-                await track.applyConstraints({
-                    advanced: [
-                        { focusMode: capabilities.focusMode.includes("single-shot") ? "single-shot" : "continuous" },
-                        { focusDistance: 0.1 }
-                    ]
-                })
-                
-                setTimeout(async () => {
-                    await track.applyConstraints({
-                        advanced: [{ focusMode: "continuous" }]
-                    })
-                }, 500)
+                constraints.advanced.push({ focusMode: "continuous" })
+            }
+            
+            if (capabilities.focusDistance) {
+                // Try to focus on something closer (barcode range)
+                constraints.advanced.push({ focusDistance: 0.2 })
+            }
+
+            if (constraints.advanced.length > 0) {
+                await track.applyConstraints(constraints)
             }
         } catch (e) {
             console.warn("Manual focus nudge failed", e)

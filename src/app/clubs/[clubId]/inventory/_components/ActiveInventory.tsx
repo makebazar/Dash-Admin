@@ -238,7 +238,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
             // Save immediately
             await handleBlur(existingItem.id, newStock)
             
-            // We don't close the scanner to allow multiple scans
+            setIsScannerOpen(false) // Close scanner when item is found
             return true
         }
 
