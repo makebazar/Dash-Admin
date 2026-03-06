@@ -125,7 +125,7 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
             const shiftId = sale.shift_id_raw
             const amount = Math.abs(sale.change_amount)
             const isSalaryDeduction = sale.reason?.toLowerCase().includes('в счет зп')
-            const price = sale.current_price || 0
+            const price = Number(sale.price_at_time || sale.current_price || 0)
             
             // Расчет выручки (пропускаем если в счет ЗП)
             const itemRevenue = isSalaryDeduction ? 0 : (amount * price)
@@ -327,28 +327,35 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
                                 </div>
                                 
                                 <div className="flex items-center gap-6">
-                                    {!isUnassigned && (
                                         <div className="flex gap-4 border-r pr-6 border-slate-100">
-                                            <div className="text-right">
-                                                <div className="text-[9px] text-slate-400 uppercase font-bold tracking-wider leading-none mb-1">По складу</div>
-                                                <div className="text-sm font-bold text-blue-600 leading-none">{group.totalRevenue.toLocaleString()} ₽</div>
-                                            </div>
-                                            <div className="text-right">
-                                                <div className="text-[9px] text-slate-400 uppercase font-bold tracking-wider leading-none mb-1">По кассе</div>
-                                                <div className="text-sm font-bold text-slate-700 leading-none">{group.shift.reported.toLocaleString()} ₽</div>
-                                            </div>
-                                            <div className="text-right">
-                                                <div className="text-[9px] text-slate-400 uppercase font-bold tracking-wider leading-none mb-1">Разница</div>
-                                                <div className={cn(
-                                                    "text-sm font-black leading-none",
-                                                    (group.shift.reported - group.totalRevenue) === 0 ? "text-green-500" : 
-                                                    (group.shift.reported - group.totalRevenue) > 0 ? "text-amber-500" : "text-red-500"
-                                                )}>
-                                                    {(group.shift.reported - group.totalRevenue) > 0 ? "+" : ""}{(group.shift.reported - group.totalRevenue).toLocaleString()} ₽
+                                            {isUnassigned ? (
+                                                <div className="text-right">
+                                                    <div className="text-[9px] text-amber-600 uppercase font-bold tracking-wider leading-none mb-1">Сумма</div>
+                                                    <div className="text-sm font-bold text-amber-600 leading-none">{group.totalRevenue.toLocaleString()} ₽</div>
                                                 </div>
-                                            </div>
+                                            ) : (
+                                                <>
+                                                    <div className="text-right">
+                                                        <div className="text-[9px] text-slate-400 uppercase font-bold tracking-wider leading-none mb-1">По складу</div>
+                                                        <div className="text-sm font-bold text-blue-600 leading-none">{group.totalRevenue.toLocaleString()} ₽</div>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <div className="text-[9px] text-slate-400 uppercase font-bold tracking-wider leading-none mb-1">По кассе</div>
+                                                        <div className="text-sm font-bold text-slate-700 leading-none">{group.shift.reported.toLocaleString()} ₽</div>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <div className="text-[9px] text-slate-400 uppercase font-bold tracking-wider leading-none mb-1">Разница</div>
+                                                        <div className={cn(
+                                                            "text-sm font-black leading-none",
+                                                            (group.shift.reported - group.totalRevenue) === 0 ? "text-green-500" : 
+                                                            (group.shift.reported - group.totalRevenue) > 0 ? "text-amber-500" : "text-red-500"
+                                                        )}>
+                                                            {(group.shift.reported - group.totalRevenue) > 0 ? "+" : ""}{(group.shift.reported - group.totalRevenue).toLocaleString()} ₽
+                                                        </div>
+                                                    </div>
+                                                </>
+                                            )}
                                         </div>
-                                    )}
 
                                     {isUnassigned && items.length > 0 && (
                                         <Badge variant="destructive" className="bg-amber-500 text-white border-none text-[10px] px-2 py-0.5 animate-pulse">
@@ -370,7 +377,9 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
                                             <TableRow className="hover:bg-transparent h-10">
                                                 <TableHead className="w-10 text-center"></TableHead>
                                                 <TableHead className="text-[10px] uppercase font-bold text-slate-400">Товар</TableHead>
+                                                <TableHead className="text-right text-[10px] uppercase font-bold text-slate-400">Цена</TableHead>
                                                 <TableHead className="text-right text-[10px] uppercase font-bold text-slate-400">Кол-во</TableHead>
+                                                <TableHead className="text-right text-[10px] uppercase font-bold text-slate-400">Итого</TableHead>
                                                 <TableHead className="text-right text-[10px] uppercase font-bold text-slate-400">Время</TableHead>
                                                 <TableHead className="text-right text-[10px] uppercase font-bold text-slate-400">Действия</TableHead>
                                             </TableRow>
@@ -402,6 +411,11 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
                                                         </div>
                                                     </TableCell>
                                                     <TableCell className="text-right py-2">
+                                                        <span className="text-xs font-medium text-slate-600">
+                                                            {Number(sale.price_at_time || sale.current_price || 0).toLocaleString()} ₽
+                                                        </span>
+                                                    </TableCell>
+                                                    <TableCell className="text-right py-2">
                                                         {editingId === sale.id ? (
                                                             <div className="flex items-center justify-end gap-1">
                                                                 <Input 
@@ -417,6 +431,11 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
                                                                 {Math.abs(sale.change_amount)} шт
                                                             </Badge>
                                                         )}
+                                                    </TableCell>
+                                                    <TableCell className="text-right py-2">
+                                                        <span className="text-sm font-bold text-slate-900">
+                                                            {(Math.abs(sale.change_amount) * Number(sale.price_at_time || sale.current_price || 0)).toLocaleString()} ₽
+                                                        </span>
                                                     </TableCell>
                                                     <TableCell className="text-right py-2">
                                                         <span className="text-[11px] text-slate-500">

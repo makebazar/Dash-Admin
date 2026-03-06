@@ -672,8 +672,10 @@ async function logStockMovement(
 ) {
     await client.query(`
         INSERT INTO warehouse_stock_movements 
-        (club_id, product_id, user_id, change_amount, previous_stock, new_stock, type, reason, related_entity_type, related_entity_id, shift_id, warehouse_id)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        (club_id, product_id, user_id, change_amount, previous_stock, new_stock, type, reason, related_entity_type, related_entity_id, shift_id, warehouse_id, price_at_time)
+        SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, selling_price
+        FROM warehouse_products
+        WHERE id = $2
     `, [clubId, productId, userId, changeAmount, previousStock, newStock, type, reason, relatedEntityType, relatedEntityId, shiftId, warehouseId])
 }
 
@@ -710,6 +712,7 @@ export async function getSalesAnalytics(clubId: string, limit: number = 200) {
         SELECT sm.*, 
                p.name as product_name, 
                p.selling_price as current_price,
+               COALESCE(sm.price_at_time, p.selling_price) as price_at_time,
                u.full_name as user_name,
                s.check_in as shift_start,
                s.check_out as shift_end,
@@ -722,7 +725,7 @@ export async function getSalesAnalytics(clubId: string, limit: number = 200) {
         LEFT JOIN users u ON sm.user_id = u.id
         LEFT JOIN shifts s ON sm.shift_id = s.id
         LEFT JOIN warehouse_inventories inv ON s.id = inv.shift_id
-        WHERE sm.club_id = $1 AND sm.type = 'SALE' AND sm.shift_id IS NOT NULL
+        WHERE sm.club_id = $1 AND sm.type = 'SALE'
         ORDER BY sm.created_at DESC
         LIMIT $2
     `, [clubId, limit])
