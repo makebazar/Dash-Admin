@@ -2,11 +2,11 @@
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { Calendar, User, ShoppingCart, Clock, ChevronDown, ChevronRight, Link, Unlink, Trash2, Check, X } from "lucide-react"
+import { Calendar, User, ShoppingCart, Clock, ChevronDown, ChevronRight, Link, Unlink, Trash2, Check, X, Pencil, Save } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useState, useMemo, useTransition } from "react"
 import { Button } from "@/components/ui/button"
-import { assignShiftToMovement, deleteStockMovement, massAssignShiftToMovements } from "../actions"
+import { assignShiftToMovement, deleteStockMovement, massAssignShiftToMovements, correctStockMovement } from "../actions"
 import { 
     DropdownMenu, 
     DropdownMenuContent, 
@@ -14,6 +14,7 @@ import {
     DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Input } from "@/components/ui/input"
 
 interface SalesTabProps {
     sales: any[]
@@ -25,6 +26,34 @@ export function SalesTab({ sales, shifts, clubId }: SalesTabProps) {
     const [expandedShifts, setExpandedShifts] = useState<Record<string, boolean>>({})
     const [isPending, startTransition] = useTransition()
     const [selectedIds, setSelectedIds] = useState<number[]>([])
+    
+    // Редактирование
+    const [editingId, setEditingId] = useState<number | null>(null)
+    const [editValue, setEditValue] = useState<string>("")
+    const [editReason, setEditReason] = useState<string>("")
+
+    const handleStartEdit = (sale: any) => {
+        setEditingId(sale.id)
+        setEditValue(Math.abs(sale.change_amount).toString())
+        setEditReason(sale.reason || "")
+    }
+
+    const handleSaveEdit = async (id: number) => {
+        const val = parseInt(editValue)
+        if (isNaN(val)) return
+        
+        startTransition(async () => {
+            const res = await correctStockMovement(id, val, editReason)
+            if (res.success) {
+                setEditingId(null)
+                if (res.wasStockAdjusted) {
+                    // Можно добавить какой-то тост или уведомление
+                }
+            } else {
+                alert("Ошибка при сохранении: " + res.error)
+            }
+        })
+    }
 
     // Group sales by shift
     const groupedSales = useMemo(() => {
@@ -286,13 +315,34 @@ export function SalesTab({ sales, shifts, clubId }: SalesTabProps) {
                                                     <TableCell className="py-2">
                                                         <div className="flex flex-col">
                                                             <span className="text-sm font-semibold text-slate-800">{sale.product_name}</span>
-                                                            <span className="text-[10px] text-slate-400 truncate max-w-[200px] italic">{sale.reason}</span>
+                                                            {editingId === sale.id ? (
+                                                                <Input 
+                                                                    value={editReason} 
+                                                                    onChange={e => setEditReason(e.target.value)}
+                                                                    className="h-6 text-[10px] mt-1"
+                                                                    placeholder="Причина корректировки..."
+                                                                />
+                                                            ) : (
+                                                                <span className="text-[10px] text-slate-400 truncate max-w-[200px] italic">{sale.reason}</span>
+                                                            )}
                                                         </div>
                                                     </TableCell>
                                                     <TableCell className="text-right py-2">
-                                                        <Badge variant="secondary" className="bg-emerald-50 text-emerald-700 border-emerald-100 font-mono text-xs">
-                                                            {Math.abs(sale.change_amount)} шт
-                                                        </Badge>
+                                                        {editingId === sale.id ? (
+                                                            <div className="flex items-center justify-end gap-1">
+                                                                <Input 
+                                                                    type="number"
+                                                                    value={editValue}
+                                                                    onChange={e => setEditValue(e.target.value)}
+                                                                    className="h-7 w-16 text-right text-xs"
+                                                                />
+                                                                <span className="text-[10px] text-slate-400">шт</span>
+                                                            </div>
+                                                        ) : (
+                                                            <Badge variant="secondary" className="bg-emerald-50 text-emerald-700 border-emerald-100 font-mono text-xs">
+                                                                {Math.abs(sale.change_amount)} шт
+                                                            </Badge>
+                                                        )}
                                                     </TableCell>
                                                     <TableCell className="text-right py-2">
                                                         <span className="text-[11px] text-slate-500">
@@ -301,40 +351,72 @@ export function SalesTab({ sales, shifts, clubId }: SalesTabProps) {
                                                     </TableCell>
                                                     <TableCell className="text-right py-2">
                                                         <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                            <DropdownMenu>
-                                                                <DropdownMenuTrigger asChild>
-                                                                    <Button size="icon" variant="ghost" className="h-8 w-8 text-slate-400 hover:text-blue-500">
-                                                                        <Link className="h-4 w-4" />
+                                                            {editingId === sale.id ? (
+                                                                <>
+                                                                    <Button 
+                                                                        size="icon" 
+                                                                        variant="ghost" 
+                                                                        onClick={() => handleSaveEdit(sale.id)}
+                                                                        className="h-8 w-8 text-green-600 hover:text-green-700 hover:bg-green-50"
+                                                                        disabled={isPending}
+                                                                    >
+                                                                        <Check className="h-4 w-4" />
                                                                     </Button>
-                                                                </DropdownMenuTrigger>
-                                                                <DropdownMenuContent align="end" className="w-72 max-h-[400px] overflow-y-auto p-1">
-                                                                    <DropdownMenuItem onClick={() => handleAssignShift(sale.id, null)} className="flex items-center gap-2 text-red-600 focus:text-red-700 focus:bg-red-50">
-                                                                        <Unlink className="h-4 w-4" /> 
-                                                                        <span>Отвязать от смены</span>
-                                                                    </DropdownMenuItem>
-                                                                    <div className="h-px bg-slate-100 my-1" />
-                                                                        {shifts.map(s => (
-                                                                        <DropdownMenuItem key={s.id} onClick={() => handleAssignShift(sale.id, s.id)} className="flex flex-col items-start gap-1 py-2">
-                                                                            <div className="flex justify-between w-full">
-                                                                                <span className="font-bold text-xs">{s.employee_name}</span>
-                                                                                <span className="text-[10px] text-slate-400">#{s.id}</span>
-                                                                            </div>
-                                                                            <div className="flex items-center gap-2 text-[10px] text-slate-500">
-                                                                                <Calendar className="h-3 w-3" />
-                                                                                <span>{new Date(s.check_in).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
-                                                                            </div>
-                                                                        </DropdownMenuItem>
-                                                                    ))}
-                                                                </DropdownMenuContent>
-                                                            </DropdownMenu>
-                                                            <Button 
-                                                                size="icon" 
-                                                                variant="ghost" 
-                                                                onClick={() => handleDelete(sale.id)}
-                                                                className="h-8 w-8 text-slate-400 hover:text-red-500"
-                                                            >
-                                                                <Trash2 className="h-4 w-4" />
-                                                            </Button>
+                                                                    <Button 
+                                                                        size="icon" 
+                                                                        variant="ghost" 
+                                                                        onClick={() => setEditingId(null)}
+                                                                        className="h-8 w-8 text-slate-400 hover:text-slate-600"
+                                                                    >
+                                                                        <X className="h-4 w-4" />
+                                                                    </Button>
+                                                                </>
+                                                            ) : (
+                                                                <>
+                                                                    <Button 
+                                                                        size="icon" 
+                                                                        variant="ghost" 
+                                                                        onClick={() => handleStartEdit(sale)}
+                                                                        className="h-8 w-8 text-slate-400 hover:text-blue-500"
+                                                                    >
+                                                                        <Pencil className="h-4 w-4" />
+                                                                    </Button>
+                                                                    <DropdownMenu>
+                                                                        <DropdownMenuTrigger asChild>
+                                                                            <Button size="icon" variant="ghost" className="h-8 w-8 text-slate-400 hover:text-blue-500">
+                                                                                <Link className="h-4 w-4" />
+                                                                            </Button>
+                                                                        </DropdownMenuTrigger>
+                                                                        <DropdownMenuContent align="end" className="w-72 max-h-[400px] overflow-y-auto p-1">
+                                                                            <DropdownMenuItem onClick={() => handleAssignShift(sale.id, null)} className="flex items-center gap-2 text-red-600 focus:text-red-700 focus:bg-red-50">
+                                                                                <Unlink className="h-4 w-4" /> 
+                                                                                <span>Отвязать от смены</span>
+                                                                            </DropdownMenuItem>
+                                                                            <div className="h-px bg-slate-100 my-1" />
+                                                                                {shifts.map(s => (
+                                                                                <DropdownMenuItem key={s.id} onClick={() => handleAssignShift(sale.id, s.id)} className="flex flex-col items-start gap-1 py-2">
+                                                                                    <div className="flex justify-between w-full">
+                                                                                        <span className="font-bold text-xs">{s.employee_name}</span>
+                                                                                        <span className="text-[10px] text-slate-400">#{s.id}</span>
+                                                                                    </div>
+                                                                                    <div className="flex items-center gap-2 text-[10px] text-slate-500">
+                                                                                        <Calendar className="h-3 w-3" />
+                                                                                        <span>{new Date(s.check_in).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                                                                                    </div>
+                                                                                </DropdownMenuItem>
+                                                                            ))}
+                                                                        </DropdownMenuContent>
+                                                                    </DropdownMenu>
+                                                                    <Button 
+                                                                        size="icon" 
+                                                                        variant="ghost" 
+                                                                        onClick={() => handleDelete(sale.id)}
+                                                                        className="h-8 w-8 text-slate-400 hover:text-red-500"
+                                                                    >
+                                                                        <Trash2 className="h-4 w-4" />
+                                                                    </Button>
+                                                                </>
+                                                            )}
                                                         </div>
                                                     </TableCell>
                                                 </TableRow>

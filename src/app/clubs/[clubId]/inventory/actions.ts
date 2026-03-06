@@ -741,6 +741,95 @@ export async function getActiveShiftsForClub(clubId: string) {
     return res.rows
 }
 
+export async function correctStockMovement(movementId: number, newAmount: number, newReason?: string) {
+    const client = await getClient()
+    try {
+        await client.query('BEGIN')
+
+        // 1. Находим само движение
+        const mRes = await client.query('SELECT * FROM warehouse_stock_movements WHERE id = $1', [movementId])
+        if (mRes.rows.length === 0) throw new Error("Движение не найдено")
+        const movement = mRes.rows[0]
+        const { club_id, product_id, warehouse_id, change_amount: oldAmount, type, related_entity_type, related_entity_id } = movement
+
+        // Если это продажа, то change_amount обычно отрицательный. 
+        // Мы ожидаем, что пользователь вводит положительное число "сколько продано", 
+        // поэтому конвертируем его в отрицательное для БД.
+        const normalizedNewAmount = type === 'SALE' ? -Math.abs(newAmount) : newAmount
+        const diff = normalizedNewAmount - oldAmount
+
+        if (diff === 0 && newReason === movement.reason) {
+            await client.query('COMMIT')
+            return { success: true }
+        }
+
+        // 2. Обновляем саму запись движения
+        await client.query(`
+            UPDATE warehouse_stock_movements 
+            SET change_amount = $1, reason = $2, new_stock = previous_stock + $1
+            WHERE id = $3
+        `, [normalizedNewAmount, newReason || movement.reason, movementId])
+
+        // 3. Проверяем, были ли инвентаризации ПОСЛЕ этого движения по этому товару
+        const laterInvRes = await client.query(`
+            SELECT id FROM warehouse_inventories 
+            WHERE club_id = $1 AND status = 'CLOSED' AND closed_at > $2
+            LIMIT 1
+        `, [club_id, movement.created_at])
+
+        const hasLaterInventory = laterInvRes.rows.length > 0
+
+        // 4. Корректируем склад ТОЛЬКО если не было инвентаризаций после
+        if (!hasLaterInventory && warehouse_id) {
+            await client.query(`
+                INSERT INTO warehouse_stock (warehouse_id, product_id, quantity)
+                VALUES ($1, $2, $3)
+                ON CONFLICT (warehouse_id, product_id) DO UPDATE SET quantity = warehouse_stock.quantity + $3
+            `, [warehouse_id, product_id, diff])
+            
+            // Обновляем общий кэш остатка в таблице продуктов
+            await client.query(`
+                UPDATE warehouse_products
+                SET current_stock = (SELECT COALESCE(SUM(quantity), 0) FROM warehouse_stock WHERE product_id = $1)
+                WHERE id = $1
+            `, [product_id])
+        }
+
+        // 5. Если движение было частью инвентаризации, правим её финансовые итоги
+        let inventoryId = (related_entity_type === 'INVENTORY') ? related_entity_id : null
+        
+        if (inventoryId && type === 'SALE') {
+            const invItemRes = await client.query(`
+                SELECT selling_price_snapshot FROM warehouse_inventory_items 
+                WHERE inventory_id = $1 AND product_id = $2
+            `, [inventoryId, product_id])
+            
+            const price = invItemRes.rows[0]?.selling_price_snapshot || 0
+            const actualRevenueDiff = diff * price
+
+            // В инвентаризации: 
+            // calculated_revenue уменьшается на разницу (так как мы продали больше/меньше)
+            // revenue_difference (расхождение) увеличивается на эту же сумму
+            await client.query(`
+                UPDATE warehouse_inventories 
+                SET calculated_revenue = calculated_revenue - $1,
+                    revenue_difference = revenue_difference + $1
+                WHERE id = $2
+            `, [actualRevenueDiff, inventoryId])
+        }
+
+        await client.query('COMMIT')
+        revalidatePath(`/clubs/${club_id}/inventory`)
+        return { success: true, wasStockAdjusted: !hasLaterInventory }
+    } catch (e: any) {
+        await client.query('ROLLBACK')
+        console.error('Error correcting movement:', e)
+        return { success: false, error: e.message }
+    } finally {
+        client.release()
+    }
+}
+
 export async function deleteStockMovement(id: number, clubId: string) {
     const client = await import("@/db").then(m => m.getClient())
     try {
