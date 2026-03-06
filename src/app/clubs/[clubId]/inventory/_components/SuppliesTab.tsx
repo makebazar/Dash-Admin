@@ -219,14 +219,14 @@ export function SuppliesTab({ supplies, products, warehouses, suppliers, current
                         <div className="flex justify-between items-start">
                             <div>
                                 <DialogTitle className="text-xl">Поставка #{viewingSupply?.id}</DialogTitle>
-                                <DialogDescription className="flex items-center gap-3 mt-1">
+                                <div className="text-sm text-muted-foreground flex items-center gap-3 mt-1">
                                     <span>{viewingSupply && new Date(viewingSupply.created_at).toLocaleString()}</span>
                                     {viewingSupply?.status === 'DRAFT' ? (
                                         <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 text-[10px]">Черновик</Badge>
                                     ) : (
                                         <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 text-[10px]">Проведено</Badge>
                                     )}
-                                </DialogDescription>
+                                </div>
                             </div>
                             <Button variant="ghost" size="icon" className="text-red-500 hover:text-red-600 hover:bg-red-50" onClick={() => viewingSupply && handleDeleteSupply(viewingSupply.id)}>
                                 <Trash2 className="h-4 w-4" />

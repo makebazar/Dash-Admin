@@ -418,7 +418,10 @@ export function ShiftClosingWizard({
     }
 
     const handleBarcodeScan = useCallback(async (barcode: string) => {
-        const item = inventoryItems.find(i => i.barcode === barcode)
+        const item = inventoryItems.find(i => 
+            i.barcode === barcode || 
+            (i.barcodes && i.barcodes.includes(barcode))
+        )
         
         if (item) {
             setInventoryItems(prev => prev.map(i => {
@@ -591,8 +594,11 @@ export function ShiftClosingWizard({
 
             const name = i.product_name.toLowerCase()
             const barcode = i.barcode || ""
+            const barcodes = i.barcodes || []
             
-            const matchOriginal = name.includes(queries.original) || barcode.includes(queries.original)
+            const matchOriginal = name.includes(queries.original) || 
+                                 barcode.includes(queries.original) || 
+                                 barcodes.some(bc => bc.includes(queries.original))
             const matchRu = name.includes(queries.ru)
             const matchEn = name.includes(queries.en)
             

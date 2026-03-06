@@ -127,7 +127,7 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
     }
 
     if (activeInventoryId) {
-        return <ActiveInventory inventoryId={activeInventoryId} onClose={() => setActiveInventoryId(null)} isOwner={isOwner} />
+        return <ActiveInventory inventoryId={activeInventoryId} onClose={() => setActiveInventoryId(null)} isOwner={isOwner} currentUserId={currentUserId} />
     }
 
     // Check if there is already an OPEN inventory in the list that belongs to the current user

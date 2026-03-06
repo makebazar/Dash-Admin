@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useTransition, useEffect, useMemo, useCallback } from "react"
+import React, { useState, useTransition, useEffect, useMemo, useCallback } from "react"
 import { ArrowLeft, CheckCircle2, AlertTriangle, Loader2, Save, X, Search, Camera, Barcode } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -19,9 +19,10 @@ interface ActiveInventoryProps {
     inventoryId: number
     onClose: () => void
     isOwner: boolean
+    currentUserId: string
 }
 
-export function ActiveInventory({ inventoryId, onClose, isOwner }: ActiveInventoryProps) {
+export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }: ActiveInventoryProps) {
     const params = useParams()
     const clubId = params.clubId as string
     
@@ -61,7 +62,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner }: ActiveInvento
         if (isNaN(val)) return
         
         startTransition(async () => {
-            const res = await correctInventoryItem(inventoryId, productId, val, clubId)
+            const res = await correctInventoryItem(inventoryId, productId, val, clubId, currentUserId)
             if (res.success) {
                 // Refresh data
                 const [inv, invItems] = await Promise.all([
@@ -224,7 +225,10 @@ export function ActiveInventory({ inventoryId, onClose, isOwner }: ActiveInvento
 
     const handleBarcodeScan = useCallback(async (barcode: string): Promise<boolean> => {
         // 1. Find item in the current inventory list
-        const existingItem = items.find(i => i.barcode === barcode)
+        const existingItem = items.find(i => 
+            i.barcode === barcode || 
+            (i.barcodes && i.barcodes.includes(barcode))
+        )
         
         if (existingItem) {
             const newStock = (existingItem.actual_stock || 0) + 1
@@ -407,7 +411,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner }: ActiveInvento
                         </TableHeader>
                         <TableBody>
                             {groupedItems.map(([category, categoryItems]) => (
-                                <>
+                                <React.Fragment key={`cat-group-${category}`}>
                                     <TableRow key={`cat-${category}`} className="bg-muted/50 hover:bg-muted/50">
                                         <TableCell colSpan={isClosed ? (inventory.target_metric_key ? 6 : 5) : (isOwner ? 4 : 3)} className="font-semibold py-2">
                                             {category} ({categoryItems.length})
@@ -422,11 +426,21 @@ export function ActiveInventory({ inventoryId, onClose, isOwner }: ActiveInvento
                                                 <TableCell className="font-medium pl-8">
                                                     <div className="flex flex-col">
                                                         <span>{item.product_name}</span>
-                                                        {item.barcode && (
-                                                            <span className="text-[10px] text-muted-foreground font-mono flex items-center gap-1">
-                                                                <Barcode className="h-2.5 w-2.5" />
-                                                                {item.barcode}
-                                                            </span>
+                                                        {(item.barcode || (item.barcodes && item.barcodes.length > 0)) && (
+                                                            <div className="flex flex-wrap gap-1 mt-1">
+                                                                {item.barcode && (
+                                                                    <span className="text-[10px] text-muted-foreground font-mono flex items-center gap-1 bg-slate-100 px-1.5 py-0.5 rounded">
+                                                                        <Barcode className="h-2.5 w-2.5" />
+                                                                        {item.barcode}
+                                                                    </span>
+                                                                )}
+                                                                {item.barcodes?.map((bc: string) => (
+                                                                    <span key={bc} className="text-[10px] text-muted-foreground font-mono flex items-center gap-1 bg-slate-100 px-1.5 py-0.5 rounded">
+                                                                        <Barcode className="h-2.5 w-2.5" />
+                                                                        {bc}
+                                                                    </span>
+                                                                ))}
+                                                            </div>
                                                         )}
                                                     </div>
                                                 </TableCell>
@@ -511,7 +525,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner }: ActiveInvento
                                             </TableRow>
                                         )
                                     })}
-                                </>
+                                </React.Fragment>
                             ))}
                             {items.length === 0 && (
                                 <TableRow>

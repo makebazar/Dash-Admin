@@ -152,7 +152,8 @@ export function EmployeeSupplyWizard({ isOpen, onClose, clubId, userId, activeSh
 
     const filteredProducts = allProducts.filter(p => 
         p.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-        p.barcode?.includes(searchQuery)
+        p.barcode?.includes(searchQuery) ||
+        p.barcodes?.some((bc: string) => bc.includes(searchQuery))
     )
 
     return (

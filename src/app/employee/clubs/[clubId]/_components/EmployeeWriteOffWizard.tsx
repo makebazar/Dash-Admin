@@ -12,7 +12,10 @@ import {
     ArrowLeft, ArrowRight, CheckCircle2, ShoppingCart, 
     Ban, Wallet, Warehouse, Plus
 } from "lucide-react"
-import { getProducts, createWriteOff, getProductByBarcode, getWarehouses, type Warehouse as WarehouseType } from "@/app/clubs/[clubId]/inventory/actions"
+import { 
+    getProducts, createWriteOff, getProductByBarcode, getWarehouses, getClubSettings, 
+    type Warehouse as WarehouseType 
+} from "@/app/clubs/[clubId]/inventory/actions"
 import { 
     Table, TableBody, TableCell, TableRow 
 } from "@/components/ui/table"
@@ -35,6 +38,7 @@ interface WriteOffItem {
     quantity: number
     type: 'WASTE' | 'SALARY_DEDUCTION'
     price: number
+    custom_price?: number
 }
 
 export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, activeShiftId, currentSalary = 0 }: EmployeeWriteOffWizardProps) {
@@ -43,6 +47,7 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
     const [allProducts, setAllProducts] = useState<any[]>([])
     const [warehouses, setWarehouses] = useState<WarehouseType[]>([])
     const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>("")
+    const [inventorySettings, setInventorySettings] = useState<any>(null)
     const [isPending, startTransition] = useTransition()
     
     // UI States
@@ -51,6 +56,7 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
     const [searchQuery, setSearchQuery] = useState("")
     const [selectedProductId, setSelectedProductId] = useState<string>("")
     const [itemQty, setItemQty] = useState("1")
+    const [itemCustomPrice, setItemCustomPrice] = useState<string>("")
     const [writeOffType, setWriteOffType] = useState<'WASTE' | 'SALARY_DEDUCTION'>('WASTE')
     const [notes, setNotes] = useState("")
 
@@ -62,6 +68,7 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
                 const def = whs.find(w => w.is_default) || whs[0]
                 if (def) setSelectedWarehouseId(def.id.toString())
             })
+            getClubSettings(clubId).then(settings => setInventorySettings(settings.inventory_settings))
         }
     }, [isOpen, clubId])
 
@@ -69,10 +76,27 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
         const product = allProducts.find(p => p.id === Number(selectedProductId))
         if (!product) return
 
+        let priceToRecord = product.selling_price || 0
+        let customPrice: number | undefined = undefined
+
+        if (writeOffType === 'SALARY_DEDUCTION') {
+            const discountPercent = inventorySettings?.employee_discount_percent || 0
+            if (discountPercent > 0) {
+                priceToRecord = Math.round(priceToRecord * (1 - discountPercent / 100))
+                customPrice = priceToRecord
+            }
+        } else if (itemCustomPrice) {
+            // This case might still happen if cost_price_sale is allowed
+            priceToRecord = Number(itemCustomPrice)
+            customPrice = priceToRecord
+        }
+
         const existingIdx = items.findIndex(i => i.product_id === product.id && i.type === writeOffType)
         if (existingIdx > -1) {
             const newItems = [...items]
             newItems[existingIdx].quantity += Number(itemQty)
+            newItems[existingIdx].custom_price = customPrice
+            newItems[existingIdx].price = priceToRecord
             setItems(newItems)
         } else {
             setItems(prev => [...prev, {
@@ -80,13 +104,15 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
                 name: product.name,
                 quantity: Number(itemQty),
                 type: writeOffType,
-                price: product.selling_price || 0
+                price: priceToRecord,
+                custom_price: customPrice
             }])
         }
 
         setIsAddDialogOpen(false)
         setSelectedProductId("")
         setItemQty("1")
+        setItemCustomPrice("")
     }
 
     const handleBarcodeScan = useCallback(async (barcode: string): Promise<boolean> => {
@@ -132,7 +158,8 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
                     items: items.map(i => ({
                         product_id: i.product_id,
                         quantity: i.quantity,
-                        type: i.type
+                        type: i.type,
+                        custom_price: i.custom_price
                     })),
                     notes: notes,
                     shift_id: activeShiftId,
@@ -156,7 +183,8 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
 
     const filteredProducts = allProducts.filter(p => 
         p.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-        p.barcode?.includes(searchQuery)
+        p.barcode?.includes(searchQuery) ||
+        p.barcodes?.some((bc: string) => bc.includes(searchQuery))
     )
 
     const totalDeduction = items
@@ -413,32 +441,88 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
                                         />
                                     </div>
                                     <div className="space-y-2">
-                                        <Label className="text-[10px] uppercase text-slate-500 font-bold tracking-wider">Тип списания</Label>
+                                        <Label className="text-[10px] uppercase text-slate-500 font-bold tracking-wider">Тип операции</Label>
                                         <div className="grid grid-cols-1 gap-2">
-                                            <button
-                                                onClick={() => setWriteOffType(writeOffType === 'WASTE' ? 'SALARY_DEDUCTION' : 'WASTE')}
-                                                className={cn(
-                                                    "h-14 rounded-2xl border transition-all flex items-center justify-center gap-3 px-4",
-                                                    writeOffType === 'WASTE' 
-                                                        ? "bg-red-500/10 border-red-500/50 text-red-400" 
-                                                        : "bg-amber-500/10 border-amber-500/50 text-amber-400"
-                                                )}
-                                            >
-                                                {writeOffType === 'WASTE' ? (
-                                                    <>
-                                                        <Trash2 className="h-4 w-4" />
-                                                        <span className="text-xs font-bold uppercase">Списание (брак)</span>
-                                                    </>
-                                                ) : (
-                                                    <>
-                                                        <Wallet className="h-4 w-4" />
-                                                        <span className="text-xs font-bold uppercase">В счет ЗП</span>
-                                                    </>
-                                                )}
-                                            </button>
+                                            {(!inventorySettings || inventorySettings.allow_salary_deduction !== false) ? (
+                                                <button
+                                                    onClick={() => setWriteOffType(writeOffType === 'WASTE' ? 'SALARY_DEDUCTION' : 'WASTE')}
+                                                    className={cn(
+                                                        "h-14 rounded-2xl border transition-all flex items-center justify-center gap-3 px-4",
+                                                        writeOffType === 'WASTE' 
+                                                            ? "bg-red-500/10 border-red-500/50 text-red-400" 
+                                                            : "bg-amber-500/10 border-amber-500/50 text-amber-400"
+                                                    )}
+                                                >
+                                                    {writeOffType === 'WASTE' ? (
+                                                        <>
+                                                            <Trash2 className="h-4 w-4" />
+                                                            <span className="text-xs font-bold uppercase">Списание (брак)</span>
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <Wallet className="h-4 w-4" />
+                                                            <span className="text-xs font-bold uppercase">В счет ЗП</span>
+                                                        </>
+                                                    )}
+                                                </button>
+                                            ) : (
+                                                <div className="h-14 rounded-2xl border border-red-500/50 bg-red-500/10 text-red-400 flex items-center justify-center gap-3 px-4">
+                                                    <Trash2 className="h-4 w-4" />
+                                                    <span className="text-xs font-bold uppercase">Только списание</span>
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
+
+                                {inventorySettings?.allow_cost_price_sale && (
+                                    <div className="space-y-2">
+                                        <div className="flex justify-between items-center">
+                                            <Label className="text-[10px] uppercase text-slate-500 font-bold tracking-wider">Цена за единицу (₽)</Label>
+                                            <div className="flex gap-2">
+                                                <Button 
+                                                    variant="outline" 
+                                                    size="sm" 
+                                                    className="h-6 text-[9px] bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
+                                                    onClick={() => {
+                                                        const p = allProducts.find(p => p.id === Number(selectedProductId))
+                                                        if (p) setItemCustomPrice(p.cost_price.toString())
+                                                    }}
+                                                >
+                                                    По себестоимости
+                                                </Button>
+                                                <Button 
+                                                    variant="outline" 
+                                                    size="sm" 
+                                                    className="h-6 text-[9px] bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
+                                                    onClick={() => setItemCustomPrice("")}
+                                                >
+                                                    Сбросить
+                                                </Button>
+                                            </div>
+                                        </div>
+                                        <Input 
+                                            type="number" 
+                                            value={itemCustomPrice} 
+                                            onChange={(e) => setItemCustomPrice(e.target.value)}
+                                            placeholder={allProducts.find(p => p.id === Number(selectedProductId))?.selling_price?.toString() || "0"}
+                                            className="bg-slate-900/50 border-slate-800 h-14 text-xl font-black text-center rounded-2xl focus:ring-blue-500/20 focus:border-blue-500/50 transition-all text-blue-400"
+                                        />
+                                        <p className="text-[10px] text-slate-500 text-center italic">
+                                            {!itemCustomPrice ? "Используется стандартная цена продажи" : "Установлена специальная цена"}
+                                        </p>
+                                    </div>
+                                )}
+                                
+                                {writeOffType === 'SALARY_DEDUCTION' && (inventorySettings?.employee_discount_percent || 0) > 0 && (
+                                    <div className="bg-blue-500/10 border border-blue-500/20 p-3 rounded-xl flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <Percent className="h-4 w-4 text-blue-400" />
+                                            <span className="text-xs text-blue-100 font-bold">Скидка сотрудника:</span>
+                                        </div>
+                                        <span className="text-sm font-black text-blue-400">-{inventorySettings.employee_discount_percent}%</span>
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>

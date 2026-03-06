@@ -108,6 +108,7 @@ export type InventoryItem = {
     product_id: number
     product_name: string
     barcode?: string | null
+    barcodes?: string[] | null
     category_name?: string
     expected_stock: number
     actual_stock: number | null
@@ -320,6 +321,7 @@ export async function transferStock(clubId: string, userId: string, data: { sour
 
         await client.query('COMMIT')
         revalidatePath(`/clubs/${clubId}/inventory`)
+        revalidatePath(`/clubs/${clubId}/inventory`, 'layout')
         return { success: true }
     } catch (e: any) {
         await client.query('ROLLBACK')
@@ -759,7 +761,7 @@ export async function getActiveShiftsForClub(clubId: string) {
     return res.rows
 }
 
-export async function correctInventoryItem(inventoryId: number, productId: number, newActualStock: number, clubId: string) {
+export async function correctInventoryItem(inventoryId: number, productId: number, newActualStock: number, clubId: string, userId: string) {
     const client = await getClient()
     try {
         await client.query('BEGIN')
@@ -776,7 +778,7 @@ export async function correctInventoryItem(inventoryId: number, productId: numbe
         if (itemRes.rows.length === 0) throw new Error("Позиция не найдена")
         const item = itemRes.rows[0]
 
-        const oldActualStock = item.actual_stock
+        const oldActualStock = Number(item.actual_stock)
         const diffInActual = newActualStock - oldActualStock
         if (diffInActual === 0) {
             await client.query('COMMIT')
@@ -790,7 +792,9 @@ export async function correctInventoryItem(inventoryId: number, productId: numbe
         // 2. Update inventory item
         await client.query(`
             UPDATE warehouse_inventory_items 
-            SET actual_stock = $1, difference = $2, calculated_revenue = $2 * selling_price_snapshot
+            SET actual_stock = $1::integer, 
+                difference = $2::integer, 
+                calculated_revenue = ($2::numeric * selling_price_snapshot)::numeric
             WHERE inventory_id = $3 AND product_id = $4
         `, [newActualStock, newDifference, inventoryId, productId])
 
@@ -798,60 +802,71 @@ export async function correctInventoryItem(inventoryId: number, productId: numbe
         const revenueChange = changeInDifference * item.selling_price_snapshot
         await client.query(`
             UPDATE warehouse_inventories 
-            SET calculated_revenue = calculated_revenue + $1,
-                revenue_difference = revenue_difference - $1
+            SET calculated_revenue = (calculated_revenue + $1::numeric)::numeric,
+                revenue_difference = (revenue_difference - $1::numeric)::numeric
             WHERE id = $2
         `, [revenueChange, inventoryId])
 
-        // 4. Update stock movements if inventory is closed
+        // 4. Update stock and movements if inventory is closed
         if (inventory.status === 'CLOSED') {
-            // Find movement created during closure (type SALE or SUPPLY)
-            // Inventory closure creates movements with related_entity_type='INVENTORY' and related_entity_id=inventoryId
-            const moveRes = await client.query(`
-                SELECT * FROM warehouse_stock_movements 
-                WHERE related_entity_type = 'INVENTORY' AND related_entity_id = $1 AND product_id = $2
-            `, [inventoryId, productId])
-
-            if (moveRes.rows.length > 0) {
-                const movement = moveRes.rows[0]
-                // change_amount in movement is (actual - expected)
-                // If expected=50, actual=40, change=-10 (SALE)
-                // If we correct actual to 45, new change=-5
-                const newChangeAmount = newActualStock - item.expected_stock
-                
-                await client.query(`
-                    UPDATE warehouse_stock_movements 
-                    SET change_amount = $1, new_stock = previous_stock + $1
-                    WHERE id = $2
-                `, [newChangeAmount, movement.id])
-
-                // 5. Update physical stock if no later inventories
-                const laterInvRes = await client.query(`
-                    SELECT id FROM warehouse_inventories 
-                    WHERE club_id = $1 AND status = 'CLOSED' AND closed_at > $2
-                    LIMIT 1
-                `, [clubId, inventory.closed_at])
-
-                if (laterInvRes.rows.length === 0) {
-                    const stockDiff = newActualStock - oldActualStock
-                    await client.query(`
-                        INSERT INTO warehouse_stock (warehouse_id, product_id, quantity)
-                        VALUES ($1, $2, $3)
-                        ON CONFLICT (warehouse_id, product_id) DO UPDATE SET quantity = warehouse_stock.quantity + $3
-                    `, [inventory.warehouse_id, productId, stockDiff])
-
-                    // Update product cache
-                    await client.query(`
-                        UPDATE warehouse_products
-                        SET current_stock = (SELECT COALESCE(SUM(quantity), 0) FROM warehouse_stock WHERE product_id = $1)
-                        WHERE id = $1
-                    `, [productId])
-                }
+            const stockDiff = newActualStock - oldActualStock
+            
+            // Fallback for warehouse_id if missing (legacy)
+            let warehouseId = inventory.warehouse_id
+            if (!warehouseId) {
+                const whRes = await client.query('SELECT id FROM warehouses WHERE club_id = $1 ORDER BY is_default DESC LIMIT 1', [clubId])
+                warehouseId = whRes.rows[0]?.id
             }
+
+            if (!warehouseId) throw new Error("Не найден склад для корректировки остатков")
+
+            // 5. Update physical stock
+            // We ALWAYS update the warehouse stock for the specific warehouse of this inventory
+            // to ensure it matches the corrected actual stock.
+            // Note: We use EXCLUDED.quantity which is the stockDiff.
+            await client.query(`
+                INSERT INTO warehouse_stock (warehouse_id, product_id, quantity)
+                VALUES ($1, $2, $3)
+                ON CONFLICT (warehouse_id, product_id) 
+                DO UPDATE SET quantity = warehouse_stock.quantity + EXCLUDED.quantity
+            `, [warehouseId, productId, stockDiff])
+
+            // Update product cache (sum of all warehouses)
+            await client.query(`
+                UPDATE warehouse_products
+                SET current_stock = (SELECT COALESCE(SUM(quantity), 0) FROM warehouse_stock WHERE product_id = $1)
+                WHERE id = $1
+            `, [productId])
+
+            // 6. Log the correction movement
+            // Get current total stock for logging
+            const totalStockRes = await client.query('SELECT current_stock FROM warehouse_products WHERE id = $1', [productId])
+            const currentTotalStock = Number(totalStockRes.rows[0]?.current_stock || 0)
+            
+            await logStockMovement(
+                client, 
+                clubId, 
+                userId, 
+                productId, 
+                stockDiff, 
+                currentTotalStock - stockDiff, 
+                currentTotalStock, 
+                'ADJUSTMENT', 
+                `Корректировка инвентаризации #${inventoryId}`, 
+                'INVENTORY', 
+                inventoryId, 
+                null, 
+                warehouseId
+            )
         }
 
         await client.query('COMMIT')
+        
+        // Comprehensive revalidation
         revalidatePath(`/clubs/${clubId}/inventory`)
+        revalidatePath(`/clubs/${clubId}/inventory`, 'layout')
+        revalidatePath(`/clubs/${clubId}/inventory/products`) 
+        
         return { success: true }
     } catch (e: any) {
         await client.query('ROLLBACK')
@@ -1078,7 +1093,7 @@ export async function massAssignShiftToMovements(movementIds: number[], shiftId:
     revalidatePath(`/clubs/${clubId}/inventory`)
 }
 
-export async function createWriteOff(clubId: string, userId: string, data: { items: { product_id: number, quantity: number, type: 'WASTE' | 'SALARY_DEDUCTION' }[], notes: string, shift_id?: string, warehouse_id?: number }) {
+export async function createWriteOff(clubId: string, userId: string, data: { items: { product_id: number, quantity: number, type: 'WASTE' | 'SALARY_DEDUCTION', custom_price?: number }[], notes: string, shift_id?: string, warehouse_id?: number }) {
     const client = await import("@/db").then(m => m.getClient())
     try {
         await client.query('BEGIN')
@@ -1122,26 +1137,22 @@ export async function createWriteOff(clubId: string, userId: string, data: { ite
             const reason = item.type === 'SALARY_DEDUCTION' ? `В счет ЗП: ${data.notes}` : `Списание: ${data.notes}`
             const movementType = item.type === 'SALARY_DEDUCTION' ? 'SALE' : 'ADJUSTMENT' // SALARY_DEDUCTION is essentially a sale to employee
             
-            await logStockMovement(
-                client, 
-                clubId, 
-                userId, 
-                item.product_id, 
-                -item.quantity, 
-                previousStock, 
-                newStock, 
-                movementType, 
-                reason, 
-                'WRITE_OFF', 
-                null, 
-                data.shift_id || null,
-                warehouseId
-            )
+            // If custom price is provided, we use it for logging the movement
+            const priceToUse = item.custom_price;
 
-            // 5. If Salary Deduction, update Shift and log
+            await client.query(`
+                INSERT INTO warehouse_stock_movements 
+                (club_id, product_id, user_id, change_amount, previous_stock, new_stock, type, reason, related_entity_type, related_entity_id, shift_id, warehouse_id, price_at_time)
+                SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, COALESCE($13, selling_price)
+                FROM warehouse_products
+                WHERE id = $2
+            `, [clubId, item.product_id, userId, -item.quantity, previousStock, newStock, movementType, reason, 'WRITE_OFF', null, data.shift_id || null, warehouseId, priceToUse])
+
+            // 5. If Salary Deduction, update Shift
             if (item.type === 'SALARY_DEDUCTION') {
                 const prodRes = await client.query('SELECT selling_price FROM warehouse_products WHERE id = $1', [item.product_id])
-                const price = prodRes.rows[0]?.selling_price || 0
+                const defaultPrice = prodRes.rows[0]?.selling_price || 0
+                const price = item.custom_price ?? defaultPrice
                 const totalDeduction = price * item.quantity
 
                 if (data.shift_id) {
@@ -1654,7 +1665,7 @@ export async function getInventory(id: number) {
 
 export async function getInventoryItems(inventoryId: number) {
     const res = await query(`
-        SELECT ii.*, p.name as product_name, p.barcode as barcode, c.name as category_name
+        SELECT ii.*, p.name as product_name, p.barcode as barcode, p.barcodes as barcodes, c.name as category_name
         FROM warehouse_inventory_items ii
         JOIN warehouse_products p ON ii.product_id = p.id
         LEFT JOIN warehouse_categories c ON p.category_id = c.id
@@ -1679,10 +1690,24 @@ export async function getClubSettings(clubId: string) {
         id: number, 
         owner_id: string, 
         inventory_settings: { 
-            employee_allowed_warehouse_ids?: number[], 
-            employee_default_metric_key?: string 
-        } 
-    }
+        employee_allowed_warehouse_ids?: number[], 
+        employee_default_metric_key?: string,
+        allow_salary_deduction?: boolean,
+        employee_discount_percent?: number,
+        allow_cost_price_sale?: boolean
+    } 
+}
+}
+
+export async function updateInventorySettings(clubId: string, userId: string, settings: any) {
+    await query(`
+        UPDATE clubs 
+        SET inventory_settings = $1 
+        WHERE id = $2
+    `, [settings, clubId])
+    
+    await logOperation(clubId, userId, 'UPDATE_SETTINGS', 'CLUB', Number(clubId), settings)
+    revalidatePath(`/clubs/${clubId}/inventory`)
 }
 
 export async function getUserRoleInClub(clubId: string, userId: string) {
