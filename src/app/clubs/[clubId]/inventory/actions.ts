@@ -933,32 +933,26 @@ export async function correctStockMovement(movementId: number, newAmount: number
     }
 }
 
-export async function deleteStockMovement(id: number, clubId: string) {
+export async function deleteStockMovement(id: number, clubId: string, options?: { revertToWarehouseId?: number }) {
     const client = await import("@/db").then(m => m.getClient())
     try {
         await client.query('BEGIN')
         
-        // 1. Get movement info to revert stock if needed
+        // 1. Get movement info
         const moveRes = await client.query('SELECT * FROM warehouse_stock_movements WHERE id = $1 AND club_id = $2', [id, clubId])
         if (moveRes.rowCount === 0) throw new Error("Запись не найдена")
         
         const move = moveRes.rows[0]
         
-        // 2. Revert stock
-        // If we deleted a SALE (-5), we need to add +5 back
-        // If we deleted a SUPPLY (+10), we need to subtract -10
-        const revertAmount = -move.change_amount
-        
-        // Find warehouse (fallback to any if no default)
-        const whRes = await client.query('SELECT id FROM warehouses WHERE club_id = $1 ORDER BY is_default DESC LIMIT 1', [clubId])
-        const warehouseId = whRes.rows[0]?.id
-
-        if (warehouseId) {
+        // 2. Revert stock if warehouse specified
+        if (options?.revertToWarehouseId) {
+            const revertAmount = -move.change_amount // If was sale (-5), revert +5
+            
             await client.query(`
                 INSERT INTO warehouse_stock (warehouse_id, product_id, quantity)
                 VALUES ($1, $2, $3)
                 ON CONFLICT (warehouse_id, product_id) DO UPDATE SET quantity = warehouse_stock.quantity + $3
-            `, [warehouseId, move.product_id, revertAmount])
+            `, [options.revertToWarehouseId, move.product_id, revertAmount])
             
             // Update cache
             await client.query(`
@@ -968,7 +962,25 @@ export async function deleteStockMovement(id: number, clubId: string) {
             `, [move.product_id])
         }
 
-        // 3. Delete movement
+        // 3. If it was an inventory sale, update the inventory header's calculated revenue (to fix differences)
+        if (move.related_entity_type === 'INVENTORY' && move.type === 'SALE') {
+            const invItemRes = await client.query(`
+                SELECT selling_price_snapshot FROM warehouse_inventory_items 
+                WHERE inventory_id = $1 AND product_id = $2
+            `, [move.related_entity_id, move.product_id])
+            
+            const price = invItemRes.rows[0]?.selling_price_snapshot || 0
+            const revenueToRevert = move.change_amount * price // e.g. -5 * 100 = -500
+
+            await client.query(`
+                UPDATE warehouse_inventories 
+                SET calculated_revenue = calculated_revenue + $1,
+                    revenue_difference = revenue_difference - $1
+                WHERE id = $2
+            `, [revenueToRevert, move.related_entity_id])
+        }
+
+        // 4. Delete movement
         await client.query('DELETE FROM warehouse_stock_movements WHERE id = $1', [id])
         
         await client.query('COMMIT')
@@ -979,6 +991,55 @@ export async function deleteStockMovement(id: number, clubId: string) {
         client.release()
     }
     revalidatePath(`/clubs/${clubId}/inventory`)
+}
+
+export async function createManualSale(clubId: string, userId: string, data: { product_id: number, quantity: number, warehouse_id: number, shift_id?: string, notes?: string }) {
+    const client = await import("@/db").then(m => m.getClient())
+    try {
+        await client.query('BEGIN')
+
+        const { product_id, quantity, warehouse_id, shift_id, notes } = data
+
+        // 1. Get product info and current stock
+        const prodRes = await client.query('SELECT selling_price, name FROM warehouse_products WHERE id = $1', [product_id])
+        if (prodRes.rows.length === 0) throw new Error("Товар не найден")
+        const product = prodRes.rows[0]
+
+        const stockRes = await client.query('SELECT quantity FROM warehouse_stock WHERE warehouse_id = $1 AND product_id = $2', [warehouse_id, product_id])
+        const prevStock = stockRes.rows[0]?.quantity || 0
+        const newStock = prevStock - quantity
+
+        // 2. Update stock
+        await client.query(`
+            UPDATE warehouse_stock 
+            SET quantity = $1 
+            WHERE warehouse_id = $2 AND product_id = $3
+        `, [newStock, warehouse_id, product_id])
+
+        // 3. Update product cache
+        await client.query(`
+            UPDATE warehouse_products
+            SET current_stock = (SELECT COALESCE(SUM(quantity), 0) FROM warehouse_stock WHERE product_id = $1)
+            WHERE id = $1
+        `, [product_id])
+
+        // 4. Log movement
+        const reason = `Ручная продажа (Админ): ${notes || ''}`
+        await logStockMovement(
+            client, clubId, userId, product_id, -quantity, prevStock, newStock, 
+            'SALE', reason, 'MANUAL', null, shift_id || null, warehouse_id
+        )
+
+        await client.query('COMMIT')
+        revalidatePath(`/clubs/${clubId}/inventory`)
+        return { success: true }
+    } catch (e: any) {
+        await client.query('ROLLBACK')
+        console.error('Manual sale error:', e)
+        throw e
+    } finally {
+        client.release()
+    }
 }
 
 export async function assignShiftToMovement(movementId: number, shiftId: number | null, clubId: string) {
