@@ -5,7 +5,7 @@ import { cookies } from 'next/headers';
 // GET /api/clubs/[clubId]/finance/transactions
 export async function GET(
     request: NextRequest,
-    { params }: { params: { clubId: string } }
+    { params }: { params: Promise<{ clubId: string }> }
 ) {
     try {
         const userId = (await cookies()).get('session_user_id')?.value;
@@ -13,7 +13,7 @@ export async function GET(
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        const { clubId } = params;
+        const { clubId } = await params;
         const { searchParams } = new URL(request.url);
 
         const type = searchParams.get('type'); // 'income' or 'expense'
@@ -136,7 +136,7 @@ export async function GET(
 // POST /api/clubs/[clubId]/finance/transactions
 export async function POST(
     request: NextRequest,
-    { params }: { params: { clubId: string } }
+    { params }: { params: Promise<{ clubId: string }> }
 ) {
     try {
         const userId = (await cookies()).get('session_user_id')?.value;
@@ -144,7 +144,7 @@ export async function POST(
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        const { clubId } = params;
+        const { clubId } = await params;
         const body = await request.json();
 
         const {
@@ -233,7 +233,7 @@ export async function POST(
 // PUT /api/clubs/[clubId]/finance/transactions
 export async function PUT(
     request: NextRequest,
-    { params }: { params: { clubId: string } }
+    { params }: { params: Promise<{ clubId: string }> }
 ) {
     try {
         const userId = (await cookies()).get('session_user_id')?.value;
@@ -241,7 +241,7 @@ export async function PUT(
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        const { clubId } = params;
+        const { clubId } = await params;
         const body = await request.json();
 
         const {
@@ -315,7 +315,7 @@ export async function PUT(
 // DELETE /api/clubs/[clubId]/finance/transactions
 export async function DELETE(
     request: NextRequest,
-    { params }: { params: { clubId: string } }
+    { params }: { params: Promise<{ clubId: string }> }
 ) {
     try {
         const userId = (await cookies()).get('session_user_id')?.value;
@@ -323,7 +323,7 @@ export async function DELETE(
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        const { clubId } = params;
+        const { clubId } = await params;
         const { searchParams } = new URL(request.url);
         const transactionId = searchParams.get('id');
 

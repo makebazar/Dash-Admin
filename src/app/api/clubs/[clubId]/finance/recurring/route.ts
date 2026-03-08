@@ -5,7 +5,7 @@ import { cookies } from 'next/headers';
 // GET /api/clubs/[clubId]/finance/recurring
 export async function GET(
     request: NextRequest,
-    { params }: { params: { clubId: string } }
+    { params }: { params: Promise<{ clubId: string }> }
 ) {
     try {
         const userId = (await cookies()).get('session_user_id')?.value;
@@ -40,7 +40,7 @@ export async function GET(
 // POST /api/clubs/[clubId]/finance/recurring
 export async function POST(
     request: NextRequest,
-    { params }: { params: { clubId: string } }
+    { params }: { params: Promise<{ clubId: string }> }
 ) {
     try {
         const userId = (await cookies()).get('session_user_id')?.value;
@@ -104,7 +104,7 @@ export async function POST(
 // DELETE /api/clubs/[clubId]/finance/recurring
 export async function DELETE(
     request: NextRequest,
-    { params }: { params: { clubId: string } }
+    { params }: { params: Promise<{ clubId: string }> }
 ) {
     try {
         const userId = (await cookies()).get('session_user_id')?.value;

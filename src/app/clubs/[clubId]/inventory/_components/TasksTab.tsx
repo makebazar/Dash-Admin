@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { completeTask } from "../actions"
 import { useParams } from "next/navigation"
+import { useUiDialogs } from "./useUiDialogs"
 
 interface TasksTabProps {
     tasks: any[]
@@ -17,6 +18,7 @@ export function TasksTab({ tasks, currentUserId }: TasksTabProps) {
     const clubId = params.clubId as string
     
     const [isPending, startTransition] = useTransition()
+    const { showMessage, Dialogs } = useUiDialogs()
 
     const handleComplete = (taskId: number) => {
         startTransition(async () => {
@@ -24,7 +26,7 @@ export function TasksTab({ tasks, currentUserId }: TasksTabProps) {
                 await completeTask(taskId, currentUserId, clubId)
             } catch (e) {
                 console.error(e)
-                alert("Ошибка при выполнении задачи")
+                showMessage({ title: "Ошибка", description: "Ошибка при выполнении задачи" })
             }
         })
     }
@@ -77,6 +79,7 @@ export function TasksTab({ tasks, currentUserId }: TasksTabProps) {
                     </div>
                 ))}
             </div>
+            {Dialogs}
         </div>
     )
 }

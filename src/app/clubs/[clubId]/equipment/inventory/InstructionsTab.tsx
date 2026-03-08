@@ -47,6 +47,10 @@ export function InstructionsTab() {
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
 
     useEffect(() => {
+        import("quill")
+    }, [])
+
+    useEffect(() => {
         fetchData()
     }, [clubId])
 

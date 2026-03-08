@@ -15,6 +15,7 @@ import { Plus, Pencil } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { BarcodeScanner } from "./BarcodeScanner"
 import { cn } from "@/lib/utils"
+import { useUiDialogs } from "./useUiDialogs"
 
 interface ActiveInventoryProps {
     inventoryId: number
@@ -77,7 +78,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                     setEditingItemId(null)
                 }
             } catch (err: any) {
-                alert("Ошибка при сохранении: " + (err.message || "Неизвестная ошибка"))
+                showMessage({ title: "Ошибка", description: "Ошибка при сохранении: " + (err.message || "Неизвестная ошибка") })
             }
         })
     }
@@ -85,6 +86,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
     // Barcode Scanner State
     const [isScannerOpen, setIsScannerOpen] = useState(false)
     const [scannedItem, setScannedItem] = useState<InventoryItem | null>(null)
+    const { confirmAction, showMessage, Dialogs } = useUiDialogs()
 
     useEffect(() => {
         const loadData = async () => {
@@ -168,7 +170,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                 onClose() // Go back to list
             } catch (e) {
                 console.error(e)
-                alert("Ошибка при закрытии инвентаризации")
+                showMessage({ title: "Ошибка", description: "Ошибка при закрытии инвентаризации" })
             }
         })
     }
@@ -209,7 +211,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                 setIsAddDialogOpen(false)
                 setSelectedProductToAdd("")
             } catch (e: any) {
-                alert(e.message)
+                showMessage({ title: "Ошибка", description: e.message || "Ошибка при добавлении товара" })
             }
         })
     }
@@ -278,7 +280,12 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                 }
 
                 // If truly not in list, confirm if user wants to add it
-                if (confirm(`Товар "${product.name}" не в списке инвентаризации. Добавить?`)) {
+                const confirmed = await confirmAction({
+                    title: "Добавить товар",
+                    description: `Товар "${product.name}" не в списке инвентаризации. Добавить?`,
+                    confirmText: "Добавить"
+                })
+                if (confirmed) {
                     setIsScannerOpen(false) 
                     await addProductToInventory(inventoryId, product.id)
                     const invItems = await getInventoryItems(inventoryId)
@@ -295,14 +302,14 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                     return true
                 }
             } else {
-                alert(`Товар со штрихкодом ${barcode} не найден в базе.`)
+                showMessage({ title: "Товар не найден", description: `Товар со штрихкодом ${barcode} не найден в базе.` })
             }
         } catch (e) {
             console.error(e)
-            alert("Ошибка при поиске товара")
+            showMessage({ title: "Ошибка", description: "Ошибка при поиске товара" })
         }
         return false
-    }, [items, clubId, inventoryId])
+    }, [items, clubId, inventoryId, confirmAction, showMessage])
 
     const handleScannedStockSave = async () => {
         if (!scannedItem) return
@@ -404,7 +411,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
             {/* Header */}
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div className="flex items-center gap-4">
-                    <Button variant="ghost" size="icon" onClick={onClose}>
+                    <Button aria-label="Вернуться к списку инвентаризаций" variant="ghost" size="icon" onClick={onClose}>
                         <ArrowLeft className="h-4 w-4" />
                     </Button>
                     <div>
@@ -430,6 +437,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                             className="pl-8 text-base"
                         />
                         <button 
+                            aria-label="Синхронизировать список товаров"
                             onClick={async () => {
                                 setIsLoading(true)
                                 try {
@@ -547,6 +555,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                                                                     onChange={e => setCorrectionStock(e.target.value)}
                                                                 />
                                                                 <Button 
+                                                                    aria-label={`Сохранить корректировку ${item.product_name}`}
                                                                     size="icon" 
                                                                     variant="ghost" 
                                                                     className="h-7 w-7 text-green-600"
@@ -556,6 +565,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                                                                     <Save className="h-3 w-3" />
                                                                 </Button>
                                                                 <Button 
+                                                                    aria-label={`Отменить корректировку ${item.product_name}`}
                                                                     size="icon" 
                                                                     variant="ghost" 
                                                                     className="h-7 w-7 text-slate-400"
@@ -569,6 +579,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                                                                 <span className="font-bold">{item.actual_stock}</span>
                                                                 {isOwner && (
                                                                     <Button 
+                                                                        aria-label={`Редактировать позицию ${item.product_name}`}
                                                                         variant="ghost" 
                                                                         size="icon" 
                                                                         className="h-6 w-6 opacity-0 group-hover/cell:opacity-100 text-slate-400 hover:text-blue-500"
@@ -747,10 +758,13 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                                         {unaccountedSales.map(sale => (
                                             <div key={sale.product_id} className="flex items-center gap-1 bg-slate-100 px-2 py-1 rounded-full text-[10px] border border-slate-200">
                                                 <span>{sale.name} ({sale.quantity} шт)</span>
-                                                <X 
-                                                    className="h-3 w-3 cursor-pointer text-red-500 hover:text-red-700" 
+                                                <button
+                                                    aria-label={`Удалить неучтенную продажу ${sale.name}`}
                                                     onClick={() => removeUnaccountedSale(sale.product_id)}
-                                                />
+                                                    className="inline-flex items-center justify-center"
+                                                >
+                                                    <X className="h-3 w-3 cursor-pointer text-red-500 hover:text-red-700" />
+                                                </button>
                                             </div>
                                         ))}
                                     </div>
@@ -842,6 +856,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+            {Dialogs}
         </div>
     )
 }

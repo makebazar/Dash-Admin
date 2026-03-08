@@ -15,6 +15,7 @@ import { useParams } from "next/navigation"
 import { format } from "date-fns"
 import { ru } from "date-fns/locale"
 import { cn } from "@/lib/utils"
+import { useUiDialogs } from "./useUiDialogs"
 
 interface ProductsTabProps {
     products: Product[]
@@ -56,6 +57,7 @@ export function ProductsTab({ products, categories, warehouses, currentUserId }:
     const [isPriceHistoryOpen, setIsPriceHistoryOpen] = useState(false)
 
     const [isPending, startTransition] = useTransition()
+    const { confirmAction, showMessage, Dialogs } = useUiDialogs()
 
     // Filter Logic
     const filteredProducts = products.filter(p => {
@@ -108,7 +110,7 @@ export function ProductsTab({ products, categories, warehouses, currentUserId }:
                 await adjustWarehouseStock(clubId, currentUserId, manageStockDialog.product!.id, warehouseId, quantity, reason)
                 setManageStockDialog({ isOpen: false, product: null })
             } catch (err: any) {
-                alert(err.message || "Ошибка при обновлении остатка")
+                showMessage({ title: "Ошибка", description: err.message || "Ошибка при обновлении остатка" })
             }
         })
     }
@@ -137,13 +139,18 @@ export function ProductsTab({ products, categories, warehouses, currentUserId }:
                 const rules = await getReplenishmentRulesForProduct(replenishmentDialog.product!.id)
                 setReplenishmentDialog(prev => ({ ...prev, rules }))
             } catch (err: any) {
-                alert(err.message || "Ошибка при создании правила")
+                showMessage({ title: "Ошибка", description: err.message || "Ошибка при создании правила" })
             }
         })
     }
 
     const handleDeleteReplenishmentRule = async (ruleId: number) => {
-        if (!confirm("Удалить правило?")) return
+        const confirmed = await confirmAction({
+            title: "Удаление правила",
+            description: "Удалить правило?",
+            confirmText: "Удалить"
+        })
+        if (!confirmed) return
         startTransition(async () => {
             try {
                 await deleteReplenishmentRule(ruleId, clubId)
@@ -151,7 +158,7 @@ export function ProductsTab({ products, categories, warehouses, currentUserId }:
                 const rules = await getReplenishmentRulesForProduct(replenishmentDialog.product!.id)
                 setReplenishmentDialog(prev => ({ ...prev, rules }))
             } catch (err: any) {
-                alert(err.message || "Ошибка при удалении")
+                showMessage({ title: "Ошибка", description: err.message || "Ошибка при удалении" })
             }
         })
     }
@@ -178,7 +185,8 @@ export function ProductsTab({ products, categories, warehouses, currentUserId }:
                         cost_price: Number(editingProduct.cost_price) || 0,
                         selling_price: Number(editingProduct.selling_price) || 0,
                         min_stock_level: Number(editingProduct.min_stock_level) || 0,
-                        is_active: editingProduct.is_active ?? true
+                        is_active: editingProduct.is_active ?? true,
+                        units_per_box: Number(editingProduct.units_per_box) || 1
                     })
                 } else {
                     await createProduct(clubId, currentUserId, {
@@ -189,7 +197,8 @@ export function ProductsTab({ products, categories, warehouses, currentUserId }:
                         cost_price: Number(editingProduct.cost_price) || 0,
                         selling_price: Number(editingProduct.selling_price) || 0,
                         current_stock: Number(editingProduct.current_stock) || 0,
-                        min_stock_level: Number(editingProduct.min_stock_level) || 0
+                        min_stock_level: Number(editingProduct.min_stock_level) || 0,
+                        units_per_box: Number(editingProduct.units_per_box) || 1
                     })
                 }
                 setIsDialogOpen(false)
@@ -198,13 +207,18 @@ export function ProductsTab({ products, categories, warehouses, currentUserId }:
                 setDesiredMargin("")
             } catch (err) {
                 console.error(err)
-                alert("Ошибка при сохранении")
+                showMessage({ title: "Ошибка", description: "Ошибка при сохранении" })
             }
         })
     }
 
-    const handleDelete = (id: number) => {
-        if (!confirm("Вы уверены? Это действие нельзя отменить.")) return
+    const handleDelete = async (id: number) => {
+        const confirmed = await confirmAction({
+            title: "Удаление товара",
+            description: "Вы уверены? Это действие нельзя отменить.",
+            confirmText: "Удалить"
+        })
+        if (!confirmed) return
         startTransition(async () => {
             await deleteProduct(id, clubId)
         })
@@ -231,7 +245,7 @@ export function ProductsTab({ products, categories, warehouses, currentUserId }:
                 setWriteOffAmount("")
                 setWriteOffReason("")
             } catch (err: any) {
-                alert(err.message || "Ошибка при списании")
+                showMessage({ title: "Ошибка", description: err.message || "Ошибка при списании" })
             }
         })
     }
@@ -433,7 +447,7 @@ export function ProductsTab({ products, categories, warehouses, currentUserId }:
                                     <TableCell>
                                         <DropdownMenu>
                                             <DropdownMenuTrigger asChild>
-                                                <Button variant="ghost" size="icon" className="h-8 w-8">
+                                                <Button aria-label={`Действия для товара ${product.name}`} variant="ghost" size="icon" className="h-8 w-8">
                                                     <MoreVertical className="h-4 w-4" />
                                                 </Button>
                                             </DropdownMenuTrigger>
@@ -750,6 +764,23 @@ export function ProductsTab({ products, categories, warehouses, currentUserId }:
                             </div>
                         </div>
 
+                        <div className="space-y-2 bg-slate-50 p-4 rounded-lg border">
+                            <Label className="flex items-center gap-2 text-blue-600">
+                                <LayoutGrid className="h-4 w-4" />
+                                Формат упаковки (шт в коробке)
+                            </Label>
+                            <Input 
+                                type="number" 
+                                value={editingProduct?.units_per_box || ''} 
+                                onChange={e => setEditingProduct(prev => ({ ...prev!, units_per_box: Number(e.target.value) }))}
+                                placeholder="1 (по умолчанию)"
+                                min={1}
+                            />
+                            <p className="text-[10px] text-muted-foreground">
+                                Используется для округления рекомендуемого количества при закупке.
+                            </p>
+                        </div>
+
                         {/* Front/Back Stock Settings */}
                         <div className="bg-slate-50 p-4 rounded-lg border space-y-4">
                             <h4 className="font-medium text-sm flex items-center gap-2">
@@ -871,7 +902,7 @@ export function ProductsTab({ products, categories, warehouses, currentUserId }:
                                             <TableCell>{rule.min_stock_level}</TableCell>
                                             <TableCell>{rule.max_stock_level}</TableCell>
                                             <TableCell>
-                                                <Button variant="ghost" size="icon" onClick={() => handleDeleteReplenishmentRule(rule.id)}>
+                                                <Button aria-label={`Удалить правило пополнения ${rule.id}`} variant="ghost" size="icon" onClick={() => handleDeleteReplenishmentRule(rule.id)}>
                                                     <Trash2 className="h-4 w-4 text-red-500" />
                                                 </Button>
                                             </TableCell>
@@ -1254,6 +1285,7 @@ export function ProductsTab({ products, categories, warehouses, currentUserId }:
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+            {Dialogs}
         </div>
     )
 }

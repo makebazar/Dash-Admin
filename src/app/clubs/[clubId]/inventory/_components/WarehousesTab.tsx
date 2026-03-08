@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { createWarehouse, updateWarehouse, deleteWarehouse, Warehouse } from "../actions"
 import { useParams } from "next/navigation"
+import { useUiDialogs } from "./useUiDialogs"
 
 interface WarehousesTabProps {
     warehouses: Warehouse[]
@@ -24,6 +25,7 @@ export function WarehousesTab({ warehouses, employees, currentUserId }: Warehous
     const [isDialogOpen, setIsDialogOpen] = useState(false)
     const [editingWarehouse, setEditingWarehouse] = useState<Partial<Warehouse> | null>(null)
     const [isPending, startTransition] = useTransition()
+    const { confirmAction, showMessage, Dialogs } = useUiDialogs()
 
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -57,21 +59,26 @@ export function WarehousesTab({ warehouses, employees, currentUserId }: Warehous
                 setEditingWarehouse(null)
             } catch (err: any) {
                 console.error(err)
-                alert("Ошибка при сохранении")
+                showMessage({ title: "Ошибка", description: "Ошибка при сохранении" })
             }
         })
     }
 
     const handleDelete = async (id: number) => {
-        if (!confirm('Вы уверены, что хотите удалить этот склад? Это действие нельзя отменить.')) return
+        const confirmed = await confirmAction({
+            title: "Удаление склада",
+            description: "Вы уверены, что хотите удалить этот склад? Это действие нельзя отменить.",
+            confirmText: "Удалить"
+        })
+        if (!confirmed) return
 
         startTransition(async () => {
             try {
                 await deleteWarehouse(id, clubId, currentUserId)
-                alert('Склад удален')
+                showMessage({ title: "Готово", description: "Склад удален" })
             } catch (err: any) {
                 console.error(err)
-                alert(err.message || "Ошибка при удалении")
+                showMessage({ title: "Ошибка", description: err.message || "Ошибка при удалении" })
             }
         })
     }
@@ -113,11 +120,11 @@ export function WarehousesTab({ warehouses, employees, currentUserId }: Warehous
                                 </div>
                             </div>
                             <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-slate-700" onClick={() => openEdit(wh)}>
+                                <Button aria-label={`Редактировать склад ${wh.name}`} variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-slate-700" onClick={() => openEdit(wh)}>
                                     <Pencil className="h-4 w-4" />
                                 </Button>
                                 {!wh.is_default && (
-                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-red-600" onClick={() => handleDelete(wh.id)}>
+                                    <Button aria-label={`Удалить склад ${wh.name}`} variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-red-600" onClick={() => handleDelete(wh.id)}>
                                         <Trash2 className="h-4 w-4" />
                                     </Button>
                                 )}
@@ -164,6 +171,7 @@ export function WarehousesTab({ warehouses, employees, currentUserId }: Warehous
                     </form>
                 </DialogContent>
             </Dialog>
+            {Dialogs}
         </div>
     )
 }

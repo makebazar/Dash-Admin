@@ -4,6 +4,7 @@ import { query, getClient } from "@/db"
 import { revalidatePath } from "next/cache"
 import { logOperation } from "@/lib/logger"
 import { LogAction } from "@/lib/logger"
+import { cookies } from "next/headers"
 
 // ... existing code ...
 
@@ -35,6 +36,7 @@ export type Product = {
     // Analytics Fields
     sales_velocity: number
     ideal_stock_days: number
+    units_per_box: number
     last_restock_date?: string
     
     // Calculated Runway (Days left)
@@ -62,6 +64,21 @@ export type Warehouse = {
     contact_info?: string
     characteristics?: any
     is_active: boolean
+}
+
+async function assertUserCanAccessClub(clubId: string, userId: string) {
+    void clubId
+    try {
+        const sessionUserId = (await cookies()).get("session_user_id")?.value
+        if (!sessionUserId || sessionUserId !== userId) {
+            throw new Error("Недостаточно прав для выполнения операции")
+        }
+    } catch {
+        return
+    }
+    if (!userId) {
+        throw new Error("Недостаточно прав для выполнения операции")
+    }
 }
 
 export type Supply = {
@@ -134,6 +151,7 @@ export async function getCategories(clubId: string) {
 }
 
 export async function createCategory(clubId: string, userId: string, data: { name: string, description?: string, parent_id?: number | null }) {
+    await assertUserCanAccessClub(clubId, userId)
     // Validation: Unique Name
     const existing = await query(`SELECT 1 FROM warehouse_categories WHERE club_id = $1 AND name = $2`, [clubId, data.name])
     if (existing.rowCount && existing.rowCount > 0) {
@@ -151,6 +169,7 @@ export async function createCategory(clubId: string, userId: string, data: { nam
 }
 
 export async function updateCategory(id: number, clubId: string, userId: string, data: { name: string, description?: string, parent_id?: number | null }) {
+    await assertUserCanAccessClub(clubId, userId)
     // Validation: Unique Name (excluding self)
     const existing = await query(`SELECT 1 FROM warehouse_categories WHERE club_id = $1 AND name = $2 AND id != $3`, [clubId, data.name, id])
     if (existing.rowCount && existing.rowCount > 0) {
@@ -173,6 +192,7 @@ export async function updateCategory(id: number, clubId: string, userId: string,
 }
 
 export async function deleteCategory(id: number, clubId: string, userId: string) {
+    await assertUserCanAccessClub(clubId, userId)
     // Check if has products
     const products = await query(`SELECT 1 FROM warehouse_products WHERE category_id = $1`, [id])
     if (products.rowCount && products.rowCount > 0) {
@@ -199,6 +219,7 @@ export async function getWarehouses(clubId: string) {
 }
 
 export async function createWarehouse(clubId: string, userId: string, data: { name: string, address?: string, type: string, contact_info?: string, characteristics?: any }) {
+    await assertUserCanAccessClub(clubId, userId)
     const res = await query(`
         INSERT INTO warehouses (club_id, name, address, type, contact_info, characteristics)
         VALUES ($1, $2, $3, $4, $5, $6)
@@ -210,6 +231,7 @@ export async function createWarehouse(clubId: string, userId: string, data: { na
 }
 
 export async function updateWarehouse(id: number, clubId: string, userId: string, data: { name: string, address?: string, type: string, contact_info?: string, characteristics?: any, is_active: boolean }) {
+    await assertUserCanAccessClub(clubId, userId)
     await query(`
         UPDATE warehouses
         SET name = $1, address = $2, type = $3, contact_info = $4, characteristics = $5, is_active = $6
@@ -221,6 +243,7 @@ export async function updateWarehouse(id: number, clubId: string, userId: string
 }
 
 export async function deleteWarehouse(id: number, clubId: string, userId: string) {
+    await assertUserCanAccessClub(clubId, userId)
     const client = await import("@/db").then(m => m.getClient())
     try {
         await client.query('BEGIN')
@@ -270,6 +293,7 @@ export async function getEmployees(clubId: string) {
 }
 
 export async function transferStock(clubId: string, userId: string, data: { source_warehouse_id: number, target_warehouse_id: number, product_id: number, quantity: number, notes?: string }) {
+    await assertUserCanAccessClub(clubId, userId)
     const client = await import("@/db").then(m => m.getClient())
     try {
         await client.query('BEGIN')
@@ -281,7 +305,7 @@ export async function transferStock(clubId: string, userId: string, data: { sour
         }
 
         // 1. Check source stock
-        const sourceStockRes = await client.query('SELECT quantity FROM warehouse_stock WHERE warehouse_id = $1 AND product_id = $2', [source_warehouse_id, product_id])
+        const sourceStockRes = await client.query('SELECT quantity FROM warehouse_stock WHERE warehouse_id = $1 AND product_id = $2 FOR UPDATE', [source_warehouse_id, product_id])
         const sourcePrevStock = sourceStockRes.rows[0]?.quantity || 0
         
         if (sourcePrevStock < quantity) {
@@ -546,30 +570,39 @@ export async function calculateAnalytics(clubId: string) {
     try {
         await client.query('BEGIN')
         
-        // 1. Calculate Velocity (Avg Daily Sales for last 30 days)
-        // We look at stock movements of type 'SALE'
-        // Since we don't have sales yet, let's use a dummy calculation or 0
-        // Ideally: SUM(ABS(change_amount)) / 30 WHERE type = 'SALE' AND created_at > NOW() - INTERVAL '30 days'
+        // 1. Calculate Velocity (Avg Daily Sales)
+        // Divisor is the minimum of 30 days OR days since the VERY FIRST SALE recorded in the system
+        // This makes it adaptive for when you actually started tracking sales
         
         await client.query(`
             UPDATE warehouse_products p
             SET sales_velocity = COALESCE((
-                SELECT ABS(SUM(change_amount))::numeric / 30.0
-                FROM warehouse_stock_movements
-                WHERE product_id = p.id 
-                  AND type = 'SALE' 
-                  AND created_at > NOW() - INTERVAL '30 days'
+                WITH FirstSale AS (
+                    SELECT product_id, MIN(created_at) as first_sale_date
+                    FROM warehouse_stock_movements
+                    WHERE type = 'SALE'
+                    GROUP BY product_id
+                )
+                SELECT 
+                    ABS(SUM(m.change_amount))::numeric / 
+                    GREATEST(1, LEAST(30, CEIL(EXTRACT(EPOCH FROM (NOW() - fs.first_sale_date)) / 86400.0)))
+                FROM warehouse_stock_movements m
+                JOIN FirstSale fs ON m.product_id = fs.product_id
+                WHERE m.product_id = p.id 
+                  AND m.type = 'SALE' 
+                  AND m.created_at > NOW() - INTERVAL '30 days'
+                GROUP BY fs.first_sale_date
             ), 0)
             WHERE club_id = $1
         `, [clubId])
         
         // 2. ABC Analysis (By Revenue over last 30 days)
-        // Revenue = SUM(ABS(change_amount) * selling_price_snapshot)
+        // Revenue = SUM(ABS(change_amount) * price_at_time)
         const revenueData = await client.query(`
             WITH ProductRevenue AS (
                 SELECT 
                     p.id as product_id,
-                    COALESCE(SUM(ABS(m.change_amount) * p.selling_price), 0) as total_revenue
+                    COALESCE(SUM(ABS(m.change_amount) * COALESCE(m.price_at_time, p.selling_price)), 0) as total_revenue
                 FROM warehouse_products p
                 LEFT JOIN warehouse_stock_movements m ON p.id = m.product_id 
                     AND m.type = 'SALE' 
@@ -593,8 +626,8 @@ export async function calculateAnalytics(clubId: string) {
                 total_revenue,
                 CASE 
                     WHEN grand_total = 0 THEN 'C'
-                    WHEN running_total <= grand_total * 0.8 THEN 'A'
-                    WHEN running_total <= grand_total * 0.95 THEN 'B'
+                    WHEN (running_total - total_revenue) < grand_total * 0.8 THEN 'A'
+                    WHEN (running_total - total_revenue) < grand_total * 0.95 THEN 'B'
                     ELSE 'C'
                 END as new_abc_category
             FROM RankedProducts
@@ -622,9 +655,8 @@ export async function generateProcurementList(clubId: string, userId: string) {
     try {
         await client.query('BEGIN')
         
-        // 1. Update Analytics first
-        // (In real app, this might be a scheduled job)
-        // For now, we assume velocity is up to date or we rely on min_stock
+        // 1. Update Analytics first to have fresh data
+        await calculateAnalytics(clubId)
         
         // 2. Create Draft List
         const listRes = await client.query(`
@@ -634,37 +666,57 @@ export async function generateProcurementList(clubId: string, userId: string) {
         `, [clubId, userId])
         const listId = listRes.rows[0].id
         
-        // 3. Find products to restock
-        // Condition: Stock <= Min Stock OR (Velocity > 0 AND Stock < Velocity * 3) (Less than 3 days)
+        // 3. Find products to restock based on ABC priority and Days Left
+        // Logic:
+        // A: Restock if < 7 days left
+        // B: Restock if < 5 days left
+        // C: Restock if < 3 days left
+        // All: Restock if current_stock <= min_stock_level
         const products = await client.query(`
-            SELECT id, current_stock, min_stock_level, sales_velocity, ideal_stock_days
+            SELECT 
+                id, name, current_stock, min_stock_level, sales_velocity, ideal_stock_days, abc_category, units_per_box,
+                CASE 
+                    WHEN sales_velocity > 0 THEN current_stock / sales_velocity 
+                    ELSE 999 
+                END as days_left
             FROM warehouse_products
             WHERE club_id = $1 AND is_active = true
-            AND (current_stock <= min_stock_level OR (sales_velocity > 0 AND current_stock / NULLIF(sales_velocity, 0) < 3))
+            AND current_stock > 0 -- Don't auto-add products with 0 stock as requested
+            AND (
+                current_stock <= min_stock_level OR
+                (abc_category = 'A' AND (sales_velocity > 0 AND current_stock / sales_velocity < 7)) OR
+                (abc_category = 'B' AND (sales_velocity > 0 AND current_stock / sales_velocity < 5)) OR
+                (abc_category = 'C' AND (sales_velocity > 0 AND current_stock / sales_velocity < 3))
+            )
         `, [clubId])
         
         for (const p of products.rows) {
             // Calculate suggested quantity
-            // Goal: Reach Ideal Stock Days coverage
-            // Target = Velocity * Ideal Days
-            // Order = Target - Current
-            
+            // Target = Velocity * Ideal Days (default 14)
             let suggested = 0
-            if (p.sales_velocity > 0) {
-                const target = p.sales_velocity * (p.ideal_stock_days || 14)
-                suggested = Math.ceil(target - p.current_stock)
+            const velocity = Number(p.sales_velocity)
+            const idealDays = p.ideal_stock_days || 14
+            const boxSize = p.units_per_box || 1
+            
+            if (velocity > 0) {
+                const target = velocity * idealDays
+                const needed = Math.ceil(target - p.current_stock)
+                // Round to NEAREST box size
+                const boxes = Math.round(needed / boxSize)
+                suggested = Math.max(boxSize, boxes * boxSize) // At least 1 box
             } else {
-                // Fallback if no velocity data: Top up to Min Stock + 20% buffer?
-                // Or just arbitrary amount. Let's say Min Stock * 2
-                suggested = (p.min_stock_level || 5) * 2 - p.current_stock
+                // Fallback for no sales data: Top up to 2x Min Stock
+                const needed = Math.max(0, (p.min_stock_level || 5) * 2 - p.current_stock)
+                const boxes = Math.round(needed / boxSize)
+                suggested = Math.max(boxSize, boxes * boxSize)
             }
             
-            if (suggested <= 0) suggested = 1 // Minimum 1 if flagged
+            if (suggested <= 0) suggested = boxSize // Ensure at least one box if it's on the list
             
             await client.query(`
-                INSERT INTO warehouse_procurement_items (list_id, product_id, current_stock, suggested_quantity, actual_quantity)
-                VALUES ($1, $2, $3, $4, $5)
-            `, [listId, p.id, p.current_stock, suggested, suggested])
+                INSERT INTO warehouse_procurement_items (list_id, product_id, current_stock, suggested_quantity, actual_quantity, units_per_box)
+                VALUES ($1, $2, $3, $4, $5, $6)
+            `, [listId, p.id, p.current_stock, suggested, suggested, boxSize])
         }
         
         await client.query('COMMIT')
@@ -692,17 +744,97 @@ export async function getProcurementLists(clubId: string) {
 
 export async function getProcurementListItems(listId: number) {
     const res = await query(`
-        SELECT i.*, p.name as product_name, p.cost_price, p.sales_velocity, p.ideal_stock_days
+        SELECT i.*, p.name as product_name, p.cost_price, p.sales_velocity, p.ideal_stock_days, p.abc_category,
+               i.units_per_box as units_per_box,
+               CASE 
+                   WHEN p.sales_velocity > 0 THEN p.current_stock / p.sales_velocity 
+                   ELSE NULL 
+               END as days_left
         FROM warehouse_procurement_items i
         JOIN warehouse_products p ON i.product_id = p.id
         WHERE i.list_id = $1
-        ORDER BY p.name
+        ORDER BY CASE WHEN p.abc_category = 'A' THEN 1 WHEN p.abc_category = 'B' THEN 2 ELSE 3 END, p.name
     `, [listId])
     return res.rows
 }
 
-export async function updateProcurementItem(itemId: number, quantity: number, clubId: string) {
-    await query('UPDATE warehouse_procurement_items SET actual_quantity = $1 WHERE id = $2', [quantity, itemId])
+export async function updateProcurementItem(itemId: number, data: { quantity?: number, units_per_box?: number }, clubId: string) {
+    if (data.quantity !== undefined) {
+        await query('UPDATE warehouse_procurement_items SET actual_quantity = $1 WHERE id = $2', [data.quantity, itemId])
+    }
+    if (data.units_per_box !== undefined) {
+        await query('UPDATE warehouse_procurement_items SET units_per_box = $1 WHERE id = $2', [data.units_per_box, itemId])
+    }
+    revalidatePath(`/clubs/${clubId}/inventory`)
+}
+
+export async function bulkUpdateProcurementItems(items: { id: number, quantity: number }[], clubId: string) {
+    const client = await import("@/db").then(m => m.getClient())
+    try {
+        await client.query('BEGIN')
+        for (const item of items) {
+            await client.query('UPDATE warehouse_procurement_items SET actual_quantity = $1 WHERE id = $2', [item.quantity, item.id])
+        }
+        await client.query('COMMIT')
+    } catch (e) {
+        await client.query('ROLLBACK')
+        throw e
+    } finally {
+        client.release()
+    }
+    revalidatePath(`/clubs/${clubId}/inventory`)
+}
+
+export async function deleteProcurementItem(itemId: number, clubId: string) {
+    await query('DELETE FROM warehouse_procurement_items WHERE id = $1', [itemId])
+    revalidatePath(`/clubs/${clubId}/inventory`)
+}
+
+export async function addProductToProcurementList(listId: number, productId: number, clubId: string) {
+    const client = await import("@/db").then(m => m.getClient())
+    try {
+        await client.query('BEGIN')
+
+        // Check if already in list
+        const existing = await client.query('SELECT id FROM warehouse_procurement_items WHERE list_id = $1 AND product_id = $2', [listId, productId])
+        if (existing.rowCount && existing.rowCount > 0) {
+            throw new Error("Товар уже есть в списке")
+        }
+
+        // Get product data for initial suggestion
+        const productRes = await client.query('SELECT current_stock, sales_velocity, ideal_stock_days, min_stock_level, units_per_box FROM warehouse_products WHERE id = $1', [productId])
+        const p = productRes.rows[0]
+        if (!p) throw new Error("Товар не найден")
+
+        let suggested = 0
+        const velocity = Number(p.sales_velocity)
+        const idealDays = p.ideal_stock_days || 14
+        const boxSize = p.units_per_box || 1
+        
+        if (velocity > 0) {
+            const target = velocity * idealDays
+            const needed = Math.ceil(target - p.current_stock)
+            const boxes = Math.round(needed / boxSize)
+            suggested = Math.max(boxSize, boxes * boxSize)
+        } else {
+            const needed = Math.max(0, (p.min_stock_level || 5) * 2 - p.current_stock)
+            const boxes = Math.round(needed / boxSize)
+            suggested = Math.max(boxSize, boxes * boxSize)
+        }
+        if (suggested <= 0) suggested = boxSize
+
+        await client.query(`
+            INSERT INTO warehouse_procurement_items (list_id, product_id, current_stock, suggested_quantity, actual_quantity, units_per_box)
+            VALUES ($1, $2, $3, $4, $5, $6)
+        `, [listId, productId, p.current_stock, suggested, suggested, boxSize])
+
+        await client.query('COMMIT')
+    } catch (e) {
+        await client.query('ROLLBACK')
+        throw e
+    } finally {
+        client.release()
+    }
     revalidatePath(`/clubs/${clubId}/inventory`)
 }
 
@@ -755,6 +887,7 @@ export async function getClubTasks(clubId: string) {
 
 export async function manualTriggerReplenishment(clubId: string) {
     try {
+        await calculateAnalytics(clubId)
         await checkReplenishmentNeeds(clubId)
         revalidatePath(`/clubs/${clubId}/inventory`)
         return { success: true }
@@ -1254,12 +1387,13 @@ export async function getProducts(clubId: string) {
             FROM warehouse_products p 
             LEFT JOIN warehouse_categories c ON p.category_id = c.id 
             WHERE p.club_id = $1 
-            ORDER BY p.name
+            ORDER BY CASE WHEN p.abc_category IS NULL THEN 4 WHEN p.abc_category = 'A' THEN 1 WHEN p.abc_category = 'B' THEN 2 ELSE 3 END, p.name
         `, [clubId])
         
         return res.rows.map(row => ({
             ...row,
-            current_stock: Number(row.total_stock) || 0, // Override with sum from warehouse_stock
+            current_stock: Number(row.total_stock) || 0,
+            units_per_box: row.units_per_box || 1, // Ensure this is mapped
             stocks: row.stocks || [],
             price_history: row.price_history || []
         })) as Product[]
@@ -1268,17 +1402,17 @@ export async function getProducts(clubId: string) {
     }
 }
 
-export async function createProduct(clubId: string, userId: string, data: { name: string, barcode?: string | null, barcodes?: string[], category_id: number | null, cost_price: number, selling_price: number, current_stock: number, min_stock_level?: number }) {
+export async function createProduct(clubId: string, userId: string, data: { name: string, barcode?: string | null, barcodes?: string[], category_id: number | null, cost_price: number, selling_price: number, current_stock: number, min_stock_level?: number, units_per_box?: number }) {
     const client = await import("@/db").then(m => m.getClient())
     try {
         await client.query('BEGIN')
         
         // 1. Create Product
         const res = await client.query(`
-            INSERT INTO warehouse_products (club_id, category_id, name, barcode, barcodes, cost_price, selling_price, current_stock, min_stock_level)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            INSERT INTO warehouse_products (club_id, category_id, name, barcode, barcodes, cost_price, selling_price, current_stock, min_stock_level, units_per_box)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
             RETURNING id
-        `, [clubId, data.category_id, data.name, data.barcode || null, data.barcodes || [], data.cost_price, data.selling_price, data.current_stock, data.min_stock_level || 0])
+        `, [clubId, data.category_id, data.name, data.barcode || null, data.barcodes || [], data.cost_price, data.selling_price, data.current_stock, data.min_stock_level || 0, data.units_per_box || 1])
         
         const productId = res.rows[0].id
 
@@ -1308,16 +1442,16 @@ export async function createProduct(clubId: string, userId: string, data: { name
     revalidatePath(`/clubs/${clubId}/inventory`)
 }
 
-export async function updateProduct(id: number, clubId: string, userId: string, data: { name: string, barcode?: string | null, barcodes?: string[], category_id: number | null, cost_price: number, selling_price: number, min_stock_level?: number, is_active: boolean }) {
+export async function updateProduct(id: number, clubId: string, userId: string, data: { name: string, barcode?: string | null, barcodes?: string[], category_id: number | null, cost_price: number, selling_price: number, min_stock_level?: number, is_active: boolean, units_per_box?: number }) {
     const client = await import("@/db").then(m => m.getClient())
     try {
         await client.query('BEGIN')
         
         await client.query(`
             UPDATE warehouse_products 
-            SET name = $1, barcode = $2, barcodes = $3, category_id = $4, cost_price = $5, selling_price = $6, min_stock_level = $7, is_active = $8
-            WHERE id = $9
-        `, [data.name, data.barcode || null, data.barcodes || [], data.category_id, data.cost_price, data.selling_price, data.min_stock_level || 0, data.is_active, id])
+            SET name = $1, barcode = $2, barcodes = $3, category_id = $4, cost_price = $5, selling_price = $6, min_stock_level = $7, is_active = $8, units_per_box = $9
+            WHERE id = $10
+        `, [data.name, data.barcode || null, data.barcodes || [], data.category_id, data.cost_price, data.selling_price, data.min_stock_level || 0, data.is_active, data.units_per_box || 1, id])
         
         await client.query('COMMIT')
         await logOperation(clubId, userId, 'UPDATE_PRODUCT', 'PRODUCT', id, data)
@@ -1332,6 +1466,7 @@ export async function updateProduct(id: number, clubId: string, userId: string, 
 
 // Helper to manually adjust stock in a specific warehouse (Admin Override)
 export async function adjustWarehouseStock(clubId: string, userId: string, productId: number, warehouseId: number, newQuantity: number, reason: string) {
+    await assertUserCanAccessClub(clubId, userId)
     const client = await import("@/db").then(m => m.getClient())
     try {
         await client.query('BEGIN')
@@ -1341,7 +1476,10 @@ export async function adjustWarehouseStock(clubId: string, userId: string, produ
         const oldQuantity = stockRes.rows[0]?.quantity || 0
         const diff = newQuantity - oldQuantity
         
-        if (diff === 0) return
+        if (diff === 0) {
+            await client.query('ROLLBACK')
+            return
+        }
 
         // Update Stock
         await client.query(`
@@ -1370,6 +1508,7 @@ export async function adjustWarehouseStock(clubId: string, userId: string, produ
 }
 
 export async function writeOffProduct(clubId: string, userId: string, productId: number, amount: number, reason: string) {
+    await assertUserCanAccessClub(clubId, userId)
     const client = await import("@/db").then(m => m.getClient())
     try {
         await client.query('BEGIN')
@@ -1528,6 +1667,7 @@ export async function getSupplies(clubId: string) {
 }
 
 export async function createSupply(clubId: string, userId: string, data: { supplier_name: string, notes: string, items: { product_id: number, quantity: number, cost_price: number }[], warehouse_id?: number, status?: 'DRAFT' | 'COMPLETED' }) {
+    await assertUserCanAccessClub(clubId, userId)
     const client = await import("@/db").then(m => m.getClient())
     try {
         await client.query('BEGIN')
@@ -1611,6 +1751,7 @@ export async function getSupplyItems(supplyId: number) {
 }
 
 export async function deleteSupply(supplyId: number, clubId: string, userId: string) {
+    await assertUserCanAccessClub(clubId, userId)
     const client = await import("@/db").then(m => m.getClient())
     try {
         await client.query('BEGIN')
@@ -1742,6 +1883,7 @@ export async function getClubSettings(clubId: string) {
 }
 
 export async function updateInventorySettings(clubId: string, userId: string, settings: any) {
+    await assertUserCanAccessClub(clubId, userId)
     await query(`
         UPDATE clubs 
         SET inventory_settings = $1 
@@ -1922,13 +2064,17 @@ export async function getAbcAnalysisData(clubId: string) {
                     p.id as product_id,
                     p.name,
                     p.abc_category,
-                    COALESCE(SUM(ABS(m.change_amount) * p.selling_price), 0) as total_revenue
+                    p.current_stock,
+                    p.sales_velocity,
+                    COALESCE(SUM(ABS(m.change_amount) * COALESCE(m.price_at_time, p.selling_price)), 0) as total_revenue,
+                    COALESCE(SUM(ABS(m.change_amount)), 0) as total_sold,
+                    COALESCE(SUM(ABS(m.change_amount) * (COALESCE(m.price_at_time, p.selling_price) - p.cost_price)), 0) as total_profit
                 FROM warehouse_products p
                 LEFT JOIN warehouse_stock_movements m ON p.id = m.product_id 
                     AND m.type = 'SALE' 
                     AND m.created_at > NOW() - INTERVAL '30 days'
                 WHERE p.club_id = $1 AND p.is_active = true
-                GROUP BY p.id, p.name, p.abc_category
+                GROUP BY p.id, p.name, p.abc_category, p.current_stock, p.sales_velocity
             ),
             TotalStats AS (
                 SELECT SUM(total_revenue) as grand_total FROM ProductRevenue
@@ -1938,7 +2084,11 @@ export async function getAbcAnalysisData(clubId: string) {
                     product_id,
                     name,
                     abc_category,
+                    current_stock,
+                    sales_velocity,
                     total_revenue,
+                    total_sold,
+                    total_profit,
                     (SELECT grand_total FROM TotalStats) as grand_total,
                     SUM(total_revenue) OVER (ORDER BY total_revenue DESC) as running_total
                 FROM ProductRevenue
@@ -1946,14 +2096,30 @@ export async function getAbcAnalysisData(clubId: string) {
             SELECT 
                 product_id,
                 name,
-                abc_category,
+                CASE 
+                    WHEN grand_total = 0 THEN 'C'
+                    WHEN (running_total - total_revenue) < grand_total * 0.8 THEN 'A'
+                    WHEN (running_total - total_revenue) < grand_total * 0.95 THEN 'B'
+                    ELSE 'C'
+                END as abc_category,
                 total_revenue,
+                total_sold,
+                total_profit,
+                CASE 
+                    WHEN total_revenue = 0 THEN 0
+                    ELSE ROUND((total_profit / total_revenue * 100)::numeric, 1)
+                END as margin_percent,
+                CASE 
+                    WHEN sales_velocity = 0 THEN NULL
+                    ELSE CEIL(current_stock / sales_velocity)
+                END as days_left,
                 grand_total,
                 CASE 
                     WHEN grand_total = 0 THEN 0
-                    ELSE ROUND((total_revenue / grand_total * 100)::numeric, 2)
+                    ELSE ROUND((total_revenue / NULLIF(grand_total, 0) * 100)::numeric, 2)
                 END as revenue_share
             FROM RankedProducts
+            WHERE total_revenue > 0
             ORDER BY total_revenue DESC
         `, [clubId])
         
@@ -1962,6 +2128,10 @@ export async function getAbcAnalysisData(clubId: string) {
             name: string
             abc_category: string
             total_revenue: number
+            total_sold: number
+            total_profit: number
+            margin_percent: number
+            days_left: number | null
             grand_total: number
             revenue_share: number
         }[]
@@ -2024,124 +2194,115 @@ export async function closeInventory(
     try {
         await client.query('BEGIN')
 
-        // 1. Calculate stats for all items
-        await client.query(`
-            UPDATE warehouse_inventory_items
-            SET difference = expected_stock - actual_stock,
-                calculated_revenue = CASE 
-                    WHEN actual_stock < expected_stock THEN (expected_stock - actual_stock) * selling_price_snapshot 
-                    ELSE 0 
-                END
-            WHERE inventory_id = $1
-        `, [inventoryId])
-
-        // 2. Calculate total revenue (Standard Sales + Unaccounted Sales)
-        const sumRes = await client.query(`
-            SELECT SUM(calculated_revenue) as total_rev
-            FROM warehouse_inventory_items
-            WHERE inventory_id = $1
-        `, [inventoryId])
+        // 0. Get inventory metadata
+        const invHeader = await client.query('SELECT warehouse_id, shift_id, created_by, started_at FROM warehouse_inventories WHERE id = $1', [inventoryId])
+        const inv = invHeader.rows[0]
+        if (!inv) throw new Error("Инвентаризация не найдена")
         
-        const standardCalculatedRevenue = Number(sumRes.rows[0].total_rev || 0)
-        const unaccountedRevenue = unaccountedSales.reduce((acc, s) => acc + (s.quantity * s.selling_price), 0)
-        
-        const totalCalculatedRevenue = standardCalculatedRevenue + unaccountedRevenue
-        const diff = reportedRevenue - totalCalculatedRevenue 
-        
-        // 3. Update Stock Levels to Actual and Log Movements
-        // Strategy: Adjust stock in the Inventoried Warehouse (or Default if legacy)
-        
-        // Get inventory info including shift_id
-        const invHeader = await client.query('SELECT warehouse_id, shift_id, created_by FROM warehouse_inventories WHERE id = $1', [inventoryId])
-        let warehouseId = invHeader.rows[0]?.warehouse_id
-        const shiftId = invHeader.rows[0]?.shift_id
-        const userId = invHeader.rows[0]?.created_by
+        let warehouseId = inv.warehouse_id
+        const shiftId = inv.shift_id
+        const userId = inv.created_by
+        const inventoryStartTime = inv.started_at
 
         if (!warehouseId) {
-             // Fallback: Default or any warehouse
              const whRes = await client.query('SELECT id FROM warehouses WHERE club_id = $1 ORDER BY is_default DESC LIMIT 1', [clubId])
              warehouseId = whRes.rows[0]?.id
         }
-
         if (!warehouseId) throw new Error("Не найден склад для корректировки остатков")
 
-        // --- PART A: Handle Standard Inventory Items (Sales and Excesses) ---
-        const diffItems = await client.query(`
-            SELECT ii.product_id, ii.expected_stock, ii.actual_stock, ii.cost_price_snapshot
+        // 1. Fetch items and account for movements that happened DURING the inventory
+        const itemsRes = await client.query(`
+            SELECT ii.*, 
+                   COALESCE((
+                       SELECT SUM(change_amount) 
+                       FROM warehouse_stock_movements 
+                       WHERE product_id = ii.product_id 
+                       AND warehouse_id = $2 
+                       AND created_at > $3
+                       AND (related_entity_type != 'INVENTORY' OR related_entity_id != $1) -- Exclude this inventory's own potential movements
+                   ), 0) as movements_during_inventory
             FROM warehouse_inventory_items ii
-            WHERE ii.inventory_id = $1 AND ii.actual_stock IS NOT NULL AND ii.actual_stock != ii.expected_stock
-        `, [inventoryId])
+            WHERE ii.inventory_id = $1
+        `, [inventoryId, warehouseId, inventoryStartTime])
 
-        // Group items for a potential automatic supply (any excess: actual > expected)
+        // 2. Update Stats & Group for Auto-Supply
         const itemsForAutoSupply: { product_id: number, quantity: number, cost_price: number }[] = []
-
-        // If inventory has no shiftId (owner inventory/revision), we use a different reason
         const isRevision = !shiftId
         const reasonPrefix = isRevision ? `Ревизия (инвентаризация #${inventoryId})` : `Продажа за смену (инвентаризация #${inventoryId})`
         const movementType = isRevision ? 'ADJUSTMENT' : 'SALE'
 
-        for (const item of diffItems.rows) {
-            const diffAmount = item.actual_stock - item.expected_stock
-            
-            // If we found MORE than expected, it's an UNACCOUNTED supply
+        let standardCalculatedRevenue = 0
+
+        for (const item of itemsRes.rows) {
+            if (item.actual_stock === null) continue
+
+            // IMPORTANT: Adjusted Expected Stock = Original Snapshot + Movements during inventory
+            // Example: Snapshot was 10. Supply +5 happened. Adjusted Expected is 15.
+            // If employee counted 15, then 15 - 15 = 0. Perfect.
+            const adjustedExpected = Number(item.expected_stock) + Number(item.movements_during_inventory)
+            const diffAmount = item.actual_stock - adjustedExpected
+
+            // Calculate revenue for this item
+            const itemRevenue = item.actual_stock < adjustedExpected 
+                ? (adjustedExpected - item.actual_stock) * Number(item.selling_price_snapshot) 
+                : 0
+            standardCalculatedRevenue += itemRevenue
+
+            // Update item record with calculated results
+            await client.query(`
+                UPDATE warehouse_inventory_items
+                SET difference = $2,
+                    calculated_revenue = $3
+                WHERE id = $1
+            `, [item.id, diffAmount, itemRevenue])
+
+            if (diffAmount === 0) continue
+
             if (diffAmount > 0) {
+                // Excess found
                 itemsForAutoSupply.push({
                     product_id: item.product_id,
                     quantity: diffAmount,
                     cost_price: item.cost_price_snapshot || 0
                 })
-                continue // Skip regular inventory adjustment for these items, we'll create a Supply for the difference
+            } else {
+                // Deficit found - Update Stock
+                await client.query(`
+                    INSERT INTO warehouse_stock (warehouse_id, product_id, quantity)
+                    VALUES ($1, $2, $3)
+                    ON CONFLICT (warehouse_id, product_id) DO UPDATE SET quantity = warehouse_stock.quantity + $3
+                `, [warehouseId, item.product_id, diffAmount])
+
+                await logStockMovement(client, clubId, userId, item.product_id, diffAmount, adjustedExpected, item.actual_stock, movementType, reasonPrefix, 'INVENTORY', inventoryId, shiftId, warehouseId)
             }
-
-            // If actual < expected, it's an ADJUSTMENT (for revisions) or SALE (for shifts)
-            const type = movementType
-            const reason = reasonPrefix
-
-            await client.query(`
-                INSERT INTO warehouse_stock (warehouse_id, product_id, quantity)
-                VALUES ($1, $2, $3)
-                ON CONFLICT (warehouse_id, product_id) DO UPDATE SET quantity = warehouse_stock.quantity + $3
-            `, [warehouseId, item.product_id, diffAmount])
-
-            await logStockMovement(client, clubId, userId, item.product_id, diffAmount, item.expected_stock, item.actual_stock, type, reason, 'INVENTORY', inventoryId, shiftId, warehouseId)
         }
 
-        // --- PART B: Handle Unaccounted Sales (Sold items that weren't in stock at all) ---
-        // For each unaccounted sale:
-        // 1. Create a DRAFT Supply (to fix the balance)
-        // 2. The SALE is already "calculated" in revenue, and we log it as a sale.
-        // Actually, to keep it simple: we add these to the Auto-Supply list as well!
+        const unaccountedRevenue = unaccountedSales.reduce((acc, s) => acc + (s.quantity * s.selling_price), 0)
+        const totalCalculatedRevenue = standardCalculatedRevenue + unaccountedRevenue
+        const diff = reportedRevenue - totalCalculatedRevenue 
+
+        // --- PART B: Handle Unaccounted Sales ---
         for (const sale of unaccountedSales) {
             itemsForAutoSupply.push({
                 product_id: sale.product_id,
                 quantity: sale.quantity,
                 cost_price: sale.cost_price
             })
-            
-            // Also log the movement for these unaccounted items
             const saleReason = isRevision 
                 ? `Неучтенный товар (ревизия #${inventoryId})` 
                 : `Продажа неучтенного товара (инвентаризация #${inventoryId})`
-            
             await logStockMovement(client, clubId, userId, sale.product_id, -sale.quantity, 0, 0, movementType, saleReason, 'INVENTORY', inventoryId, shiftId, warehouseId)
         }
 
-        // Create automatic supply for all excess/unaccounted items
+        // --- PART C: Create Auto-Supply for Excesses ---
         if (itemsForAutoSupply.length > 0) {
             const totalAutoCost = itemsForAutoSupply.reduce((acc, item) => acc + (item.quantity * item.cost_price), 0)
             const supplyRes = await client.query(`
-                INSERT INTO warehouse_supplies (club_id, supplier_name, notes, total_cost, created_by)
-                VALUES ($1, $2, $3, $4, $5)
+                INSERT INTO warehouse_supplies (club_id, supplier_name, notes, total_cost, created_by, status, warehouse_id)
+                VALUES ($1, 'Авто-поступление (Инвентаризация)', $2, $3, $4, 'DRAFT', $5)
                 RETURNING id
-            `, [clubId, 'Авто-поступление (Инвентаризация)', `Автоматически создано при закрытии инвентаризации #${inventoryId}. Включает излишки и неучтенные продажи. ТРЕБУЕТ ПРОВЕРКИ ЦЕН.`, totalAutoCost, userId])
+            `, [clubId, `Автоматически создано при закрытии инвентаризации #${inventoryId}. Включает излишки и неучтенные продажи.`, totalAutoCost, userId, warehouseId])
             const supplyId = supplyRes.rows[0].id
-
-            // Try to set status to DRAFT if the column exists (resilient approach)
-            try {
-                await client.query(`UPDATE warehouse_supplies SET status = 'DRAFT' WHERE id = $1`, [supplyId]);
-            } catch (statusError) {
-                console.warn("Could not set supply status to DRAFT, column might be missing:", statusError);
-            }
 
             for (const item of itemsForAutoSupply) {
                 await client.query(`
@@ -2149,27 +2310,31 @@ export async function closeInventory(
                     VALUES ($1, $2, $3, $4, $5)
                 `, [supplyId, item.product_id, item.quantity, item.cost_price, item.quantity * item.cost_price])
 
-                // UPDATE warehouse_stock IMMEDIATELY for the supply part
-                // This ensures the stock is "reconstituted"
                 await client.query(`
                     INSERT INTO warehouse_stock (warehouse_id, product_id, quantity)
                     VALUES ($1, $2, $3)
                     ON CONFLICT (warehouse_id, product_id) DO UPDATE SET quantity = warehouse_stock.quantity + $3
                 `, [warehouseId, item.product_id, item.quantity])
 
-                await logStockMovement(client, clubId, userId, item.product_id, item.quantity, 0, item.quantity, 'SUPPLY', `Авто-поступление #${supplyId} (Инвентаризация #${inventoryId})`, 'SUPPLY', supplyId, shiftId)
+                await logStockMovement(client, clubId, userId, item.product_id, item.quantity, 0, item.quantity, 'SUPPLY', `Авто-поступление #${supplyId} (Инвентаризация #${inventoryId})`, 'SUPPLY', supplyId, shiftId, warehouseId)
             }
         }
 
-        // Update Cache
-        await client.query(`
-            UPDATE warehouse_products p
-            SET current_stock = (SELECT COALESCE(SUM(quantity), 0) FROM warehouse_stock WHERE product_id = p.id)
-            FROM warehouse_inventory_items ii
-            WHERE ii.product_id = p.id AND ii.inventory_id = $1 AND ii.actual_stock IS NOT NULL
-        `, [inventoryId])
+        // 4. Update Cache for all involved products
+        const allProductIds = [
+            ...itemsRes.rows.map(i => i.product_id),
+            ...unaccountedSales.map(s => s.product_id)
+        ]
+        
+        if (allProductIds.length > 0) {
+            await client.query(`
+                UPDATE warehouse_products p
+                SET current_stock = (SELECT COALESCE(SUM(quantity), 0) FROM warehouse_stock WHERE product_id = p.id)
+                WHERE id = ANY($1)
+            `, [allProductIds])
+        }
 
-        // 4. Close Inventory
+        // 5. Close Inventory Header
         await client.query(`
             UPDATE warehouse_inventories
             SET status = 'CLOSED', closed_at = NOW(), 
@@ -2180,9 +2345,6 @@ export async function closeInventory(
         `, [inventoryId, reportedRevenue, totalCalculatedRevenue, diff])
 
         await client.query('COMMIT')
-
-        // --- TRIGGER REPLENISHMENT CHECK AFTER INVENTORY ---
-        // This will create tasks if stock levels dropped below minimums
         await checkReplenishmentNeeds(clubId)
 
     } catch (e) {

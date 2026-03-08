@@ -152,7 +152,7 @@ export default async function InventoryPage({ params, searchParams }: { params: 
                 </TabsContent>
 
                 <TabsContent value="procurement" className="mt-0">
-                    <ProcurementTab lists={procurementLists} currentUserId={userId} />
+                    <ProcurementTab lists={procurementLists} products={products} currentUserId={userId} />
                 </TabsContent>
 
                 <TabsContent value="inventory" className="mt-0">

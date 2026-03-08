@@ -16,6 +16,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Check, ChevronsUpDown } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useUiDialogs } from "./useUiDialogs"
 
 interface SuppliesTabProps {
     supplies: Supply[]
@@ -51,6 +52,7 @@ export function SuppliesTab({ supplies, products, warehouses, suppliers, current
     const [selectedProductId, setSelectedProductId] = useState<string>("")
     const [qty, setQty] = useState("")
     const [cost, setCost] = useState("")
+    const { confirmAction, showMessage, Dialogs } = useUiDialogs()
 
     const handleOpenSupply = async (supply: Supply) => {
         setViewSupply(supply)
@@ -66,7 +68,12 @@ export function SuppliesTab({ supplies, products, warehouses, suppliers, current
     }
 
     const handleDeleteSupply = async (id: number) => {
-        if (!confirm("Вы уверены? Это действие может изменить остатки на складе (если не было инвентаризации).")) return
+        const confirmed = await confirmAction({
+            title: "Удаление поставки",
+            description: "Вы уверены? Это действие может изменить остатки на складе (если не было инвентаризации).",
+            confirmText: "Удалить"
+        })
+        if (!confirmed) return
         
         startTransition(async () => {
             try {
@@ -74,7 +81,7 @@ export function SuppliesTab({ supplies, products, warehouses, suppliers, current
                 setViewSupply(null)
                 router.refresh()
             } catch (e) {
-                alert("Ошибка при удалении")
+                showMessage({ title: "Ошибка", description: "Ошибка при удалении" })
             }
         })
     }
@@ -228,7 +235,7 @@ export function SuppliesTab({ supplies, products, warehouses, suppliers, current
                                     )}
                                 </div>
                             </div>
-                            <Button variant="ghost" size="icon" className="text-red-500 hover:text-red-600 hover:bg-red-50" onClick={() => viewingSupply && handleDeleteSupply(viewingSupply.id)}>
+                            <Button aria-label={`Удалить поставку ${viewingSupply?.id || ""}`} variant="ghost" size="icon" className="text-red-500 hover:text-red-600 hover:bg-red-50" onClick={() => viewingSupply && handleDeleteSupply(viewingSupply.id)}>
                                 <Trash2 className="h-4 w-4" />
                             </Button>
                         </div>
@@ -438,7 +445,7 @@ export function SuppliesTab({ supplies, products, warehouses, suppliers, current
                                     onChange={e => setCost(e.target.value)}
                                 />
                             </div>
-                            <Button onClick={handleAddItem} disabled={!selectedProductId || !qty || !cost} className="h-9 w-9 p-0 bg-slate-900 hover:bg-slate-800">
+                            <Button aria-label="Добавить товар в поставку" onClick={handleAddItem} disabled={!selectedProductId || !qty || !cost} className="h-9 w-9 p-0 bg-slate-900 hover:bg-slate-800">
                                 <Plus className="h-4 w-4" />
                             </Button>
                         </div>
@@ -488,7 +495,7 @@ export function SuppliesTab({ supplies, products, warehouses, suppliers, current
                                                 </TableCell>
                                                 <TableCell className="text-right py-2 font-bold text-slate-900">{(item.quantity * item.cost).toLocaleString()} ₽</TableCell>
                                                 <TableCell className="py-2">
-                                                    <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-300 hover:text-red-500 hover:bg-red-50" onClick={() => handleRemoveItem(idx)}>
+                                                    <Button aria-label={`Удалить позицию ${p?.name || idx}`} variant="ghost" size="icon" className="h-7 w-7 text-slate-300 hover:text-red-500 hover:bg-red-50" onClick={() => handleRemoveItem(idx)}>
                                                         <Trash2 className="h-3.5 w-3.5" />
                                                     </Button>
                                                 </TableCell>
@@ -514,6 +521,7 @@ export function SuppliesTab({ supplies, products, warehouses, suppliers, current
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+            {Dialogs}
         </div>
     )
 }

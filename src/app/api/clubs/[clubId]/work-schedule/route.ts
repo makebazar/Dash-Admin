@@ -236,62 +236,94 @@ export async function PATCH(
             );
             
             // --- OPTIMIZATION LOGIC START ---
-            // If a shift is ADDED (or restored), check if there are any PENDING tasks scheduled for FUTURE dates
-            // that could be pulled back to this new earlier date.
+            // If a shift is ADDED (or restored), check if there are any PENDING tasks 
+            // that could be assigned or moved to this new shift date.
             
-            // 1. Find tasks assigned to this user that are scheduled AFTER this new shift date
-            const futureTasks = await query(
-                `SELECT t.id, t.equipment_id, t.due_date, e.cleaning_interval_days, e.last_cleaned_at 
+            // Find:
+            // 1. Tasks already assigned to this user that are scheduled for the FUTURE
+            // 2. Tasks already assigned to this user that are scheduled for a day where they DON'T have a shift
+            // 3. Tasks currently UNASSIGNED but where this user is the responsible person for the equipment
+            const candidateTasks = await query(
+                `SELECT t.id, t.equipment_id, t.due_date, e.cleaning_interval_days, e.last_cleaned_at, t.assigned_user_id
                  FROM equipment_maintenance_tasks t
                  JOIN equipment e ON t.equipment_id = e.id
-                 WHERE t.assigned_user_id = $1 
-                   AND t.due_date > $2 
+                 WHERE (t.assigned_user_id = $1 OR (t.assigned_user_id IS NULL AND e.assigned_user_id = $1))
                    AND t.status = 'PENDING'
+                   AND e.club_id = $2
                  ORDER BY t.due_date ASC`,
-                [userId, date]
+                [userId, clubId]
             );
 
-            if (futureTasks.rowCount && futureTasks.rowCount > 0) {
+            if (candidateTasks.rowCount && candidateTasks.rowCount > 0) {
                 const newShiftDate = new Date(date);
                 newShiftDate.setHours(0,0,0,0);
                 
                 const tasksToMove = [];
+                const tasksToAssignAndMove = [];
 
-                for (const task of futureTasks.rows) {
+                for (const task of candidateTasks.rows) {
+                    // Skip if task is already on this date
+                    const taskDate = new Date(task.due_date);
+                    taskDate.setHours(0,0,0,0);
+                    if (taskDate.getTime() === newShiftDate.getTime() && task.assigned_user_id === userId) continue;
+
                     // Check if moving to this new date respects the cleaning interval
                     let canMove = true;
                     
                     if (task.last_cleaned_at) {
                         const lastCleaned = new Date(task.last_cleaned_at);
                         const intervalDays = task.cleaning_interval_days || 30;
-                        
-                        // Calculate minimum allowed date (Last Cleaned + Interval)
                         const minDate = new Date(lastCleaned);
                         minDate.setDate(minDate.getDate() + intervalDays);
-                        
-                        // Reset time components for comparison
                         minDate.setHours(0,0,0,0);
                         
-                        // If new shift date is too early (before allowed interval), skip
                         if (newShiftDate < minDate) {
                             canMove = false;
                         }
                     }
 
                     if (canMove) {
-                        tasksToMove.push(task.id);
+                        // Decide if we should move it
+                        // - If it's unassigned: YES
+                        // - If it's on a non-shift day: YES
+                        // - If it's in the future and this date is earlier: YES
+                        
+                        let shouldMove = false;
+                        if (!task.assigned_user_id) {
+                            shouldMove = true;
+                        } else {
+                            // Check if current due date is a shift day
+                            const currentShiftCheck = await query(
+                                `SELECT 1 FROM work_schedules WHERE club_id = $1 AND user_id = $2 AND date = $3`,
+                                [clubId, userId, task.due_date]
+                            );
+                            if (currentShiftCheck.rowCount === 0) {
+                                shouldMove = true;
+                            } else if (newShiftDate < taskDate) {
+                                shouldMove = true;
+                            }
+                        }
+
+                        if (shouldMove) {
+                            if (!task.assigned_user_id) tasksToAssignAndMove.push(task.id);
+                            else tasksToMove.push(task.id);
+                        }
                     }
                 }
 
                 if (tasksToMove.length > 0) {
                     await query(
-                        `UPDATE equipment_maintenance_tasks 
-                         SET due_date = $1 
-                         WHERE id = ANY($2)`,
+                        `UPDATE equipment_maintenance_tasks SET due_date = $1 WHERE id = ANY($2)`,
                         [date, tasksToMove]
                     );
-                    console.log(`[Schedule] Pulled back ${tasksToMove.length} tasks to new shift on ${date} for user ${userId}`);
                 }
+                if (tasksToAssignAndMove.length > 0) {
+                    await query(
+                        `UPDATE equipment_maintenance_tasks SET due_date = $1, assigned_user_id = $2 WHERE id = ANY($3)`,
+                        [date, userId, tasksToAssignAndMove]
+                    );
+                }
+                console.log(`[Schedule] Optimized ${tasksToMove.length + tasksToAssignAndMove.length} tasks for user ${userId} on ${date}`);
             }
             // --- OPTIMIZATION LOGIC END ---
         }

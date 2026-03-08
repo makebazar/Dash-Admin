@@ -40,4 +40,5 @@ if (process.env.NODE_ENV !== 'production') {
 
 export const query = (text: string, params?: any[]) => pool.query(text, params);
 export const getClient = () => pool.connect();
+export const queryClient = () => pool.connect();
 export default pool;

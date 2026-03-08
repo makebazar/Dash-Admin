@@ -6,7 +6,7 @@ import { cookies } from 'next/headers';
 // Returns summary of all account balances and total
 export async function GET(
     request: NextRequest,
-    { params }: { params: { clubId: string } }
+    { params }: { params: Promise<{ clubId: string }> }
 ) {
     try {
         const userId = (await cookies()).get('session_user_id')?.value;
@@ -14,7 +14,7 @@ export async function GET(
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        const { clubId } = params;
+        const { clubId } = await params;
 
         // Get balances grouped by account type
         const result = await query(

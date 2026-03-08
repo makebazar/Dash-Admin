@@ -12,6 +12,7 @@ import { createInventory, deleteInventory, Inventory, Category, Warehouse, getMe
 import { useParams } from "next/navigation"
 import { ActiveInventory } from "./ActiveInventory"
 import { cn } from "@/lib/utils"
+import { useUiDialogs } from "./useUiDialogs"
 
 interface InventoryTabProps {
     inventories: Inventory[]
@@ -41,6 +42,7 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
     // Active Inventory State
     const [activeInventoryId, setActiveInventoryId] = useState<number | null>(null)
     const [deleteId, setDeleteId] = useState<number | null>(null)
+    const { showMessage, Dialogs } = useUiDialogs()
 
     useEffect(() => {
         if (isDialogOpen && metrics.length === 0) {
@@ -80,13 +82,13 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
         // Validation
         if (!isOwner) {
             if ((!selectedMetric || selectedMetric === "none") && !inventorySettings?.employee_default_metric_key) {
-                alert("Не настроена метрика выручки для сотрудников. Обратитесь к администратору.")
+                showMessage({ title: "Настройка не завершена", description: "Не настроена метрика выручки для сотрудников. Обратитесь к администратору." })
                 return
             }
         }
         
         if (!selectedWarehouse) {
-            alert("Выберите склад")
+            showMessage({ title: "Проверьте данные", description: "Выберите склад" })
             return
         }
 
@@ -108,7 +110,7 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
                 setActiveInventoryId(newId)
             } catch (e) {
                 console.error(e)
-                alert("Ошибка при создании инвентаризации")
+                showMessage({ title: "Ошибка", description: "Ошибка при создании инвентаризации" })
             }
         })
     }
@@ -121,7 +123,7 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
                 setDeleteId(null)
             } catch (e) {
                 console.error(e)
-                alert("Ошибка при удалении")
+                showMessage({ title: "Ошибка", description: "Ошибка при удалении" })
             }
         })
     }
@@ -233,7 +235,7 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
                                     <TableCell>
                                         <div className="flex items-center justify-end gap-1">
                                             {inv.status === 'CLOSED' ? (
-                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-blue-600" onClick={() => setActiveInventoryId(inv.id)}>
+                                                <Button aria-label={`Открыть результаты инвентаризации ${inv.id}`} variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-blue-600" onClick={() => setActiveInventoryId(inv.id)}>
                                                     <ArrowRight className="h-4 w-4" />
                                                 </Button>
                                             ) : (
@@ -245,7 +247,7 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
                                                     <span className="text-[10px] text-muted-foreground italic px-2 font-medium">В процессе...</span>
                                                 )
                                             )}
-                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-300 hover:text-red-600 hover:bg-red-50 transition-colors" onClick={() => setDeleteId(inv.id)}>
+                                            <Button aria-label={`Удалить инвентаризацию ${inv.id}`} variant="ghost" size="icon" className="h-8 w-8 text-slate-300 hover:text-red-600 hover:bg-red-50 transition-colors" onClick={() => setDeleteId(inv.id)}>
                                                 <Trash2 className="h-4 w-4" />
                                             </Button>
                                         </div>
@@ -332,7 +334,7 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
                                         </Button>
                                     )
                                 )}
-                                <Button variant="ghost" size="icon" className="h-9 w-9 text-slate-300 hover:text-red-600 hover:bg-red-50" onClick={() => setDeleteId(inv.id)}>
+                                <Button aria-label={`Удалить инвентаризацию ${inv.id}`} variant="ghost" size="icon" className="h-9 w-9 text-slate-300 hover:text-red-600 hover:bg-red-50" onClick={() => setDeleteId(inv.id)}>
                                     <Trash2 className="h-4 w-4" />
                                 </Button>
                             </div>
@@ -438,6 +440,7 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+            {Dialogs}
         </div>
     )
 }

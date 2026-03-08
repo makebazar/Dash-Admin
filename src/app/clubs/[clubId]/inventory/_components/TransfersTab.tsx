@@ -25,6 +25,7 @@ import {
 } from "../actions"
 import { useParams } from "next/navigation"
 import { cn } from "@/lib/utils"
+import { useUiDialogs } from "./useUiDialogs"
 
 interface TransfersTabProps {
     warehouses: Warehouse[]
@@ -50,6 +51,7 @@ export function TransfersTab({ warehouses, products, currentUserId }: TransfersT
     })
 
     const [searchQuery, setSearchQuery] = useState("")
+    const { showMessage, Dialogs } = useUiDialogs()
 
     useEffect(() => {
         refreshMovements()
@@ -64,10 +66,9 @@ export function TransfersTab({ warehouses, products, currentUserId }: TransfersT
         }
     }
 
-    const handleTransfer = async (e: React.FormEvent) => {
-        e.preventDefault()
+    const handleTransfer = async () => {
         if (!formData.source_warehouse_id || !formData.target_warehouse_id || !formData.product_id) {
-            alert("Заполните все обязательные поля")
+            showMessage({ title: "Проверьте данные", description: "Заполните все обязательные поля" })
             return
         }
 
@@ -89,10 +90,10 @@ export function TransfersTab({ warehouses, products, currentUserId }: TransfersT
                     notes: ""
                 })
                 refreshMovements()
-                alert("Перемещение успешно оформлено")
+                showMessage({ title: "Готово", description: "Перемещение успешно оформлено" })
             } catch (err: any) {
                 console.error(err)
-                alert(err.message || "Ошибка при перемещении")
+                showMessage({ title: "Ошибка", description: err.message || "Ошибка при перемещении" })
             }
         })
     }
@@ -311,6 +312,7 @@ export function TransfersTab({ warehouses, products, currentUserId }: TransfersT
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+            {Dialogs}
         </div>
     )
 }

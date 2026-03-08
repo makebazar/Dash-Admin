@@ -45,8 +45,11 @@ export function AbcAnalysisTab({ clubId }: AbcAnalysisTabProps) {
         A: data.filter(i => i.abc_category === 'A'),
         B: data.filter(i => i.abc_category === 'B'),
         C: data.filter(i => i.abc_category === 'C'),
-        totalRevenue: data.reduce((acc, curr) => acc + Number(curr.total_revenue), 0)
+        totalRevenue: data.reduce((acc, curr) => acc + Number(curr.total_revenue), 0),
+        totalProfit: data.reduce((acc, curr) => acc + Number(curr.total_profit), 0)
     }
+
+    const avgMargin = stats.totalRevenue > 0 ? (stats.totalProfit / stats.totalRevenue * 100) : 0
 
     if (isLoading) {
         return (
@@ -139,9 +142,14 @@ export function AbcAnalysisTab({ clubId }: AbcAnalysisTabProps) {
                         <TrendingUp className="h-4 w-4 text-blue-600" />
                         Детализация по товарам
                     </h4>
-                    <span className="text-[10px] text-slate-400 uppercase font-bold tracking-widest">
-                        Всего выручки: {stats.totalRevenue.toLocaleString()} ₽
-                    </span>
+                    <div className="flex items-center gap-4">
+                        <span className="text-[10px] text-slate-400 uppercase font-bold tracking-widest">
+                            Выручка: {stats.totalRevenue.toLocaleString()} ₽
+                        </span>
+                        <span className="text-[10px] text-green-600 uppercase font-bold tracking-widest">
+                            Прибыль: {stats.totalProfit.toLocaleString()} ₽ ({avgMargin.toFixed(1)}%)
+                        </span>
+                    </div>
                 </div>
                 
                 <div className="overflow-x-auto">
@@ -151,8 +159,12 @@ export function AbcAnalysisTab({ clubId }: AbcAnalysisTabProps) {
                                 <TableHead className="w-[50px] text-center">#</TableHead>
                                 <TableHead>Товар</TableHead>
                                 <TableHead className="text-center">Группа</TableHead>
-                                <TableHead className="text-right">Выручка (30д)</TableHead>
-                                <TableHead className="text-right">Доля в выручке</TableHead>
+                                <TableHead className="text-right">Продано</TableHead>
+                                <TableHead className="text-right">Выручка</TableHead>
+                                <TableHead className="text-right">Прибыль</TableHead>
+                                <TableHead className="text-right">Маржа</TableHead>
+                                <TableHead className="text-right">Запас (дн)</TableHead>
+                                <TableHead className="text-right">Доля</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -176,13 +188,38 @@ export function AbcAnalysisTab({ clubId }: AbcAnalysisTabProps) {
                                             {item.abc_category}
                                         </Badge>
                                     </TableCell>
+                                    <TableCell className="text-right font-medium text-slate-600">
+                                        {Number(item.total_sold).toLocaleString()} шт.
+                                    </TableCell>
                                     <TableCell className="text-right font-black text-slate-900">
                                         {Number(item.total_revenue).toLocaleString()} ₽
+                                    </TableCell>
+                                    <TableCell className="text-right font-bold text-green-600">
+                                        {Number(item.total_profit).toLocaleString()} ₽
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                        <Badge variant="outline" className="font-bold border-slate-200">
+                                            {item.margin_percent}%
+                                        </Badge>
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                        {item.days_left !== null ? (
+                                            <span className={cn(
+                                                "text-xs font-bold",
+                                                Number(item.days_left) < 3 ? "text-rose-500" : 
+                                                Number(item.days_left) < 7 ? "text-amber-500" : 
+                                                "text-slate-500"
+                                            )}>
+                                                {Math.round(item.days_left)} дн.
+                                            </span>
+                                        ) : (
+                                            <span className="text-slate-300 text-[10px]">∞</span>
+                                        )}
                                     </TableCell>
                                     <TableCell className="text-right">
                                         <div className="flex flex-col items-end gap-1">
                                             <span className="text-sm font-bold text-blue-600">{item.revenue_share}%</span>
-                                            <div className="w-24 h-1 bg-slate-100 rounded-full overflow-hidden">
+                                            <div className="w-16 h-1 bg-slate-100 rounded-full overflow-hidden">
                                                 <div 
                                                     className={cn(
                                                         "h-full",
@@ -199,7 +236,7 @@ export function AbcAnalysisTab({ clubId }: AbcAnalysisTabProps) {
                             ))}
                             {data.length === 0 && (
                                 <TableRow>
-                                    <TableCell colSpan={5} className="h-32 text-center text-slate-400 italic">
+                                    <TableCell colSpan={9} className="h-32 text-center text-slate-400 italic">
                                         Нет данных о продажах за последние 30 дней
                                     </TableCell>
                                 </TableRow>

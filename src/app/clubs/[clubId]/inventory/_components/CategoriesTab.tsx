@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { createCategory, updateCategory, deleteCategory, Category } from "../actions"
 import { useParams } from "next/navigation"
+import { useUiDialogs } from "./useUiDialogs"
 
 interface CategoriesTabProps {
     categories: Category[]
@@ -24,6 +25,7 @@ export function CategoriesTab({ categories, currentUserId }: CategoriesTabProps)
     const [isDialogOpen, setIsDialogOpen] = useState(false)
     const [editingCategory, setEditingCategory] = useState<Partial<Category> | null>(null)
     const [isPending, startTransition] = useTransition()
+    const { confirmAction, showMessage, Dialogs } = useUiDialogs()
 
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -48,18 +50,23 @@ export function CategoriesTab({ categories, currentUserId }: CategoriesTabProps)
                 setEditingCategory(null)
             } catch (err: any) {
                 console.error(err)
-                alert(err.message || "Ошибка при сохранении")
+                showMessage({ title: "Ошибка", description: err.message || "Ошибка при сохранении" })
             }
         })
     }
 
-    const handleDelete = (id: number) => {
-        if (!confirm("Вы уверены?")) return
+    const handleDelete = async (id: number) => {
+        const confirmed = await confirmAction({
+            title: "Удаление категории",
+            description: "Вы уверены?",
+            confirmText: "Удалить"
+        })
+        if (!confirmed) return
         startTransition(async () => {
             try {
                 await deleteCategory(id, clubId, currentUserId)
             } catch (err: any) {
-                alert(err.message)
+                showMessage({ title: "Ошибка", description: err.message || "Ошибка при удалении" })
             }
         })
     }
@@ -115,10 +122,10 @@ export function CategoriesTab({ categories, currentUserId }: CategoriesTabProps)
                                 <TableCell className="text-right">{cat.products_count}</TableCell>
                                 <TableCell>
                                     <div className="flex justify-end gap-2">
-                                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(cat)}>
+                                        <Button aria-label={`Редактировать категорию ${cat.name}`} variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(cat)}>
                                             <Pencil className="h-4 w-4" />
                                         </Button>
-                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500" onClick={() => handleDelete(cat.id)}>
+                                        <Button aria-label={`Удалить категорию ${cat.name}`} variant="ghost" size="icon" className="h-8 w-8 text-red-500" onClick={() => handleDelete(cat.id)}>
                                             <Trash2 className="h-4 w-4" />
                                         </Button>
                                     </div>
@@ -184,6 +191,7 @@ export function CategoriesTab({ categories, currentUserId }: CategoriesTabProps)
                     </form>
                 </DialogContent>
             </Dialog>
+            {Dialogs}
         </div>
     )
 }

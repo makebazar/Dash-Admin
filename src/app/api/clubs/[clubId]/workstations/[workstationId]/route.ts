@@ -66,8 +66,10 @@ export async function PATCH(
         }
 
         if (body.assigned_user_id !== undefined || body.free_pool !== undefined) {
-            const assignedUserId = body.assigned_user_id === '' ? null : body.assigned_user_id;
+            const assignedUserId = body.assigned_user_id === '' ? null : (body.assigned_user_id || null);
             const freePool = !!body.free_pool;
+            
+            // Update equipment
             await query(
                 `UPDATE equipment
                  SET assigned_user_id = $1::uuid,
@@ -75,6 +77,41 @@ export async function PATCH(
                  WHERE workstation_id = $3`,
                 [assignedUserId, freePool, workstationId]
             );
+
+            // Propagate to PENDING maintenance tasks
+            await query(
+                `UPDATE equipment_maintenance_tasks 
+                 SET assigned_user_id = $1::uuid
+                 WHERE equipment_id IN (
+                    SELECT id FROM equipment WHERE workstation_id = $2
+                 ) AND status = 'PENDING'`,
+                [assignedUserId, workstationId]
+            );
+
+            // If a new user is assigned, move their PENDING tasks to their next shift
+            if (assignedUserId) {
+                const today = new Date().toISOString().split('T')[0];
+                const nextShift = await query(
+                    `SELECT date FROM work_schedules 
+                     WHERE club_id = $1 AND user_id = $2 AND date >= $3
+                     ORDER BY date ASC LIMIT 1`,
+                    [clubId, assignedUserId, today]
+                );
+
+                if (nextShift.rowCount && nextShift.rowCount > 0) {
+                    const shiftDate = nextShift.rows[0].date;
+                    const shiftDateStr = shiftDate instanceof Date ? shiftDate.toISOString().split('T')[0] : shiftDate;
+                    
+                    await query(
+                        `UPDATE equipment_maintenance_tasks 
+                         SET due_date = $1
+                         WHERE equipment_id IN (
+                            SELECT id FROM equipment WHERE workstation_id = $2
+                         ) AND status = 'PENDING' AND assigned_user_id = $3`,
+                        [shiftDateStr, workstationId, assignedUserId]
+                    );
+                }
+            }
         }
 
         return NextResponse.json(result.rows[0]);

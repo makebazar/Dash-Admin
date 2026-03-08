@@ -5,6 +5,11 @@ import { Input } from "@/components/ui/input"
 
 // ... (keep PageShell and PageHeader)
 
+interface PageShellProps extends React.HTMLAttributes<HTMLDivElement> {
+    children: React.ReactNode
+    maxWidth?: "full" | "xl" | "2xl" | "3xl" | "4xl" | "5xl" | "6xl" | "7xl"
+}
+
 export function PageShell({ children, className, maxWidth = "full", ...props }: PageShellProps) {
     const maxWidthClass = {
         "full": "max-w-full",

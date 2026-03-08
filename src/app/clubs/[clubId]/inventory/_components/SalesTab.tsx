@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { useUiDialogs } from "./useUiDialogs"
 
 interface SalesTabProps {
     sales: any[]
@@ -52,6 +53,7 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
         shift_id: "none",
         notes: ""
     })
+    const { showMessage, Dialogs } = useUiDialogs()
 
     const handleStartEdit = (sale: any) => {
         setEditingId(sale.id)
@@ -68,7 +70,7 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
             if (res.success) {
                 setEditingId(null)
             } else {
-                alert("Ошибка при сохранении: " + res.error)
+                showMessage({ title: "Ошибка", description: "Ошибка при сохранении: " + res.error })
             }
         })
     }
@@ -84,7 +86,7 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
                 setDeleteId(null)
                 setRevertMode('none')
             } catch (e) {
-                alert("Ошибка при удалении")
+                showMessage({ title: "Ошибка", description: "Ошибка при удалении" })
             }
         })
     }
@@ -110,7 +112,7 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
                     notes: ""
                 })
             } catch (e: any) {
-                alert("Ошибка: " + e.message)
+                showMessage({ title: "Ошибка", description: "Ошибка: " + e.message })
             }
         })
     }
@@ -185,7 +187,7 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
             try {
                 await assignShiftToMovement(movementId, shiftId, clubId)
             } catch (e) {
-                alert("Ошибка при привязке")
+                showMessage({ title: "Ошибка", description: "Ошибка при привязке" })
             }
         })
     }
@@ -197,7 +199,7 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
                 await massAssignShiftToMovements(selectedIds, shiftId, clubId)
                 setSelectedIds([])
             } catch (e) {
-                alert("Ошибка при массовой привязке")
+                showMessage({ title: "Ошибка", description: "Ошибка при массовой привязке" })
             }
         })
     }
@@ -454,6 +456,7 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
                                                             {editingId === sale.id ? (
                                                                 <>
                                                                     <Button 
+                                                                        aria-label={`Сохранить корректировку продажи ${sale.product_name}`}
                                                                         size="icon" 
                                                                         variant="ghost" 
                                                                         onClick={() => handleSaveEdit(sale.id)}
@@ -463,6 +466,7 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
                                                                         <Check className="h-4 w-4" />
                                                                     </Button>
                                                                     <Button 
+                                                                        aria-label={`Отменить корректировку продажи ${sale.product_name}`}
                                                                         size="icon" 
                                                                         variant="ghost" 
                                                                         onClick={() => setEditingId(null)}
@@ -474,6 +478,7 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
                                                             ) : (
                                                                 <>
                                                                     <Button 
+                                                                        aria-label={`Редактировать продажу ${sale.product_name}`}
                                                                         size="icon" 
                                                                         variant="ghost" 
                                                                         onClick={() => handleStartEdit(sale)}
@@ -483,7 +488,7 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
                                                                     </Button>
                                                                     <DropdownMenu>
                                                                         <DropdownMenuTrigger asChild>
-                                                                            <Button size="icon" variant="ghost" className="h-8 w-8 text-slate-400 hover:text-blue-500">
+                                                                            <Button aria-label={`Привязать продажу ${sale.product_name} к смене`} size="icon" variant="ghost" className="h-8 w-8 text-slate-400 hover:text-blue-500">
                                                                                 <Link className="h-4 w-4" />
                                                                             </Button>
                                                                         </DropdownMenuTrigger>
@@ -508,6 +513,7 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
                                                                         </DropdownMenuContent>
                                                                     </DropdownMenu>
                                                                     <Button 
+                                                                        aria-label={`Удалить продажу ${sale.product_name}`}
                                                                         size="icon" 
                                                                         variant="ghost" 
                                                                         onClick={() => handleDelete(sale.id, sale.product_name)}
@@ -698,6 +704,7 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+            {Dialogs}
         </div>
     )
 }
