@@ -14,7 +14,7 @@ export function InventoryTabsWrapper({
     
     // Map sub-tabs to their parent tab for the top-level navigation
     const getTopLevelTab = (tab: string) => {
-        if (['categories', 'warehouses'].includes(tab)) return 'settings'
+        if (['categories', 'warehouses', 'pricetags'].includes(tab)) return 'settings'
         return tab
     }
     

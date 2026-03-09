@@ -41,10 +41,11 @@ export async function calculateSalary(
     const breakdown: any = { 
         base: 0, 
         bonuses: [], 
-        penalties: [], 
         deductions: [], // Added for bar purchases
         total: 0,  // Только REAL_MONEY (для зарплаты)
-        virtual_balance_total: 0  // Только VIRTUAL_BALANCE (отдельно)
+        virtual_balance_total: 0,  // Только VIRTUAL_BALANCE (отдельно)
+        instant_payout: 0, // К выдаче сразу (ежедневно)
+        accrued_payout: 0 // В накопление (зарплата)
     };
 
     // ... (existing base normalization) ...
@@ -52,6 +53,7 @@ export async function calculateSalary(
     const amount = scheme.base?.amount ?? scheme.amount ?? 0;
     const percent = scheme.base?.percent ?? scheme.percent ?? 0;
     const fullShiftHours = scheme.base?.full_shift_hours ?? scheme.full_shift_hours ?? 12;
+    const basePayoutTiming = scheme.base?.payout_timing || 'MONTH';
 
     // 1. Base Salary (всегда REAL_MONEY)
     if (type === 'hourly') {
@@ -73,6 +75,13 @@ export async function calculateSalary(
     breakdown.base = parseFloat(baseAmount.toFixed(2));
     let total = baseAmount;  // Зарплата (REAL_MONEY)
     let virtualBalanceTotal = 0;  // Виртуальный баланс (отдельно)
+    
+    // Distribute base amount
+    if (basePayoutTiming === 'SHIFT') {
+        breakdown.instant_payout += breakdown.base;
+    } else {
+        breakdown.accrued_payout += breakdown.base;
+    }
 
     // 2. Per-Shift Bonuses (from scheme.bonuses)
     if (scheme.bonuses && Array.isArray(scheme.bonuses)) {
@@ -89,29 +98,31 @@ export async function calculateSalary(
                 bonusAmount = Number(bonus.amount) || 0;
             } else if (bonus.type === 'percent_revenue') {
                 bonusAmount = metricValue * ((Number(bonus.percent) || 0) / 100);
-            } else if (bonus.type === 'tiered') {
-                if (bonus.tiers) {
-                    for (const tier of bonus.tiers) {
-                        const from = Number(tier.from) || 0;
-                        const to = tier.to === '∞' || tier.to === null ? Infinity : (Number(tier.to) || Infinity);
-                        if (metricValue >= from && metricValue <= to) {
-                            bonusAmount = Number(tier.bonus) || Number(tier.amount) || 0;
-                            break;
-                        }
-                    }
-                }
+
             } else if (bonus.type === 'progressive_percent') {
-                if (bonus.thresholds) {
+                if (bonus.mode === 'MONTH') {
+                    // Handle as period bonus contribution (if reward value is provided)
+                    const rewardValue = bonus.current_reward_value ?? 0;
+                    const rewardType = bonus.current_reward_type ?? 'PERCENT';
+                    
+                    if (rewardType === 'PERCENT') {
+                        bonusAmount = metricValue * (rewardValue / 100);
+                    }
+                    // For FIXED monthly bonuses, we don't add per-shift contribution usually
+                } else if (bonus.thresholds) {
+                    // Daily progressive logic
                     const sorted = [...bonus.thresholds].sort((a, b) => (Number(b.from) || 0) - (Number(a.from) || 0));
                     for (const t of sorted) {
                         if (metricValue >= (Number(t.from) || 0)) {
-                            bonusAmount = metricValue * ((Number(t.percent) || 0) / 100);
+                            if (bonus.reward_type === 'FIXED') {
+                                bonusAmount = Number(t.amount) || 0;
+                            } else {
+                                bonusAmount = metricValue * ((Number(t.percent) || 0) / 100);
+                            }
                             break;
                         }
                     }
                 }
-            } else if (bonus.type === 'penalty') {
-                bonusAmount = -(Number(bonus.amount) || 0);
             } else if (bonus.type === 'checklist') {
                 // Handle checklist bonus (Per Shift mode)
                 if (bonus.mode !== 'MONTH' && shift.evaluations && Array.isArray(shift.evaluations)) {
@@ -157,6 +168,12 @@ export async function calculateSalary(
                                 virtualBalanceTotal += bonusAmount;
                             } else {
                                 total += bonusAmount;
+                                const payoutTiming = bonus.payout_timing || 'MONTH';
+                                if (payoutTiming === 'SHIFT') {
+                                    breakdown.instant_payout += bonusAmount;
+                                } else {
+                                    breakdown.accrued_payout += bonusAmount;
+                                }
                             }
                             continue; // Skip the default push below
                         }
@@ -240,6 +257,12 @@ export async function calculateSalary(
                             virtualBalanceTotal += finalAmount;
                         } else {
                             total += finalAmount;
+                            const payoutTiming = bonus.payout_timing || 'MONTH';
+                            if (payoutTiming === 'SHIFT') {
+                                breakdown.instant_payout += finalAmount;
+                            } else {
+                                breakdown.accrued_payout += finalAmount;
+                            }
                         }
                     }
                 }
@@ -262,6 +285,12 @@ export async function calculateSalary(
                     virtualBalanceTotal += bonusAmount;
                 } else {
                     total += bonusAmount;
+                    const payoutTiming = bonus.payout_timing || 'MONTH';
+                    if (payoutTiming === 'SHIFT') {
+                        breakdown.instant_payout += bonusAmount;
+                    } else {
+                        breakdown.accrued_payout += bonusAmount;
+                    }
                 }
             }
         }
@@ -306,6 +335,12 @@ export async function calculateSalary(
                     virtualBalanceTotal += bonusAmount;
                 } else {
                     total += bonusAmount;
+                    const payoutTiming = bonus.payout_timing || 'MONTH';
+                    if (payoutTiming === 'SHIFT') {
+                        breakdown.instant_payout += bonusAmount;
+                    } else {
+                        breakdown.accrued_payout += bonusAmount;
+                    }
                 }
             }
         }
@@ -330,6 +365,7 @@ export async function calculateSalary(
 
         // Добавляем только к зарплате (REAL_MONEY)
         total += amount;
+        breakdown.accrued_payout += amount;
     }
 
     // 5. Bar Deductions (from shift.bar_purchases)
@@ -340,13 +376,18 @@ export async function calculateSalary(
             amount: deduction
         });
         total -= deduction;
+        breakdown.accrued_payout -= deduction;
     }
 
     breakdown.total = parseFloat(total.toFixed(2));
     breakdown.virtual_balance_total = parseFloat(virtualBalanceTotal.toFixed(2));
+    breakdown.instant_payout = parseFloat(breakdown.instant_payout.toFixed(2));
+    breakdown.accrued_payout = parseFloat(breakdown.accrued_payout.toFixed(2));
 
     return {
         total: breakdown.total,
+        instant_payout: breakdown.instant_payout,
+        accrued_payout: breakdown.accrued_payout,
         breakdown
     };
 }

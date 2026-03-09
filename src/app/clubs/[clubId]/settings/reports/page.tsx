@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -11,6 +11,9 @@ import { Loader2, Plus, GripVertical, Save, Trash2, ArrowLeft } from "lucide-rea
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import Link from "next/link"
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from "@dnd-kit/core"
+import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable"
+import { CSS } from "@dnd-kit/utilities"
 
 interface SystemMetric {
     id: number
@@ -30,7 +33,7 @@ interface TemplateField {
     show_in_stats: boolean
     show_for_employee?: boolean
     account_id?: number // For INCOME fields - which account to credit
-    id?: string // for frontend dnd
+    id: string // for frontend dnd (required for sortable)
 }
 
 interface Account {
@@ -41,6 +44,217 @@ interface Account {
     account_type: string
 }
 
+function SortableField({ 
+    field, 
+    index, 
+    metric, 
+    accounts, 
+    onUpdate, 
+    onRemove 
+}: { 
+    field: TemplateField
+    index: number
+    metric: SystemMetric | undefined
+    accounts: Account[]
+    onUpdate: (index: number, key: keyof TemplateField, value: any) => void
+    onRemove: (index: number) => void
+}) {
+    const {
+        attributes,
+        listeners,
+        setNodeRef,
+        transform,
+        transition,
+        isDragging
+    } = useSortable({ id: field.id });
+
+    const style = {
+        transform: CSS.Transform.toString(transform),
+        transition,
+        zIndex: isDragging ? 10 : 0,
+        opacity: isDragging ? 0.5 : 1,
+    };
+
+    if (!metric) return null;
+
+    return (
+        <div 
+            ref={setNodeRef} 
+            style={style} 
+            className={`group relative flex flex-col gap-4 rounded-xl border bg-card p-5 transition-all shadow-sm ${
+                isDragging ? 'border-purple-500 shadow-lg' : 'hover:border-purple-200 hover:shadow-md'
+            }`}
+        >
+            <div className="flex items-start justify-between gap-4">
+                <div className="flex items-center gap-3">
+                    <div 
+                        {...attributes} 
+                        {...listeners} 
+                        className="cursor-grab active:cursor-grabbing text-muted-foreground/40 hover:text-purple-500 transition-colors p-1 -ml-2"
+                    >
+                        <GripVertical className="h-5 w-5" />
+                    </div>
+                    <div className="space-y-0.5">
+                        <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold uppercase tracking-wider text-purple-600/70">{metric.category}</span>
+                            {field.is_required && (
+                                <Badge variant="secondary" className="bg-red-50 text-red-600 border-red-100 text-[10px] h-4 px-1.5">
+                                    Обязательно
+                                </Badge>
+                            )}
+                        </div>
+                        <h3 className="font-semibold text-foreground tracking-tight">{metric.label}</h3>
+                    </div>
+                </div>
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-muted-foreground hover:text-red-500 hover:bg-red-50 rounded-full"
+                    onClick={() => onRemove(index)}
+                >
+                    <Trash2 className="h-4 w-4" />
+                </Button>
+            </div>
+
+            <div className="grid gap-6 md:grid-cols-2">
+                <div className="space-y-4">
+                    <div className="space-y-2">
+                        <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                            Название в отчете (как видит сотрудник)
+                        </Label>
+                        <Input
+                            value={field.custom_label}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => onUpdate(index, 'custom_label', e.target.value)}
+                            className="bg-muted/30 border-muted-foreground/10 focus:border-purple-500/50 transition-colors"
+                            placeholder="Напр: Касса бар"
+                        />
+                    </div>
+
+                    <div className="space-y-3">
+                        <Label className="text-xs font-medium text-muted-foreground">Тип операции</Label>
+                        <div className="grid grid-cols-3 gap-2 bg-muted/50 p-1 rounded-lg">
+                            <button
+                                onClick={() => onUpdate(index, 'field_type', 'INCOME')}
+                                className={`flex items-center justify-center gap-1.5 py-1.5 text-xs font-medium rounded-md transition-all ${
+                                    field.field_type === 'INCOME'
+                                        ? 'bg-emerald-500 text-white shadow-sm'
+                                        : 'text-muted-foreground hover:bg-background/50'
+                                }`}
+                            >
+                                <Plus className="h-3 w-3" /> Доход
+                            </button>
+                            <button
+                                onClick={() => onUpdate(index, 'field_type', 'EXPENSE')}
+                                className={`flex items-center justify-center gap-1.5 py-1.5 text-xs font-medium rounded-md transition-all ${
+                                    field.field_type === 'EXPENSE'
+                                        ? 'bg-orange-500 text-white shadow-sm'
+                                        : 'text-muted-foreground hover:bg-background/50'
+                                }`}
+                            >
+                                <Trash2 className="h-3 w-3 rotate-180" /> Расход
+                            </button>
+                            <button
+                                onClick={() => onUpdate(index, 'field_type', 'OTHER')}
+                                className={`flex items-center justify-center gap-1.5 py-1.5 text-xs font-medium rounded-md transition-all ${
+                                    field.field_type === 'OTHER' || !field.field_type
+                                        ? 'bg-background text-foreground shadow-sm'
+                                        : 'text-muted-foreground hover:bg-background/50'
+                                }`}
+                            >
+                                Другое
+                            </button>
+                        </div>
+                    </div>
+
+                    {field.field_type === 'INCOME' && (
+                        <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+                            <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-100/50 space-y-3">
+                                <div className="flex items-center gap-2 text-emerald-700">
+                                    <Label className="text-[11px] font-bold uppercase tracking-wider">Куда зачислять деньги?</Label>
+                                </div>
+                                <Select
+                                    value={field.account_id?.toString()}
+                                    onValueChange={(value: string) => onUpdate(index, 'account_id', parseInt(value))}
+                                >
+                                    <SelectTrigger className="bg-background border-emerald-200/50 h-10 font-medium hover:border-emerald-300 transition-colors shadow-none">
+                                        <SelectValue placeholder="Выберите счёт" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {accounts.map(acc => (
+                                            <SelectItem key={acc.id} value={acc.id.toString()}>
+                                                <span className="flex items-center gap-2">
+                                                    <span className="text-base leading-none">{acc.icon}</span>
+                                                    <span>{acc.name}</span>
+                                                </span>
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                <p className="text-[10px] text-emerald-600/70 leading-relaxed">
+                                    Сумма из этого поля будет автоматически добавлена на выбранный баланс.
+                                </p>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                <div className="space-y-4 flex flex-col justify-center">
+                    <div className="space-y-3 rounded-xl bg-muted/20 p-4 border border-muted-foreground/5">
+                        <div className="flex items-center justify-between group/switch">
+                            <div className="space-y-0.5">
+                                <Label className="text-sm font-medium cursor-pointer" htmlFor={`emp-${field.id}`}>
+                                    Видно сотруднику
+                                </Label>
+                                <p className="text-[11px] text-muted-foreground">Показывать в истории смен</p>
+                            </div>
+                            <Switch
+                                id={`emp-${field.id}`}
+                                checked={field.show_for_employee !== false}
+                                onCheckedChange={(checked) => onUpdate(index, 'show_for_employee', checked)}
+                                className="data-[state=checked]:bg-purple-600"
+                            />
+                        </div>
+
+                        <div className="h-px bg-muted-foreground/5" />
+
+                        <div className="flex items-center justify-between group/switch">
+                            <div className="space-y-0.5">
+                                <Label className="text-sm font-medium cursor-pointer" htmlFor={`stats-${field.id}`}>
+                                    В общую статистику
+                                </Label>
+                                <p className="text-[11px] text-muted-foreground">Использовать в дашборде</p>
+                            </div>
+                            <Switch
+                                id={`stats-${field.id}`}
+                                checked={field.show_in_stats}
+                                onCheckedChange={(checked) => onUpdate(index, 'show_in_stats', checked)}
+                                className="data-[state=checked]:bg-purple-600"
+                            />
+                        </div>
+
+                        <div className="h-px bg-muted-foreground/5" />
+
+                        <div className="flex items-center justify-between group/switch">
+                            <div className="space-y-0.5">
+                                <Label className="text-sm font-medium cursor-pointer" htmlFor={`req-${field.id}`}>
+                                    Обязательное поле
+                                </Label>
+                                <p className="text-[11px] text-muted-foreground">Нельзя закрыть смену без заполнения</p>
+                            </div>
+                            <Switch
+                                id={`req-${field.id}`}
+                                checked={field.is_required}
+                                onCheckedChange={(checked) => onUpdate(index, 'is_required', checked)}
+                                className="data-[state=checked]:bg-purple-600"
+                            />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 export default function ReportBuilderPage({ params }: { params: Promise<{ clubId: string }> }) {
     const router = useRouter()
     const [clubId, setClubId] = useState('')
@@ -49,6 +263,17 @@ export default function ReportBuilderPage({ params }: { params: Promise<{ clubId
     const [accounts, setAccounts] = useState<Account[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [isSaving, setIsSaving] = useState(false)
+
+    const sensors = useSensors(
+        useSensor(PointerSensor, {
+            activationConstraint: {
+                distance: 8,
+            },
+        }),
+        useSensor(KeyboardSensor, {
+            coordinateGetter: sortableKeyboardCoordinates,
+        })
+    );
 
     useEffect(() => {
         params.then(p => {
@@ -67,7 +292,12 @@ export default function ReportBuilderPage({ params }: { params: Promise<{ clubId
                 setAccounts(data.accounts || [])
 
                 if (data.currentTemplate && Array.isArray(data.currentTemplate.schema)) {
-                    setSelectedFields(data.currentTemplate.schema)
+                    // Ensure all fields have an id for dnd-kit
+                    const schema = data.currentTemplate.schema.map((f: any) => ({
+                        ...f,
+                        id: f.id || `${f.metric_key}-${Math.random().toString(36).substr(2, 9)}`
+                    }))
+                    setSelectedFields(schema)
                 } else {
                     // Default fields if no template exists
                     const defaults = data.systemMetrics
@@ -77,7 +307,8 @@ export default function ReportBuilderPage({ params }: { params: Promise<{ clubId
                             custom_label: m.label,
                             is_required: true,
                             field_type: 'OTHER',
-                            show_in_stats: true
+                            show_in_stats: true,
+                            id: `${m.key}-${Math.random().toString(36).substr(2, 9)}`
                         }))
                     setSelectedFields(defaults)
                 }
@@ -99,7 +330,8 @@ export default function ReportBuilderPage({ params }: { params: Promise<{ clubId
                 custom_label: metric.label,
                 is_required: metric.is_required,
                 field_type: 'OTHER',
-                show_in_stats: true
+                show_in_stats: true,
+                id: `${metric.key}-${Math.random().toString(36).substr(2, 9)}`
             }
         ])
     }
@@ -116,6 +348,19 @@ export default function ReportBuilderPage({ params }: { params: Promise<{ clubId
         setSelectedFields(newFields)
     }
 
+    const handleDragEnd = (event: DragEndEvent) => {
+        const { active, over } = event;
+
+        if (over && active.id !== over.id) {
+            setSelectedFields((items) => {
+                const oldIndex = items.findIndex((item) => item.id === active.id);
+                const newIndex = items.findIndex((item) => item.id === over.id);
+
+                return arrayMove(items, oldIndex, newIndex);
+            });
+        }
+    };
+
     const handleSave = async () => {
         setIsSaving(true)
         try {
@@ -126,9 +371,11 @@ export default function ReportBuilderPage({ params }: { params: Promise<{ clubId
             })
 
             if (res.ok) {
-                alert('Шаблон отчета сохранен!')
+                // We could use a toast here, but since the project doesn't have one, 
+                // we'll use a more professional message.
+                alert('✅ Шаблон отчета успешно обновлен! Все изменения вступят в силу немедленно.')
             } else {
-                alert('Ошибка сохранения')
+                alert('❌ Ошибка при сохранении. Пожалуйста, попробуйте еще раз или обратитесь в поддержку.')
             }
         } catch (error) {
             console.error(error)
@@ -140,197 +387,122 @@ export default function ReportBuilderPage({ params }: { params: Promise<{ clubId
 
     const getMetricInfo = (key: string) => systemMetrics.find(m => m.key === key)
 
-    if (isLoading) return <div className="flex h-screen items-center justify-center"><Loader2 className="animate-spin" /></div>
+    if (isLoading) return <div className="flex h-screen items-center justify-center bg-background"><Loader2 className="animate-spin text-purple-600" /></div>
 
     return (
-        <div className="min-h-screen bg-background p-8">
-            <div className="mx-auto max-w-5xl">
-                <div className="mb-8 flex items-center justify-between">
-                    <div>
-                        <Link href={`/dashboard`} className="mb-2 flex items-center text-sm text-muted-foreground hover:text-foreground">
-                            <ArrowLeft className="mr-1 h-4 w-4" /> Назад в дашборд
-                        </Link>
-                        <h1 className="text-3xl font-bold">Конструктор отчета смены</h1>
-                        <p className="text-muted-foreground">Настройте, какие данные сотрудники должны заполнять при закрытии смены</p>
+        <div className="min-h-screen bg-[#F9FAFB] dark:bg-background">
+            <div className="sticky top-0 z-30 w-full border-b bg-background/80 backdrop-blur-md">
+                <div className="mx-auto max-w-6xl px-4 py-4 flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                        <Button variant="ghost" size="icon" asChild className="rounded-full">
+                            <Link href={`/clubs/${clubId}/settings/general`}>
+                                <ArrowLeft className="h-5 w-5" />
+                            </Link>
+                        </Button>
+                        <div>
+                            <h1 className="text-xl font-bold tracking-tight">Настройка отчета</h1>
+                            <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Конструктор смены</p>
+                        </div>
                     </div>
-                    <Button onClick={handleSave} disabled={isSaving} className="bg-purple-600 hover:bg-purple-700">
-                        {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                        Сохранить шаблон
-                    </Button>
+                    <div className="flex items-center gap-3">
+                        <Button onClick={handleSave} disabled={isSaving} className="bg-purple-600 hover:bg-purple-700 text-white px-6 shadow-md shadow-purple-200 transition-all active:scale-95">
+                            {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                            Сохранить изменения
+                        </Button>
+                    </div>
                 </div>
+            </div>
 
-                <div className="grid gap-8 md:grid-cols-12">
+            <div className="mx-auto max-w-6xl p-6 lg:p-10">
+                <div className="grid gap-10 lg:grid-cols-12">
 
                     {/* Left: Current Template */}
-                    <div className="md:col-span-7">
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Структура вашего отчета</CardTitle>
-                                <CardDescription>Сотрудник увидит эти поля в таком порядке</CardDescription>
-                            </CardHeader>
-                            <CardContent className="space-y-4">
-                                {selectedFields.length === 0 && (
-                                    <div className="border-2 border-dashed rounded-lg p-8 text-center text-muted-foreground">
-                                        Перетащите или добавьте метрики из списка справа
-                                    </div>
-                                )}
+                    <div className="lg:col-span-7 space-y-6">
+                        <div className="flex items-center justify-between">
+                            <h2 className="text-lg font-bold flex items-center gap-2">
+                                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-purple-100 text-purple-600 text-xs font-bold">1</span>
+                                Структура отчета
+                            </h2>
+                            <Badge variant="outline" className="bg-white/50 text-muted-foreground">
+                                {selectedFields.length} полей добавлено
+                            </Badge>
+                        </div>
 
-                                {selectedFields.map((field, index) => {
-                                    const metric = getMetricInfo(field.metric_key)
-                                    if (!metric) return null
-
-                                    return (
-                                        <div key={index} className="flex items-start gap-3 rounded-lg border bg-card p-4 transition-all hover:border-sidebar-primary/50 shadow-sm">
-                                            <div className="mt-3 cursor-move text-muted-foreground">
-                                                <GripVertical className="h-5 w-5" />
+                        <DndContext 
+                            sensors={sensors}
+                            collisionDetection={closestCenter}
+                            onDragEnd={handleDragEnd}
+                        >
+                            <SortableContext 
+                                items={selectedFields.map(f => f.id)}
+                                strategy={verticalListSortingStrategy}
+                            >
+                                <div className="space-y-4">
+                                    {selectedFields.length === 0 ? (
+                                        <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-muted-foreground/10 bg-white/30 py-20 text-center animate-in fade-in zoom-in-95 duration-500">
+                                            <div className="h-12 w-12 rounded-full bg-purple-50 flex items-center justify-center mb-4">
+                                                <Plus className="h-6 w-6 text-purple-400" />
                                             </div>
-
-                                            <div className="flex-1 space-y-3">
-                                                <div className="flex items-center justify-between">
-                                                    <Badge variant="outline" className="text-xs">{metric.category}</Badge>
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        className="h-6 w-6 p-0 text-muted-foreground hover:text-red-500"
-                                                        onClick={() => handleRemoveField(index)}
-                                                    >
-                                                        <Trash2 className="h-4 w-4" />
-                                                    </Button>
-                                                </div>
-
-                                                <div>
-                                                    <Label className="text-xs text-muted-foreground mb-1 block">Название для сотрудника</Label>
-                                                    <Input
-                                                        value={field.custom_label}
-                                                        onChange={(e) => handleUpdateField(index, 'custom_label', e.target.value)}
-                                                        className="font-medium bg-background"
-                                                    />
-                                                </div>
-
-                                                <div className="space-y-4">
-                                                    <div className="flex flex-col gap-1.5">
-                                                        <Label className="text-[10px] uppercase text-muted-foreground">Категория для расчётов</Label>
-                                                        <div className="flex bg-muted rounded-md p-1 scale-90 origin-left w-fit">
-                                                            <button
-                                                                onClick={() => handleUpdateField(index, 'field_type', 'INCOME')}
-                                                                className={`px-3 py-1 text-[10px] font-medium rounded-sm transition-all ${field.field_type === 'INCOME'
-                                                                    ? 'bg-green-500 text-white shadow-sm'
-                                                                    : 'hover:bg-background/50 text-muted-foreground'
-                                                                    }`}
-                                                            >
-                                                                Доход
-                                                            </button>
-                                                            <button
-                                                                onClick={() => handleUpdateField(index, 'field_type', 'EXPENSE')}
-                                                                className={`px-3 py-1 text-[10px] font-medium rounded-sm transition-all ${field.field_type === 'EXPENSE'
-                                                                    ? 'bg-orange-500 text-white shadow-sm'
-                                                                    : 'hover:bg-background/50 text-muted-foreground'
-                                                                    }`}
-                                                            >
-                                                                Расход
-                                                            </button>
-                                                            <button
-                                                                onClick={() => handleUpdateField(index, 'field_type', 'OTHER')}
-                                                                className={`px-3 py-1 text-[10px] font-medium rounded-sm transition-all ${field.field_type === 'OTHER' || !field.field_type
-                                                                    ? 'bg-background text-foreground shadow-sm'
-                                                                    : 'hover:bg-background/50 text-muted-foreground'
-                                                                    }`}
-                                                            >
-                                                                Другое
-                                                            </button>
-                                                        </div>
-                                                    </div>
-
-                                                    {field.field_type === 'INCOME' && (
-                                                        <div className="bg-green-50/20 p-3 rounded-lg border border-green-100/50 space-y-2">
-                                                            <div className="flex items-center gap-2 text-green-700">
-                                                                <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-                                                                <Label className="text-[10px] uppercase font-bold tracking-wider">Счёт для зачисления</Label>
-                                                            </div>
-                                                            <Select
-                                                                value={field.account_id?.toString()}
-                                                                onValueChange={(value) => handleUpdateField(index, 'account_id', parseInt(value))}
-                                                            >
-                                                                <SelectTrigger className="w-full bg-background border-green-200/50 h-9 font-medium shadow-sm hover:border-green-300 transition-colors">
-                                                                    <SelectValue placeholder="Выберите счёт" />
-                                                                </SelectTrigger>
-                                                                <SelectContent>
-                                                                    {accounts.map(acc => (
-                                                                        <SelectItem key={acc.id} value={acc.id.toString()}>
-                                                                            <span className="flex items-center gap-2">
-                                                                                <span className="text-base">{acc.icon}</span>
-                                                                                <span>{acc.name}</span>
-                                                                            </span>
-                                                                        </SelectItem>
-                                                                    ))}
-                                                                </SelectContent>
-                                                            </Select>
-                                                            <p className="text-[9px] text-muted-foreground leading-tight italic">
-                                                                * Все доходы из этого поля будут автоматически попадать на этот счёт
-                                                            </p>
-                                                        </div>
-                                                    )}
-
-                                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t pt-4 border-foreground/5">
-                                                        <div className="flex items-center justify-between gap-2">
-                                                            <div className="flex flex-col">
-                                                                <Label htmlFor={`emp-${index}`} className="text-sm">Сотруднику</Label>
-                                                                <span className="text-[10px] text-muted-foreground">Показывать в истории</span>
-                                                            </div>
-                                                            <Switch
-                                                                id={`emp-${index}`}
-                                                                checked={field.show_for_employee !== false}
-                                                                onCheckedChange={(checked) => handleUpdateField(index, 'show_for_employee', checked)}
-                                                            />
-                                                        </div>
-
-                                                        <div className="flex items-center justify-between gap-2">
-                                                            <div className="flex flex-col">
-                                                                <Label htmlFor={`stats-${index}`} className="text-sm">В сводке</Label>
-                                                                <span className="text-[10px] text-muted-foreground">Показывать в админке</span>
-                                                            </div>
-                                                            <Switch
-                                                                id={`stats-${index}`}
-                                                                checked={field.show_in_stats}
-                                                                onCheckedChange={(checked) => handleUpdateField(index, 'show_in_stats', checked)}
-                                                            />
-                                                        </div>
-
-                                                        <div className="flex items-center justify-between gap-2 sm:col-span-2">
-                                                            <Label htmlFor={`req-${index}`} className="text-sm">Обязательное поле</Label>
-                                                            <Switch
-                                                                id={`req-${index}`}
-                                                                checked={field.is_required}
-                                                                onCheckedChange={(checked) => handleUpdateField(index, 'is_required', checked)}
-                                                            />
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
+                                            <h3 className="text-sm font-semibold text-foreground">Отчет пока пуст</h3>
+                                            <p className="mt-1 text-xs text-muted-foreground max-w-[200px]">
+                                                Добавьте метрики из библиотеки справа, чтобы начать
+                                            </p>
                                         </div>
-                                    )
-                                })}
-                            </CardContent>
-                        </Card>
+                                    ) : (
+                                        selectedFields.map((field, index) => (
+                                            <SortableField 
+                                                key={field.id}
+                                                field={field}
+                                                index={index}
+                                                metric={getMetricInfo(field.metric_key)}
+                                                accounts={accounts}
+                                                onUpdate={handleUpdateField}
+                                                onRemove={handleRemoveField}
+                                            />
+                                        ))
+                                    )}
+                                </div>
+                            </SortableContext>
+                        </DndContext>
                     </div>
 
                     {/* Right: Available Metrics */}
-                    <div className="md:col-span-5">
-                        <Card className="sticky top-8">
-                            <CardHeader>
-                                <CardTitle>Библиотека метрик</CardTitle>
-                                <CardDescription>Нажмите +, чтобы добавить в отчет</CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="space-y-6">
+                    <div className="lg:col-span-5 space-y-6">
+                        <div className="sticky top-24 space-y-6">
+                            <h2 className="text-lg font-bold flex items-center gap-2">
+                                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-purple-100 text-purple-600 text-xs font-bold">2</span>
+                                Библиотека метрик
+                            </h2>
+
+                            <Card className="border-none shadow-xl shadow-purple-900/5 bg-white/80 backdrop-blur-sm overflow-hidden rounded-2xl">
+                                <CardHeader className="pb-3 bg-gradient-to-br from-purple-50/50 to-transparent">
+                                    <CardTitle className="text-sm font-bold">Доступные показатели</CardTitle>
+                                    <CardDescription className="text-xs">Нажмите на метрику, чтобы добавить её в отчет</CardDescription>
+                                </CardHeader>
+                                <CardContent className="space-y-6 max-h-[calc(100vh-250px)] overflow-y-auto custom-scrollbar pt-4">
                                     {['FINANCE', 'OPERATIONS', 'MARKETING'].map(category => {
                                         const metrics = systemMetrics.filter(m => m.category === category)
                                         if (metrics.length === 0) return null
 
+                                        const categoryIcons: Record<string, string> = {
+                                            'FINANCE': '💰',
+                                            'OPERATIONS': '⚙️',
+                                            'MARKETING': '📣'
+                                        }
+
+                                        const categoryNames: Record<string, string> = {
+                                            'FINANCE': 'Финансы',
+                                            'OPERATIONS': 'Операционка',
+                                            'MARKETING': 'Маркетинг'
+                                        }
+
                                         return (
-                                            <div key={category}>
-                                                <h4 className="mb-2 text-xs font-semibold uppercase text-muted-foreground">{category}</h4>
-                                                <div className="space-y-2">
+                                            <div key={category} className="space-y-3">
+                                                <h4 className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-muted-foreground/60 px-1">
+                                                    <span>{categoryIcons[category]}</span>
+                                                    {categoryNames[category]}
+                                                </h4>
+                                                <div className="grid gap-2">
                                                     {metrics.map(metric => {
                                                         const isAdded = selectedFields.some(f => f.metric_key === metric.key)
                                                         return (
@@ -338,16 +510,24 @@ export default function ReportBuilderPage({ params }: { params: Promise<{ clubId
                                                                 key={metric.id}
                                                                 onClick={() => handleAddField(metric)}
                                                                 disabled={isAdded}
-                                                                className={`w-full flex items-center justify-between rounded-md border p-3 text-left transition-all ${isAdded
-                                                                    ? 'bg-muted opacity-50 cursor-not-allowed'
-                                                                    : 'bg-card hover:bg-accent hover:text-accent-foreground'
+                                                                className={`group w-full flex items-center justify-between rounded-xl border p-3 text-left transition-all duration-200 ${isAdded
+                                                                    ? 'bg-muted/50 border-muted-foreground/5 opacity-50 cursor-not-allowed scale-[0.98]'
+                                                                    : 'bg-white border-muted-foreground/10 hover:border-purple-300 hover:shadow-md hover:shadow-purple-500/5 active:scale-95'
                                                                     }`}
                                                             >
-                                                                <div>
-                                                                    <div className="font-medium text-sm">{metric.label}</div>
-                                                                    <div className="text-xs text-muted-foreground">{metric.description}</div>
+                                                                <div className="space-y-0.5">
+                                                                    <div className="font-semibold text-xs text-foreground group-hover:text-purple-700 transition-colors">{metric.label}</div>
+                                                                    <div className="text-[10px] text-muted-foreground line-clamp-1 group-hover:text-muted-foreground/80 transition-colors">{metric.description}</div>
                                                                 </div>
-                                                                {!isAdded && <Plus className="h-4 w-4 text-primary" />}
+                                                                <div className={`h-6 w-6 rounded-full flex items-center justify-center transition-all ${
+                                                                    isAdded ? 'bg-muted-foreground/10' : 'bg-purple-50 group-hover:bg-purple-600'
+                                                                }`}>
+                                                                    {isAdded ? (
+                                                                        <div className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40" />
+                                                                    ) : (
+                                                                        <Plus className="h-3 w-3 text-purple-600 group-hover:text-white" />
+                                                                    )}
+                                                                </div>
                                                             </button>
                                                         )
                                                     })}
@@ -355,12 +535,28 @@ export default function ReportBuilderPage({ params }: { params: Promise<{ clubId
                                             </div>
                                         )
                                     })}
-                                </div>
-                            </CardContent>
-                        </Card>
+                                </CardContent>
+                            </Card>
+                        </div>
                     </div>
                 </div>
             </div>
+            
+            <style jsx global>{`
+                .custom-scrollbar::-webkit-scrollbar {
+                    width: 4px;
+                }
+                .custom-scrollbar::-webkit-scrollbar-track {
+                    background: transparent;
+                }
+                .custom-scrollbar::-webkit-scrollbar-thumb {
+                    background: #e2e8f0;
+                    border-radius: 10px;
+                }
+                .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+                    background: #cbd5e1;
+                }
+            `}</style>
         </div>
     )
 }

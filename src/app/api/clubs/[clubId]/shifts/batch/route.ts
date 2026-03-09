@@ -126,10 +126,20 @@ export async function POST(
                 }).format(checkInDate);
                 const hour = parseInt(hourInClubTZ);
                 if (!isNaN(hour)) {
-                    if (hour >= dayStartHour && hour < nightStartHour) {
-                        shiftType = 'DAY';
+                    if (dayStartHour < nightStartHour) {
+                        // Standard day: e.g. 08:00 to 20:00
+                        if (hour >= dayStartHour && hour < nightStartHour) {
+                            shiftType = 'DAY';
+                        } else {
+                            shiftType = 'NIGHT';
+                        }
                     } else {
-                        shiftType = 'NIGHT';
+                        // Wrapped day: e.g. Day starts 20:00, Night starts 08:00
+                        if (hour >= dayStartHour || hour < nightStartHour) {
+                            shiftType = 'DAY';
+                        } else {
+                            shiftType = 'NIGHT';
+                        }
                     }
                 }
 

@@ -3,16 +3,18 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { CategoriesTab } from "./CategoriesTab"
 import { WarehousesTab } from "./WarehousesTab"
-import { Category, Warehouse, updateInventorySettings } from "../actions"
+import { Category, Warehouse, updateInventorySettings, PriceTagSettings, Product } from "../actions"
 import { useRouter, useSearchParams, useParams } from "next/navigation"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { useTransition, useState, useEffect } from "react"
-import { RefreshCw, ShieldCheck, Wallet, Percent, Tag } from "lucide-react"
+import { RefreshCw, ShieldCheck, Wallet, Percent, Tag, Printer } from "lucide-react"
+import { PriceTagTemplateTab } from "./PriceTagTemplateTab"
 
 interface SettingsTabProps {
+    products: Product[]
     categories: Category[]
     warehouses: Warehouse[]
     employees: { id: string, full_name: string, role: string }[]
@@ -22,11 +24,12 @@ interface SettingsTabProps {
         employee_default_metric_key?: string,
         allow_salary_deduction?: boolean,
         employee_discount_percent?: number,
-        allow_cost_price_sale?: boolean
+        allow_cost_price_sale?: boolean,
+        price_tag_settings?: PriceTagSettings
     }
 }
 
-export function SettingsTab({ categories, warehouses, employees, currentUserId, inventorySettings }: SettingsTabProps) {
+export function SettingsTab({ products, categories, warehouses, employees, currentUserId, inventorySettings }: SettingsTabProps) {
     const router = useRouter()
     const searchParams = useSearchParams()
     const params = useParams()
@@ -42,7 +45,7 @@ export function SettingsTab({ categories, warehouses, employees, currentUserId, 
 
     // Default to categories if on 'settings' or something else
     const currentSubTab = searchParams.get("tab")
-    const activeValue = ['categories', 'warehouses', 'general'].includes(currentSubTab || '') 
+    const activeValue = ['categories', 'warehouses', 'general', 'pricetags'].includes(currentSubTab || '') 
         ? currentSubTab! 
         : 'general'
 
@@ -98,6 +101,12 @@ export function SettingsTab({ categories, warehouses, employees, currentUserId, 
                             className="rounded-md px-4 md:px-8 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm transition-all text-slate-500 font-bold text-xs md:text-sm h-full"
                         >
                             Склады
+                        </TabsTrigger>
+                        <TabsTrigger 
+                            value="pricetags"
+                            className="rounded-md px-4 md:px-8 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm transition-all text-slate-500 font-bold text-xs md:text-sm h-full"
+                        >
+                            Ценники
                         </TabsTrigger>
                     </TabsList>
                 </div>
@@ -193,6 +202,15 @@ export function SettingsTab({ categories, warehouses, employees, currentUserId, 
                 <TabsContent value="warehouses" className="mt-6">
                     <WarehousesTab warehouses={warehouses} employees={employees} currentUserId={currentUserId} />
                 </TabsContent>
+                
+                <TabsContent value="pricetags" className="mt-6">
+                     <PriceTagTemplateTab 
+                         products={products}
+                         initialSettings={inventorySettings?.price_tag_settings as any}
+                         onSave={(settings) => handleUpdateSetting('price_tag_settings', settings)}
+                         isPending={isPending}
+                     />
+                 </TabsContent>
             </Tabs>
         </div>
     )

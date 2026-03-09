@@ -1,5 +1,5 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { getProducts, getCategories, getSupplies, getInventories, getWarehouses, getEmployees, getClubTasks, getProcurementLists, getSuppliersForSelect, getClubSettings, manualTriggerReplenishment, getSalesAnalytics, getActiveShiftsForClub, getUserRoleInClub } from "./actions"
+import { getProducts, getCategories, getSupplies, getInventories, getWarehouses, getEmployees, getClubTasks, getProcurementLists, getSuppliersForSelect, getClubSettings, getSalesAnalytics, getActiveShiftsForClub, getUserRoleInClub } from "./actions"
 import { ProductsTab } from "./_components/ProductsTab"
 import { SalesTab } from "./_components/SalesTab"
 import { TasksTab } from "./_components/TasksTab"
@@ -11,9 +11,6 @@ import { SettingsTab } from "./_components/SettingsTab"
 import { AbcAnalysisTab } from "./_components/AbcAnalysisTab"
 import { InventoryTabsWrapper } from "./_components/InventoryTabsWrapper"
 import { cookies } from "next/headers"
-import { Button } from "@/components/ui/button"
-import { RefreshCw, ShoppingCart } from "lucide-react"
-import { revalidatePath } from "next/cache"
 
 export default async function InventoryPage({ params, searchParams }: { params: Promise<{ clubId: string }>, searchParams: Promise<{ tab?: string }> }) {
     const { clubId } = await params
@@ -21,12 +18,6 @@ export default async function InventoryPage({ params, searchParams }: { params: 
     const userId = (await cookies()).get("session_user_id")?.value
 
     if (!userId) return <div className="p-8 text-red-500">Доступ запрещен. Пожалуйста, авторизуйтесь.</div>
-
-    const handleManualTrigger = async () => {
-        "use server"
-        await manualTriggerReplenishment(clubId)
-        revalidatePath(`/clubs/${clubId}/inventory`)
-    }
 
     const [products, categories, supplies, inventories, warehouses, employees, tasks, procurementLists, suppliers, clubSettings, sales, shifts, userRole] = await Promise.all([
         getProducts(clubId),
@@ -56,12 +47,6 @@ export default async function InventoryPage({ params, searchParams }: { params: 
                     <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Склад и учет</h1>
                     <p className="text-sm md:text-base text-muted-foreground">Управление товарными запасами, поставками, складами и проведение ревизий.</p>
                 </div>
-                <form action={handleManualTrigger}>
-                    <Button variant="outline" className="gap-2">
-                        <RefreshCw className="h-4 w-4" />
-                        Проверить остатки
-                    </Button>
-                </form>
             </div>
             
             <InventoryTabsWrapper activeTab={activeTab}>
@@ -125,7 +110,13 @@ export default async function InventoryPage({ params, searchParams }: { params: 
                 </div>
 
                 <TabsContent value="stock" className="mt-0">
-                    <ProductsTab products={products} categories={categories} warehouses={warehouses} currentUserId={userId} />
+                    <ProductsTab 
+                        products={products} 
+                        categories={categories} 
+                        warehouses={warehouses} 
+                        currentUserId={userId} 
+                        priceTagSettings={clubSettings.inventory_settings?.price_tag_settings}
+                    />
                 </TabsContent>
 
                 <TabsContent value="sales" className="mt-0">
@@ -167,11 +158,12 @@ export default async function InventoryPage({ params, searchParams }: { params: 
                 </TabsContent>
 
                 <TabsContent value="abc-analysis" className="mt-0">
-                    <AbcAnalysisTab clubId={clubId} />
+                    <AbcAnalysisTab clubId={clubId} products={products} />
                 </TabsContent>
 
                 <TabsContent value="settings" className="mt-0">
                     <SettingsTab 
+                        products={products}
                         categories={categories} 
                         warehouses={warehouses} 
                         employees={employees} 

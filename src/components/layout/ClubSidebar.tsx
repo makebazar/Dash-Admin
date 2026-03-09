@@ -19,7 +19,9 @@ import {
     FileText,
     Calendar,
     Wrench,
-    Monitor
+    Monitor,
+    Shield,
+    Loader2
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -41,24 +43,48 @@ interface ClubSidebarContentProps {
 
 export function ClubSidebarContent({ club, clubId, onLinkClick }: ClubSidebarContentProps) {
     const pathname = usePathname()
+    const [permissions, setPermissions] = useState<Record<string, boolean>>({})
+    const [isFullAccess, setIsFullAccess] = useState(false)
+    const [isLoading, setIsLoading] = useState(true)
+
+    useEffect(() => {
+        const fetchMyPermissions = async () => {
+            try {
+                const res = await fetch(`/api/clubs/${clubId}/my-permissions`)
+                const data = await res.json()
+                if (res.ok) {
+                    setPermissions(data.permissions || {})
+                    setIsFullAccess(data.isFullAccess || false)
+                }
+            } catch (error) {
+                console.error('Error fetching permissions:', error)
+            } finally {
+                setIsLoading(false)
+            }
+        }
+        fetchMyPermissions()
+    }, [clubId])
+
+    const hasPermission = (key: string) => isFullAccess || permissions[key] === true
 
     const mainLinks = [
-        { href: `/clubs/${clubId}`, label: 'Дашборд', icon: <LayoutDashboard className="h-4 w-4" /> },
-        { href: `/clubs/${clubId}/shifts`, label: 'Смены', icon: <Clock className="h-4 w-4" /> },
-        { href: `/clubs/${clubId}/schedule`, label: 'График работы', icon: <Calendar className="h-4 w-4" /> },
-        { href: `/clubs/${clubId}/employees`, label: 'Сотрудники', icon: <Users className="h-4 w-4" /> },
-        { href: `/clubs/${clubId}/salaries`, label: 'Зарплаты', icon: <Wallet className="h-4 w-4" /> },
-        { href: `/clubs/${clubId}/finance`, label: 'Финансы', icon: <DollarSign className="h-4 w-4" /> },
-        { href: `/clubs/${clubId}/inventory`, label: 'Склад', icon: <Package className="h-4 w-4" /> },
-        { href: `/clubs/${clubId}/equipment`, label: 'Оборудование', icon: <Monitor className="h-4 w-4" /> },
-        { href: `/clubs/${clubId}/reviews`, label: 'Центр проверок', icon: <ClipboardCheck className="h-4 w-4" /> },
+        { href: `/clubs/${clubId}`, label: 'Дашборд', icon: <LayoutDashboard className="h-4 w-4" />, visible: hasPermission('view_dashboard') },
+        { href: `/clubs/${clubId}/shifts`, label: 'Смены', icon: <Clock className="h-4 w-4" />, visible: hasPermission('view_shifts') },
+        { href: `/clubs/${clubId}/schedule`, label: 'График работы', icon: <Calendar className="h-4 w-4" />, visible: hasPermission('view_schedule') },
+        { href: `/clubs/${clubId}/employees`, label: 'Сотрудники', icon: <Users className="h-4 w-4" />, visible: hasPermission('manage_employees') },
+        { href: `/clubs/${clubId}/salaries`, label: 'Зарплаты', icon: <Wallet className="h-4 w-4" />, visible: hasPermission('view_salaries') },
+        { href: `/clubs/${clubId}/finance`, label: 'Финансы', icon: <DollarSign className="h-4 w-4" />, visible: hasPermission('view_finance') },
+        { href: `/clubs/${clubId}/inventory`, label: 'Склад', icon: <Package className="h-4 w-4" />, visible: hasPermission('manage_inventory') },
+        { href: `/clubs/${clubId}/equipment`, label: 'Оборудование', icon: <Monitor className="h-4 w-4" />, visible: hasPermission('manage_equipment') },
+        { href: `/clubs/${clubId}/reviews`, label: 'Центр проверок', icon: <ClipboardCheck className="h-4 w-4" />, visible: hasPermission('view_reviews') },
     ]
 
     const settingsLinks = [
-        { href: `/clubs/${clubId}/settings/general`, label: 'Общие', icon: <Settings className="h-4 w-4" /> },
-        { href: `/clubs/${clubId}/settings/salary`, label: 'Зарплаты', icon: <Wallet className="h-4 w-4" /> },
-        { href: `/clubs/${clubId}/settings/reports`, label: 'Отчеты', icon: <FileText className="h-4 w-4" /> },
-        { href: `/clubs/${clubId}/settings/checklists`, label: 'Чеклисты', icon: <ClipboardCheck className="h-4 w-4" /> },
+        { href: `/clubs/${clubId}/settings/general`, label: 'Общие', icon: <Settings className="h-4 w-4" />, visible: hasPermission('manage_club_settings') },
+        { href: `/clubs/${clubId}/settings/salary`, label: 'Зарплаты', icon: <Wallet className="h-4 w-4" />, visible: hasPermission('edit_salaries_settings') },
+        { href: `/clubs/${clubId}/settings/reports`, label: 'Отчеты', icon: <FileText className="h-4 w-4" />, visible: hasPermission('manage_report_template') },
+        { href: `/clubs/${clubId}/settings/checklists`, label: 'Чеклисты', icon: <ClipboardCheck className="h-4 w-4" />, visible: hasPermission('manage_checklists') },
+        { href: `/clubs/${clubId}/settings/access`, label: 'Доступ', icon: <Shield className="h-4 w-4" />, visible: isFullAccess },
     ]
 
     return (
@@ -90,49 +116,61 @@ export function ClubSidebarContent({ club, clubId, onLinkClick }: ClubSidebarCon
 
             {/* Navigation */}
             <div className="flex-1 overflow-auto p-4">
-                <div className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Меню
-                </div>
-                <nav className="mb-6 space-y-1">
-                    {mainLinks.map((link) => (
-                        <Link
-                            key={link.href}
-                            href={link.href}
-                            onClick={onLinkClick}
-                            className={cn(
-                                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
-                                pathname === link.href
-                                    ? "bg-accent text-accent-foreground"
-                                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                            )}
-                        >
-                            {link.icon}
-                            {link.label}
-                        </Link>
-                    ))}
-                </nav>
+                {isLoading ? (
+                    <div className="flex items-center justify-center py-10">
+                        <Loader2 className="h-5 w-5 animate-spin text-purple-600" />
+                    </div>
+                ) : (
+                    <>
+                        <div className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                            Меню
+                        </div>
+                        <nav className="mb-6 space-y-1">
+                            {mainLinks.filter(l => l.visible).map((link) => (
+                                <Link
+                                    key={link.href}
+                                    href={link.href}
+                                    onClick={onLinkClick}
+                                    className={cn(
+                                        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
+                                        pathname === link.href
+                                            ? "bg-accent text-accent-foreground"
+                                            : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                                    )}
+                                >
+                                    {link.icon}
+                                    {link.label}
+                                </Link>
+                            ))}
+                        </nav>
 
-                <div className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Настройки
-                </div>
-                <nav className="space-y-1">
-                    {settingsLinks.map((link) => (
-                        <Link
-                            key={link.href}
-                            href={link.href}
-                            onClick={onLinkClick}
-                            className={cn(
-                                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
-                                pathname === link.href
-                                    ? "bg-accent text-accent-foreground"
-                                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                            )}
-                        >
-                            {link.icon}
-                            {link.label}
-                        </Link>
-                    ))}
-                </nav>
+                        {settingsLinks.some(l => l.visible) && (
+                            <>
+                                <div className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                                    Настройки
+                                </div>
+                                <nav className="space-y-1">
+                                    {settingsLinks.filter(l => l.visible).map((link) => (
+                                        <Link
+                                            key={link.href}
+                                            href={link.href}
+                                            onClick={onLinkClick}
+                                            className={cn(
+                                                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
+                                                pathname === link.href
+                                                    ? "bg-accent text-accent-foreground"
+                                                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                                            )}
+                                        >
+                                            {link.icon}
+                                            {link.label}
+                                        </Link>
+                                    ))}
+                                </nav>
+                            </>
+                        )}
+                    </>
+                )}
             </div>
         </div>
     )

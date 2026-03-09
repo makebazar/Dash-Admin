@@ -380,77 +380,105 @@ export async function GET(
 
             // 1. Calculate Period Bonuses rewards
             let bonuses_status: any[] = [];
+            let enriched_scheme_bonuses: any[] = activeScheme?.bonuses ? [...activeScheme.bonuses] : [];
+            let enriched_legacy_period_bonuses: any[] = [];
             
             // If we have a frozen result in the snapshot, use it
             if (snapshot?.frozen_bonuses_status) {
                 bonuses_status = snapshot.frozen_bonuses_status;
+                // If frozen status exists, we assume it contains the final state of relevant bonuses
+                // But for schemeWithRewards we might need to be careful. 
+                // For simplicity, if frozen, we trust the snapshot's breakdown which is used later.
             } else {
-                const period_bonuses = activeScheme?.period_bonuses || [];
-                if (Array.isArray(period_bonuses)) {
-                    bonuses_status = period_bonuses.map((bonus: any) => {
-                        const current_value = monthlyMetrics[bonus.metric_key] ||
-                            (bonus.metric_key === 'total_revenue' ? monthlyMetrics.total_revenue :
-                                bonus.metric_key === 'total_hours' ? monthlyMetrics.total_hours : 0);
+                // Helper to calculate bonus status
+                const calculateBonusStatus = (bonus: any) => {
+                    const metricKey = bonus.metric_key || bonus.source || 'total_revenue';
+                    const current_value = monthlyMetrics[metricKey] ||
+                        (metricKey === 'total_revenue' ? monthlyMetrics.total_revenue :
+                            metricKey === 'total_hours' ? monthlyMetrics.total_hours : 0);
 
-                        const existingAccrual = empShifts.find((s: any) =>
-                            s.salary_snapshot?.type === 'PERIOD_BONUS' &&
-                            s.salary_snapshot?.metric_key === bonus.metric_key
-                        );
+                    const existingAccrual = empShifts.find((s: any) =>
+                        s.salary_snapshot?.type === 'PERIOD_BONUS' &&
+                        (s.salary_snapshot?.metric_key === metricKey || s.salary_snapshot?.source === metricKey)
+                    );
 
-                        let target_value = 0;
-                        let progress_percent = 0;
-                        let is_met = false;
-                        let current_reward_value = bonus.reward_value;
-                        let current_reward_type = bonus.reward_type;
+                    let target_value = 0;
+                    let progress_percent = 0;
+                    let is_met = false;
+                    let current_reward_value = bonus.reward_value;
+                    let current_reward_type = bonus.reward_type;
 
-                        const standard_shifts = activeScheme?.standard_monthly_shifts || 15;
-                        const mode = bonus.bonus_mode || 'MONTH';
+                    const standard_shifts = activeScheme?.standard_monthly_shifts || 15;
+                    const mode = bonus.bonus_mode || bonus.mode || 'MONTH';
 
-                        let resultThresholds = bonus.thresholds;
+                    let resultThresholds = bonus.thresholds;
 
-                        if (bonus.type === 'PROGRESSIVE' && Array.isArray(bonus.thresholds) && bonus.thresholds.length > 0) {
-                            const sorted = [...bonus.thresholds].sort((a: any, b: any) => (a.from || 0) - (b.from || 0));
-                            const scaledThresholds = sorted.map((t: any) => {
-                                const threshold_from = t.from || 0;
-                                let scaled_from = mode === 'SHIFT' ? threshold_from * shifts_count : (threshold_from / standard_shifts) * shifts_count;
-                                return { from: scaled_from, original_from: threshold_from, percent: t.percent || 0, label: t.label || null };
-                            });
-                            resultThresholds = scaledThresholds;
+                    if ((bonus.type === 'PROGRESSIVE' || bonus.type === 'progressive_percent') && Array.isArray(bonus.thresholds) && bonus.thresholds.length > 0) {
+                        const sorted = [...bonus.thresholds].sort((a: any, b: any) => (a.from || 0) - (b.from || 0));
+                        const scaledThresholds = sorted.map((t: any) => {
+                            const threshold_from = t.from || 0;
+                            let scaled_from = mode === 'SHIFT' ? threshold_from * shifts_count : (threshold_from / standard_shifts) * shifts_count;
+                            return { from: scaled_from, original_from: threshold_from, percent: t.percent || 0, amount: t.amount || t.bonus || 0, label: t.label || null };
+                        });
+                        resultThresholds = scaledThresholds;
 
-                            let metThresholdIndex = -1;
-                            for (let i = scaledThresholds.length - 1; i >= 0; i--) {
-                                if (current_value >= scaledThresholds[i].from) { metThresholdIndex = i; break; }
-                            }
-
-                            if (metThresholdIndex >= 0 && shifts_count > 0) {
-                                is_met = true;
-                                current_reward_value = scaledThresholds[metThresholdIndex].percent;
-                                current_reward_type = 'PERCENT';
-                                target_value = metThresholdIndex < scaledThresholds.length - 1 ? scaledThresholds[metThresholdIndex + 1].from : scaledThresholds[metThresholdIndex].from;
-                            } else {
-                                is_met = false;
-                                target_value = shifts_count > 0 ? scaledThresholds[0].from : (sorted[0]?.from || 0);
-                                current_reward_value = 0;
-                                current_reward_type = 'PERCENT';
-                            }
-                        } else {
-                            target_value = mode === 'SHIFT' ? shifts_count * (bonus.target_per_shift || 0) : (bonus.target_per_shift || 0) / (standard_shifts || 1) * shifts_count;
-                            is_met = shifts_count > 0 && current_value >= target_value;
+                        let metThresholdIndex = -1;
+                        for (let i = scaledThresholds.length - 1; i >= 0; i--) {
+                            if (current_value >= scaledThresholds[i].from) { metThresholdIndex = i; break; }
                         }
 
-                        progress_percent = target_value > 0 ? (current_value / target_value) * 100 : (shifts_count > 0 ? 100 : 0);
+                        if (metThresholdIndex >= 0 && shifts_count > 0) {
+                            is_met = true;
+                            if (bonus.reward_type === 'FIXED') {
+                                current_reward_value = scaledThresholds[metThresholdIndex].amount;
+                                current_reward_type = 'FIXED';
+                            } else {
+                                current_reward_value = scaledThresholds[metThresholdIndex].percent;
+                                current_reward_type = 'PERCENT';
+                            }
+                            target_value = metThresholdIndex < scaledThresholds.length - 1 ? scaledThresholds[metThresholdIndex + 1].from : scaledThresholds[metThresholdIndex].from;
+                        } else {
+                            is_met = false;
+                            target_value = shifts_count > 0 ? scaledThresholds[0].from : (sorted[0]?.from || 0);
+                            current_reward_value = 0;
+                            current_reward_type = bonus.reward_type === 'FIXED' ? 'FIXED' : 'PERCENT';
+                        }
+                    } else {
+                        target_value = mode === 'SHIFT' ? shifts_count * (bonus.target_per_shift || 0) : (bonus.target_per_shift || 0) / (standard_shifts || 1) * shifts_count;
+                        is_met = shifts_count > 0 && current_value >= target_value;
+                    }
 
-                        return {
-                            ...bonus,
-                            thresholds: resultThresholds,
-                            current_value,
-                            target_value,
-                            progress_percent,
-                            is_met,
-                            is_accrued: !!existingAccrual,
-                            current_reward_value,
-                            current_reward_type
-                        };
+                    progress_percent = target_value > 0 ? (current_value / target_value) * 100 : (shifts_count > 0 ? 100 : 0);
+
+                    return {
+                        ...bonus,
+                        thresholds: resultThresholds,
+                        current_value,
+                        target_value,
+                        progress_percent,
+                        is_met,
+                        is_accrued: !!existingAccrual,
+                        current_reward_value,
+                        current_reward_type
+                    };
+                };
+
+                // 1. Process legacy period_bonuses
+                const period_bonuses = activeScheme?.period_bonuses || [];
+                if (Array.isArray(period_bonuses)) {
+                    enriched_legacy_period_bonuses = period_bonuses.map(calculateBonusStatus);
+                    bonuses_status = [...bonuses_status, ...enriched_legacy_period_bonuses];
+                }
+
+                // 2. Process new bonuses with mode='MONTH'
+                if (Array.isArray(enriched_scheme_bonuses)) {
+                    enriched_scheme_bonuses = enriched_scheme_bonuses.map((bonus: any) => {
+                        if ((bonus.type === 'progressive_percent' || bonus.type === 'PROGRESSIVE') && bonus.mode === 'MONTH') {
+                            const status = calculateBonusStatus(bonus);
+                            bonuses_status.push(status);
+                            return status;
+                        }
+                        return bonus;
                     });
                 }
             }
@@ -497,7 +525,11 @@ export async function GET(
 
                 // Pass the scheme WITH calculated bonuses reward levels
                 // IMPORTANT: Use activeScheme (frozen if paid) instead of emp
-                const schemeWithRewards = { ...activeScheme, period_bonuses: bonuses_status };
+                const schemeWithRewards = { 
+                    ...activeScheme, 
+                    period_bonuses: enriched_legacy_period_bonuses,
+                    bonuses: enriched_scheme_bonuses 
+                };
 
                 const result = await calculateSalary(
                     { 
@@ -518,7 +550,7 @@ export async function GET(
             const periodBonuses_local = activeScheme?.period_bonuses || [];
             const bonuses_local = activeScheme?.bonuses || [];
             
-            const has_kpi_feature = periodBonuses_local.some((b: any) => !b.payout_type || b.payout_type === 'REAL_MONEY') ||
+            const has_kpi_feature = bonuses_status.length > 0 || // Use bonuses_status which covers both sources
                                    bonuses_local.some((b: any) => !b.payout_type || b.payout_type === 'REAL_MONEY');
 
             const has_virtual_balance_feature = periodBonuses_local.some((b: any) => b.payout_type === 'VIRTUAL_BALANCE') ||
@@ -528,6 +560,10 @@ export async function GET(
             // 3. Totals and final summary data
             // base_salary - только ставка
             const base_salary = processedShifts.reduce((sum: number, s: any) => sum + (s.breakdown?.base || 0), 0);
+            
+            // Calculate payout split from shifts
+            const instant_payout_total = processedShifts.reduce((sum: number, s: any) => sum + (s.breakdown?.instant_payout || 0), 0);
+            const accrued_payout_from_shifts = processedShifts.reduce((sum: number, s: any) => sum + (s.breakdown?.accrued_payout || 0), 0);
             
             // shift_bonuses - бонусы, привязанные К СМЕНЕ (кроме периодических и обслуживания)
             const shift_bonuses = processedShifts.reduce((sum: number, s: any) => {
@@ -646,6 +682,9 @@ export async function GET(
                 let final_total_accrued = base_salary + shift_bonuses + kpi_bonus_amount;
                 let final_virtual_balance_accrued = virtual_shift_bonuses + virtual_kpi_bonus_amount;
 
+                // Track monthly accrued bonuses for payout breakdown
+                let accrued_monthly_bonuses = kpi_bonus_amount;
+
                 // Add Monthly Checklist Bonuses to final totals
                 const allChecklistConfigs = (activeScheme.bonuses || []).filter((b: any) => b.type === 'checklist');
                 const checklist_status: any[] = [];
@@ -683,6 +722,7 @@ export async function GET(
                                 final_virtual_balance_accrued += total_earned_this_month;
                             } else {
                                 final_total_accrued += total_earned_this_month;
+                                accrued_monthly_bonuses += total_earned_this_month;
                             }
                         }
                     } else {
@@ -745,7 +785,8 @@ export async function GET(
                 kpi_bonus_amount: final_total_accrued - base_salary,
                 virtual_balance_accrued: final_virtual_balance_accrued,
                 total_paid,
-                balance: final_total_accrued - total_paid,
+                balance: final_total_accrued - total_paid - total_bar_purchases,
+                total_bar_purchases,
                 virtual_balance: final_virtual_balance_accrued - total_paid_bonus,
                 total_paid_bonus,
                 period_bonuses: bonuses_status,
@@ -759,7 +800,9 @@ export async function GET(
                     base_salary,
                     virtual_balance: final_virtual_balance_accrued,
                     kpi_bonuses: kpi_bonus_amount,
-                    other_bonuses: shift_bonuses
+                    other_bonuses: shift_bonuses,
+                    instant_payout: instant_payout_total,
+                    accrued_payout: final_total_accrued - instant_payout_total - total_bar_purchases
                 },
                 metrics: {
                     total_revenue,
@@ -782,7 +825,6 @@ export async function GET(
                     method: p.payment_method,
                     payment_type: p.payment_type || 'salary'
                 })),
-                total_bar_purchases,
                 bar_details: barPurchasesRes.rows.map((m: any) => ({
                     id: m.id,
                     date: m.date,

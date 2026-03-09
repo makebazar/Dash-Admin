@@ -254,7 +254,7 @@ export async function GET(
         // Combine period_bonuses and any progressive_bonus from main bonuses array
         const all_progressive_bonuses = [
             ...period_bonuses,
-            ...bonuses.filter((b: any) => b.type === 'progressive_bonus' || b.type === 'tiered' || b.type === 'progressive_percent')
+            ...bonuses.filter((b: any) => b.type === 'progressive_bonus' || b.type === 'progressive_percent')
         ];
 
         const kpi_progress = all_progressive_bonuses.map((bonus: any) => {
@@ -282,8 +282,8 @@ export async function GET(
             let is_met = false;
             let all_thresholds: any[] = [];
 
-            // Handle tiered/progressive thresholds
-            const bonusThresholds = bonus.thresholds || bonus.tiers || [];
+            // Handle progressive thresholds
+            const bonusThresholds = bonus.thresholds || [];
 
             if (bonusThresholds.length > 0) {
                 const sorted = [...bonusThresholds].sort((a: any, b: any) => (a.from || 0) - (b.from || 0));
@@ -314,7 +314,13 @@ export async function GET(
 
                     const percent = t.percent || 0;
                     const amount = t.bonus || t.amount || 0;
-                    const potentialBonus = percent > 0 ? endOfMonthThreshold * (percent / 100) : amount;
+                    
+                    let potentialBonus = 0;
+                    if (bonus.reward_type === 'FIXED') {
+                        potentialBonus = amount;
+                    } else {
+                        potentialBonus = endOfMonthThreshold * (percent / 100);
+                    }
 
                     return {
                         level: idx + 1,
@@ -339,11 +345,10 @@ export async function GET(
                         current_level = i + 1;
                         const reached_t = all_thresholds[i];
                         
-                        // If threshold has percent, calculate from value. Otherwise use amount.
-                        if (reached_t.percent > 0) {
-                            current_bonus_amount = value_for_scaling * (reached_t.percent / 100);
-                        } else {
+                        if (bonus.reward_type === 'FIXED') {
                             current_bonus_amount = reached_t.amount;
+                        } else {
+                            current_bonus_amount = value_for_scaling * (reached_t.percent / 100);
                         }
                         
                         is_met = true;
@@ -396,14 +401,18 @@ export async function GET(
             let projected_level = 0;
             let projected_bonus = 0;
 
-            if (bonus.type === 'PROGRESSIVE' && all_thresholds.length > 0) {
+            if ((bonus.type === 'PROGRESSIVE' || bonus.type === 'progressive_percent') && all_thresholds.length > 0) {
                 for (let i = all_thresholds.length - 1; i >= 0; i--) {
                     const monthlyThreshold = all_thresholds[i].monthly_threshold;
                     const endOfMonthThreshold = mode === 'SHIFT' ? monthlyThreshold * planned_shifts : monthlyThreshold;
 
                     if (projected_total >= endOfMonthThreshold) {
                         projected_level = i + 1;
-                        projected_bonus = projected_total * (all_thresholds[i].percent / 100);
+                        if (bonus.reward_type === 'FIXED') {
+                             projected_bonus = all_thresholds[i].amount;
+                        } else {
+                             projected_bonus = projected_total * (all_thresholds[i].percent / 100);
+                        }
                         break;
                     }
                 }

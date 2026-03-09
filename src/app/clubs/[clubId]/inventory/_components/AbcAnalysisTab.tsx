@@ -5,15 +5,17 @@ import { getAbcAnalysisData, manualTriggerReplenishment } from "../actions"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { RefreshCw, TrendingUp, AlertTriangle, CheckCircle2, Info } from "lucide-react"
+import { RefreshCw, TrendingUp, AlertTriangle, CheckCircle2, Info, Package, DollarSign, PieChart } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import { Product } from "../actions"
 
 interface AbcAnalysisTabProps {
     clubId: string
+    products: Product[]
 }
 
-export function AbcAnalysisTab({ clubId }: AbcAnalysisTabProps) {
+export function AbcAnalysisTab({ clubId, products }: AbcAnalysisTabProps) {
     const [data, setData] = useState<any[]>([])
     const [isPending, startTransition] = useTransition()
     const [isLoading, setIsLoading] = useState(true)
@@ -46,9 +48,16 @@ export function AbcAnalysisTab({ clubId }: AbcAnalysisTabProps) {
         B: data.filter(i => i.abc_category === 'B'),
         C: data.filter(i => i.abc_category === 'C'),
         totalRevenue: data.reduce((acc, curr) => acc + Number(curr.total_revenue), 0),
-        totalProfit: data.reduce((acc, curr) => acc + Number(curr.total_profit), 0)
+        totalProfit: data.reduce((acc, curr) => acc + Number(curr.total_profit), 0),
+        
+        // Stock Stats
+        totalProducts: products.length,
+        stockCost: products.reduce((acc, p) => acc + (p.cost_price * (p.current_stock || 0)), 0),
+        stockValue: products.reduce((acc, p) => acc + (p.selling_price * (p.current_stock || 0)), 0),
     }
 
+    const potentialProfit = stats.stockValue - stats.stockCost
+    const stockMargin = stats.stockValue > 0 ? (potentialProfit / stats.stockValue * 100) : 0
     const avgMargin = stats.totalRevenue > 0 ? (stats.totalProfit / stats.totalRevenue * 100) : 0
 
     if (isLoading) {
@@ -64,8 +73,10 @@ export function AbcAnalysisTab({ clubId }: AbcAnalysisTabProps) {
         <div className="space-y-6">
             <div className="flex justify-between items-center">
                 <div>
-                    <h2 className="text-2xl font-black text-slate-900">ABC Анализ</h2>
-                    <p className="text-sm text-slate-500">Классификация товаров по вкладу в выручку за 30 дней</p>
+                    <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tight">
+                        Аналитика
+                    </h2>
+                    <p className="text-sm text-slate-500">Складские показатели и ABC-анализ продаж за 30 дней</p>
                 </div>
                 <Button 
                     onClick={handleRecalculate} 
@@ -74,8 +85,61 @@ export function AbcAnalysisTab({ clubId }: AbcAnalysisTabProps) {
                     className="gap-2"
                 >
                     <RefreshCw className={cn("h-4 w-4", isPending && "animate-spin")} />
-                    Пересчитать
+                    Обновить данные
                 </Button>
+            </div>
+
+            {/* Inventory Overview */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+                    <div className="flex items-center gap-3 mb-2">
+                        <div className="p-2 bg-blue-50 rounded-lg">
+                            <Package className="h-4 w-4 text-blue-600" />
+                        </div>
+                        <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Товаров в наличии</span>
+                    </div>
+                    <div className="flex items-baseline gap-2">
+                        <span className="text-2xl font-black text-slate-900">{stats.totalProducts}</span>
+                        <span className="text-xs text-slate-500 font-medium">позиций</span>
+                    </div>
+                </div>
+
+                <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+                    <div className="flex items-center gap-3 mb-2">
+                        <div className="p-2 bg-slate-50 rounded-lg">
+                            <DollarSign className="h-4 w-4 text-slate-600" />
+                        </div>
+                        <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Сумма в закупе</span>
+                    </div>
+                    <div className="flex items-baseline gap-2">
+                        <span className="text-2xl font-black text-slate-900">{Math.round(stats.stockCost).toLocaleString()} ₽</span>
+                    </div>
+                </div>
+
+                <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+                    <div className="flex items-center gap-3 mb-2">
+                        <div className="p-2 bg-green-50 rounded-lg">
+                            <TrendingUp className="h-4 w-4 text-green-600" />
+                        </div>
+                        <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Сумма в продаже</span>
+                    </div>
+                    <div className="flex items-baseline gap-2">
+                        <span className="text-2xl font-black text-slate-900">{Math.round(stats.stockValue).toLocaleString()} ₽</span>
+                    </div>
+                </div>
+
+                <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-100">
+                    <div className="flex items-center gap-3 mb-2">
+                        <div className="p-2 bg-white rounded-lg shadow-sm">
+                            <PieChart className="h-4 w-4 text-indigo-600" />
+                        </div>
+                        <span className="text-[10px] text-indigo-400 uppercase font-bold tracking-wider">Потенц. прибыль</span>
+                    </div>
+                    <div className="flex items-baseline gap-2">
+                        <span className="text-2xl font-black text-indigo-900">{Math.round(potentialProfit).toLocaleString()} ₽</span>
+                        <span className="text-xs text-indigo-600 font-bold">({stockMargin.toFixed(1)}%)</span>
+                    </div>
+                </div>
             </div>
 
             {/* Summary Cards */}

@@ -28,25 +28,16 @@ export async function uploadFileToS3(
   mimeType: string,
   folder: string = 'uploads'
 ): Promise<string> {
-  try {
-    // Use UUID for filename to ensure S3 compatibility and uniqueness
-    const fileExtension = fileName.split('.').pop() || 'bin';
-    const uniqueFileName = `${uuidv4()}.${fileExtension}`;
-    
-    // In "делаем базар" implementation, key is just `${folder}/${filename}`
-    // If bucket name is 'uploads' and folder is 'uploads', key becomes 'uploads/file.png'
-    // The previous logic to avoid duplication might be over-engineering if MinIO handles it correctly
-    // Let's stick to the proven pattern from the reference project.
-    
-    const key = `${folder}/${uniqueFileName}`;
+  const fileExtension = fileName.split('.').pop() || 'bin';
+  const uniqueFileName = `${uuidv4()}.${fileExtension}`;
+  const key = `${folder}/${uniqueFileName}`;
 
+  try {
     const params: PutObjectCommandInput = {
       Bucket: bucketName,
       Key: key,
       Body: fileBuffer,
       ContentType: mimeType,
-      // Re-enable ACL as per reference implementation, but comment out if it fails
-      // In the reference, it is 'public-read'
       ACL: 'public-read', 
     };
 
@@ -54,13 +45,17 @@ export async function uploadFileToS3(
     await s3Client.send(command);
 
     // Construct the public URL
-    // For MinIO, it's typically: http://endpoint/bucket/key
     const endpoint = process.env.S3_ENDPOINT?.replace(/\/$/, '') || '';
-    
     const url = `${endpoint}/${bucketName}/${key}`;
     return url;
-  } catch (error) {
-    console.error('Error uploading file to S3:', error);
-    throw new Error('Failed to upload file to storage');
+  } catch (error: any) {
+    console.error('Detailed S3 Upload Error:', {
+      message: error.message,
+      code: error.code,
+      requestId: error.$metadata?.requestId,
+      bucket: bucketName,
+      key: key
+    });
+    throw new Error(`S3 Upload failed: ${error.message}`);
   }
 }

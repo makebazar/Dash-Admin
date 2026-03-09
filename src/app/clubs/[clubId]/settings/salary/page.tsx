@@ -5,8 +5,9 @@ import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Loader2, Plus, Wallet, Edit, Trash2, Users } from "lucide-react"
+import { Loader2, Plus, Wallet, Edit, Trash2, Users, Coins, Calculator, TrendingUp, Info, ArrowRight, Clock, ShieldAlert, ClipboardCheck, Wrench } from "lucide-react"
 import { SalaryScheme, Formula, PeriodBonus } from "@/components/salary/SalarySchemeForm"
+import { PageShell, PageHeader } from "@/components/layout/PageShell"
 
 export default function SalarySettingsPage({ params }: { params: Promise<{ clubId: string }> }) {
     const [clubId, setClubId] = useState('')
@@ -49,153 +50,175 @@ export default function SalarySettingsPage({ params }: { params: Promise<{ clubI
         }
     }
 
-    const formatPeriodBonusesSummary = (bonuses?: PeriodBonus[]) => {
-        if (!bonuses || bonuses.length === 0) return null
-        return bonuses.map(b => `${b.name}: цель ${b.target_per_shift}/смена -> ${b.reward_type === 'PERCENT' ? `${b.reward_value}%` : `${b.reward_value}₽`}`).join('; ')
-    }
-
     const formatFormulaSummary = (f: Formula) => {
-        const parts: string[] = []
-
-        if (f.base.type === 'hourly') {
-            if (f.base.day_rate && f.base.night_rate) {
-                parts.push(`${f.base.day_rate}₽/час (день), ${f.base.night_rate}₽/час (ночь)`)
-            } else {
-                parts.push(`${f.base.amount || 0}₽/час`)
-            }
-        } else if (f.base.type === 'per_shift') {
-            if (f.base.day_rate && f.base.night_rate) {
-                parts.push(`${f.base.day_rate}₽/смена (день), ${f.base.night_rate}₽/смена (ночь)`)
-            } else {
-                parts.push(`${f.base.amount || 0}₽/смена`)
-            }
-            if (f.base.full_shift_hours) {
-                parts.push(`за ${f.base.full_shift_hours}ч`)
-            }
-        }
+        const parts: { label: string, value: string, icon?: any }[] = []
 
         f.bonuses.forEach(b => {
             const sourceMap: Record<string, string> = { cash: 'нала', card: 'безнала', total: 'выручки' }
+            const name = b.name || (b.type === 'percent_revenue' ? `% от ${sourceMap[b.source || 'total']}` : 'Бонус')
+            
             if (b.type === 'percent_revenue') {
-                parts.push(`+${b.percent}% от ${sourceMap[b.source || 'total']}`)
+                parts.push({ label: name, value: `${b.percent}%`, icon: TrendingUp })
             } else if (b.type === 'fixed') {
-                parts.push(`+${b.amount}₽ бонус`)
-            } else if (b.type === 'tiered') {
-                parts.push(`KPI-ступени (${b.tiers?.length || 0})`)
+                parts.push({ label: name, value: `${b.amount}₽`, icon: Coins })
+
             } else if (b.type === 'progressive_percent') {
-                parts.push(`Прогрессия % (${b.thresholds?.length || 0} порогов)`)
-            } else if (b.type === 'penalty') {
-                parts.push(`-${b.amount}₽ штраф`)
+                parts.push({ label: name, value: `${b.thresholds?.length || 0} пор.`, icon: TrendingUp })
             } else if (b.type === 'checklist') {
-                parts.push(`+${b.amount}₽ за чек-лист ${b.mode === 'MONTH' ? '(мес)' : ''} (> ${b.min_score}%)`)
+                parts.push({ label: 'Чек-лист', value: `+${b.amount}₽ (> ${b.min_score}%)`, icon: ClipboardCheck })
             } else if (b.type === 'maintenance_kpi') {
-                parts.push(`KPI Обслуживания (${b.amount}₽/задача${b.reward_type === 'FIXED' ? ', фикс. бонусы' : ''})`)
+                parts.push({ label: 'Обслуживание', value: b.calculation_mode === 'PER_TASK' ? `${b.amount}₽/зад.` : 'Месячный', icon: Wrench })
             }
         })
 
-        return parts.join(' • ') || 'Не настроено'
+        return parts
     }
 
     if (isLoading) {
         return (
             <div className="flex h-96 items-center justify-center">
-                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                <Loader2 className="h-8 w-8 animate-spin text-purple-600" />
             </div>
         )
     }
 
     return (
-        <div className="p-8 space-y-8">
-            {/* Header */}
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-3xl font-bold tracking-tight">Схемы оплаты</h1>
-                    <p className="text-muted-foreground">Настройте формулы расчёта зарплаты для сотрудников</p>
-                </div>
+        <PageShell maxWidth="5xl">
+            <PageHeader
+                title="Схемы оплаты"
+                description="Настройте правила расчёта зарплаты для различных должностей"
+            >
                 <Link href={`/clubs/${clubId}/settings/salary/scheme/new`}>
-                    <Button className="gap-2">
-                        <Plus className="h-4 w-4" />
-                        Новая схема
+                    <Button className="bg-purple-600 hover:bg-purple-700 text-white font-bold px-6 h-12 rounded-xl shadow-lg shadow-purple-200 gap-2 transition-all hover:scale-[1.02]">
+                        <Plus className="h-5 w-5" />
+                        Создать схему
                     </Button>
                 </Link>
-            </div>
+            </PageHeader>
 
-            {/* Schemes Grid */}
+            {/* Empty State */}
             {schemes.length === 0 ? (
-                <Card className="border-dashed">
-                    <CardContent className="flex flex-col items-center justify-center py-16">
-                        <Wallet className="h-12 w-12 text-muted-foreground/30 mb-4" />
-                        <h3 className="text-lg font-medium mb-2">Нет схем оплаты</h3>
-                        <p className="text-muted-foreground text-sm mb-4">Создайте первую схему для расчёта зарплат</p>
+                <Card className="border-2 border-dashed border-muted-foreground/10 bg-muted/5 rounded-[2rem]">
+                    <CardContent className="flex flex-col items-center justify-center py-24">
+                        <div className="h-24 w-24 rounded-[2rem] bg-purple-50 flex items-center justify-center mb-6">
+                            <Wallet className="h-12 w-12 text-purple-600 opacity-40" />
+                        </div>
+                        <h3 className="text-2xl font-black tracking-tight mb-2">Схемы пока не созданы</h3>
+                        <p className="text-muted-foreground text-sm max-w-[300px] text-center mb-8 font-medium">
+                            Создайте первую схему оплаты, чтобы система могла автоматически рассчитывать зарплаты ваших сотрудников.
+                        </p>
                         <Link href={`/clubs/${clubId}/settings/salary/scheme/new`}>
-                            <Button variant="outline" className="gap-2">
+                            <Button variant="outline" className="h-12 px-8 rounded-xl font-bold border-purple-200 text-purple-600 hover:bg-purple-50 gap-2">
                                 <Plus className="h-4 w-4" />
-                                Создать схему
+                                Добавить схему
                             </Button>
                         </Link>
                     </CardContent>
                 </Card>
             ) : (
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                    {schemes.map(scheme => (
-                        <Card key={scheme.id} className={`relative ${!scheme.is_active ? 'opacity-50' : ''}`}>
-                            <CardHeader className="pb-3">
-                                <div className="flex items-start justify-between">
-                                    <div>
-                                        <CardTitle className="text-lg">{scheme.name}</CardTitle>
-                                        {scheme.description && (
-                                            <CardDescription className="mt-1">{scheme.description}</CardDescription>
-                                        )}
-                                    </div>
-                                    <Badge variant="outline" className="text-xs">
-                                        v{scheme.version || 1}
-                                    </Badge>
-                                </div>
-                            </CardHeader>
-                            <CardContent className="space-y-4">
-                                <div className="bg-muted/50 rounded-lg p-3 text-sm">
-                                    <div className="mb-2 pb-2 border-b border-border/10">
-                                        <span className="text-muted-foreground">Эталон:</span> {scheme.standard_monthly_shifts || 15} смен/мес
-                                    </div>
-                                    {formatFormulaSummary(scheme.formula)}
-                                    {scheme.period_bonuses && scheme.period_bonuses.length > 0 && (
-                                        <div className="mt-2 pt-2 border-t border-border/10 text-xs text-muted-foreground flex gap-2 items-center">
-                                            <Badge variant="secondary" className="text-[10px] h-4 px-1">KPI</Badge>
-                                            {formatPeriodBonusesSummary(scheme.period_bonuses)}
+                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3">
+                    {schemes.map(scheme => {
+                        const formulaParts = formatFormulaSummary(scheme.formula)
+                        return (
+                            <Card key={scheme.id} className={`group border-none shadow-sm hover:shadow-xl transition-all duration-300 rounded-[2rem] overflow-hidden ${!scheme.is_active ? 'opacity-60 grayscale' : ''}`}>
+                                <CardHeader className="pb-4 bg-gradient-to-br from-white to-slate-50/50">
+                                    <div className="flex items-start justify-between">
+                                        <div className="space-y-1">
+                                            <div className="flex items-center gap-2">
+                                                <div className="h-10 w-10 rounded-2xl bg-purple-50 flex items-center justify-center group-hover:bg-purple-600 group-hover:text-white transition-colors duration-300">
+                                                    <Wallet className="h-5 w-5 text-purple-600 group-hover:text-white transition-colors duration-300" />
+                                                </div>
+                                                <CardTitle className="text-lg font-black tracking-tight">{scheme.name}</CardTitle>
+                                            </div>
+                                            {scheme.description && (
+                                                <CardDescription className="text-[11px] font-medium pl-12 line-clamp-1">{scheme.description}</CardDescription>
+                                            )}
                                         </div>
-                                    )}
-                                </div>
-
-                                <div className="flex items-center justify-between text-sm">
-                                    <div className="flex items-center gap-1 text-muted-foreground">
-                                        <Users className="h-4 w-4" />
-                                        <span>{scheme.employee_count || 0} сотр.</span>
+                                        <Badge variant="outline" className="text-[10px] font-black uppercase tracking-widest bg-white border-muted-foreground/10 px-2 rounded-lg">
+                                            v{scheme.version || 1}
+                                        </Badge>
                                     </div>
-                                    <div className="flex gap-1">
-                                        <Link href={`/clubs/${clubId}/settings/salary/scheme/${scheme.id}`}>
+                                </CardHeader>
+                                <CardContent className="space-y-6 pt-2">
+                                    {/* Stats Summary */}
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div className="bg-muted/20 rounded-2xl p-3 border border-muted-foreground/5">
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-1">Ставка</p>
+                                            <p className="text-sm font-bold flex items-center gap-1.5">
+                                                <Coins className="h-3.5 w-3.5 text-purple-400" />
+                                                {scheme.formula.base.type === 'hourly' 
+                                                    ? `${scheme.formula.base.amount || scheme.formula.base.day_rate || 0} ₽/ч`
+                                                    : `${scheme.formula.base.amount || scheme.formula.base.day_rate || 0} ₽/с`}
+                                            </p>
+                                        </div>
+                                        <div className="bg-muted/20 rounded-2xl p-3 border border-muted-foreground/5">
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-1">Сотрудники</p>
+                                            <p className="text-sm font-bold flex items-center gap-1.5">
+                                                <Users className="h-3.5 w-3.5 text-blue-400" />
+                                                {scheme.employee_count || 0} <span className="text-[11px] text-muted-foreground font-medium">чел.</span>
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    {/* KPI Breakdown */}
+                                    <div className="space-y-2">
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground px-1">Активные KPI и бонусы</p>
+                                        <div className="bg-white rounded-2xl border border-muted-foreground/5 divide-y divide-muted-foreground/5 overflow-hidden">
+                                            {formulaParts.map((part, idx) => (
+                                                <div key={idx} className="flex items-center justify-between p-3 hover:bg-muted/10 transition-colors">
+                                                    <div className="flex items-center gap-2.5">
+                                                        <div className="p-1.5 rounded-lg bg-slate-50 text-slate-400 group-hover:bg-white group-hover:text-purple-500 transition-colors">
+                                                            {part.icon && <part.icon className="h-3.5 w-3.5" />}
+                                                        </div>
+                                                        <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-tight">{part.label}</span>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                            {scheme.period_bonuses && scheme.period_bonuses.length > 0 && scheme.period_bonuses.map((pb, idx) => (
+                                                <div key={`pb-${idx}`} className="flex items-center justify-between p-3 hover:bg-muted/10 transition-colors">
+                                                    <div className="flex items-center gap-2.5">
+                                                        <div className="p-1.5 rounded-lg bg-emerald-50 text-emerald-400 group-hover:bg-white group-hover:text-emerald-500 transition-colors">
+                                                            <TrendingUp className="h-3.5 w-3.5" />
+                                                        </div>
+                                                        <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-tight">{pb.name}</span>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                            {(formulaParts.length === 0 && (!scheme.period_bonuses || scheme.period_bonuses.length === 0)) && (
+                                                <div className="p-4 text-center text-xs text-muted-foreground italic font-medium">
+                                                    KPI не настроены
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Actions */}
+                                    <div className="flex gap-2 pt-2">
+                                        <Link href={`/clubs/${clubId}/settings/salary/scheme/${scheme.id}`} className="flex-1">
                                             <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                className="h-8 w-8"
+                                                variant="outline"
+                                                className="w-full h-11 rounded-xl font-bold text-xs uppercase tracking-widest border-muted-foreground/10 hover:bg-purple-50 hover:text-purple-600 hover:border-purple-200 gap-2 transition-all"
                                             >
-                                                <Edit className="h-4 w-4" />
+                                                <Edit className="h-3.5 w-3.5" />
+                                                Настроить
                                             </Button>
                                         </Link>
                                         <Button
                                             variant="ghost"
                                             size="icon"
-                                            className="h-8 w-8 hover:text-red-500"
+                                            className="h-11 w-11 rounded-xl hover:bg-red-50 hover:text-red-500 transition-colors shrink-0 border border-transparent hover:border-red-100"
                                             onClick={() => handleDelete(scheme)}
                                         >
                                             <Trash2 className="h-4 w-4" />
                                         </Button>
                                     </div>
-                                </div>
-                            </CardContent>
-                        </Card>
-                    ))}
+                                </CardContent>
+                            </Card>
+                        )
+                    })}
                 </div>
             )}
-        </div>
+        </PageShell>
     )
 }
+

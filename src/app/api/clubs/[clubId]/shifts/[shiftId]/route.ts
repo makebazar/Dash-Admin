@@ -114,7 +114,125 @@ export async function GET(
             return NextResponse.json({ error: 'Shift not found' }, { status: 404 });
         }
 
-        return NextResponse.json({ shift: shiftResult.rows[0] });
+        const shift = shiftResult.rows[0];
+
+        // Fetch related data in parallel
+        const [checklistsRes, transactionsRes, inventoryRes, maintenanceRes, metricsRes, productSalesRes, inventoryDiscrepanciesRes] = await Promise.all([
+            // 1. Checklists (by shift_id OR (employee_id + time range))
+            query(
+                `SELECT e.*, t.name as template_name, u.full_name as evaluator_name
+                 FROM evaluations e
+                 LEFT JOIN evaluation_templates t ON e.template_id = t.id
+                 LEFT JOIN users u ON e.evaluator_id = u.id
+                 WHERE e.shift_id = $1
+                 OR (
+                     e.employee_id = $2
+                     AND e.created_at >= $3
+                     AND ($4::timestamp IS NULL OR e.created_at <= $4::timestamp)
+                 )
+                 ORDER BY e.created_at DESC`,
+                [shiftId, shift.user_id, shift.check_in, shift.check_out]
+            ),
+            // 2. Finance Transactions
+            query(
+                `SELECT t.*, c.name as category_name
+                 FROM finance_transactions t
+                 LEFT JOIN finance_categories c ON t.category_id = c.id
+                 WHERE t.related_shift_report_id = $1
+                 ORDER BY t.created_at DESC`,
+                [shiftId]
+            ),
+            // 3. Inventory Checks (by user and time range, linking to warehouse for name)
+            query(
+                `SELECT wi.*, w.name as warehouse_name 
+                 FROM warehouse_inventories wi
+                 LEFT JOIN warehouses w ON wi.warehouse_id = w.id
+                 WHERE wi.created_by = $1 
+                 AND wi.started_at >= $2
+                 AND ($3::timestamp IS NULL OR wi.started_at <= $3::timestamp)
+                 ORDER BY wi.started_at DESC`,
+                [shift.user_id, shift.check_in, shift.check_out]
+            ),
+            // 4. Maintenance Tasks (by user and time range)
+            query(
+                `SELECT t.*, e.name as equipment_name, cw.name as workstation_name
+                 FROM equipment_maintenance_tasks t
+                 JOIN equipment e ON t.equipment_id = e.id
+                 LEFT JOIN club_workstations cw ON e.workstation_id = cw.id
+                 WHERE t.completed_by = $1
+                 AND t.completed_at >= $2
+                 AND ($3::timestamp IS NULL OR t.completed_at <= $3::timestamp)
+                 ORDER BY t.completed_at DESC`,
+                [shift.user_id, shift.check_in, shift.check_out]
+            ),
+            // 5. System Metrics (for labels)
+            query(`SELECT key, label FROM system_metrics`),
+            // 6. Product Sales (Warehouse Stock Movements of type SALE)
+            query(
+                `SELECT sm.*, p.name as product_name
+                 FROM warehouse_stock_movements sm
+                 JOIN warehouse_products p ON sm.product_id = p.id
+                 WHERE sm.club_id = $1 
+                 AND sm.type = 'SALE'
+                 AND (
+                     sm.shift_id = $2 
+                     OR (
+                         sm.user_id = $3 
+                         AND sm.created_at >= $4 
+                         AND ($5::timestamp IS NULL OR sm.created_at <= $5::timestamp)
+                     )
+                 )
+                 ORDER BY sm.created_at DESC`,
+                [clubId, shiftId, shift.user_id, shift.check_in, shift.check_out]
+            ),
+            // 7. Inventory Discrepancies (items where difference != 0 for relevant inventories)
+            query(
+                `SELECT ii.*, p.name as product_name, wi.id as inventory_id
+                 FROM warehouse_inventory_items ii
+                 JOIN warehouse_inventories wi ON ii.inventory_id = wi.id
+                 JOIN warehouse_products p ON ii.product_id = p.id
+                 WHERE wi.created_by = $1 
+                 AND wi.started_at >= $2
+                 AND ($3::timestamp IS NULL OR wi.started_at <= $3::timestamp)
+                 AND ii.difference != 0
+                 ORDER BY ii.difference ASC`,
+                [shift.user_id, shift.check_in, shift.check_out]
+            )
+        ]);
+
+        // Create a map of metric key -> label
+        const metricLabels: Record<string, string> = {};
+        metricsRes.rows.forEach((row: any) => {
+            metricLabels[row.key] = row.label;
+        });
+
+        // Also fetch club specific report template to get custom labels if any
+        const templateRes = await query(
+            `SELECT schema FROM club_report_templates WHERE club_id = $1 AND is_active = true ORDER BY created_at DESC LIMIT 1`,
+            [clubId]
+        );
+        
+        if (templateRes.rows.length > 0) {
+            const schema = templateRes.rows[0].schema;
+            if (Array.isArray(schema)) {
+                schema.forEach((field: any) => {
+                    if (field.metric_key && field.custom_label) {
+                        metricLabels[field.metric_key] = field.custom_label;
+                    }
+                });
+            }
+        }
+
+        return NextResponse.json({ 
+            shift,
+            checklists: checklistsRes.rows,
+            transactions: transactionsRes.rows,
+            inventory_checks: inventoryRes.rows,
+            maintenance_tasks: maintenanceRes.rows,
+            product_sales: productSalesRes.rows,
+            inventory_discrepancies: inventoryDiscrepanciesRes.rows,
+            metric_labels: metricLabels
+        });
 
     } catch (error: any) {
         console.error('Get Shift Error:', error);
@@ -322,6 +440,13 @@ export async function PATCH(
         if (calculatedSalary !== null) {
             updates.push(`calculated_salary = $${paramIndex++}`);
             values.push(calculatedSalary);
+
+            // Handle declined payout: If user chose NOT to take money (auto_payout_amount === 0),
+            // we must move instant_payout to accrued_payout in breakdown
+            if (mergedData.report_data?.auto_payout_amount === 0 && salaryBreakdown?.instant_payout > 0) {
+                salaryBreakdown.accrued_payout = (salaryBreakdown.accrued_payout || 0) + salaryBreakdown.instant_payout;
+                salaryBreakdown.instant_payout = 0;
+            }
 
             updates.push(`salary_breakdown = $${paramIndex++}`);
             values.push(JSON.stringify(salaryBreakdown));

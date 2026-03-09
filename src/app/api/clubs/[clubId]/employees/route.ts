@@ -35,7 +35,9 @@ export async function GET(
         r.name as role_name,
         r.id as role_id,
         ce.hired_at,
-        u.is_active,
+        ce.is_active,
+        ce.dismissed_at,
+        ce.show_in_schedule,
         esa.scheme_id as salary_scheme_id,
         ss.name as salary_scheme_name
        FROM club_employees ce
@@ -56,6 +58,8 @@ export async function GET(
             role_id: row.role_id,
             hired_at: row.hired_at,
             is_active: row.is_active,
+            dismissed_at: row.dismissed_at,
+            show_in_schedule: row.show_in_schedule !== false,
             salary_scheme_id: row.salary_scheme_id,
             salary_scheme_name: row.salary_scheme_name
         }));

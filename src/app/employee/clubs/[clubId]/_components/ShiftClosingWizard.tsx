@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useTransition, useEffect, useMemo, useCallback } from "react"
-import { Loader2, ArrowRight, CheckCircle2, AlertTriangle, Package, Camera, Search, Barcode, X, Plus, Trash2, ArrowLeft, RefreshCcw, AlertCircle } from "lucide-react"
+import { Loader2, ArrowRight, CheckCircle2, AlertTriangle, Package, Camera, Search, Barcode, X, Plus, Trash2, ArrowLeft, RefreshCcw, AlertCircle, DollarSign } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -62,6 +62,7 @@ export function ShiftClosingWizard({
     const [isUnaccountedDialogOpen, setIsUnaccountedDialogOpen] = useState(false)
     const [selectedUnaccountedProduct, setSelectedUnaccountedProduct] = useState("")
     const [unaccountedQty, setUnaccountedQty] = useState("1")
+    const [payoutSuggestion, setPayoutSuggestion] = useState<{ amount: number, isAvailable: boolean } | null>(null)
 
     // New states for barcode scanner and manual adding
     const [isScannerOpen, setIsScannerOpen] = useState(false)
@@ -71,6 +72,26 @@ export function ShiftClosingWizard({
     const [selectedProductToAdd, setSelectedProductToAdd] = useState("")
     const [searchQuery, setSearchQuery] = useState("")
     const [isRefreshingCatalog, setIsRefreshingCatalog] = useState(false)
+
+    // Check for available daily payout
+    useEffect(() => {
+        if (isOpen && activeShiftId) {
+            fetch(`/api/employee/shifts/${activeShiftId}/indicators`)
+                .then(res => res.json())
+                .then(data => {
+                    // Assuming the API returns something like { instant_payout: 1500 }
+                    // We need to implement this calculation on backend or use existing data
+                    // For now, let's assume we get 'projected_instant_payout'
+                    if (data.projected_instant_payout > 0) {
+                        setPayoutSuggestion({ 
+                            amount: data.projected_instant_payout, 
+                            isAvailable: true 
+                        })
+                    }
+                })
+                .catch(console.error)
+        }
+    }, [isOpen, activeShiftId])
 
     // Persistence key
     const persistenceKey = `shift_closing_${activeShiftId}`
@@ -1337,6 +1358,56 @@ export function ShiftClosingWizard({
                                     value={reportData['shift_comment'] || ''}
                                     onChange={(e) => setReportData({ ...reportData, 'shift_comment': e.target.value })}
                                 />
+                            </div>
+                        )}
+
+                        {/* Payout Suggestion Block */}
+                        {payoutSuggestion && payoutSuggestion.isAvailable && (
+                            <div className="bg-emerald-900/20 border border-emerald-500/30 p-5 rounded-2xl space-y-4">
+                                <div className="flex items-center gap-3 text-emerald-400">
+                                    <div className="bg-emerald-500/20 p-2 rounded-xl">
+                                        <DollarSign className="h-6 w-6" />
+                                    </div>
+                                    <div>
+                                        <h4 className="font-bold text-lg">Доступна выплата: {payoutSuggestion.amount} ₽</h4>
+                                        <p className="text-xs text-emerald-300/80">Вы заработали эту сумму за смену (деньщина).</p>
+                                    </div>
+                                </div>
+                                <div className="p-3 bg-slate-900/50 rounded-xl border border-slate-800">
+                                    {(Number(reportData.cash_income || 0)) < payoutSuggestion.amount ? (
+                                        <div className="text-center space-y-3">
+                                            <p className="text-sm font-bold text-red-400">Недостаточно наличных в кассе</p>
+                                            <p className="text-xs text-slate-400">В кассе {reportData.cash_income || 0} ₽, а к выплате {payoutSuggestion.amount} ₽. Выплата будет зачислена на баланс.</p>
+                                            <Button 
+                                                disabled
+                                                variant="secondary"
+                                                className="w-full h-10 opacity-50"
+                                            >
+                                                Автоматически на баланс
+                                            </Button>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <p className="text-sm text-slate-300 mb-2">Забрать деньги из кассы сейчас?</p>
+                                            <div className="flex gap-3">
+                                                <Button 
+                                                    onClick={() => setReportData({ ...reportData, auto_payout_amount: payoutSuggestion.amount })}
+                                                    variant={reportData.auto_payout_amount ? 'default' : 'outline'}
+                                                    className={`flex-1 h-10 ${reportData.auto_payout_amount ? 'bg-emerald-600 hover:bg-emerald-700 border-emerald-500' : 'border-slate-700 hover:bg-slate-800'}`}
+                                                >
+                                                    Да, забираю
+                                                </Button>
+                                                <Button 
+                                                    onClick={() => setReportData({ ...reportData, auto_payout_amount: 0 })}
+                                                    variant={reportData.auto_payout_amount === 0 ? 'secondary' : 'ghost'}
+                                                    className="flex-1 h-10"
+                                                >
+                                                    Нет, на баланс
+                                                </Button>
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
                             </div>
                         )}
                     </div>

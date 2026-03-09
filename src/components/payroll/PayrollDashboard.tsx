@@ -64,6 +64,8 @@ interface Employee {
         virtual_balance: number;
         kpi_bonuses: number;
         other_bonuses: number;
+        instant_payout?: number;
+        accrued_payout?: number;
     };
     metrics?: {
         total_hours?: number;
@@ -898,9 +900,22 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                                             <span>Итого зарплата:</span>
                                                                             <span className="text-blue-600">{formatCurrency(employee.total_accrued)}</span>
                                                                         </div>
+                                                                        
+                                                                        {/* Breakdown by payout timing */}
+                                                                        <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-dashed">
+                                                                            <div className="bg-orange-50 p-2 rounded-lg border border-orange-100 flex flex-col items-center">
+                                                                                <span className="text-[9px] text-orange-600 uppercase font-bold">В конце смены</span>
+                                                                                <span className="font-bold text-sm text-orange-700">{formatCurrency(employee.breakdown?.instant_payout || 0)}</span>
+                                                                            </div>
+                                                                            <div className="bg-blue-50 p-2 rounded-lg border border-blue-100 flex flex-col items-center">
+                                                                                <span className="text-[9px] text-blue-600 uppercase font-bold">Копить на балансе</span>
+                                                                                <span className="font-bold text-sm text-blue-700">{formatCurrency(employee.breakdown?.accrued_payout || 0)}</span>
+                                                                            </div>
+                                                                        </div>
+
                                                                         {employee.has_virtual_balance_feature && (
                                                                             <div className={`pt-2 border-t flex justify-between items-center font-bold px-2 py-1 rounded -mx-2 ${employee.virtual_balance_accrued && employee.virtual_balance_accrued > 0 ? 'text-purple-600 bg-purple-50 border-purple-200 dark:bg-purple-900/20 dark:border-purple-800' : 'text-muted-foreground border-muted/20'}`}>
-                                                                                <span>Итого бонусные (за месяц):</span>
+                                                                                <span>Итого на депозит:</span>
                                                                                 <span>{employee.virtual_balance_accrued && employee.virtual_balance_accrued > 0 ? formatCurrency(employee.virtual_balance_accrued) : '0 ₽'}</span>
                                                                             </div>
                                                                         )}

@@ -53,6 +53,11 @@ export async function GET(
                     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='club_employees' AND column_name='is_active') THEN
                         ALTER TABLE club_employees ADD COLUMN is_active BOOLEAN DEFAULT TRUE;
                     END IF;
+
+                    -- Club Employees table additions (show_in_schedule)
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='club_employees' AND column_name='show_in_schedule') THEN
+                        ALTER TABLE club_employees ADD COLUMN show_in_schedule BOOLEAN DEFAULT TRUE;
+                    END IF;
                 END $$;
             `);
 
@@ -95,13 +100,13 @@ export async function GET(
         try {
             console.log(`Fetching schedule employees for club ${clubId}, date >= ${startOfMonth}`);
             const employeesRes = await query(
-                `SELECT u.id, u.full_name, r.name as role, ce.dismissed_at, ce.display_order, ce.is_active
+                `SELECT u.id, u.full_name, r.name as role, ce.dismissed_at, ce.display_order, ce.is_active, ce.show_in_schedule
                  FROM club_employees ce
                  JOIN users u ON u.id = ce.user_id
                  LEFT JOIN roles r ON u.role_id = r.id
                  WHERE ce.club_id = $1 
                  AND (
-                    (ce.dismissed_at IS NULL AND ce.is_active = TRUE)
+                    (ce.dismissed_at IS NULL AND ce.is_active = TRUE AND ce.show_in_schedule = TRUE)
                     OR 
                     (ce.dismissed_at IS NOT NULL AND ce.dismissed_at >= $2::date)
                  )

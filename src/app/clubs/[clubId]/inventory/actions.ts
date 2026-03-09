@@ -1847,15 +1847,51 @@ export async function getInventory(id: number) {
 }
 
 export async function getInventoryItems(inventoryId: number) {
-    const res = await query(`
-        SELECT ii.*, p.name as product_name, p.barcode as barcode, p.barcodes as barcodes, c.name as category_name
-        FROM warehouse_inventory_items ii
-        JOIN warehouse_products p ON ii.product_id = p.id
-        LEFT JOIN warehouse_categories c ON p.category_id = c.id
-        WHERE ii.inventory_id = $1
-        ORDER BY c.name NULLS LAST, p.name
-    `, [inventoryId])
-    return res.rows as InventoryItem[]
+    const client = await import("@/db").then(m => m.getClient())
+    try {
+        const invHeader = await client.query('SELECT warehouse_id, started_at FROM warehouse_inventories WHERE id = $1', [inventoryId])
+        const inv = invHeader.rows[0]
+        
+        const res = await client.query(`
+            SELECT ii.*, p.name as product_name, p.barcode as barcode, p.barcodes as barcodes, c.name as category_name
+            FROM warehouse_inventory_items ii
+            JOIN warehouse_products p ON ii.product_id = p.id
+            LEFT JOIN warehouse_categories c ON p.category_id = c.id
+            WHERE ii.inventory_id = $1
+            ORDER BY c.name NULLS LAST, p.name
+        `, [inventoryId])
+        
+        const items = res.rows as InventoryItem[]
+
+        // If inventory is OPEN, calculate dynamic expected stock
+        // expected_stock (snapshot) + movements_during_inventory = adjusted_expected
+        if (inv && inv.warehouse_id) {
+            for (const item of items) {
+                // Get movements since inventory started for this item in this warehouse
+                // EXCLUDING this inventory's own adjustments (which happen at close)
+                const movementsRes = await client.query(`
+                    SELECT COALESCE(SUM(change_amount), 0) as movement
+                    FROM warehouse_stock_movements
+                    WHERE product_id = $1 
+                    AND warehouse_id = $2
+                    AND created_at > $3
+                    AND related_entity_type != 'INVENTORY'
+                `, [item.product_id, inv.warehouse_id, inv.started_at])
+                
+                const movement = parseFloat(movementsRes.rows[0]?.movement || '0')
+                
+                // Update expected stock in the returned object (not in DB)
+                // This makes the UI show the "live" expected amount
+                if (movement !== 0) {
+                    item.expected_stock = Number(item.expected_stock) + movement
+                }
+            }
+        }
+        
+        return items
+    } finally {
+        client.release()
+    }
 }
 
 export async function getMetrics() {
@@ -1877,9 +1913,47 @@ export async function getClubSettings(clubId: string) {
         employee_default_metric_key?: string,
         allow_salary_deduction?: boolean,
         employee_discount_percent?: number,
-        allow_cost_price_sale?: boolean
+        allow_cost_price_sale?: boolean,
+        price_tag_template?: PriceTagTemplate,
+        price_tag_settings?: PriceTagSettings
     } 
 }
+}
+
+export type PriceTagTemplate = {
+    id: string
+    name: string
+    width_mm: number
+    height_mm: number
+    background_image_url?: string
+    background_color?: string
+    font_family?: string
+    font_url?: string
+    show_decimals?: boolean
+    elements: {
+        id: string
+        type: 'text' | 'barcode' | 'price'
+        x: number // in mm
+        y: number // in mm
+        fontSize?: number
+        fontWeight?: string
+        color?: string
+        font_family?: string
+        font_url?: string
+        currency_font_family?: string
+        currency_font_url?: string
+        content?: string
+        field?: 'name' | 'price' | 'barcode'
+        width?: number // in mm
+        height?: number // in mm
+        wrap_text?: boolean
+        auto_scale?: boolean
+    }[]
+}
+
+export type PriceTagSettings = {
+    active_template_id?: string
+    templates: PriceTagTemplate[]
 }
 
 export async function updateInventorySettings(clubId: string, userId: string, settings: any) {

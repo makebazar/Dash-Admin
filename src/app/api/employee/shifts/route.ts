@@ -46,12 +46,51 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'You already have an active shift in this club' }, { status: 400 });
         }
 
+        // Get club settings for shift type
+        const clubSettings = await query(
+            `SELECT timezone, day_start_hour, night_start_hour FROM clubs WHERE id = $1`,
+            [club_id]
+        );
+        
+        const clubTimezone = clubSettings.rows[0]?.timezone || 'Europe/Moscow';
+        const dayStartHour = clubSettings.rows[0]?.day_start_hour ?? 8;
+        const nightStartHour = clubSettings.rows[0]?.night_start_hour ?? 20;
+
+        const checkIn = new Date();
+        
+        // Determine shift type
+        let shiftType = 'DAY';
+        const hourInClubTZ = new Intl.DateTimeFormat('en-US', {
+            timeZone: clubTimezone,
+            hour: 'numeric',
+            hourCycle: 'h23'
+        }).format(checkIn);
+        const hour = parseInt(hourInClubTZ);
+
+        if (!isNaN(hour)) {
+            if (dayStartHour < nightStartHour) {
+                // Standard day: e.g. 08:00 to 20:00
+                if (hour >= dayStartHour && hour < nightStartHour) {
+                    shiftType = 'DAY';
+                } else {
+                    shiftType = 'NIGHT';
+                }
+            } else {
+                // Wrapped day (unlikely but possible): e.g. Day starts 20:00, Night starts 08:00
+                if (hour >= dayStartHour || hour < nightStartHour) {
+                    shiftType = 'DAY';
+                } else {
+                    shiftType = 'NIGHT';
+                }
+            }
+        }
+
         // Create new shift
         const result = await query(
-            `INSERT INTO shifts (user_id, club_id, check_in)
-       VALUES ($1, $2, NOW())
+            `INSERT INTO shifts (user_id, club_id, check_in, shift_type)
+       VALUES ($1, $2, $3, $4)
        RETURNING id`,
-            [userId, club_id]
+            [userId, club_id, checkIn, shiftType]
         );
 
         return NextResponse.json({

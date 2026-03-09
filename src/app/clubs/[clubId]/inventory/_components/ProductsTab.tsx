@@ -10,28 +10,33 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
-import { createProduct, updateProduct, deleteProduct, bulkUpdatePrices, writeOffProduct, getProductHistory, Product, Category, adjustWarehouseStock, getReplenishmentRulesForProduct, createReplenishmentRule, deleteReplenishmentRule, ReplenishmentRule, Warehouse } from "../actions"
+import { createProduct, updateProduct, deleteProduct, bulkUpdatePrices, writeOffProduct, getProductHistory, Product, Category, adjustWarehouseStock, getReplenishmentRulesForProduct, createReplenishmentRule, deleteReplenishmentRule, ReplenishmentRule, Warehouse, PriceTagTemplate, PriceTagSettings } from "../actions"
 import { useParams } from "next/navigation"
 import { format } from "date-fns"
 import { ru } from "date-fns/locale"
 import { cn } from "@/lib/utils"
 import { useUiDialogs } from "./useUiDialogs"
+import { PriceTagPrinter } from "./PriceTagPrinter"
+import { Printer } from "lucide-react"
 
 interface ProductsTabProps {
     products: Product[]
     categories: Category[]
     warehouses: Warehouse[]
     currentUserId: string
+    priceTagSettings?: PriceTagSettings
 }
 
-export function ProductsTab({ products, categories, warehouses, currentUserId }: ProductsTabProps) {
+export function ProductsTab({ products, categories, warehouses, currentUserId, priceTagSettings }: ProductsTabProps) {
     const params = useParams()
     const clubId = params.clubId as string
     
+    const activeTemplate = priceTagSettings?.templates.find(t => t.id === priceTagSettings.active_template_id) || priceTagSettings?.templates[0]
+    
     const [search, setSearch] = useState("")
     const [categoryFilter, setCategoryFilter] = useState("all")
-    const [abcFilter, setAbcFilter] = useState("all")
     const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+    const [isPrintDialogOpen, setIsPrintDialogOpen] = useState(false)
     
     const [isDialogOpen, setIsDialogOpen] = useState(false)
     const [editingProduct, setEditingProduct] = useState<Partial<Product> | null>(null)
@@ -66,8 +71,7 @@ export function ProductsTab({ products, categories, warehouses, currentUserId }:
             (p.barcode && p.barcode.includes(search)) ||
             (p.barcodes && p.barcodes.some(b => b.includes(search)))
         const matchesCategory = categoryFilter === "all" || (p.category_id?.toString() === categoryFilter)
-        const matchesAbc = abcFilter === "all" || p.abc_category === abcFilter
-        return matchesSearch && matchesCategory && matchesAbc
+        return matchesSearch && matchesCategory
     })
 
     // Price Calculation Logic
@@ -294,24 +298,19 @@ export function ProductsTab({ products, categories, warehouses, currentUserId }:
                             ))}
                         </SelectContent>
                     </Select>
-                    <Select value={abcFilter} onValueChange={setAbcFilter}>
-                        <SelectTrigger className="w-full sm:w-[130px] h-10 md:h-9">
-                            <SelectValue placeholder="ABC Анализ" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">Весь ABC</SelectItem>
-                            <SelectItem value="A">Категория A (Топ)</SelectItem>
-                            <SelectItem value="B">Категория B (Средние)</SelectItem>
-                            <SelectItem value="C">Категория C (Низкие)</SelectItem>
-                        </SelectContent>
-                    </Select>
                 </div>
                 <div className="flex gap-2 w-full md:w-auto">
                     {selectedIds.size > 0 && (
-                        <Button variant="secondary" onClick={() => setIsBulkDialogOpen(true)} className="flex-1 md:flex-none h-10 md:h-9 text-sm">
-                            <Layers className="mr-1 md:mr-2 h-4 w-4 shrink-0" />
-                            <span className="md:inline">Цены ({selectedIds.size})</span>
-                        </Button>
+                        <>
+                            <Button variant="secondary" onClick={() => setIsPrintDialogOpen(true)} className="flex-1 md:flex-none h-10 md:h-9 text-sm">
+                                <Printer className="mr-1 md:mr-2 h-4 w-4 shrink-0" />
+                                <span className="md:inline">Печать ({selectedIds.size})</span>
+                            </Button>
+                            <Button variant="secondary" onClick={() => setIsBulkDialogOpen(true)} className="flex-1 md:flex-none h-10 md:h-9 text-sm">
+                                <Layers className="mr-1 md:mr-2 h-4 w-4 shrink-0" />
+                                <span className="md:inline">Цены ({selectedIds.size})</span>
+                            </Button>
+                        </>
                     )}
                     <Button onClick={() => {
                         setEditingProduct({ is_active: true, current_stock: 0, cost_price: 0, selling_price: 0 })
@@ -1320,6 +1319,14 @@ export function ProductsTab({ products, categories, warehouses, currentUserId }:
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            <PriceTagPrinter 
+                isOpen={isPrintDialogOpen} 
+                onClose={() => setIsPrintDialogOpen(false)} 
+                products={products.filter(p => selectedIds.has(p.id))}
+                template={activeTemplate}
+            />
+
             {Dialogs}
         </div>
     )

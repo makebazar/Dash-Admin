@@ -38,15 +38,15 @@ export async function PATCH(
             return NextResponse.json({ error: 'Employee not found in this club' }, { status: 404 });
         }
 
-        const { full_name, role_id, password, phone_number, dismissed_at, is_active } = await request.json();
+        const { full_name, role_id, password, phone_number, dismissed_at, is_active, show_in_schedule } = await request.json();
+        console.log('[API] Updating employee:', { employeeId, full_name, role_id, phone_number, dismissed_at, is_active, show_in_schedule });
 
         // 1. Update USERS table
         const userUpdates = [];
         const userValues = [];
-        let userValIdx = 1;
-
+        
         if (full_name !== undefined) {
-            userUpdates.push(`full_name = $${userValIdx++}`);
+            userUpdates.push(`full_name = $${userUpdates.length + 1}`);
             userValues.push(full_name);
         }
 
@@ -59,54 +59,66 @@ export async function PATCH(
             if ((phoneCheck.rowCount ?? 0) > 0) {
                 return NextResponse.json({ error: 'Phone number already in use' }, { status: 400 });
             }
-            userUpdates.push(`phone_number = $${userValIdx++}`);
+            userUpdates.push(`phone_number = $${userUpdates.length + 1}`);
             userValues.push(normalizedPhone);
         }
 
         if (role_id !== undefined) {
-            userUpdates.push(`role_id = $${userValIdx++}`);
+            userUpdates.push(`role_id = $${userUpdates.length + 1}`);
             userValues.push(role_id);
         }
 
         if (password) {
             const password_hash = await bcrypt.hash(password, SALT_ROUNDS);
-            userUpdates.push(`password_hash = $${userValIdx++}`);
+            userUpdates.push(`password_hash = $${userUpdates.length + 1}`);
             userValues.push(password_hash);
             userUpdates.push(`password_set_at = NOW()`);
         }
 
+        // Also update users.is_active if explicitly restoring
+        if (is_active === true) {
+            userUpdates.push(`is_active = TRUE`);
+        }
+
         if (userUpdates.length > 0) {
             userValues.push(employeeId);
-            await query(
-                `UPDATE users SET ${userUpdates.join(', ')} WHERE id = $${userValIdx}`,
-                userValues
-            );
+            const queryText = `UPDATE users SET ${userUpdates.join(', ')} WHERE id = $${userValues.length}`;
+            console.log('[API] Executing user update:', { queryText, values: userValues });
+            await query(queryText, userValues);
         }
 
         // 2. Update CLUB_EMPLOYEES table (Dismissal / Activation)
         const empUpdates = [];
         const empValues = [];
-        let empValIdx = 1;
 
-        if (dismissed_at !== undefined) {
-            empUpdates.push(`dismissed_at = $${empValIdx++}`);
-            empValues.push(dismissed_at);
+        // Special handling for restoration to avoid duplicate dismissed_at in SET clause
+        if (is_active === true) {
+            empUpdates.push(`is_active = $${empUpdates.length + 1}`);
+            empValues.push(true);
+            empUpdates.push(`dismissed_at = NULL`);
+        } else {
+            if (dismissed_at !== undefined) {
+                empUpdates.push(`dismissed_at = $${empUpdates.length + 1}`);
+                empValues.push(dismissed_at);
+            }
+
+            if (is_active !== undefined) {
+                empUpdates.push(`is_active = $${empUpdates.length + 1}`);
+                empValues.push(is_active);
+            }
         }
 
-        if (is_active !== undefined) {
-            empUpdates.push(`is_active = $${empValIdx++}`);
-            empValues.push(is_active);
+        if (show_in_schedule !== undefined) {
+            empUpdates.push(`show_in_schedule = $${empUpdates.length + 1}`);
+            empValues.push(show_in_schedule);
         }
 
         if (empUpdates.length > 0) {
             empValues.push(clubId);
             empValues.push(employeeId);
-            await query(
-                `UPDATE club_employees 
-                 SET ${empUpdates.join(', ')} 
-                 WHERE club_id = $${empValIdx++} AND user_id = $${empValIdx++}`,
-                empValues
-            );
+            const queryText = `UPDATE club_employees SET ${empUpdates.join(', ')} WHERE club_id = $${empValues.length - 1} AND user_id = $${empValues.length}`;
+            console.log('[API] Executing club_employee update:', { queryText, values: empValues });
+            await query(queryText, empValues);
         }
 
         if (userUpdates.length === 0 && empUpdates.length === 0) {

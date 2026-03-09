@@ -16,7 +16,17 @@ CREATE TABLE IF NOT EXISTS roles (
     default_kpi_settings JSONB DEFAULT '{}'
 );
 
--- Insert default roles
+-- Role Permissions table
+CREATE TABLE IF NOT EXISTS role_permissions (
+    id SERIAL PRIMARY KEY,
+    role_id INTEGER NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
+    club_id INTEGER NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
+    permission_key VARCHAR(100) NOT NULL,
+    is_allowed BOOLEAN DEFAULT FALSE,
+    UNIQUE(role_id, club_id, permission_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_role_permissions_role_club ON role_permissions(role_id, club_id);
 INSERT INTO roles (name, default_kpi_settings) VALUES ('Админ', '{}')
 ON CONFLICT (name) DO NOTHING;
 INSERT INTO roles (name, default_kpi_settings) VALUES ('Управляющий', '{}')
@@ -60,6 +70,8 @@ CREATE TABLE IF NOT EXISTS club_employees (
     role VARCHAR(100) NOT NULL,
     is_active BOOLEAN DEFAULT TRUE,
     hired_at TIMESTAMP DEFAULT NOW(),
+    dismissed_at TIMESTAMP,
+    show_in_schedule BOOLEAN DEFAULT TRUE,
     UNIQUE(club_id, user_id)
 );
 CREATE INDEX IF NOT EXISTS idx_employees_club ON club_employees(club_id);
