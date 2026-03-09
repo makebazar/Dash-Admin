@@ -14,13 +14,14 @@ export async function GET(
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        // Verify ownership
-        const ownerCheck = await query(
-            `SELECT id FROM clubs WHERE id = $1 AND owner_id = $2`,
+        const accessCheck = await query(
+            `SELECT 1 FROM clubs WHERE id = $1 AND owner_id = $2
+             UNION
+             SELECT 1 FROM club_employees WHERE club_id = $1 AND user_id = $2`,
             [clubId, userId]
         );
 
-        if (ownerCheck.rowCount === 0) {
+        if ((accessCheck.rowCount || 0) === 0) {
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 

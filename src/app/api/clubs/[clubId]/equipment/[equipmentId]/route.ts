@@ -131,6 +131,24 @@ export async function PATCH(
         const currentWorkstationId = currentEquipment.rows[0].workstation_id;
         const newWorkstationId = body.workstation_id;
 
+        if (newWorkstationId !== undefined && body.assigned_user_id === undefined && newWorkstationId) {
+            const inheritedAssignee = await query(
+                `SELECT COALESCE(w.assigned_user_id, z.assigned_user_id) AS assigned_user_id
+                 FROM club_workstations w
+                 LEFT JOIN club_zones z ON z.club_id = w.club_id AND z.name = w.zone
+                 WHERE w.id = $1 AND w.club_id = $2
+                 LIMIT 1`,
+                [newWorkstationId, clubId]
+            );
+
+            if ((inheritedAssignee.rowCount || 0) > 0) {
+                body.assigned_user_id = inheritedAssignee.rows[0].assigned_user_id ?? null;
+                if (body.maintenance_enabled === undefined) {
+                    body.maintenance_enabled = !!body.assigned_user_id;
+                }
+            }
+        }
+
         // Build dynamic update query
         const updates: string[] = [];
         const values: any[] = [];

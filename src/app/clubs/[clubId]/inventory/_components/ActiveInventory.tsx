@@ -485,152 +485,245 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                                 : "Введите фактическое количество товара на полках. Система скрывает ожидаемый остаток для чистоты проверки."}
                     </CardDescription>
                 </CardHeader>
-                <CardContent>
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead className="w-[40%]">Товар</TableHead>
-                                <TableHead className="text-right">Цена продажи</TableHead>
-                                {(isClosed || isOwner) && <TableHead className="text-right text-muted-foreground">Ожидалось</TableHead>}
-                                <TableHead className="text-right w-[150px]">Фактический остаток</TableHead>
-                                {isClosed && (
-                                    <>
-                                        <TableHead className="text-right">Разница (шт)</TableHead>
-                                        {inventory.target_metric_key && <TableHead className="text-right">Разница (₽)</TableHead>}
-                                    </>
-                                )}
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {groupedItems.map(([category, categoryItems]) => (
-                                <React.Fragment key={`cat-group-${category}`}>
-                                    <TableRow key={`cat-${category}`} className="bg-muted/50 hover:bg-muted/50">
-                                        <TableCell colSpan={isClosed ? (inventory.target_metric_key ? 6 : 5) : (isOwner ? 4 : 3)} className="font-semibold py-2">
-                                            {category} ({categoryItems.length})
+                <CardContent className="p-0 sm:p-6">
+                    {/* Desktop Table */}
+                    <div className="hidden md:block">
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead className="w-[40%]">Товар</TableHead>
+                                    <TableHead className="text-right">Цена продажи</TableHead>
+                                    {(isClosed || isOwner) && <TableHead className="text-right text-muted-foreground">Ожидалось</TableHead>}
+                                    <TableHead className="text-right w-[150px]">Фактический остаток</TableHead>
+                                    {isClosed && (
+                                        <>
+                                            <TableHead className="text-right">Разница (шт)</TableHead>
+                                            {inventory.target_metric_key && <TableHead className="text-right">Разница (₽)</TableHead>}
+                                        </>
+                                    )}
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {groupedItems.map(([category, categoryItems]) => (
+                                    <React.Fragment key={`cat-group-${category}`}>
+                                        <TableRow key={`cat-${category}`} className="bg-muted/50 hover:bg-muted/50">
+                                            <TableCell colSpan={isClosed ? (inventory.target_metric_key ? 6 : 5) : (isOwner ? 4 : 3)} className="font-semibold py-2">
+                                                {category} ({categoryItems.length})
+                                            </TableCell>
+                                        </TableRow>
+                                        {categoryItems.map(item => {
+                                            const difference = (item.expected_stock || 0) - (item.actual_stock || 0)
+                                            const revenue = difference * item.selling_price_snapshot
+                                            
+                                            return (
+                                                <TableRow key={item.id} className={isClosed && difference !== 0 ? "bg-slate-50" : scannedItem?.id === item.id ? "bg-blue-50 ring-2 ring-blue-500 ring-inset" : ""}>
+                                                    <TableCell className="font-medium pl-8">
+                                                        <div className="flex flex-col">
+                                                            <span>{item.product_name}</span>
+                                                            {(item.barcode || (item.barcodes && item.barcodes.length > 0)) && (
+                                                                <div className="flex flex-wrap gap-1 mt-1">
+                                                                    {item.barcode && (
+                                                                        <span className="text-[10px] text-muted-foreground font-mono flex items-center gap-1 bg-slate-100 px-1.5 py-0.5 rounded">
+                                                                            <Barcode className="h-2.5 w-2.5" />
+                                                                            {item.barcode}
+                                                                        </span>
+                                                                    )}
+                                                                    {item.barcodes?.map((bc: string) => (
+                                                                        <span key={bc} className="text-[10px] text-muted-foreground font-mono flex items-center gap-1 bg-slate-100 px-1.5 py-0.5 rounded">
+                                                                            <Barcode className="h-2.5 w-2.5" />
+                                                                            {bc}
+                                                                        </span>
+                                                                    ))}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </TableCell>
+                                                    <TableCell className="text-right">{item.selling_price_snapshot} ₽</TableCell>
+                                                    
+                                                    {(isClosed || isOwner) && (
+                                                        <TableCell className="text-right text-muted-foreground">
+                                                            {item.expected_stock}
+                                                        </TableCell>
+                                                    )}
+
+                                                    <TableCell className="text-right">
+                                                        {isClosed ? (
+                                                            editingItemId === item.id ? (
+                                                                <div className="flex items-center justify-end gap-1">
+                                                                    <Input 
+                                                                        type="number" 
+                                                                        className="h-7 w-20 text-right text-base"
+                                                                        value={correctionStock}
+                                                                        onChange={e => setCorrectionStock(e.target.value)}
+                                                                    />
+                                                                    <Button 
+                                                                        aria-label={`Сохранить корректировку ${item.product_name}`}
+                                                                        size="icon" 
+                                                                        variant="ghost" 
+                                                                        className="h-7 w-7 text-green-600"
+                                                                        onClick={() => handleSaveCorrection(item.product_id)}
+                                                                        disabled={isPending}
+                                                                    >
+                                                                        <Save className="h-3 w-3" />
+                                                                    </Button>
+                                                                    <Button 
+                                                                        aria-label={`Отменить корректировку ${item.product_name}`}
+                                                                        size="icon" 
+                                                                        variant="ghost" 
+                                                                        className="h-7 w-7 text-slate-400"
+                                                                        onClick={() => setEditingItemId(null)}
+                                                                    >
+                                                                        <X className="h-3 w-3" />
+                                                                    </Button>
+                                                                </div>
+                                                            ) : (
+                                                                <div className="flex items-center justify-end gap-2">
+                                                                    <span className="font-bold">{item.actual_stock}</span>
+                                                                    {isOwner && (
+                                                                        <Button 
+                                                                            aria-label={`Редактировать позицию ${item.product_name}`}
+                                                                            variant="ghost" 
+                                                                            size="icon" 
+                                                                            className="h-6 w-6 text-slate-400 hover:text-blue-500 hover:bg-blue-50"
+                                                                            onClick={() => handleStartCorrection(item)}
+                                                                        >
+                                                                            <Pencil className="h-3 w-3" />
+                                                                        </Button>
+                                                                    )}
+                                                                </div>
+                                                            )
+                                                        ) : (
+                                                            <Input 
+                                                                type="number" 
+                                                                id={`input-${item.id}`}
+                                                                className="text-right w-24 ml-auto"
+                                                                value={item.actual_stock === null ? "" : item.actual_stock}
+                                                                onChange={(e) => handleStockChange(item.id, e.target.value)}
+                                                                onBlur={(e) => handleBlur(item.id, e.target.value === "" ? null : Number(e.target.value))}
+                                                                placeholder="0"
+                                                            />
+                                                        )}
+                                                    </TableCell>
+
+                                                    {isClosed && (
+                                                        <>
+                                                            <TableCell className="text-right">
+                                                                <span className={difference > 0 ? "text-green-600" : difference < 0 ? "text-red-600" : "text-gray-400"}>
+                                                                    {difference > 0 ? `-${difference}` : `+${Math.abs(difference)}`} 
+                                                                </span>
+                                                            </TableCell>
+                                                            {inventory.target_metric_key && (
+                                                                <TableCell className="text-right font-bold">
+                                                                    {revenue.toLocaleString()} ₽
+                                                                </TableCell>
+                                                            )}
+                                                        </>
+                                                    )}
+                                                </TableRow>
+                                            )
+                                        })}
+                                    </React.Fragment>
+                                ))}
+                                {items.length === 0 && (
+                                    <TableRow>
+                                        <TableCell colSpan={isClosed ? 6 : 4} className="h-24 text-center text-muted-foreground">
+                                            Товары не найдены
                                         </TableCell>
                                     </TableRow>
-                                    {categoryItems.map(item => {
-                                        const difference = (item.expected_stock || 0) - (item.actual_stock || 0)
-                                        const revenue = difference * item.selling_price_snapshot
-                                        
-                                        return (
-                                            <TableRow key={item.id} className={isClosed && difference !== 0 ? "bg-slate-50" : scannedItem?.id === item.id ? "bg-blue-50 ring-2 ring-blue-500 ring-inset" : ""}>
-                                                <TableCell className="font-medium pl-8">
-                                                    <div className="flex flex-col">
-                                                        <span>{item.product_name}</span>
-                                                        {(item.barcode || (item.barcodes && item.barcodes.length > 0)) && (
-                                                            <div className="flex flex-wrap gap-1 mt-1">
-                                                                {item.barcode && (
-                                                                    <span className="text-[10px] text-muted-foreground font-mono flex items-center gap-1 bg-slate-100 px-1.5 py-0.5 rounded">
-                                                                        <Barcode className="h-2.5 w-2.5" />
-                                                                        {item.barcode}
-                                                                    </span>
-                                                                )}
-                                                                {item.barcodes?.map((bc: string) => (
-                                                                    <span key={bc} className="text-[10px] text-muted-foreground font-mono flex items-center gap-1 bg-slate-100 px-1.5 py-0.5 rounded">
-                                                                        <Barcode className="h-2.5 w-2.5" />
-                                                                        {bc}
-                                                                    </span>
-                                                                ))}
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell className="text-right">{item.selling_price_snapshot} ₽</TableCell>
-                                                
-                                                {(isClosed || isOwner) && (
-                                                    <TableCell className="text-right text-muted-foreground">
-                                                        {item.expected_stock}
-                                                    </TableCell>
-                                                )}
+                                )}
+                            </TableBody>
+                        </Table>
+                    </div>
 
-                                                <TableCell className="text-right">
+                    {/* Mobile Card View */}
+                    <div className="md:hidden divide-y">
+                        {groupedItems.map(([category, categoryItems]) => (
+                            <div key={`mob-cat-${category}`} className="flex flex-col">
+                                <div className="bg-slate-50 px-4 py-2 text-xs font-black text-slate-500 uppercase tracking-widest sticky top-0 z-10 border-y">
+                                    {category} ({categoryItems.length})
+                                </div>
+                                {categoryItems.map(item => {
+                                    const difference = (item.expected_stock || 0) - (item.actual_stock || 0)
+                                    const revenue = difference * item.selling_price_snapshot
+                                    const isModified = item.actual_stock !== null
+                                    
+                                    return (
+                                        <div key={`mob-item-${item.id}`} className={cn(
+                                            "p-4 flex flex-col gap-3 active:bg-slate-50 transition-colors",
+                                            isClosed && difference !== 0 ? "bg-red-50/30" : 
+                                            scannedItem?.id === item.id ? "bg-blue-50 ring-2 ring-blue-500 ring-inset" : ""
+                                        )}>
+                                            <div className="flex justify-between items-start gap-4">
+                                                <div className="flex-1 min-w-0">
+                                                    <h4 className="font-bold text-slate-900 text-sm leading-tight mb-1">{item.product_name}</h4>
+                                                    <div className="flex flex-wrap gap-1">
+                                                        {item.barcode && (
+                                                            <span className="text-[9px] text-slate-400 font-mono bg-slate-100 px-1 rounded flex items-center gap-0.5">
+                                                                <Barcode className="h-2 w-2" />
+                                                                {item.barcode}
+                                                            </span>
+                                                        )}
+                                                        <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">{item.selling_price_snapshot} ₽</span>
+                                                    </div>
+                                                </div>
+                                                
+                                                <div className="flex flex-col items-end gap-1">
                                                     {isClosed ? (
-                                                        editingItemId === item.id ? (
-                                                            <div className="flex items-center justify-end gap-1">
+                                                        <div className="flex flex-col items-end">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="text-xs text-slate-400">Было: {item.expected_stock}</span>
+                                                                <span className="text-sm font-black text-slate-900">Стало: {item.actual_stock}</span>
+                                                            </div>
+                                                            <div className="flex items-center gap-2 mt-1">
+                                                                <span className={cn(
+                                                                    "text-xs font-black px-1.5 py-0.5 rounded",
+                                                                    difference === 0 ? "bg-slate-100 text-slate-500" :
+                                                                    difference > 0 ? "bg-red-100 text-red-600" : "bg-green-100 text-green-600"
+                                                                )}>
+                                                                    {difference === 0 ? "OK" : difference > 0 ? `-${difference}` : `+${Math.abs(difference)}`}
+                                                                </span>
+                                                                {inventory.target_metric_key && (
+                                                                    <span className="text-xs font-bold text-slate-700">{revenue.toLocaleString()} ₽</span>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="flex items-center gap-3">
+                                                            {(isOwner) && (
+                                                                <div className="flex flex-col items-end">
+                                                                    <span className="text-[9px] text-slate-400 uppercase font-bold tracking-widest">Ожидалось</span>
+                                                                    <span className="text-sm font-bold text-slate-400">{item.expected_stock}</span>
+                                                                </div>
+                                                            )}
+                                                            <div className="relative">
                                                                 <Input 
                                                                     type="number" 
-                                                                    className="h-7 w-20 text-right text-base"
-                                                                    value={correctionStock}
-                                                                    onChange={e => setCorrectionStock(e.target.value)}
+                                                                    id={`mob-input-${item.id}`}
+                                                                    className={cn(
+                                                                        "text-center w-20 h-10 font-black text-lg p-0",
+                                                                        isModified ? "bg-blue-50 border-blue-200 text-blue-700" : "bg-white"
+                                                                    )}
+                                                                    value={item.actual_stock === null ? "" : item.actual_stock}
+                                                                    onChange={(e) => handleStockChange(item.id, e.target.value)}
+                                                                    onBlur={(e) => handleBlur(item.id, e.target.value === "" ? null : Number(e.target.value))}
+                                                                    placeholder="0"
                                                                 />
-                                                                <Button 
-                                                                    aria-label={`Сохранить корректировку ${item.product_name}`}
-                                                                    size="icon" 
-                                                                    variant="ghost" 
-                                                                    className="h-7 w-7 text-green-600"
-                                                                    onClick={() => handleSaveCorrection(item.product_id)}
-                                                                    disabled={isPending}
-                                                                >
-                                                                    <Save className="h-3 w-3" />
-                                                                </Button>
-                                                                <Button 
-                                                                    aria-label={`Отменить корректировку ${item.product_name}`}
-                                                                    size="icon" 
-                                                                    variant="ghost" 
-                                                                    className="h-7 w-7 text-slate-400"
-                                                                    onClick={() => setEditingItemId(null)}
-                                                                >
-                                                                    <X className="h-3 w-3" />
-                                                                </Button>
-                                                            </div>
-                                                        ) : (
-                                                            <div className="flex items-center justify-end gap-2 group/cell">
-                                                                <span className="font-bold">{item.actual_stock}</span>
-                                                                {isOwner && (
-                                                                    <Button 
-                                                                        aria-label={`Редактировать позицию ${item.product_name}`}
-                                                                        variant="ghost" 
-                                                                        size="icon" 
-                                                                        className="h-6 w-6 opacity-0 group-hover/cell:opacity-100 text-slate-400 hover:text-blue-500"
-                                                                        onClick={() => handleStartCorrection(item)}
-                                                                    >
-                                                                        <Pencil className="h-3 w-3" />
-                                                                    </Button>
+                                                                {isModified && (
+                                                                    <div className="absolute -top-1 -right-1 bg-blue-500 text-white rounded-full p-0.5 shadow-sm">
+                                                                        <CheckCircle2 className="h-2.5 w-2.5" />
+                                                                    </div>
                                                                 )}
                                                             </div>
-                                                        )
-                                                    ) : (
-                                                        <Input 
-                                                            type="number" 
-                                                            id={`input-${item.id}`}
-                                                            className="text-right w-24 ml-auto"
-                                                            value={item.actual_stock === null ? "" : item.actual_stock}
-                                                            onChange={(e) => handleStockChange(item.id, e.target.value)}
-                                                            onBlur={(e) => handleBlur(item.id, e.target.value === "" ? null : Number(e.target.value))}
-                                                            placeholder="0"
-                                                        />
+                                                        </div>
                                                     )}
-                                                </TableCell>
-
-                                                {isClosed && (
-                                                    <>
-                                                        <TableCell className="text-right">
-                                                            <span className={difference > 0 ? "text-green-600" : difference < 0 ? "text-red-600" : "text-gray-400"}>
-                                                                {difference > 0 ? `-${difference}` : `+${Math.abs(difference)}`} 
-                                                            </span>
-                                                        </TableCell>
-                                                        {inventory.target_metric_key && (
-                                                            <TableCell className="text-right font-bold">
-                                                                {revenue.toLocaleString()} ₽
-                                                            </TableCell>
-                                                        )}
-                                                    </>
-                                                )}
-                                            </TableRow>
-                                        )
-                                    })}
-                                </React.Fragment>
-                            ))}
-                            {items.length === 0 && (
-                                <TableRow>
-                                    <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
-                                        Товары не найдены
-                                    </TableCell>
-                                </TableRow>
-                            )}
-                        </TableBody>
-                    </Table>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )
+                                })}
+                            </div>
+                        ))}
+                    </div>
                 </CardContent>
             </Card>
 

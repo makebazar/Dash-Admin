@@ -14,39 +14,40 @@ export async function GET(
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        // Verify ownership
-        const ownerCheck = await query(
-            `SELECT id FROM clubs WHERE id = $1 AND owner_id = $2`,
+        const accessCheck = await query(
+            `SELECT 1 FROM clubs WHERE id = $1 AND owner_id = $2
+             UNION
+             SELECT 1 FROM club_employees WHERE club_id = $1 AND user_id = $2`,
             [clubId, userId]
         );
 
-        if (ownerCheck.rowCount === 0) {
+        if ((accessCheck.rowCount || 0) === 0) {
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
-        // Get stats from shifts for current month
         const statsResult = await query(
             `SELECT 
                 COALESCE(SUM(COALESCE(cash_income, 0) + COALESCE(card_income, 0)), 0) as total_revenue,
                 COALESCE(SUM(COALESCE(expenses, 0)), 0) as total_expenses,
-                COALESCE(SUM(COALESCE(cash_income, 0) - COALESCE(expenses, 0)), 0) as actual_balance
-             FROM shifts
-             WHERE club_id = $1 
-               AND check_out >= DATE_TRUNC('month', CURRENT_DATE)
-               AND check_out IS NOT NULL`,
+                COALESCE(SUM(COALESCE(cash_income, 0) + COALESCE(card_income, 0) - COALESCE(expenses, 0)), 0) as actual_balance
+             FROM shifts s
+             LEFT JOIN shift_reports sr ON s.shift_report_id = sr.id
+             WHERE COALESCE(s.club_id, sr.club_id) = $1
+               AND s.status NOT IN ('ACTIVE', 'CANCELLED')
+               AND COALESCE(s.check_out, s.check_in) >= DATE_TRUNC('month', CURRENT_DATE)`,
             [clubId]
         );
 
-        // Get previous month stats for comparison
         const prevStatsResult = await query(
             `SELECT 
                 COALESCE(SUM(COALESCE(cash_income, 0) + COALESCE(card_income, 0)), 0) as total_revenue,
                 COALESCE(SUM(COALESCE(expenses, 0)), 0) as total_expenses
-             FROM shifts
-             WHERE club_id = $1 
-               AND check_out >= DATE_TRUNC('month', CURRENT_DATE - INTERVAL '1 month')
-               AND check_out < DATE_TRUNC('month', CURRENT_DATE)
-               AND check_out IS NOT NULL`,
+             FROM shifts s
+             LEFT JOIN shift_reports sr ON s.shift_report_id = sr.id
+             WHERE COALESCE(s.club_id, sr.club_id) = $1
+               AND s.status NOT IN ('ACTIVE', 'CANCELLED')
+               AND COALESCE(s.check_out, s.check_in) >= DATE_TRUNC('month', CURRENT_DATE - INTERVAL '1 month')
+               AND COALESCE(s.check_out, s.check_in) < DATE_TRUNC('month', CURRENT_DATE)`,
             [clubId]
         );
 

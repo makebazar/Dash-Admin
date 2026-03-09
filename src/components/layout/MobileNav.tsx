@@ -2,9 +2,10 @@
 
 import { Menu } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
+import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet"
 import { useState } from "react"
 import { usePathname } from "next/navigation"
+import * as VisuallyHidden from "@radix-ui/react-visually-hidden"
 
 export function MobileNav({ children }: { children: React.ReactNode }) {
     const [open, setOpen] = useState(false)
@@ -27,6 +28,9 @@ export function MobileNav({ children }: { children: React.ReactNode }) {
                     </Button>
                 </SheetTrigger>
                 <SheetContent side="left" className="p-0 w-80">
+                    <VisuallyHidden.Root>
+                        <SheetTitle>Навигация</SheetTitle>
+                    </VisuallyHidden.Root>
                      <div className="h-full" onClick={(e) => {
                          if ((e.target as HTMLElement).closest('a') || (e.target as HTMLElement).closest('button')) {
                              // Allow some time for navigation or action before closing? 

@@ -223,7 +223,8 @@ export function ProcurementTab({ lists, products, currentUserId }: ProcurementTa
                 </Button>
             </div>
 
-            <div className="bg-white rounded-2xl border overflow-hidden shadow-sm">
+            {/* Desktop Table */}
+            <div className="hidden md:block bg-white rounded-2xl border overflow-hidden shadow-sm">
                 <Table>
                     <TableHeader className="bg-slate-50/50">
                         <TableRow className="hover:bg-transparent">
@@ -281,37 +282,82 @@ export function ProcurementTab({ lists, products, currentUserId }: ProcurementTa
                 </Table>
             </div>
 
+            {/* Mobile Cards */}
+            <div className="md:hidden space-y-3">
+                {lists.length === 0 ? (
+                    <div className="py-12 text-center text-muted-foreground italic bg-white rounded-xl border border-dashed">Списков пока нет</div>
+                ) : lists.map(list => (
+                    <div 
+                        key={list.id} 
+                        className="bg-white rounded-xl border p-4 shadow-sm active:bg-slate-50 transition-colors"
+                        onClick={() => openDetails(list)}
+                    >
+                        <div className="flex justify-between items-start mb-3">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
+                                    <FileText className="h-5 w-5" />
+                                </div>
+                                <div className="flex flex-col">
+                                    <h4 className="font-black text-slate-900 text-base leading-tight">{list.name}</h4>
+                                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">
+                                        {format(new Date(list.created_at), 'dd MMM yyyy', { locale: ru })}
+                                    </span>
+                                </div>
+                            </div>
+                            <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-8 w-8 text-red-400" 
+                                onClick={(e) => { e.stopPropagation(); handleDelete(list.id) }}
+                            >
+                                <Trash2 className="h-4 w-4" />
+                            </Button>
+                        </div>
+                        
+                        <div className="flex justify-between items-center pt-3 border-t border-slate-50">
+                            <div className="flex items-center gap-2 text-xs text-slate-500 font-medium">
+                                <Clock className="h-3.5 w-3.5" />
+                                <span>{list.creator_name?.split(' ')[0]}</span>
+                            </div>
+                            <Badge variant="secondary" className="bg-slate-100 text-slate-600 font-black border-none text-[10px]">
+                                {list.items_count} ПОЗ.
+                            </Badge>
+                        </div>
+                    </div>
+                ))}
+            </div>
+
             {/* Details Dialog */}
             <Dialog open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
                 <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto p-0 border-none shadow-2xl rounded-3xl">
-                    <div className="p-8 bg-slate-900 text-white relative overflow-hidden">
+                    <div className="p-6 md:p-8 bg-slate-900 text-white relative overflow-hidden">
                         <div className="relative z-10">
-                            <div className="flex justify-between items-start">
+                            <div className="flex flex-col md:flex-row justify-between items-start gap-4">
                                 <div>
                                     <Badge className="mb-2 bg-blue-500 text-white border-none font-black uppercase tracking-widest text-[10px] px-2 py-0.5">Черновик заказа</Badge>
-                                    <DialogTitle className="text-2xl font-black">{activeList?.name}</DialogTitle>
-                                    <DialogDescription className="text-slate-400 mt-1">
+                                    <DialogTitle className="text-xl md:text-2xl font-black">{activeList?.name}</DialogTitle>
+                                    <DialogDescription className="text-slate-400 mt-1 text-xs md:text-sm">
                                         Автоматический расчет на основе ABC-приоритетов и темпов продаж.
                                     </DialogDescription>
                                 </div>
-                                <div className="text-right">
-                                    <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mb-1">Ориентировочная сумма</p>
-                                    <p className="text-3xl font-black text-blue-400">{totalSum.toLocaleString()} ₽</p>
+                                <div className="text-left md:text-right">
+                                    <p className="text-[10px] md:text-xs text-slate-400 font-bold uppercase tracking-widest mb-1">Ориентировочная сумма</p>
+                                    <p className="text-2xl md:text-3xl font-black text-blue-400">{totalSum.toLocaleString()} ₽</p>
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-3 gap-4 mt-8">
-                                <div className="bg-white/5 rounded-2xl p-4 border border-white/10 backdrop-blur-sm">
-                                    <p className="text-[10px] text-slate-400 font-bold uppercase mb-1 tracking-wider">Всего позиций</p>
-                                    <p className="text-xl font-black">{itemsCount}</p>
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4 mt-6 md:mt-8">
+                                <div className="bg-white/5 rounded-2xl p-3 md:p-4 border border-white/10 backdrop-blur-sm">
+                                    <p className="text-[9px] md:text-[10px] text-slate-400 font-bold uppercase mb-1 tracking-wider">Всего позиций</p>
+                                    <p className="text-lg md:text-xl font-black">{itemsCount}</p>
                                 </div>
-                                <div className="bg-white/5 rounded-2xl p-4 border border-white/10 backdrop-blur-sm">
-                                    <p className="text-[10px] text-slate-400 font-bold uppercase mb-1 tracking-wider">Критический запас</p>
-                                    <p className="text-xl font-black text-rose-400">{criticalItems}</p>
+                                <div className="bg-white/5 rounded-2xl p-3 md:p-4 border border-white/10 backdrop-blur-sm">
+                                    <p className="text-[9px] md:text-[10px] text-slate-400 font-bold uppercase mb-1 tracking-wider">Критический запас</p>
+                                    <p className="text-lg md:text-xl font-black text-rose-400">{criticalItems}</p>
                                 </div>
-                                <div className="bg-white/5 rounded-2xl p-4 border border-white/10 backdrop-blur-sm">
-                                    <p className="text-[10px] text-slate-400 font-bold uppercase mb-1 tracking-wider">Дата плана</p>
-                                    <p className="text-xl font-black">{activeList && format(new Date(activeList.created_at), 'dd.MM.yyyy')}</p>
+                                <div className="bg-white/5 rounded-2xl p-3 md:p-4 border border-white/10 backdrop-blur-sm col-span-2 md:col-span-1">
+                                    <p className="text-[9px] md:text-[10px] text-slate-400 font-bold uppercase mb-1 tracking-wider">Дата плана</p>
+                                    <p className="text-lg md:text-xl font-black">{activeList && format(new Date(activeList.created_at), 'dd.MM.yyyy')}</p>
                                 </div>
                             </div>
                         </div>
@@ -320,11 +366,11 @@ export function ProcurementTab({ lists, products, currentUserId }: ProcurementTa
                         <div className="absolute -left-20 -top-20 w-64 h-64 bg-purple-600/10 rounded-full blur-[100px]" />
                     </div>
 
-                    <div className="p-8 space-y-6">
+                    <div className="p-4 md:p-8 space-y-6">
                         {/* Budget & Add Item Row */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {/* Budget Distribution */}
-                            <div className="flex items-end gap-3 bg-blue-50 p-4 rounded-2xl border border-blue-100 shadow-sm">
+                            <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-3 bg-blue-50 p-4 rounded-2xl border border-blue-100 shadow-sm">
                                 <div className="flex-1 space-y-1.5">
                                     <label className="text-[10px] font-black uppercase text-blue-600 ml-1">Распределить бюджет (₽)</label>
                                     <Input 
@@ -337,18 +383,18 @@ export function ProcurementTab({ lists, products, currentUserId }: ProcurementTa
                                 </div>
                                 <Button 
                                     onClick={handleDistributeBudget} 
-                                    className="bg-blue-600 text-white hover:bg-blue-700 transition-all active:scale-95 shadow-md px-6 font-bold"
+                                    className="bg-blue-600 text-white hover:bg-blue-700 transition-all active:scale-95 shadow-md px-6 font-bold h-10 md:h-9"
                                 >
                                     Распределить
                                 </Button>
                             </div>
 
                             {/* Add Item Bar */}
-                            <div className="flex items-end gap-3 bg-slate-50 p-4 rounded-2xl border border-slate-100 shadow-inner">
+                            <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-3 bg-slate-50 p-4 rounded-2xl border border-slate-100 shadow-inner">
                                 <div className="flex-1 space-y-1.5">
                                     <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Добавить товар вручную</label>
                                     <Select value={selectedNewProductId} onValueChange={setSelectedNewProductId}>
-                                        <SelectTrigger className="bg-white border-slate-200 text-xs">
+                                        <SelectTrigger className="bg-white border-slate-200 text-xs h-10 md:h-9">
                                             <SelectValue placeholder="Выберите товар..." />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -363,7 +409,7 @@ export function ProcurementTab({ lists, products, currentUserId }: ProcurementTa
                                 <Button 
                                     onClick={handleAddItem} 
                                     disabled={!selectedNewProductId}
-                                    className="bg-slate-900 text-white hover:bg-slate-800 transition-all active:scale-95 shadow-lg px-6"
+                                    className="bg-slate-900 text-white hover:bg-slate-800 transition-all active:scale-95 shadow-lg px-6 h-10 md:h-9"
                                 >
                                     <Plus className="h-4 w-4 mr-2" />
                                     Добавить
@@ -372,121 +418,195 @@ export function ProcurementTab({ lists, products, currentUserId }: ProcurementTa
                         </div>
 
                         <div className="rounded-2xl border border-slate-200 overflow-hidden shadow-sm bg-white">
-                            <Table>
-                                <TableHeader className="bg-slate-50/50">
-                                    <TableRow className="hover:bg-transparent">
-                                        <TableHead className="text-[10px] uppercase font-bold text-slate-400 pl-6">Товар</TableHead>
-                                        <TableHead className="text-center text-[10px] uppercase font-bold text-slate-400">Группа</TableHead>
-                                        <TableHead className="text-right text-[10px] uppercase font-bold text-slate-400">Остаток</TableHead>
-                                        <TableHead className="text-right text-[10px] uppercase font-bold text-slate-400">Запас (дн)</TableHead>
-                                        <TableHead className="text-right text-[10px] uppercase font-bold text-slate-400">План (шт)</TableHead>
-                                        <TableHead className="w-[120px] text-right text-[10px] uppercase font-bold text-slate-400">К заказу</TableHead>
-                                        <TableHead className="text-right text-[10px] uppercase font-bold text-slate-400 pr-6">Сумма</TableHead>
-                                        <TableHead className="w-[50px]"></TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {listItems.map(item => (
-                                        <TableRow key={item.id} className="hover:bg-slate-50/50 group/row transition-colors">
-                                            <TableCell className="pl-6">
-                                                <p className="font-bold text-slate-700">{item.product_name}</p>
-                                                <div className="flex items-center gap-2 mt-0.5">
-                                                    <p className="text-[10px] text-slate-400 font-medium whitespace-nowrap">Закуп: {item.cost_price} ₽</p>
-                                                    <div className="flex items-center gap-1">
-                                                        <span className="text-[9px] text-slate-400 font-bold uppercase">В кор:</span>
+                            {/* Desktop Table */}
+                            <div className="hidden md:block">
+                                <Table>
+                                    <TableHeader className="bg-slate-50/50">
+                                        <TableRow className="hover:bg-transparent">
+                                            <TableHead className="text-[10px] uppercase font-bold text-slate-400 pl-6">Товар</TableHead>
+                                            <TableHead className="text-center text-[10px] uppercase font-bold text-slate-400">Группа</TableHead>
+                                            <TableHead className="text-right text-[10px] uppercase font-bold text-slate-400">Остаток</TableHead>
+                                            <TableHead className="text-right text-[10px] uppercase font-bold text-slate-400">Запас (дн)</TableHead>
+                                            <TableHead className="text-right text-[10px] uppercase font-bold text-slate-400">План (шт)</TableHead>
+                                            <TableHead className="w-[120px] text-right text-[10px] uppercase font-bold text-slate-400">К заказу</TableHead>
+                                            <TableHead className="text-right text-[10px] uppercase font-bold text-slate-400 pr-6">Сумма</TableHead>
+                                            <TableHead className="w-[50px]"></TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {listItems.map(item => (
+                                            <TableRow key={item.id} className="hover:bg-slate-50/50 group/row transition-colors">
+                                                <TableCell className="pl-6">
+                                                    <p className="font-bold text-slate-700">{item.product_name}</p>
+                                                    <div className="flex items-center gap-2 mt-0.5">
+                                                        <p className="text-[10px] text-slate-400 font-medium whitespace-nowrap">Закуп: {item.cost_price} ₽</p>
+                                                        <div className="flex items-center gap-1">
+                                                            <span className="text-[9px] text-slate-400 font-bold uppercase">В кор:</span>
+                                                            <Input 
+                                                                type="number" 
+                                                                className="h-5 w-12 text-[10px] px-1 text-center font-bold border-blue-100 bg-blue-50/30 text-blue-600 focus:ring-0 focus:border-blue-300" 
+                                                                value={item.units_per_box}
+                                                                onChange={(e) => handleUpdateBoxSize(item.id, Number(e.target.value))}
+                                                                min={1}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell className="text-center">
+                                                    <Badge 
+                                                        className={cn(
+                                                            "h-5 px-2 text-[10px] font-black uppercase border-none",
+                                                            item.abc_category === 'A' ? "bg-green-500 text-white" :
+                                                            item.abc_category === 'B' ? "bg-amber-500 text-white" :
+                                                            "bg-slate-400 text-white"
+                                                        )}
+                                                    >
+                                                        {item.abc_category || 'C'}
+                                                    </Badge>
+                                                </TableCell>
+                                                <TableCell className="text-right font-medium text-slate-600">{item.current_stock}</TableCell>
+                                                <TableCell className="text-right">
+                                                    {item.days_left !== null ? (
+                                                        <Badge variant="outline" className={cn(
+                                                            "font-bold border-none h-6 px-2",
+                                                            Number(item.days_left) < 3 ? "bg-rose-50 text-rose-600" : 
+                                                            Number(item.days_left) < 7 ? "bg-amber-50 text-amber-600" : 
+                                                            "bg-slate-50 text-slate-500"
+                                                        )}>
+                                                            <Clock className="h-3 w-3 mr-1" />
+                                                            {Math.round(Number(item.days_left))} дн.
+                                                        </Badge>
+                                                    ) : (
+                                                        <span className="text-slate-300">∞</span>
+                                                    )}
+                                                </TableCell>
+                                                <TableCell className="text-right">
+                                                    <div className="flex flex-col items-end">
+                                                        <Badge variant="secondary" className="bg-blue-50 text-blue-600 border-none font-bold">
+                                                            {item.suggested_quantity}
+                                                        </Badge>
+                                                        {item.units_per_box > 1 && (
+                                                            <span className="text-[9px] text-slate-400 mt-0.5">
+                                                                {Math.round(item.suggested_quantity / item.units_per_box)} кор.
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell className="text-right">
+                                                    <div className="flex flex-col items-end gap-1">
                                                         <Input 
                                                             type="number" 
-                                                            className="h-5 w-12 text-[10px] px-1 text-center font-bold border-blue-100 bg-blue-50/30 text-blue-600 focus:ring-0 focus:border-blue-300" 
-                                                            value={item.units_per_box}
-                                                            onChange={(e) => handleUpdateBoxSize(item.id, Number(e.target.value))}
-                                                            min={1}
+                                                            className="text-right h-8 w-[80px] font-black border-blue-100 focus:border-blue-500 focus:ring-blue-500 transition-all" 
+                                                            value={item.actual_quantity}
+                                                            onChange={(e) => handleUpdateQuantity(item.id, Number(e.target.value))}
                                                         />
+                                                        {item.units_per_box > 1 && (
+                                                            <span className="text-[9px] text-blue-500 font-bold px-1 bg-blue-50 rounded">
+                                                                {Math.round(item.actual_quantity / item.units_per_box)} кор.
+                                                            </span>
+                                                        )}
                                                     </div>
+                                                </TableCell>
+                                                <TableCell className="text-right font-black text-slate-900 pr-6">
+                                                    {(item.actual_quantity * item.cost_price).toLocaleString()} ₽
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Button 
+                                                        aria-label={`Удалить товар ${item.product_name} из списка`}
+                                                        variant="ghost" 
+                                                        size="icon" 
+                                                        className="h-8 w-8 text-slate-300 hover:text-red-600 opacity-0 group-hover/row:opacity-100 transition-all"
+                                                        onClick={() => handleDeleteItem(item.id)}
+                                                    >
+                                                        <X className="h-4 w-4" />
+                                                    </Button>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </div>
+
+                            {/* Mobile View */}
+                            <div className="md:hidden divide-y divide-slate-100">
+                                {listItems.map(item => (
+                                    <div key={item.id} className="p-4 flex flex-col gap-3 active:bg-slate-50 transition-colors">
+                                        <div className="flex justify-between items-start gap-4">
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <h4 className="font-bold text-slate-900 text-sm leading-tight">{item.product_name}</h4>
+                                                    <Badge 
+                                                        className={cn(
+                                                            "h-4 px-1 text-[8px] font-black uppercase border-none",
+                                                            item.abc_category === 'A' ? "bg-green-500 text-white" :
+                                                            item.abc_category === 'B' ? "bg-amber-500 text-white" :
+                                                            "bg-slate-400 text-white"
+                                                        )}
+                                                    >
+                                                        {item.abc_category || 'C'}
+                                                    </Badge>
                                                 </div>
-                                            </TableCell>
-                                            <TableCell className="text-center">
-                                                <Badge 
-                                                    className={cn(
-                                                        "h-5 px-2 text-[10px] font-black uppercase border-none",
-                                                        item.abc_category === 'A' ? "bg-green-500 text-white" :
-                                                        item.abc_category === 'B' ? "bg-amber-500 text-white" :
-                                                        "bg-slate-400 text-white"
-                                                    )}
-                                                >
-                                                    {item.abc_category || 'C'}
-                                                </Badge>
-                                            </TableCell>
-                                            <TableCell className="text-right font-medium text-slate-600">{item.current_stock}</TableCell>
-                                            <TableCell className="text-right">
-                                                {item.days_left !== null ? (
-                                                    <Badge variant="outline" className={cn(
-                                                        "font-bold border-none h-6 px-2",
-                                                        Number(item.days_left) < 3 ? "bg-rose-50 text-rose-600" : 
-                                                        Number(item.days_left) < 7 ? "bg-amber-50 text-amber-600" : 
-                                                        "bg-slate-50 text-slate-500"
-                                                    )}>
-                                                        <Clock className="h-3 w-3 mr-1" />
-                                                        {Math.round(Number(item.days_left))} дн.
-                                                    </Badge>
-                                                ) : (
-                                                    <span className="text-slate-300">∞</span>
-                                                )}
-                                            </TableCell>
-                                            <TableCell className="text-right">
-                                                <div className="flex flex-col items-end">
-                                                    <Badge variant="secondary" className="bg-blue-50 text-blue-600 border-none font-bold">
-                                                        {item.suggested_quantity}
-                                                    </Badge>
-                                                    {item.units_per_box > 1 && (
-                                                        <span className="text-[9px] text-slate-400 mt-0.5">
-                                                            {Math.round(item.suggested_quantity / item.units_per_box)} кор.
+                                                <div className="flex flex-wrap gap-x-3 gap-y-1">
+                                                    <span className="text-[10px] text-slate-400 font-medium">Закуп: {item.cost_price} ₽</span>
+                                                    <span className="text-[10px] text-slate-400 font-medium">Остаток: {item.current_stock} шт</span>
+                                                    {item.days_left !== null && (
+                                                        <span className={cn(
+                                                            "text-[10px] font-bold",
+                                                            Number(item.days_left) < 3 ? "text-rose-500" : "text-slate-400"
+                                                        )}>
+                                                            Запас: {Math.round(Number(item.days_left))} дн.
                                                         </span>
                                                     )}
                                                 </div>
-                                            </TableCell>
-                                            <TableCell className="text-right">
-                                                <div className="flex flex-col items-end gap-1">
+                                            </div>
+                                            <Button 
+                                                variant="ghost" 
+                                                size="icon" 
+                                                className="h-8 w-8 text-slate-300" 
+                                                onClick={() => handleDeleteItem(item.id)}
+                                            >
+                                                <X className="h-4 w-4" />
+                                            </Button>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-4 pt-2 border-t border-slate-50">
+                                            <div className="flex flex-col gap-1">
+                                                <span className="text-[9px] text-slate-400 uppercase font-black tracking-widest">К заказу</span>
+                                                <div className="flex items-center gap-2">
                                                     <Input 
                                                         type="number" 
-                                                        className="text-right h-8 w-[80px] font-black border-blue-100 focus:border-blue-500 focus:ring-blue-500 transition-all" 
+                                                        className="text-center h-10 w-20 font-black text-lg border-blue-100 bg-blue-50/30 text-blue-700" 
                                                         value={item.actual_quantity}
                                                         onChange={(e) => handleUpdateQuantity(item.id, Number(e.target.value))}
                                                     />
                                                     {item.units_per_box > 1 && (
-                                                        <span className="text-[9px] text-blue-500 font-bold px-1 bg-blue-50 rounded">
-                                                            {Math.round(item.actual_quantity / item.units_per_box)} кор.
-                                                        </span>
+                                                        <div className="flex flex-col">
+                                                            <span className="text-[9px] text-blue-500 font-bold leading-none">
+                                                                {Math.round(item.actual_quantity / item.units_per_box)} кор.
+                                                            </span>
+                                                            <span className="text-[8px] text-slate-400 font-medium leading-none mt-0.5">по {item.units_per_box} шт</span>
+                                                        </div>
                                                     )}
                                                 </div>
-                                            </TableCell>
-                                            <TableCell className="text-right font-black text-slate-900 pr-6">
-                                                {(item.actual_quantity * item.cost_price).toLocaleString()} ₽
-                                            </TableCell>
-                                            <TableCell>
-                                                <Button 
-                                                    aria-label={`Удалить товар ${item.product_name} из списка`}
-                                                    variant="ghost" 
-                                                    size="icon" 
-                                                    className="h-8 w-8 text-slate-300 hover:text-red-600 opacity-0 group-hover/row:opacity-100 transition-all"
-                                                    onClick={() => handleDeleteItem(item.id)}
-                                                >
-                                                    <X className="h-4 w-4" />
-                                                </Button>
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
+                                            </div>
+                                            <div className="text-right flex flex-col justify-end">
+                                                <p className="text-[9px] text-slate-400 uppercase font-black tracking-widest mb-1">Сумма</p>
+                                                <p className="text-lg font-black text-slate-900">{(item.actual_quantity * item.cost_price).toLocaleString()} ₽</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     </div>
 
-                    <div className="p-8 bg-slate-50 border-t flex justify-between items-center">
+                    <div className="p-6 md:p-8 bg-slate-50 border-t flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-4">
                         <div className="flex gap-3">
-                            <Button variant="outline" className="gap-2 border-slate-300 bg-white hover:bg-white hover:border-slate-400 transition-all shadow-sm" onClick={copyToClipboard}>
+                            <Button variant="outline" className="flex-1 sm:flex-none gap-2 border-slate-300 bg-white hover:bg-white hover:border-slate-400 transition-all shadow-sm text-xs h-10" onClick={copyToClipboard}>
                                 <Copy className="h-4 w-4" />
-                                Копировать список
+                                Копировать
                             </Button>
-                            <Button variant="outline" className="gap-2 border-slate-300 bg-white hover:bg-white hover:border-slate-400 transition-all shadow-sm" onClick={() => window.print()}>
+                            <Button variant="outline" className="flex-1 sm:flex-none gap-2 border-slate-300 bg-white hover:bg-white hover:border-slate-400 transition-all shadow-sm text-xs h-10" onClick={() => window.print()}>
                                 <FileDown className="h-4 w-4" />
                                 PDF / Печать
                             </Button>

@@ -2,7 +2,7 @@
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { Calendar, User, ShoppingCart, Clock, ChevronDown, ChevronRight, Link, Unlink, Trash2, Check, X, Pencil, Save, Plus, AlertCircle, RefreshCw } from "lucide-react"
+import { Calendar, ShoppingCart, Clock, ChevronRight, Link, Unlink, Trash2, Check, X, Pencil, Plus, AlertCircle, RefreshCw } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useState, useMemo, useTransition } from "react"
 import { Button } from "@/components/ui/button"
@@ -290,83 +290,71 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
                             {/* Shift Header */}
                             <div 
                                 className={cn(
-                                    "px-4 py-4 flex items-center justify-between cursor-pointer select-none",
+                                    "px-3 py-3 flex items-center justify-between cursor-pointer select-none gap-2",
                                     isExpanded ? "border-b bg-slate-50/50" : ""
                                 )}
                                 onClick={() => toggleShift(groupId)}
                             >
-                                <div className="flex items-center gap-4">
+                                {/* Left: Avatar & Info */}
+                                <div className="flex items-center gap-2 min-w-0 shrink-0">
                                     <div className={cn(
-                                        "p-2 rounded-xl transition-all",
+                                        "p-2 rounded-lg transition-all shrink-0",
                                         isUnassigned ? "bg-amber-100 text-amber-600" : "bg-blue-50 text-blue-600",
                                         isExpanded ? "rotate-90" : ""
                                     )}>
-                                        <ChevronRight className="h-5 w-5" />
+                                        <ChevronRight className="h-4 w-4" />
                                     </div>
-                                    <div className="flex flex-col">
-                                        <div className="flex items-center gap-2">
-                                            {isUnassigned ? (
-                                                <span className="text-sm font-bold text-amber-700">Продажи без привязки</span>
-                                            ) : (
-                                                <span className="text-sm font-bold text-slate-900">{group.shift.employee}</span>
-                                            )}
-                                        </div>
-                                        <div className="flex items-center gap-3 text-[10px] text-slate-500 mt-1">
+                                    <div className="flex flex-col min-w-0">
+                                        <span className="text-sm font-black text-slate-900 truncate leading-tight">
+                                            {isUnassigned ? "Продажи" : group.shift.employee}
+                                        </span>
+                                        <div className="flex items-center gap-1.5 text-[9px] text-slate-400 mt-0.5 whitespace-nowrap">
                                             {!isUnassigned && (
-                                                <div className="flex items-center gap-1">
-                                                    <Calendar className="h-3.5 w-3.5 opacity-60" />
-                                                    <span className="font-medium">
-                                                        {new Date(group.shift.start).toLocaleDateString('ru-RU')} {new Date(group.shift.start).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
-                                                    </span>
-                                                </div>
+                                                <span>{new Date(group.shift.start).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })} {new Date(group.shift.start).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</span>
                                             )}
-                                            <div className="flex items-center gap-1">
-                                                <ShoppingCart className="h-3.5 w-3.5 opacity-60" />
-                                                <span className="font-medium">{items.length} поз.</span>
+                                            <div className="flex items-center gap-0.5">
+                                                <ShoppingCart className="h-2.5 w-2.5 opacity-60" />
+                                                <span>{items.length} поз.</span>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
                                 
-                                <div className="flex items-center gap-6">
-                                        <div className="flex gap-4 border-r pr-6 border-slate-100">
-                                            {isUnassigned ? (
-                                                <div className="text-right">
-                                                    <div className="text-[9px] text-amber-600 uppercase font-bold tracking-wider leading-none mb-1">Сумма</div>
-                                                    <div className="text-sm font-bold text-amber-600 leading-none">{group.totalRevenue.toLocaleString()} ₽</div>
-                                                </div>
-                                            ) : (
-                                                <>
-                                                    <div className="text-right">
-                                                        <div className="text-[9px] text-slate-400 uppercase font-bold tracking-wider leading-none mb-1">По складу</div>
-                                                        <div className="text-sm font-bold text-blue-600 leading-none">{group.totalRevenue.toLocaleString()} ₽</div>
-                                                    </div>
-                                                    <div className="text-right">
-                                                        <div className="text-[9px] text-slate-400 uppercase font-bold tracking-wider leading-none mb-1">По кассе</div>
-                                                        <div className="text-sm font-bold text-slate-700 leading-none">{group.shift.reported.toLocaleString()} ₽</div>
-                                                    </div>
-                                                    <div className="text-right">
-                                                        <div className="text-[9px] text-slate-400 uppercase font-bold tracking-wider leading-none mb-1">Разница</div>
-                                                        <div className={cn(
-                                                            "text-sm font-black leading-none",
-                                                            (group.shift.reported - group.totalRevenue) === 0 ? "text-green-500" : 
-                                                            (group.shift.reported - group.totalRevenue) > 0 ? "text-amber-500" : "text-red-500"
-                                                        )}>
-                                                            {(group.shift.reported - group.totalRevenue) > 0 ? "+" : ""}{(group.shift.reported - group.totalRevenue).toLocaleString()} ₽
-                                                        </div>
-                                                    </div>
-                                                </>
-                                            )}
+                                {/* Right: Stats Row - NO WRAPPING */}
+                                <div className="flex items-center gap-3 sm:gap-6 ml-auto shrink-0">
+                                    {!isUnassigned && (
+                                        <div className="flex items-center gap-3 sm:gap-6">
+                                            <div className="flex flex-col items-end shrink-0">
+                                                <span className="text-[7px] sm:text-[9px] text-slate-400 uppercase font-black tracking-tighter sm:tracking-widest leading-none mb-1">Склад</span>
+                                                <span className="text-[11px] sm:text-sm font-black text-blue-600 leading-none whitespace-nowrap">{group.totalRevenue.toLocaleString()} ₽</span>
+                                            </div>
+                                            <div className="flex flex-col items-end shrink-0">
+                                                <span className="text-[7px] sm:text-[9px] text-slate-400 uppercase font-black tracking-tighter sm:tracking-widest leading-none mb-1">Касса</span>
+                                                <span className="text-[11px] sm:text-sm font-black text-slate-700 leading-none whitespace-nowrap">{group.shift.reported.toLocaleString()} ₽</span>
+                                            </div>
+                                            <div className="flex flex-col items-end shrink-0">
+                                                <span className="text-[7px] sm:text-[9px] text-slate-400 uppercase font-black tracking-tighter sm:tracking-widest leading-none mb-1">Разница</span>
+                                                <span className={cn(
+                                                    "text-[11px] sm:text-sm font-black leading-none whitespace-nowrap",
+                                                    (group.shift.reported - group.totalRevenue) === 0 ? "text-green-500" : 
+                                                    (group.shift.reported - group.totalRevenue) > 0 ? "text-amber-500" : "text-red-500"
+                                                )}>
+                                                    {(group.shift.reported - group.totalRevenue) > 0 ? "+" : ""}{(group.shift.reported - group.totalRevenue).toLocaleString()} ₽
+                                                </span>
+                                            </div>
                                         </div>
-
-                                    {isUnassigned && items.length > 0 && (
-                                        <Badge variant="destructive" className="bg-amber-500 text-white border-none text-[10px] px-2 py-0.5 animate-pulse">
-                                            Требует привязки
-                                        </Badge>
                                     )}
-                                    <div className="text-right min-w-[60px]">
-                                        <div className="text-[10px] text-slate-400 uppercase font-bold tracking-wider leading-none mb-1">Кол-во</div>
-                                        <div className="text-lg font-black text-slate-700 leading-none">{group.totalAmount}</div>
+                                    {isUnassigned && (
+                                        <div className="flex flex-col items-end shrink-0">
+                                            <span className="text-[7px] sm:text-[9px] text-amber-600 uppercase font-black tracking-tighter sm:tracking-widest leading-none mb-1">Сумма</span>
+                                            <span className="text-[11px] sm:text-sm font-black text-amber-600 leading-none whitespace-nowrap">{group.totalRevenue.toLocaleString()} ₽</span>
+                                        </div>
+                                    )}
+
+                                    {/* Total Amount Badge */}
+                                    <div className="hidden xs:flex flex-col items-end shrink-0 border-l pl-3 border-slate-100">
+                                        <span className="text-[7px] sm:text-[9px] text-slate-400 uppercase font-black tracking-tighter sm:tracking-widest leading-none mb-1">Всего</span>
+                                        <span className="text-xs sm:text-base font-black text-slate-900 leading-none">{group.totalAmount}</span>
                                     </div>
                                 </div>
                             </div>
@@ -374,161 +362,195 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
                             {/* Shift Items */}
                             {isExpanded && (
                                 <div className="divide-y">
-                                    <Table>
-                                        <TableHeader className="bg-slate-50/50">
-                                            <TableRow className="hover:bg-transparent h-10">
-                                                <TableHead className="w-10 text-center"></TableHead>
-                                                <TableHead className="text-[10px] uppercase font-bold text-slate-400">Товар</TableHead>
-                                                <TableHead className="text-right text-[10px] uppercase font-bold text-slate-400">Цена</TableHead>
-                                                <TableHead className="text-right text-[10px] uppercase font-bold text-slate-400">Кол-во</TableHead>
-                                                <TableHead className="text-right text-[10px] uppercase font-bold text-slate-400">Итого</TableHead>
-                                                <TableHead className="text-right text-[10px] uppercase font-bold text-slate-400">Время</TableHead>
-                                                <TableHead className="text-right text-[10px] uppercase font-bold text-slate-400">Действия</TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {items.map((sale) => (
-                                                <TableRow key={sale.id} className="hover:bg-slate-50/50 group h-12">
-                                                    <TableCell className="text-center p-0">
-                                                        <Checkbox 
-                                                            checked={selectedIds.includes(sale.id)}
-                                                            onCheckedChange={() => toggleSelect(sale.id)}
-                                                            className="h-4 w-4"
-                                                            onClick={(e) => e.stopPropagation()}
-                                                        />
-                                                    </TableCell>
-                                                    <TableCell className="py-2">
-                                                        <div className="flex flex-col">
-                                                            <div className="flex items-center gap-2">
-                                                                <span className="text-sm font-semibold text-slate-800">{sale.product_name}</span>
-                                                                {sale.shift_employee_name && sale.user_name !== sale.shift_employee_name && (
-                                                                    <Badge variant="outline" className="text-[9px] h-4 px-1 border-slate-200 text-slate-400 font-normal">
-                                                                        от {sale.user_name.split(' ')[0]}
-                                                                    </Badge>
-                                                                )}
+                                    {/* Desktop Table */}
+                                    <div className="hidden md:block">
+                                        <Table>
+                                            <TableHeader className="bg-slate-50/50">
+                                                <TableRow className="hover:bg-transparent h-10">
+                                                    <TableHead className="w-10 text-center"></TableHead>
+                                                    <TableHead className="text-[10px] uppercase font-bold text-slate-400">Товар</TableHead>
+                                                    <TableHead className="text-right text-[10px] uppercase font-bold text-slate-400">Цена</TableHead>
+                                                    <TableHead className="text-right text-[10px] uppercase font-bold text-slate-400">Кол-во</TableHead>
+                                                    <TableHead className="text-right text-[10px] uppercase font-bold text-slate-400">Итого</TableHead>
+                                                    <TableHead className="text-right text-[10px] uppercase font-bold text-slate-400">Время</TableHead>
+                                                    <TableHead className="text-right text-[10px] uppercase font-bold text-slate-400">Действия</TableHead>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {items.map((sale, saleIdx) => (
+                                                    <TableRow key={`${sale.id}-${saleIdx}`} className="hover:bg-slate-50/50 group h-12">
+                                                        <TableCell className="text-center p-0">
+                                                            <Checkbox 
+                                                                checked={selectedIds.includes(sale.id)}
+                                                                onCheckedChange={() => toggleSelect(sale.id)}
+                                                                className="h-4 w-4"
+                                                                onClick={(e) => e.stopPropagation()}
+                                                            />
+                                                        </TableCell>
+                                                        <TableCell className="py-2">
+                                                            <div className="flex flex-col">
+                                                                <span className="text-sm font-bold text-slate-700">{sale.product_name}</span>
+                                                                <span className="text-[10px] text-slate-400">{sale.warehouse_name}</span>
                                                             </div>
+                                                        </TableCell>
+                                                        <TableCell className="text-right text-sm font-medium text-slate-600">
+                                                            {(sale.price_at_time || sale.current_price || 0).toLocaleString()} ₽
+                                                        </TableCell>
+                                                        <TableCell className="text-right">
                                                             {editingId === sale.id ? (
-                                                                <Input 
-                                                                    value={editReason} 
-                                                                    onChange={e => setEditReason(e.target.value)}
-                                                                    className="h-6 text-[10px] mt-1"
-                                                                    placeholder="Причина корректировки..."
-                                                                />
-                                                            ) : (
-                                                                <span className="text-[10px] text-slate-400 truncate max-w-[200px] italic">{sale.reason}</span>
-                                                            )}
-                                                        </div>
-                                                    </TableCell>
-                                                    <TableCell className="text-right py-2">
-                                                        <span className="text-xs font-medium text-slate-600">
-                                                            {Number(sale.price_at_time || sale.current_price || 0).toLocaleString()} ₽
-                                                        </span>
-                                                    </TableCell>
-                                                    <TableCell className="text-right py-2">
-                                                        {editingId === sale.id ? (
-                                                            <div className="flex items-center justify-end gap-1">
-                                                                <Input 
-                                                                    type="number"
-                                                                    value={editValue}
-                                                                    onChange={e => setEditValue(e.target.value)}
-                                                                    className="h-7 w-16 text-right text-xs"
-                                                                />
-                                                                <span className="text-[10px] text-slate-400">шт</span>
-                                                            </div>
-                                                        ) : (
-                                                            <Badge variant="secondary" className="bg-emerald-50 text-emerald-700 border-emerald-100 font-mono text-xs">
-                                                                {Math.abs(sale.change_amount)} шт
-                                                            </Badge>
-                                                        )}
-                                                    </TableCell>
-                                                    <TableCell className="text-right py-2">
-                                                        <span className="text-sm font-bold text-slate-900">
-                                                            {(Math.abs(sale.change_amount) * Number(sale.price_at_time || sale.current_price || 0)).toLocaleString()} ₽
-                                                        </span>
-                                                    </TableCell>
-                                                    <TableCell className="text-right py-2">
-                                                        <span className="text-[11px] text-slate-500">
-                                                            {new Date(sale.created_at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
-                                                        </span>
-                                                    </TableCell>
-                                                    <TableCell className="text-right py-2">
-                                                        <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                            {editingId === sale.id ? (
-                                                                <>
-                                                                    <Button 
-                                                                        aria-label={`Сохранить корректировку продажи ${sale.product_name}`}
-                                                                        size="icon" 
-                                                                        variant="ghost" 
-                                                                        onClick={() => handleSaveEdit(sale.id)}
-                                                                        className="h-8 w-8 text-green-600 hover:text-green-700 hover:bg-green-50"
-                                                                        disabled={isPending}
-                                                                    >
+                                                                <div className="flex justify-end items-center gap-1" onClick={e => e.stopPropagation()}>
+                                                                    <Input 
+                                                                        type="number" 
+                                                                        value={editValue} 
+                                                                        onChange={e => setEditValue(e.target.value)}
+                                                                        className="w-16 h-8 text-xs text-right p-1"
+                                                                        autoFocus
+                                                                    />
+                                                                    <Button size="icon" variant="ghost" className="h-8 w-8 text-green-600" onClick={() => handleSaveEdit(sale.id)}>
                                                                         <Check className="h-4 w-4" />
                                                                     </Button>
-                                                                    <Button 
-                                                                        aria-label={`Отменить корректировку продажи ${sale.product_name}`}
-                                                                        size="icon" 
-                                                                        variant="ghost" 
-                                                                        onClick={() => setEditingId(null)}
-                                                                        className="h-8 w-8 text-slate-400 hover:text-slate-600"
-                                                                    >
+                                                                    <Button size="icon" variant="ghost" className="h-8 w-8 text-slate-400" onClick={() => setEditingId(null)}>
                                                                         <X className="h-4 w-4" />
                                                                     </Button>
-                                                                </>
+                                                                </div>
                                                             ) : (
-                                                                <>
-                                                                    <Button 
-                                                                        aria-label={`Редактировать продажу ${sale.product_name}`}
-                                                                        size="icon" 
-                                                                        variant="ghost" 
-                                                                        onClick={() => handleStartEdit(sale)}
-                                                                        className="h-8 w-8 text-slate-400 hover:text-blue-500"
-                                                                    >
-                                                                        <Pencil className="h-4 w-4" />
-                                                                    </Button>
-                                                                    <DropdownMenu>
-                                                                        <DropdownMenuTrigger asChild>
-                                                                            <Button aria-label={`Привязать продажу ${sale.product_name} к смене`} size="icon" variant="ghost" className="h-8 w-8 text-slate-400 hover:text-blue-500">
-                                                                                <Link className="h-4 w-4" />
-                                                                            </Button>
-                                                                        </DropdownMenuTrigger>
-                                                                        <DropdownMenuContent align="end" className="w-72 max-h-[400px] overflow-y-auto p-1">
-                                                                            <DropdownMenuItem onClick={() => handleAssignShift(sale.id, null)} className="flex items-center gap-2 text-red-600 focus:text-red-700 focus:bg-red-50">
-                                                                                <Unlink className="h-4 w-4" /> 
-                                                                                <span>Отвязать от смены</span>
-                                                                            </DropdownMenuItem>
-                                                                            <div className="h-px bg-slate-100 my-1" />
-                                                                                {shifts.map(s => (
-                                                                                <DropdownMenuItem key={s.id} onClick={() => handleAssignShift(sale.id, s.id)} className="flex flex-col items-start gap-1 py-2">
-                                                                                    <div className="flex justify-between w-full">
-                                                                                        <span className="font-bold text-xs">{s.employee_name}</span>
-                                                                                        <span className="text-[10px] text-slate-400">#{s.id}</span>
-                                                                                    </div>
-                                                                                    <div className="flex items-center gap-2 text-[10px] text-slate-500">
-                                                                                        <Calendar className="h-3 w-3" />
-                                                                                        <span>{new Date(s.check_in).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
-                                                                                    </div>
-                                                                                </DropdownMenuItem>
-                                                                            ))}
-                                                                        </DropdownMenuContent>
-                                                                    </DropdownMenu>
-                                                                    <Button 
-                                                                        aria-label={`Удалить продажу ${sale.product_name}`}
-                                                                        size="icon" 
-                                                                        variant="ghost" 
-                                                                        onClick={() => handleDelete(sale.id, sale.product_name)}
-                                                                        className="h-8 w-8 text-slate-400 hover:text-red-500"
-                                                                    >
-                                                                        <Trash2 className="h-4 w-4" />
-                                                                    </Button>
-                                                                </>
+                                                                <Badge variant="secondary" className="bg-blue-50 text-blue-700 border-blue-100 font-mono">
+                                                                    {Math.abs(sale.change_amount)} шт
+                                                                </Badge>
                                                             )}
-                                                        </div>
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))}
-                                        </TableBody>
-                                    </Table>
+                                                        </TableCell>
+                                                        <TableCell className="text-right font-black text-slate-900">
+                                                            {(Math.abs(sale.change_amount) * (sale.price_at_time || sale.current_price || 0)).toLocaleString()} ₽
+                                                        </TableCell>
+                                                        <TableCell className="text-right text-[10px] text-slate-400 font-mono">
+                                                            {new Date(sale.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                        </TableCell>
+                                                        <TableCell className="text-right">
+                                                            <div className="flex justify-end items-center gap-1">
+                                                                <Button 
+                                                                    variant="ghost" 
+                                                                    size="icon" 
+                                                                    className="h-7 w-7 text-blue-500 hover:bg-blue-50 shrink-0" 
+                                                                    onClick={(e) => { e.stopPropagation(); handleStartEdit(sale); }}
+                                                                >
+                                                                    <Pencil className="h-3.5 w-3.5" />
+                                                                </Button>
+                                                                
+                                                                <DropdownMenu>
+                                                                    <DropdownMenuTrigger asChild>
+                                                                        <Button 
+                                                                            variant="ghost" 
+                                                                            size="icon" 
+                                                                            className="h-7 w-7 text-slate-400 hover:text-blue-500 hover:bg-blue-50 shrink-0"
+                                                                        >
+                                                                            <Link className="h-3.5 w-3.5" />
+                                                                        </Button>
+                                                                    </DropdownMenuTrigger>
+                                                                    <DropdownMenuContent align="end" className="w-64 max-h-[300px] overflow-y-auto">
+                                                                        <DropdownMenuItem onClick={() => handleAssignShift(sale.id, null)} className="text-red-600 focus:text-red-700 focus:bg-red-50">
+                                                                            <Unlink className="h-4 w-4 mr-2" /> Отвязать от смены
+                                                                        </DropdownMenuItem>
+                                                                        <div className="h-px bg-slate-100 my-1" />
+                                                                        {shifts.map(s => (
+                                                                            <DropdownMenuItem key={s.id} onClick={() => handleAssignShift(sale.id, s.id)} className="flex flex-col items-start gap-1 py-2">
+                                                                                <div className="flex justify-between w-full">
+                                                                                    <span className="font-bold text-xs">{s.employee_name}</span>
+                                                                                    <span className="text-[10px] text-slate-400">#{s.id}</span>
+                                                                                </div>
+                                                                                <div className="flex items-center gap-2 text-[10px] text-slate-500">
+                                                                                    <Calendar className="h-3 w-3" />
+                                                                                    <span>{new Date(s.check_in).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })}</span>
+                                                                                </div>
+                                                                            </DropdownMenuItem>
+                                                                        ))}
+                                                                    </DropdownMenuContent>
+                                                                </DropdownMenu>
+
+                                                                <Button 
+                                                                    variant="ghost" 
+                                                                    size="icon" 
+                                                                    className="h-7 w-7 text-red-500 hover:bg-red-50 shrink-0" 
+                                                                    onClick={(e) => { e.stopPropagation(); handleDelete(sale.id, sale.product_name); }}
+                                                                >
+                                                                    <Trash2 className="h-3.5 w-3.5" />
+                                                                </Button>
+                                                            </div>
+                                                        </TableCell>
+                                                    </TableRow>
+                                                ))}
+                                            </TableBody>
+                                        </Table>
+                                    </div>
+
+                                    {/* Mobile Card List */}
+                                    <div className="md:hidden divide-y divide-slate-100 bg-slate-50/30">
+                                        {items.map((sale, saleIdx) => (
+                                            <div key={`${sale.id}-${saleIdx}`} className="p-4 flex items-center gap-3 active:bg-slate-100 transition-colors group">
+                                                <div className="flex-none">
+                                                    <Checkbox 
+                                                        checked={selectedIds.includes(sale.id)}
+                                                        onCheckedChange={() => toggleSelect(sale.id)}
+                                                        className="h-5 w-5"
+                                                    />
+                                                </div>
+                                                
+                                                <div className="flex-1 min-w-0">
+                                                    <h4 className="font-bold text-slate-900 text-sm leading-tight truncate">{sale.product_name}</h4>
+                                                    <div className="flex items-center gap-2 text-[10px] text-slate-500 mt-0.5">
+                                                        <Clock className="h-2.5 w-2.5" />
+                                                        {new Date(sale.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                        <span className="mx-1">•</span>
+                                                        <span className="text-blue-600 font-bold">{Math.abs(sale.change_amount)} шт</span>
+                                                    </div>
+                                                </div>
+
+                                                <div className="flex flex-col items-end gap-1 px-2">
+                                                    <div className="text-sm font-black text-slate-900">
+                                                        {(Math.abs(sale.change_amount) * (sale.price_at_time || sale.current_price || 0)).toLocaleString()} ₽
+                                                    </div>
+                                                    <div className="text-[10px] text-slate-400">
+                                                        {Number(sale.price_at_time || sale.current_price || 0).toLocaleString()} ₽/шт
+                                                    </div>
+                                                </div>
+
+                                                <div className="flex flex-none gap-1 pl-2 border-l border-slate-100">
+                                                     <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-500 active:bg-blue-50" onClick={() => handleStartEdit(sale)}>
+                                                         <Pencil className="h-4 w-4" />
+                                                     </Button>
+
+                                                     <DropdownMenu>
+                                                         <DropdownMenuTrigger asChild>
+                                                             <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 active:bg-blue-50">
+                                                                 <Link className="h-4 w-4" />
+                                                             </Button>
+                                                         </DropdownMenuTrigger>
+                                                         <DropdownMenuContent align="end" className="w-64 max-h-[300px] overflow-y-auto">
+                                                             <DropdownMenuItem onClick={() => handleAssignShift(sale.id, null)} className="text-red-600 focus:text-red-700 focus:bg-red-50">
+                                                                 <Unlink className="h-4 w-4 mr-2" /> Отвязать от смены
+                                                             </DropdownMenuItem>
+                                                             <div className="h-px bg-slate-100 my-1" />
+                                                             {shifts.map(s => (
+                                                                 <DropdownMenuItem key={s.id} onClick={() => handleAssignShift(sale.id, s.id)} className="flex flex-col items-start gap-1 py-2">
+                                                                     <div className="flex justify-between w-full">
+                                                                         <span className="font-bold text-xs">{s.employee_name}</span>
+                                                                         <span className="text-[10px] text-slate-400">#{s.id}</span>
+                                                                     </div>
+                                                                     <div className="flex items-center gap-2 text-[10px] text-slate-500">
+                                                                         <Calendar className="h-3 w-3" />
+                                                                         <span>{new Date(s.check_in).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })}</span>
+                                                                     </div>
+                                                                 </DropdownMenuItem>
+                                                             ))}
+                                                         </DropdownMenuContent>
+                                                     </DropdownMenu>
+
+                                                     <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 active:bg-red-50" onClick={() => handleDelete(sale.id, sale.product_name)}>
+                                                         <Trash2 className="h-4 w-4" />
+                                                     </Button>
+                                                 </div>
+                                            </div>
+                                        ))}
+                                    </div>
                                 </div>
                             )}
                         </div>

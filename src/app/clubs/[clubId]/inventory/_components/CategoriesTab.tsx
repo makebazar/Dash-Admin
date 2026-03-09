@@ -4,6 +4,7 @@ import { useState, useTransition } from "react"
 import { Plus, Pencil, Trash2, FolderTree } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -94,7 +95,8 @@ export function CategoriesTab({ categories, currentUserId }: CategoriesTabProps)
                 </Button>
             </div>
 
-            <div className="rounded-md border bg-white">
+            {/* Desktop Table */}
+            <div className="hidden md:block rounded-md border bg-white">
                 <Table>
                     <TableHeader>
                         <TableRow>
@@ -141,6 +143,41 @@ export function CategoriesTab({ categories, currentUserId }: CategoriesTabProps)
                         )}
                     </TableBody>
                 </Table>
+            </div>
+
+            {/* Mobile View */}
+            <div className="md:hidden space-y-3">
+                {categories.length === 0 ? (
+                    <div className="py-12 text-center text-muted-foreground italic bg-white rounded-xl border border-dashed">Категорий нет</div>
+                ) : categories.map(cat => (
+                    <div key={cat.id} className="bg-white rounded-xl border p-4 shadow-sm relative">
+                        <div className="flex justify-between items-start mb-2">
+                            <div className="flex flex-col">
+                                <h4 className="font-bold text-slate-900 text-base">{cat.name}</h4>
+                                {cat.parent_name && (
+                                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Родитель: {cat.parent_name}</p>
+                                )}
+                            </div>
+                            <div className="flex items-center gap-1">
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400" onClick={() => openEdit(cat)}>
+                                    <Pencil className="h-4 w-4" />
+                                </Button>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-red-400" onClick={() => handleDelete(cat.id)}>
+                                    <Trash2 className="h-4 w-4" />
+                                </Button>
+                            </div>
+                        </div>
+                        {cat.description && (
+                            <p className="text-sm text-slate-500 line-clamp-2 mb-3 italic">"{cat.description}"</p>
+                        )}
+                        <div className="pt-3 border-t border-slate-50 flex justify-between items-center">
+                            <span className="text-xs text-slate-400 font-medium">Товаров в категории</span>
+                            <Badge variant="secondary" className="bg-blue-50 text-blue-600 border-none font-bold">
+                                {cat.products_count} шт.
+                            </Badge>
+                        </div>
+                    </div>
+                ))}
             </div>
 
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>

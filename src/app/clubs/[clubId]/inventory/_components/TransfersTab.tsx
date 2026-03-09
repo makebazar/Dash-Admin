@@ -4,7 +4,7 @@ import { useState, useTransition, useEffect } from "react"
 import { 
     ArrowRightLeft, Plus, History, 
     ArrowRight, Package, Warehouse as WarehouseIcon,
-    Loader2, Search, CheckCircle2
+    Loader2, Search, CheckCircle2, User
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -105,24 +105,28 @@ export function TransfersTab({ warehouses, products, currentUserId }: TransfersT
     return (
         <div className="space-y-6">
             {/* Actions Area */}
-            <div className="flex justify-between items-center bg-white p-6 rounded-2xl border shadow-sm">
-                <div className="flex items-center gap-4">
-                    <div className="h-12 w-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center">
-                        <ArrowRightLeft className="h-6 w-6" />
+            <div className="flex items-center justify-between bg-white p-4 sm:p-6 rounded-2xl border shadow-sm gap-4">
+                <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+                    <div className="h-10 w-10 sm:h-12 sm:w-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center shrink-0">
+                        <ArrowRightLeft className="h-5 w-5 sm:h-6 sm:w-6" />
                     </div>
-                    <div>
-                        <h3 className="text-lg font-bold">Перемещения</h3>
-                        <p className="text-sm text-muted-foreground text-slate-500">Между складами клуба</p>
+                    <div className="min-w-0">
+                        <h3 className="text-sm sm:text-lg font-bold truncate">Перемещения</h3>
+                        <p className="text-[10px] sm:text-sm text-muted-foreground text-slate-500 truncate">Между складами клуба</p>
                     </div>
                 </div>
-                <Button onClick={() => setIsDialogOpen(true)} className="bg-blue-600 hover:bg-blue-700 h-12 rounded-xl">
-                    <Plus className="mr-2 h-4 w-4" />
-                    Новое перемещение
+                <Button 
+                    onClick={() => setIsDialogOpen(true)} 
+                    className="bg-blue-600 hover:bg-blue-700 h-10 sm:h-12 rounded-xl shrink-0 px-3 sm:px-6"
+                >
+                    <Plus className="h-4 w-4 sm:mr-2" />
+                    <span className="hidden sm:inline">Новое перемещение</span>
+                    <span className="inline sm:hidden text-xs ml-1">Новое</span>
                 </Button>
             </div>
 
-            {/* History Table */}
-            <div className="bg-white border rounded-2xl overflow-hidden shadow-sm">
+            {/* Desktop Table */}
+            <div className="hidden md:block bg-white border rounded-2xl overflow-hidden shadow-sm">
                 <div className="p-4 border-b bg-slate-50/50 flex items-center gap-2">
                     <History className="h-4 w-4 text-slate-400" />
                     <span className="text-sm font-bold uppercase tracking-wider text-slate-500">История движений</span>
@@ -184,6 +188,61 @@ export function TransfersTab({ warehouses, products, currentUserId }: TransfersT
                         )}
                     </TableBody>
                 </Table>
+            </div>
+
+            {/* Mobile Cards */}
+            <div className="md:hidden space-y-3">
+                <div className="flex items-center gap-2 px-1 mb-1">
+                    <History className="h-4 w-4 text-slate-400" />
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">История движений</span>
+                </div>
+                {movements.length === 0 ? (
+                    <div className="h-32 flex flex-col items-center justify-center text-muted-foreground bg-white rounded-xl border border-dashed">
+                        <Package className="h-8 w-8 opacity-10 mb-2" />
+                        <p className="italic text-sm">Движений пока нет</p>
+                    </div>
+                ) : movements.map(m => (
+                    <div key={m.id} className="bg-white rounded-xl border p-4 shadow-sm relative">
+                        <div className="flex justify-between items-start mb-2">
+                            <div className="flex flex-col">
+                                <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">
+                                    {new Date(m.created_at).toLocaleString('ru-RU', { 
+                                        day: '2-digit', month: '2-digit', 
+                                        hour: '2-digit', minute: '2-digit' 
+                                    })}
+                                </span>
+                                <h4 className="font-bold text-slate-900 text-sm leading-tight">{m.product_name}</h4>
+                            </div>
+                            <Badge 
+                                variant="secondary" 
+                                className={cn(
+                                    "font-black text-[10px] border-none px-2 py-0.5",
+                                    m.change_amount > 0 ? "bg-emerald-50 text-emerald-600" : "bg-red-50 text-red-600"
+                                )}
+                            >
+                                {m.change_amount > 0 ? "+" : ""}{m.change_amount} шт
+                            </Badge>
+                        </div>
+                        
+                        <div className="flex justify-between items-center mt-3 pt-2 border-t border-slate-50">
+                            <div className="flex items-center gap-3">
+                                <div className="flex items-center gap-1 text-[10px] text-slate-500">
+                                    <WarehouseIcon className="h-3 w-3" />
+                                    <span>{m.warehouse_name || "???"}</span>
+                                </div>
+                                <div className="flex items-center gap-1 text-[10px] text-slate-500">
+                                    <User className="h-3 w-3" />
+                                    <span>{m.user_name?.split(' ')[0] || "Система"}</span>
+                                </div>
+                            </div>
+                            {m.reason && (
+                                <p className="text-[10px] text-slate-400 italic truncate max-w-[120px]">
+                                    {m.reason}
+                                </p>
+                            )}
+                        </div>
+                    </div>
+                ))}
             </div>
 
             {/* Transfer Dialog */}

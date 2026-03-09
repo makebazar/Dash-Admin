@@ -80,7 +80,7 @@ export function AbcAnalysisTab({ clubId }: AbcAnalysisTabProps) {
 
             {/* Summary Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden group">
+                <div className="bg-white p-4 md:p-6 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden group">
                     <div className="absolute top-0 left-0 w-1.5 h-full bg-green-500" />
                     <div className="flex justify-between items-start mb-4">
                         <div className="p-2 bg-green-50 rounded-lg">
@@ -88,17 +88,17 @@ export function AbcAnalysisTab({ clubId }: AbcAnalysisTabProps) {
                         </div>
                         <Badge className="bg-green-500 text-white font-black">Группа A</Badge>
                     </div>
-                    <h3 className="text-3xl font-black text-slate-900">{stats.A.length}</h3>
-                    <p className="text-xs text-slate-500 mt-1 uppercase font-bold tracking-wider">Товаров-локомотивов</p>
+                    <h3 className="text-2xl md:text-3xl font-black text-slate-900">{stats.A.length}</h3>
+                    <p className="text-[10px] md:text-xs text-slate-500 mt-1 uppercase font-bold tracking-wider">Товаров-локомотивов</p>
                     <div className="mt-4 flex items-center gap-2">
                         <div className="h-1.5 flex-1 bg-slate-100 rounded-full overflow-hidden">
                             <div className="h-full bg-green-500" style={{ width: '80%' }} />
                         </div>
-                        <span className="text-xs font-black text-green-600">~80% выручки</span>
+                        <span className="text-[10px] md:text-xs font-black text-green-600">~80% выручки</span>
                     </div>
                 </div>
 
-                <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden">
+                <div className="bg-white p-4 md:p-6 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden">
                     <div className="absolute top-0 left-0 w-1.5 h-full bg-amber-500" />
                     <div className="flex justify-between items-start mb-4">
                         <div className="p-2 bg-amber-50 rounded-lg">
@@ -106,17 +106,17 @@ export function AbcAnalysisTab({ clubId }: AbcAnalysisTabProps) {
                         </div>
                         <Badge className="bg-amber-500 text-white font-black">Группа B</Badge>
                     </div>
-                    <h3 className="text-3xl font-black text-slate-900">{stats.B.length}</h3>
-                    <p className="text-xs text-slate-500 mt-1 uppercase font-bold tracking-wider">Стабильные товары</p>
+                    <h3 className="text-2xl md:text-3xl font-black text-slate-900">{stats.B.length}</h3>
+                    <p className="text-[10px] md:text-xs text-slate-500 mt-1 uppercase font-bold tracking-wider">Стабильные товары</p>
                     <div className="mt-4 flex items-center gap-2">
                         <div className="h-1.5 flex-1 bg-slate-100 rounded-full overflow-hidden">
                             <div className="h-full bg-amber-500" style={{ width: '15%' }} />
                         </div>
-                        <span className="text-xs font-black text-amber-600">~15% выручки</span>
+                        <span className="text-[10px] md:text-xs font-black text-amber-600">~15% выручки</span>
                     </div>
                 </div>
 
-                <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden">
+                <div className="bg-white p-4 md:p-6 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden">
                     <div className="absolute top-0 left-0 w-1.5 h-full bg-slate-400" />
                     <div className="flex justify-between items-start mb-4">
                         <div className="p-2 bg-slate-50 rounded-lg">
@@ -124,25 +124,25 @@ export function AbcAnalysisTab({ clubId }: AbcAnalysisTabProps) {
                         </div>
                         <Badge className="bg-slate-400 text-white font-black">Группа C</Badge>
                     </div>
-                    <h3 className="text-3xl font-black text-slate-900">{stats.C.length}</h3>
-                    <p className="text-xs text-slate-500 mt-1 uppercase font-bold tracking-wider">Малоценные товары</p>
+                    <h3 className="text-2xl md:text-3xl font-black text-slate-900">{stats.C.length}</h3>
+                    <p className="text-[10px] md:text-xs text-slate-500 mt-1 uppercase font-bold tracking-wider">Малоценные товары</p>
                     <div className="mt-4 flex items-center gap-2">
                         <div className="h-1.5 flex-1 bg-slate-100 rounded-full overflow-hidden">
                             <div className="h-full bg-slate-400" style={{ width: '5%' }} />
                         </div>
-                        <span className="text-xs font-black text-slate-600">~5% выручки</span>
+                        <span className="text-[10px] md:text-xs font-black text-slate-600">~5% выручки</span>
                     </div>
                 </div>
             </div>
 
             {/* Detailed Table */}
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+                <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-col md:flex-row md:justify-between md:items-center gap-2">
                     <h4 className="font-bold text-slate-900 flex items-center gap-2">
                         <TrendingUp className="h-4 w-4 text-blue-600" />
                         Детализация по товарам
                     </h4>
-                    <div className="flex items-center gap-4">
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
                         <span className="text-[10px] text-slate-400 uppercase font-bold tracking-widest">
                             Выручка: {stats.totalRevenue.toLocaleString()} ₽
                         </span>
@@ -152,7 +152,74 @@ export function AbcAnalysisTab({ clubId }: AbcAnalysisTabProps) {
                     </div>
                 </div>
                 
-                <div className="overflow-x-auto">
+                {/* Mobile View */}
+                <div className="md:hidden divide-y divide-slate-100">
+                    {data.map((item, index) => (
+                        <div key={item.product_id} className="p-4 space-y-3">
+                            <div className="flex justify-between items-start gap-4">
+                                <div className="space-y-1 flex-1 min-w-0">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-[10px] text-slate-400 font-mono">#{index + 1}</span>
+                                        <h5 className="font-bold text-slate-900 truncate">{item.name}</h5>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <Badge 
+                                            className={cn(
+                                                "h-4 px-1.5 text-[9px] font-black uppercase",
+                                                item.abc_category === 'A' ? "bg-green-500" :
+                                                item.abc_category === 'B' ? "bg-amber-500" :
+                                                "bg-slate-400"
+                                            )}
+                                        >
+                                            Группа {item.abc_category}
+                                        </Badge>
+                                        {item.days_left !== null && (
+                                            <span className={cn(
+                                                "text-[10px] font-bold",
+                                                Number(item.days_left) < 3 ? "text-rose-500" : 
+                                                Number(item.days_left) < 7 ? "text-amber-500" : 
+                                                "text-slate-500"
+                                            )}>
+                                                Запас: {Math.round(item.days_left)} дн.
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+                                <div className="text-right">
+                                    <div className="text-sm font-black text-slate-900 leading-none">
+                                        {Number(item.total_revenue).toLocaleString()} ₽
+                                    </div>
+                                    <div className="text-[10px] font-bold text-green-600 mt-1">
+                                        +{Number(item.total_profit).toLocaleString()} ₽
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-3 gap-2 py-2 border-y border-slate-50 bg-slate-50/30 rounded-lg px-2">
+                                <div className="space-y-0.5">
+                                    <div className="text-[9px] text-slate-400 uppercase font-bold tracking-wider">Продано</div>
+                                    <div className="text-xs font-bold text-slate-600">{Number(item.total_sold).toLocaleString()} шт.</div>
+                                </div>
+                                <div className="space-y-0.5">
+                                    <div className="text-[9px] text-slate-400 uppercase font-bold tracking-wider">Маржа</div>
+                                    <div className="text-xs font-bold text-slate-900">{item.margin_percent}%</div>
+                                </div>
+                                <div className="space-y-0.5 text-right">
+                                    <div className="text-[9px] text-slate-400 uppercase font-bold tracking-wider">Доля</div>
+                                    <div className="text-xs font-black text-blue-600">{item.revenue_share}%</div>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                    {data.length === 0 && (
+                        <div className="py-12 text-center text-slate-400 italic text-sm px-4">
+                            Нет данных о продажах за последние 30 дней
+                        </div>
+                    )}
+                </div>
+
+                {/* Desktop View */}
+                <div className="hidden md:block overflow-x-auto">
                     <Table>
                         <TableHeader>
                             <TableRow className="hover:bg-transparent">

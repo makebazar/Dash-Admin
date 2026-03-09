@@ -119,12 +119,12 @@ export function WarehousesTab({ warehouses, employees, currentUserId }: Warehous
                                     {wh.is_default && <Badge variant="secondary" className="text-[10px] py-0 px-1 bg-blue-100 text-blue-700 border-none">Основной</Badge>}
                                 </div>
                             </div>
-                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <Button aria-label={`Редактировать склад ${wh.name}`} variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-slate-700" onClick={() => openEdit(wh)}>
+                            <div className="flex gap-1">
+                                <Button aria-label={`Редактировать склад ${wh.name}`} variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-slate-700 hover:bg-slate-50" onClick={() => openEdit(wh)}>
                                     <Pencil className="h-4 w-4" />
                                 </Button>
                                 {!wh.is_default && (
-                                    <Button aria-label={`Удалить склад ${wh.name}`} variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-red-600" onClick={() => handleDelete(wh.id)}>
+                                    <Button aria-label={`Удалить склад ${wh.name}`} variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50" onClick={() => handleDelete(wh.id)}>
                                         <Trash2 className="h-4 w-4" />
                                     </Button>
                                 )}

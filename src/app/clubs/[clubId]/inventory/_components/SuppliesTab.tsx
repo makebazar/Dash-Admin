@@ -164,7 +164,8 @@ export function SuppliesTab({ supplies, products, warehouses, suppliers, current
                 </Button>
             </div>
 
-            <div className="rounded-xl border bg-white overflow-hidden shadow-sm">
+            {/* Desktop Table */}
+            <div className="hidden md:block rounded-xl border bg-white overflow-hidden shadow-sm">
                 <Table>
                     <TableHeader className="bg-slate-50/50">
                         <TableRow className="hover:bg-transparent">
@@ -217,6 +218,53 @@ export function SuppliesTab({ supplies, products, warehouses, suppliers, current
                         ))}
                     </TableBody>
                 </Table>
+            </div>
+
+            {/* Mobile Cards */}
+            <div className="md:hidden space-y-3">
+                {supplies.length === 0 ? (
+                    <div className="h-32 flex flex-col items-center justify-center text-muted-foreground bg-white rounded-xl border border-dashed">
+                        <Package className="h-8 w-8 opacity-10 mb-2" />
+                        <p className="italic text-sm">История поставок пуста</p>
+                    </div>
+                ) : supplies.map(supply => (
+                    <div 
+                        key={supply.id} 
+                        className="bg-white rounded-xl border p-4 shadow-sm active:bg-slate-50 transition-colors"
+                        onClick={() => handleOpenSupply(supply)}
+                    >
+                        <div className="flex justify-between items-start mb-3">
+                            <div className="flex flex-col">
+                                <span className="text-[10px] text-slate-400 uppercase font-black tracking-widest mb-0.5">
+                                    {new Date(supply.created_at).toLocaleDateString()} в {new Date(supply.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                </span>
+                                <h4 className="font-black text-slate-900 text-base leading-tight">{supply.supplier_name}</h4>
+                            </div>
+                            {supply.status === 'DRAFT' ? (
+                                <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 text-[9px] uppercase font-black">Черновик</Badge>
+                            ) : (
+                                <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 text-[9px] uppercase font-black">Проведено</Badge>
+                            )}
+                        </div>
+                        
+                        <div className="flex justify-between items-end pt-3 border-t border-slate-100">
+                            <div className="flex flex-col gap-1">
+                                <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                                    <User className="h-3.5 w-3.5" />
+                                    <span>{supply.created_by_name || "Неизвестно"}</span>
+                                </div>
+                                <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                                    <Package className="h-3.5 w-3.5" />
+                                    <span>{supply.items_count} поз.</span>
+                                </div>
+                            </div>
+                            <div className="text-right">
+                                <p className="text-[10px] text-slate-400 uppercase font-black tracking-widest mb-0.5">Сумма</p>
+                                <p className="text-xl font-black text-blue-600">{Number(supply.total_cost).toLocaleString()} ₽</p>
+                            </div>
+                        </div>
+                    </div>
+                ))}
             </div>
 
             {/* View Details Dialog */}
