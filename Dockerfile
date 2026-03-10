@@ -36,8 +36,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
+RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 nextjs
 
 # Copy built application
 COPY --from=builder /app/public ./public
@@ -47,10 +46,10 @@ COPY --from=builder /app/.next/static ./.next/static
 # Copy database files and migrations
 COPY --from=builder /app/src/db ./src/db
 COPY --from=builder /app/migrations ./migrations
-COPY --from=builder /app/scripts ./scripts
+COPY --from=builder /app/scripts/start.sh ./scripts/start.sh
 
 # Install pg module for migrations (simpler than copying individual modules)
-RUN npm install pg --omit=dev --no-save
+RUN npm install pg --omit=dev --no-save --no-audit --no-fund
 
 # Make startup script executable
 RUN chmod +x ./scripts/start.sh

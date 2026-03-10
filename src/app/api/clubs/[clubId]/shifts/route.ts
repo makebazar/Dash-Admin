@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { query } from '@/db';
 import { cookies } from 'next/headers';
 import { calculateSalary } from '@/lib/salary-calculator';
+import { ensureOwnerSubscriptionActive } from '@/lib/club-subscription-guard';
 
 // GET: Get all shifts for a club
 export async function GET(
@@ -98,15 +99,8 @@ export async function POST(
             return NextResponse.json({ error: 'Invalid Club ID' }, { status: 400 });
         }
 
-        // Check ownership
-        const ownerCheck = await query(
-            `SELECT 1 FROM clubs WHERE id = $1::integer AND owner_id = $2::uuid`,
-            [club_id_int, userId]
-        );
-
-        if ((ownerCheck.rowCount || 0) === 0) {
-            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-        }
+        const guard = await ensureOwnerSubscriptionActive(club_id_int, userId)
+        if (!guard.ok) return guard.response
 
         const {
             employee_id,

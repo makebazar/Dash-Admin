@@ -2,6 +2,59 @@ import { NextResponse } from 'next/server';
 import { query } from '@/db';
 import { cookies } from 'next/headers';
 import { normalizePhone } from '@/lib/phone-utils';
+import { canAddMoreEmployeesToClub, resolveSubscriptionState } from '@/lib/subscriptions';
+import { hasColumn } from '@/lib/db-compat';
+import { ensureOwnerSubscriptionActive } from '@/lib/club-subscription-guard';
+
+async function syncOwnersSubscriptionForClub(clubId: string | number) {
+    const hasSubscriptionStatus = await hasColumn('users', 'subscription_status');
+    const hasSubscriptionCanceledAt = await hasColumn('users', 'subscription_canceled_at');
+
+    const sourceResult = await query(
+        `SELECT 
+            u.subscription_plan,
+            ${hasSubscriptionStatus ? 'u.subscription_status' : "NULL::varchar as subscription_status"},
+            u.subscription_started_at,
+            u.subscription_ends_at,
+            ${hasSubscriptionCanceledAt ? 'u.subscription_canceled_at' : "NULL::timestamp as subscription_canceled_at"}
+         FROM clubs c
+         JOIN users u ON u.id = c.owner_id
+         WHERE c.id = $1`,
+        [clubId]
+    );
+
+    if ((sourceResult.rowCount || 0) === 0) return;
+    const source = sourceResult.rows[0];
+
+    await query(
+        `UPDATE users
+         SET subscription_plan = $1,
+             ${hasSubscriptionStatus ? 'subscription_status = $2,' : ''}
+             subscription_started_at = $3::timestamp,
+             subscription_ends_at = $4::timestamp
+             ${hasSubscriptionCanceledAt ? ', subscription_canceled_at = $5::timestamp' : ''}
+         WHERE id IN (
+            SELECT c.owner_id
+            FROM clubs c
+            WHERE c.id = $6
+            UNION
+            SELECT ce.user_id
+            FROM club_employees ce
+            WHERE ce.club_id = $6
+              AND ce.role = 'Владелец'
+              AND ce.is_active = TRUE
+              AND ce.dismissed_at IS NULL
+         )`,
+        [
+            source.subscription_plan,
+            source.subscription_status,
+            source.subscription_started_at,
+            source.subscription_ends_at,
+            source.subscription_canceled_at,
+            clubId
+        ]
+    );
+}
 
 export async function GET(
     request: Request,
@@ -15,9 +68,14 @@ export async function GET(
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        // Verify ownership
         const ownerCheck = await query(
-            `SELECT id FROM clubs WHERE id = $1 AND owner_id = $2`,
+            `SELECT 1
+             FROM clubs c
+             WHERE c.id = $1 AND c.owner_id = $2
+             UNION
+             SELECT 1
+             FROM club_employees ce
+             WHERE ce.club_id = $1 AND ce.user_id = $2 AND ce.role = 'Владелец'`,
             [clubId, userId]
         );
 
@@ -27,26 +85,40 @@ export async function GET(
 
         // Get employees with salary scheme assignments
         const result = await query(
-            `SELECT 
+            `WITH member_rows AS (
+                SELECT ce.user_id, ce.role, ce.hired_at, ce.is_active, ce.dismissed_at, ce.show_in_schedule, 0 as priority
+                FROM club_employees ce
+                WHERE ce.club_id = $1
+                UNION ALL
+                SELECT c.owner_id as user_id, 'Владелец'::varchar as role, c.created_at as hired_at, TRUE as is_active, NULL::timestamp as dismissed_at, TRUE as show_in_schedule, 1 as priority
+                FROM clubs c
+                WHERE c.id = $1
+            ),
+            dedup_members AS (
+                SELECT DISTINCT ON (user_id) user_id, role, hired_at, is_active, dismissed_at, show_in_schedule
+                FROM member_rows
+                ORDER BY user_id, priority DESC, hired_at DESC
+            )
+            SELECT
         u.id,
-        ce.user_id,
+        dm.user_id,
         u.full_name,
         u.phone_number,
+        dm.role as club_role,
         r.name as role_name,
         r.id as role_id,
-        ce.hired_at,
-        ce.is_active,
-        ce.dismissed_at,
-        ce.show_in_schedule,
+        dm.hired_at,
+        dm.is_active,
+        dm.dismissed_at,
+        dm.show_in_schedule,
         esa.scheme_id as salary_scheme_id,
         ss.name as salary_scheme_name
-       FROM club_employees ce
-       JOIN users u ON ce.user_id = u.id
+       FROM dedup_members dm
+       JOIN users u ON dm.user_id = u.id
        LEFT JOIN roles r ON u.role_id = r.id
        LEFT JOIN employee_salary_assignments esa ON esa.user_id = u.id AND esa.club_id = $1
        LEFT JOIN salary_schemes ss ON ss.id = esa.scheme_id
-       WHERE ce.club_id = $1
-       ORDER BY ce.hired_at DESC`,
+       ORDER BY dm.hired_at DESC`,
             [clubId]
         );
 
@@ -54,7 +126,9 @@ export async function GET(
             id: row.id,
             full_name: row.full_name,
             phone_number: row.phone_number,
-            role: row.role_name || 'Сотрудник',
+            role: (row.club_role === 'EMPLOYEE' || row.club_role === 'Сотрудник' || row.club_role === 'EMP')
+                ? (row.role_name || 'Сотрудник')
+                : (row.club_role || row.role_name || 'Сотрудник'),
             role_id: row.role_id,
             hired_at: row.hired_at,
             is_active: row.is_active,
@@ -86,15 +160,10 @@ export async function POST(
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        // Verify ownership
-        const ownerCheck = await query(
-            `SELECT id FROM clubs WHERE id = $1 AND owner_id = $2`,
-            [clubId, userId]
-        );
-
-        if (ownerCheck.rowCount === 0) {
+        const guard = await ensureOwnerSubscriptionActive(clubId, userId)
+        if (!guard.ok) {
             console.log('[API] Permission denied for user:', userId, 'to add employee to club:', clubId);
-            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+            return guard.response;
         }
 
         const { phone_number, full_name, role_id } = await request.json();
@@ -149,6 +218,58 @@ export async function POST(
             }
         }
 
+        const hasSubscriptionStatus = await hasColumn('users', 'subscription_status');
+        const subscriptionResult = await query(
+            `SELECT 
+                c.owner_id,
+                u.subscription_plan,
+                ${hasSubscriptionStatus ? 'u.subscription_status' : "NULL::varchar as subscription_status"},
+                u.subscription_ends_at
+             FROM clubs c
+             JOIN users u ON u.id = c.owner_id
+             WHERE c.id = $1`,
+            [clubId]
+        );
+
+        if (subscriptionResult.rowCount === 0) {
+            return NextResponse.json({ error: 'Club not found' }, { status: 404 });
+        }
+
+        const ownerSubscription = subscriptionResult.rows[0];
+        const subscriptionState = resolveSubscriptionState(ownerSubscription);
+
+        if (!subscriptionState.isActive) {
+            return NextResponse.json(
+                { error: 'Подписка владельца клуба неактивна. Добавление сотрудников недоступно.' },
+                { status: 403 }
+            );
+        }
+
+        const memberExistsResult = await query(
+            `SELECT 1 FROM club_employees WHERE club_id = $1 AND user_id = $2`,
+            [clubId, employeeId]
+        );
+
+        if (memberExistsResult.rowCount === 0) {
+            const employeeCountResult = await query(
+                `SELECT COUNT(*)::integer as total
+                 FROM club_employees
+                 WHERE club_id = $1
+                   AND is_active = TRUE
+                   AND dismissed_at IS NULL`,
+                [clubId]
+            );
+            const currentCount = Number(employeeCountResult.rows[0]?.total || 0);
+            const employeesLimitCheck = canAddMoreEmployeesToClub(currentCount, ownerSubscription.subscription_plan);
+
+            if (!employeesLimitCheck.allowed) {
+                return NextResponse.json(
+                    { error: `Лимит тарифа: максимум ${employeesLimitCheck.limit} сотрудник(а/ов) в клубе.` },
+                    { status: 403 }
+                );
+            }
+        }
+
         // Add to club_employees with role
         console.log('[API] Adding to club_employees. Club:', clubId, 'User:', employeeId, 'Role:', roleName);
         const linkResult = await query(
@@ -163,6 +284,10 @@ export async function POST(
             console.log('[API] User was already linked to this club (updated role)');
         } else {
             console.log('[API] Link created successfully');
+        }
+
+        if (roleName === 'Владелец') {
+            await syncOwnersSubscriptionForClub(clubId);
         }
 
         return NextResponse.json({ success: true, employeeId });
@@ -191,15 +316,8 @@ export async function DELETE(
             return NextResponse.json({ error: 'Employee ID is required' }, { status: 400 });
         }
 
-        // Verify ownership
-        const ownerCheck = await query(
-            `SELECT id FROM clubs WHERE id = $1 AND owner_id = $2`,
-            [clubId, userId]
-        );
-
-        if (ownerCheck.rowCount === 0) {
-            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-        }
+        const guard = await ensureOwnerSubscriptionActive(clubId, userId)
+        if (!guard.ok) return guard.response
 
         // Remove from club_employees
         await query(

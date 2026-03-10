@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/db';
 import { cookies } from 'next/headers';
+import { isSuperAdmin } from '@/lib/super-admin';
 
 export async function GET() {
     try {
@@ -12,11 +13,13 @@ export async function GET() {
 
         // Check if super admin
         const adminCheck = await query(
-            `SELECT is_super_admin FROM users WHERE id = $1`,
+            `SELECT is_super_admin, phone_number FROM users WHERE id = $1`,
             [userId]
         );
 
-        if (!adminCheck.rows[0]?.is_super_admin) {
+        const canAccess = isSuperAdmin(adminCheck.rows[0]?.is_super_admin, userId, adminCheck.rows[0]?.phone_number);
+
+        if (!canAccess) {
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
@@ -42,11 +45,13 @@ export async function POST(request: Request) {
         }
 
         const adminCheck = await query(
-            `SELECT is_super_admin FROM users WHERE id = $1`,
+            `SELECT is_super_admin, phone_number FROM users WHERE id = $1`,
             [userId]
         );
 
-        if (!adminCheck.rows[0]?.is_super_admin) {
+        const canAccess = isSuperAdmin(adminCheck.rows[0]?.is_super_admin, userId, adminCheck.rows[0]?.phone_number);
+
+        if (!canAccess) {
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 

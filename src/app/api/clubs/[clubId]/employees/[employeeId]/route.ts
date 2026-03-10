@@ -3,6 +3,7 @@ import { query } from '@/db';
 import { cookies } from 'next/headers';
 import bcrypt from 'bcrypt';
 import { normalizePhone } from '@/lib/phone-utils';
+import { ensureOwnerSubscriptionActive } from '@/lib/club-subscription-guard';
 
 const SALT_ROUNDS = 10;
 
@@ -18,15 +19,8 @@ export async function PATCH(
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        // Verify ownership
-        const ownerCheck = await query(
-            `SELECT id FROM clubs WHERE id = $1 AND owner_id = $2`,
-            [clubId, userId]
-        );
-
-        if (ownerCheck.rowCount === 0) {
-            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-        }
+        const guard = await ensureOwnerSubscriptionActive(clubId, userId)
+        if (!guard.ok) return guard.response
 
         // Verify employee belongs to this club
         const employeeCheck = await query(

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { useRouter, usePathname } from "next/navigation"
 import Link from "next/link"
-import { LayoutDashboard, Database, CreditCard, Users, Settings, LogOut, ShieldAlert } from "lucide-react"
+import { LayoutDashboard, Database, CreditCard, Users, ShieldAlert } from "lucide-react"
 
 export default function SuperAdminLayout({ children }: { children: React.ReactNode }) {
     const router = useRouter()
@@ -11,13 +11,19 @@ export default function SuperAdminLayout({ children }: { children: React.ReactNo
     const [isAuthorized, setIsAuthorized] = useState(false)
 
     useEffect(() => {
-        // Simple client-side check (real protection is in API)
-        fetch('/api/auth/me').then(res => res.json()).then(data => {
-            // Ideally we should check is_super_admin flag here from API
-            // For now we assume if API allows access to metrics, user is admin
-            setIsAuthorized(true)
-        })
-    }, [])
+        fetch('/api/auth/me')
+            .then(res => res.json())
+            .then(data => {
+                if (data?.user?.is_super_admin) {
+                    setIsAuthorized(true)
+                    return
+                }
+                router.push('/dashboard')
+            })
+            .catch(() => {
+                router.push('/login')
+            })
+    }, [router])
 
     if (!isAuthorized) return null
 

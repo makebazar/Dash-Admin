@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/db';
 import { cookies } from 'next/headers';
+import { isSuperAdmin } from '@/lib/super-admin';
+import { resolveSubscriptionState } from '@/lib/subscriptions';
+import { hasColumn } from '@/lib/db-compat';
 
 export async function GET() {
     try {
@@ -14,8 +17,21 @@ export async function GET() {
         }
 
         // Get user info
+        const hasSubscriptionStatus = await hasColumn('users', 'subscription_status');
+        const hasSubscriptionCanceledAt = await hasColumn('users', 'subscription_canceled_at');
         const userResult = await query(
-            `SELECT id, full_name, phone_number FROM users WHERE id = $1`,
+            `SELECT 
+                id,
+                full_name,
+                phone_number,
+                is_super_admin,
+                subscription_plan,
+                ${hasSubscriptionStatus ? 'subscription_status' : "NULL::varchar as subscription_status"},
+                subscription_started_at,
+                subscription_ends_at,
+                ${hasSubscriptionCanceledAt ? 'subscription_canceled_at' : "NULL::timestamp as subscription_canceled_at"}
+             FROM users
+             WHERE id = $1`,
             [userId]
         );
 
@@ -25,23 +41,42 @@ export async function GET() {
         }
 
         const user = userResult.rows[0];
+        const resolvedSuperAdmin = isSuperAdmin(user.is_super_admin, user.id, user.phone_number);
+        const subscription = resolveSubscriptionState(user);
         console.log('[Auth/Me] User found:', user.full_name);
 
         // Get owned clubs
         const ownedClubsResult = await query(
-            `SELECT id, name FROM clubs WHERE owner_id = $1 ORDER BY created_at DESC`,
+            `SELECT DISTINCT c.id, c.name, c.created_at
+             FROM clubs c
+             LEFT JOIN club_employees ce ON ce.club_id = c.id
+             WHERE c.owner_id = $1
+                OR (
+                    ce.user_id = $1
+                    AND ce.role = 'Владелец'
+                    AND ce.is_active = TRUE
+                    AND ce.dismissed_at IS NULL
+                )
+             ORDER BY c.created_at DESC`,
             [userId]
         );
         console.log('[Auth/Me] Owned clubs count:', ownedClubsResult.rowCount);
 
+        const ownedClubs = ownedClubsResult.rows.map(row => ({
+            id: row.id,
+            name: row.name
+        }));
+
         // Get employee clubs with role
         const employeeClubsQuery = `
-            SELECT c.id, c.name, c.inventory_required, c.inventory_settings, r.name as role_name, r.id as role_id
+            SELECT c.id, c.name, c.inventory_required, c.inventory_settings, ce.role as employee_role, r.name as global_role_name, r.id as global_role_id
             FROM clubs c
             JOIN club_employees ce ON c.id = ce.club_id
             LEFT JOIN users u ON ce.user_id = u.id
             LEFT JOIN roles r ON u.role_id = r.id
             WHERE ce.user_id = $1
+              AND ce.is_active = TRUE
+              AND ce.dismissed_at IS NULL
             ORDER BY ce.hired_at DESC
         `;
         
@@ -49,37 +84,96 @@ export async function GET() {
         
         const employeeClubsResult = await query(employeeClubsQuery, [userId]);
         
-        console.log('[Auth/Me] Employee clubs found:', employeeClubsResult.rowCount);
-        if (employeeClubsResult.rowCount === 0) {
-            // Debug: check if any entries exist in club_employees for this user
-            const debugCheck = await query('SELECT * FROM club_employees WHERE user_id = $1', [userId]);
-            console.log('[Auth/Me] DEBUG: Raw club_employees entries for user:', debugCheck.rows);
-        } else {
-            console.log('[Auth/Me] Employee clubs list:', employeeClubsResult.rows.map(r => r.name));
+        // Combine employee clubs and owned clubs for the employee dashboard view
+        // Owners should be able to "go on shift" in their own clubs
+        const employeeClubsMap = new Map();
+        
+        // Add actual employee roles first
+        employeeClubsResult.rows.forEach(row => {
+            const normalizedRole = (row.employee_role === 'EMPLOYEE' || row.employee_role === 'Сотрудник' || row.employee_role === 'EMP')
+                ? (row.global_role_name || 'Сотрудник')
+                : (row.employee_role || row.global_role_name || 'Сотрудник');
+            employeeClubsMap.set(row.id, {
+                id: row.id,
+                name: row.name,
+                inventory_required: row.inventory_required,
+                inventory_settings: row.inventory_settings,
+                role: normalizedRole,
+                role_id: row.global_role_id
+            });
+        });
+
+        // Add owned clubs if not already there (as Владелец)
+        ownedClubsResult.rows.forEach(row => {
+            if (!employeeClubsMap.has(row.id)) {
+                employeeClubsMap.set(row.id, {
+                    id: row.id,
+                    name: row.name,
+                    role: 'Владелец',
+                    is_owner: true
+                });
+            }
+        });
+
+        const clubIds = Array.from(employeeClubsMap.keys()).map(id => Number(id)).filter(id => Number.isInteger(id));
+        if (clubIds.length > 0) {
+            const ownerSubscriptionResult = await query(
+                `SELECT c.id as club_id,
+                        u.subscription_plan,
+                        ${hasSubscriptionStatus ? 'u.subscription_status' : "NULL::varchar as subscription_status"},
+                        u.subscription_ends_at
+                 FROM clubs c
+                 JOIN users u ON u.id = c.owner_id
+                 WHERE c.id = ANY($1::int[])`,
+                [clubIds]
+            );
+
+            const subscriptionByClub = new Map<number, { status: string; isActive: boolean; endsAt: Date | null }>();
+            for (const row of ownerSubscriptionResult.rows) {
+                const resolved = resolveSubscriptionState(row);
+                subscriptionByClub.set(Number(row.club_id), {
+                    status: resolved.status,
+                    isActive: resolved.isActive,
+                    endsAt: resolved.endsAt
+                });
+            }
+
+            employeeClubsMap.forEach((club, clubId) => {
+                const state = subscriptionByClub.get(Number(clubId));
+                if (state) {
+                    club.subscription_status = state.status;
+                    club.subscription_is_active = state.isActive;
+                    club.subscription_ends_at = state.endsAt;
+                }
+            });
         }
 
-        const ownedClubs = ownedClubsResult.rows.map(row => ({
-            id: row.id,
-            name: row.name
-        }));
-
-        const employeeClubs = employeeClubsResult.rows.map(row => ({
-            id: row.id,
-            name: row.name,
-            inventory_required: row.inventory_required,
-            inventory_settings: row.inventory_settings,
-            role: row.role_name || 'Сотрудник',
-            role_id: row.role_id
-        }));
+        const employeeClubs = Array.from(employeeClubsMap.values());
+        const hasExpiredClubSubscription = employeeClubs.some((club: any) => club.subscription_is_active === false);
 
         return NextResponse.json({
             user: {
                 id: user.id,
                 full_name: user.full_name,
-                phone_number: user.phone_number
+                phone_number: user.phone_number,
+                is_super_admin: resolvedSuperAdmin,
+                subscription_plan: subscription.plan,
+                subscription_status: subscription.status,
+                subscription_started_at: user.subscription_started_at,
+                subscription_ends_at: user.subscription_ends_at,
+                subscription_canceled_at: user.subscription_canceled_at,
+                subscription_limits: {
+                    max_clubs: subscription.planDefinition.maxClubs,
+                    max_employees_per_club: subscription.planDefinition.maxEmployeesPerClub,
+                    price_monthly: subscription.planDefinition.priceMonthly,
+                    advanced_analytics: subscription.planDefinition.advancedAnalytics,
+                    inventory_lite: subscription.planDefinition.inventoryLite,
+                    priority_support: subscription.planDefinition.prioritySupport
+                }
             },
             ownedClubs,
-            employeeClubs
+            employeeClubs,
+            has_expired_club_subscription: hasExpiredClubSubscription
         });
 
     } catch (error) {

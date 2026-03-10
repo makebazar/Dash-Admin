@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/db';
 import { cookies } from 'next/headers';
+import { ensureOwnerSubscriptionActive } from '@/lib/club-subscription-guard';
 
 // GET /api/clubs/[clubId]/equipment - List all equipment
 export async function GET(
@@ -153,15 +154,8 @@ export async function POST(
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        // Verify ownership
-        const ownerCheck = await query(
-            `SELECT 1 FROM clubs WHERE id = $1 AND owner_id = $2`,
-            [clubId, userId]
-        );
-
-        if ((ownerCheck.rowCount || 0) === 0) {
-            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-        }
+        const guard = await ensureOwnerSubscriptionActive(clubId, userId)
+        if (!guard.ok) return guard.response
 
         const {
             workstation_id,

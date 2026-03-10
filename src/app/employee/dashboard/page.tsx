@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Building2, Loader2, ChevronRight, Briefcase } from "lucide-react"
+import { Card, CardContent } from "@/components/ui/card"
+import { Building2, Loader2, ChevronRight, Briefcase, Plus } from "lucide-react"
 
 interface Club {
     id: number
@@ -48,10 +48,10 @@ export default function EmployeeDashboard() {
     }
 
     return (
-        <div className="p-8">
-            <div className="mb-8">
-                <h1 className="text-3xl font-bold tracking-tight">Рабочее пространство</h1>
-                <p className="text-muted-foreground">
+        <div className="container mx-auto p-4 sm:p-8">
+            <div className="mb-10 flex flex-col gap-2">
+                <h1 className="text-3xl font-extrabold tracking-tight text-slate-900">Рабочее пространство</h1>
+                <p className="text-slate-500">
                     Выберите клуб для начала работы
                 </p>
             </div>
@@ -59,42 +59,45 @@ export default function EmployeeDashboard() {
             {clubs.length === 0 ? (
                 <Card className="border-dashed">
                     <CardContent className="flex flex-col items-center justify-center py-16">
-                        <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-purple-500/10">
-                            <Building2 className="h-8 w-8 text-purple-600" />
+                        <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-slate-100">
+                            <Building2 className="h-8 w-8 text-slate-400" />
                         </div>
                         <h3 className="mb-2 text-xl font-semibold">Нет клубов</h3>
-                        <p className="text-center text-sm text-muted-foreground">
+                        <p className="text-center text-sm text-slate-500">
                             Вы пока не добавлены ни в один клуб.<br />
                             Обратитесь к администратору для получения доступа.
                         </p>
                     </CardContent>
                 </Card>
             ) : (
-                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                     {clubs.map((club) => (
                         <Link key={club.id} href={`/employee/clubs/${club.id}`}>
-                            <Card className="group relative overflow-hidden transition-all hover:shadow-lg hover:shadow-purple-500/20">
-                                <div className="absolute right-0 top-0 h-32 w-32 -translate-y-8 translate-x-8 rounded-full bg-gradient-to-br from-purple-500/20 to-blue-500/20 blur-2xl transition-transform group-hover:scale-150" />
-                                <CardHeader className="relative">
-                                    <div className="mb-4 flex items-center justify-between">
-                                        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-tr from-purple-500 to-blue-500">
-                                            <Building2 className="h-6 w-6 text-white" />
-                                        </div>
-                                        <ChevronRight className="h-5 w-5 text-muted-foreground transition-transform group-hover:translate-x-1" />
+                            <div className="group relative flex h-full min-h-[180px] cursor-pointer flex-col justify-between rounded-2xl border border-black/5 bg-white p-6 shadow-sm transition-all hover:shadow-md hover:border-black/10">
+                                <div className="flex items-start justify-between">
+                                    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-900 transition-colors group-hover:bg-purple-600 group-hover:text-white">
+                                        <Building2 className="h-6 w-6" />
                                     </div>
-                                    <CardTitle className="text-xl">{club.name}</CardTitle>
-                                    <CardDescription className="flex items-center gap-2">
-                                        <Briefcase className="h-3 w-3" />
+                                    <ChevronRight className="h-5 w-5 text-slate-300 transition-transform group-hover:translate-x-1 group-hover:text-purple-600" />
+                                </div>
+
+                                <div className="mt-4">
+                                    <h3 className="text-lg font-bold text-slate-900 group-hover:text-black">{club.name}</h3>
+                                    <p className="mt-1 flex items-center gap-2 text-sm text-slate-500">
+                                        <Briefcase className="h-3.5 w-3.5" />
                                         {club.role}
-                                    </CardDescription>
-                                </CardHeader>
-                                <CardContent className="relative">
-                                    <div className="flex items-center gap-2 text-sm text-purple-600">
-                                        <span>Открыть рабочее пространство</span>
-                                        <ChevronRight className="h-4 w-4" />
+                                    </p>
+                                </div>
+
+                                <div className="mt-6 flex items-center justify-between border-t border-slate-50 pt-4">
+                                    <span className="text-[10px] font-medium uppercase tracking-wider text-purple-600">
+                                        Открыть рабочее пространство
+                                    </span>
+                                    <div className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-50 text-slate-400 transition-colors group-hover:bg-purple-600 group-hover:text-white">
+                                        <Plus className="h-3 w-3" />
                                     </div>
-                                </CardContent>
-                            </Card>
+                                </div>
+                            </div>
                         </Link>
                     ))}
                 </div>

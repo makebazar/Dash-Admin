@@ -40,12 +40,36 @@ CREATE TABLE IF NOT EXISTS users (
     role_id INTEGER REFERENCES roles(id),
     is_active BOOLEAN DEFAULT TRUE,
     password_hash VARCHAR(255),
-    subscription_plan VARCHAR(50) DEFAULT 'trial',
-    subscription_started_at TIMESTAMP,
+    subscription_plan VARCHAR(50) DEFAULT 'new_user',
+    subscription_status VARCHAR(30) DEFAULT 'trialing',
+    subscription_started_at TIMESTAMP DEFAULT NOW(),
     subscription_ends_at TIMESTAMP,
+    subscription_canceled_at TIMESTAMP,
     is_super_admin BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS subscription_plans (
+    id SERIAL PRIMARY KEY,
+    code VARCHAR(100) NOT NULL UNIQUE,
+    name VARCHAR(255) NOT NULL,
+    tagline VARCHAR(255),
+    description TEXT,
+    features JSONB NOT NULL DEFAULT '[]'::jsonb,
+    badge_text VARCHAR(100),
+    badge_tone VARCHAR(30) NOT NULL DEFAULT 'default',
+    cta_text VARCHAR(100),
+    card_theme VARCHAR(30) NOT NULL DEFAULT 'light',
+    display_order INTEGER NOT NULL DEFAULT 100,
+    is_highlighted BOOLEAN NOT NULL DEFAULT FALSE,
+    price_amount DECIMAL(12, 2) NOT NULL DEFAULT 0,
+    period_unit VARCHAR(20) NOT NULL DEFAULT 'month',
+    period_value INTEGER NOT NULL DEFAULT 1,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_subscription_plans_active ON subscription_plans(is_active, created_at DESC);
 
 -- CLUBS
 CREATE TABLE IF NOT EXISTS clubs (
