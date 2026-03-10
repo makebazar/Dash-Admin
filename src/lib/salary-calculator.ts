@@ -1,6 +1,4 @@
 
-import { query } from '@/db';
-
 // Update interface to match actual DB JSON structure
 interface SalaryScheme {
     id?: number;
@@ -9,6 +7,7 @@ interface SalaryScheme {
         amount?: number;
         percent?: number;
         full_shift_hours?: number;
+        payout_timing?: 'SHIFT' | 'MONTH';
     };
     // Support legacy/flat structure for backward compatibility if needed
     type?: 'hourly' | 'fixed' | 'per_shift' | 'percent_revenue' | 'none';
