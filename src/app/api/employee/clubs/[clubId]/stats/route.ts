@@ -82,7 +82,13 @@ export async function GET(
 
         const rawScheme = schemeRes.rows[0];
         const formula = rawScheme?.scheme_formula || {};
-        const scheme = { ...rawScheme, ...formula };
+        
+        // Use formula bonuses if legacy ones are empty
+        const period_bonuses_config = (Array.isArray(rawScheme?.period_bonuses) && rawScheme.period_bonuses.length > 0) 
+            ? rawScheme.period_bonuses 
+            : (formula.period_bonuses || []);
+
+        const scheme = { ...rawScheme, ...formula, period_bonuses: period_bonuses_config };
         
         const hourlyRate = parseFloat(scheme?.role_rate || scheme?.amount || '150');
         const standard_monthly_shifts = scheme?.standard_monthly_shifts || 15;
@@ -161,14 +167,13 @@ export async function GET(
         let weekHours = 0;
         let totalBaseSalary = 0;
         let totalShiftBonuses = 0;
+        let completed_shifts_count = 0;
         const monthlyMetrics: Record<string, number> = { total_revenue: 0, total_hours: 0 };
         const activeShiftMetrics: Record<string, number> = { total_revenue: 0, total_hours: 0 };
 
         const startOfWeek = new Date(now);
         startOfWeek.setDate(now.getDate() - now.getDay() + (now.getDay() === 0 ? -6 : 1)); // Monday
         startOfWeek.setHours(0, 0, 0, 0);
-
-        let completed_shifts_count = 0;
 
         finishedShifts.forEach(s => {
             const hours = parseFloat(s.total_hours || 0);
@@ -235,23 +240,28 @@ export async function GET(
         let maintenanceBonusVirtual = 0;
         let maintenanceBonusReal = 0;
 
-        // 4.1. Period Revenue Bonuses (Logic synced with salary summary)
-        const period_bonuses_config = scheme?.period_bonuses || [];
-        if (Array.isArray(period_bonuses_config)) {
-            period_bonuses_config.forEach((bonus: any) => {
-                const metric_key = bonus.metric_key || 'total_revenue';
+        // 4.1. Revenue KPI Bonuses (legacy + formula)
+        const all_progressive_bonuses = [
+            ...(Array.isArray(period_bonuses_config) ? period_bonuses_config : []),
+            ...((scheme.bonuses || []).filter((b: any) =>
+                b.type === 'progressive_bonus' || b.type === 'progressive_percent' || b.type === 'PROGRESSIVE'
+            ))
+        ]
 
-                // For scaling and checking MET status, we use revenue from CLOSED shifts only
+        all_progressive_bonuses.forEach((bonus: any) => {
+                const metric_key = bonus.metric_key || bonus.source || 'total_revenue';
+
+                // SYNC WITH KPI: Use revenue from CLOSED shifts only for scaling bonuses
                 const value_for_scaling_bonus = metric_key === 'total_revenue' ? (monthlyMetrics.total_revenue - (activeShiftMetrics.total_revenue || 0)) : 
-                                              (monthlyMetrics[metric_key] - (activeShiftMetrics[metric_key] || 0));
+                                              ((monthlyMetrics[metric_key] || 0) - (activeShiftMetrics[metric_key] || 0));
 
                 let is_met = false;
                 let metPercent = 0;
                 let earned = 0;
 
-                const mode = bonus.bonus_mode || 'MONTH';
+                const mode = bonus.bonus_mode || bonus.mode || 'MONTH';
 
-                if (bonus.type === 'PROGRESSIVE' && bonus.thresholds?.length) {
+                if ((bonus.type === 'PROGRESSIVE' || bonus.type === 'progressive_percent' || bonus.type === 'progressive_bonus') && bonus.thresholds?.length) {
                     const sorted = [...bonus.thresholds].sort((a: any, b: any) => (a.from || 0) - (b.from || 0));
                     
                     for (let i = sorted.length - 1; i >= 0; i--) {
@@ -277,8 +287,10 @@ export async function GET(
                     if (is_met) {
                         if (bonus.reward_type === 'PERCENT') {
                             earned = value_for_scaling_bonus * (bonus.reward_value / 100);
+                            metPercent = bonus.reward_value;
                         } else {
                             earned = bonus.reward_value;
+                            metPercent = 100; 
                         }
                     }
                 }
@@ -287,12 +299,11 @@ export async function GET(
                     revenueKpiBreakdown.push({
                         name: bonus.name || 'KPI Выручка',
                         amount: earned,
-                        metPercent: metPercent || bonus.reward_value,
+                        metPercent: metPercent,
                         is_virtual: bonus.payout_type === 'VIRTUAL_BALANCE'
                     });
                 }
             });
-        }
 
         // 4.2. Checklist Bonuses (Monthly)
         const allChecklistConfigs = (scheme.bonuses || []).filter((b: any) => b.type === 'checklist');

@@ -86,7 +86,10 @@ export async function GET(
         const formula = rawScheme.scheme_formula || {};
         
         // Merge period_bonuses and bonuses from formula and main table
-        const period_bonuses = rawScheme.period_bonuses || formula.period_bonuses || [];
+        const period_bonuses = (Array.isArray(rawScheme.period_bonuses) && rawScheme.period_bonuses.length > 0)
+            ? rawScheme.period_bonuses
+            : (formula.period_bonuses || []);
+            
         const bonuses = formula.bonuses || [];
         const scheme = { ...rawScheme, ...formula, period_bonuses, bonuses };
 

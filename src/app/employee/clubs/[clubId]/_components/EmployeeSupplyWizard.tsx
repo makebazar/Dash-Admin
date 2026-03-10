@@ -9,9 +9,9 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { 
     Loader2, Plus, Trash2, Search, Camera, Package, 
-    ArrowLeft, ArrowRight, CheckCircle2, ShoppingCart
+    ArrowLeft, ArrowRight, CheckCircle2, ShoppingCart, Warehouse
 } from "lucide-react"
-import { getProducts, createSupply, getProductByBarcode } from "@/app/clubs/[clubId]/inventory/actions"
+import { getProducts, createSupply, getProductByBarcode, getWarehouses, type Warehouse as WarehouseType } from "@/app/clubs/[clubId]/inventory/actions"
 import { 
     Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
 } from "@/components/ui/table"
@@ -38,6 +38,8 @@ export function EmployeeSupplyWizard({ isOpen, onClose, clubId, userId, activeSh
     const [step, setStep] = useState(1) // 1: Items List, 2: Final Details
     const [items, setItems] = useState<SupplyItem[]>([])
     const [allProducts, setAllProducts] = useState<any[]>([])
+    const [warehouses, setWarehouses] = useState<WarehouseType[]>([])
+    const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>("")
     const [isPending, startTransition] = useTransition()
     
     // UI States
@@ -71,10 +73,15 @@ export function EmployeeSupplyWizard({ isOpen, onClose, clubId, userId, activeSh
         }
     }, [isOpen])
 
-    // Load products
+    // Load products and warehouses
     useEffect(() => {
         if (isOpen) {
             getProducts(clubId).then(setAllProducts)
+            getWarehouses(clubId).then(whs => {
+                setWarehouses(whs)
+                const def = whs.find(w => w.is_default) || whs[0]
+                if (def) setSelectedWarehouseId(def.id.toString())
+            })
         }
     }, [isOpen, clubId])
 
@@ -143,11 +150,16 @@ export function EmployeeSupplyWizard({ isOpen, onClose, clubId, userId, activeSh
 
     const handleFinalize = () => {
         if (items.length === 0) return
+        if (!selectedWarehouseId) {
+            alert("Выберите склад")
+            return
+        }
         startTransition(async () => {
             try {
                 await createSupply(clubId, userId, {
                     supplier_name: supplierName || "Сотрудник (самовывоз)",
                     notes: notes + (activeShiftId ? ` (Смена #${activeShiftId})` : ""),
+                    warehouse_id: Number(selectedWarehouseId),
                     items: items.map(i => ({
                         product_id: i.product_id,
                         quantity: i.quantity,
@@ -298,6 +310,30 @@ export function EmployeeSupplyWizard({ isOpen, onClose, clubId, userId, activeSh
                             </div>
                         ) : (
                             <div className="space-y-6">
+                                <div className="space-y-2">
+                                    <Label className="text-[10px] text-slate-500 uppercase tracking-wider flex items-center gap-2">
+                                        <Warehouse className="h-3 w-3" />
+                                        Куда поставляем?
+                                    </Label>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        {warehouses.map(wh => (
+                                            <Button
+                                                key={wh.id}
+                                                variant="outline"
+                                                className={cn(
+                                                    "h-10 border-slate-800 bg-slate-900/50 hover:bg-slate-800 text-[10px] justify-start px-3",
+                                                    selectedWarehouseId === wh.id.toString() && "border-blue-500 bg-blue-500/10 text-blue-400"
+                                                )}
+                                                onClick={() => setSelectedWarehouseId(wh.id.toString())}
+                                            >
+                                                <div className="flex flex-col items-start truncate">
+                                                    <span className="truncate">{wh.name}</span>
+                                                    {wh.is_default && <span className="text-[7px] opacity-50 uppercase">Основной</span>}
+                                                </div>
+                                            </Button>
+                                        ))}
+                                    </div>
+                                </div>
                                 <div className="space-y-2">
                                     <Label className="text-xs text-slate-500 uppercase tracking-wider">Поставщик</Label>
                                     <Input 

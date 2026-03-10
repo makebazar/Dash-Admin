@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {
     Clock, Loader2, LogIn, LogOut, Wallet, Activity, Calendar,
-    TrendingUp, Target, Zap, ChevronRight, Trophy, Brush, ClipboardCheck, Monitor, AlertCircle, Ban
+    TrendingUp, Target, Zap, ChevronRight, Trophy, Brush, ClipboardCheck, Monitor, AlertCircle, Ban, ArrowRightLeft, MessageSquare
 } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -19,6 +19,9 @@ import { ShiftClosingWizard } from "./_components/ShiftClosingWizard"
 import { ShiftOpeningWizard } from "./_components/ShiftOpeningWizard"
 import { EmployeeSupplyWizard } from "./_components/EmployeeSupplyWizard"
 import { EmployeeWriteOffWizard } from "./_components/EmployeeWriteOffWizard"
+import { EmployeeTransferWizard } from "./_components/EmployeeTransferWizard"
+import { EmployeeRequestWizard } from "./_components/EmployeeRequestWizard"
+import { getEmployeeRequests } from "./requests-actions"
 import { VirtualBalanceCard } from "@/components/employee/VirtualBalanceCard"
 
 interface ClubInfo {
@@ -113,6 +116,9 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
     const [isIndicatorsModalOpen, setIsIndicatorsModalOpen] = useState(false)
     const [isSupplyWizardOpen, setIsSupplyWizardOpen] = useState(false)
     const [isWriteOffWizardOpen, setIsWriteOffWizardOpen] = useState(false)
+    const [isTransferWizardOpen, setIsTransferWizardOpen] = useState(false)
+    const [isRequestWizardOpen, setIsRequestWizardOpen] = useState(false)
+    const [unreadRequestsCount, setUnreadRequestsCount] = useState(0)
 
     // Live timer
     const [liveSeconds, setLiveSeconds] = useState(0)
@@ -192,6 +198,29 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
         }
         fetchEvaluationScore()
     }, [clubId, currentUserId])
+
+    useEffect(() => {
+        if (!clubId || !currentUserId) return
+        const fetchUnreadRequests = async () => {
+            try {
+                const requests = await getEmployeeRequests(clubId, currentUserId)
+                const unreadCount = requests.filter((r: any) => !r.is_read_by_employee).length
+                setUnreadRequestsCount(unreadCount)
+            } catch (error) {
+                console.error('Error fetching requests:', error)
+            }
+        }
+        fetchUnreadRequests()
+        const eventSource = new EventSource(`/api/clubs/${clubId}/requests/stream`)
+        const onUpdate = () => {
+            fetchUnreadRequests()
+        }
+        eventSource.addEventListener("update", onUpdate)
+        return () => {
+            eventSource.removeEventListener("update", onUpdate)
+            eventSource.close()
+        }
+    }, [clubId, currentUserId, isRequestWizardOpen])
 
     const fetchChecklistTemplates = async (clubId: string) => {
         try {
@@ -594,29 +623,45 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                                             <Button
                                                 variant="outline"
                                                 className="w-full h-auto py-3 text-sm border-white/20 bg-white/5 text-white hover:bg-white/10 whitespace-normal"
-                                                onClick={() => setIsIndicatorsModalOpen(true)}
+                                                onClick={() => setIsRequestWizardOpen(true)}
                                                 disabled={isActionLoading}
                                             >
-                                                <Target className="mr-2 h-4 w-4 shrink-0" />
-                                                <span className="text-center">Внести промежуточные показатели</span>
+                                                <div className="relative">
+                                                    <MessageSquare className="mr-2 h-4 w-4 shrink-0" />
+                                                    {unreadRequestsCount > 0 && (
+                                                        <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                                                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75"></span>
+                                                            <span className="relative inline-flex rounded-full h-3 w-3 bg-purple-500 border border-white/20"></span>
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <span className="text-center">Связаться с руководством</span>
                                             </Button>
 
-                                            <div className="pt-2 border-t border-white/10 mt-2 grid grid-cols-2 gap-2">
+                                            <div className="pt-2 border-t border-white/10 mt-2 grid grid-cols-3 gap-2">
                                                 <Button
                                                     variant="ghost"
-                                                    className="w-full h-12 text-sm text-purple-300 hover:text-white hover:bg-purple-500/20 rounded-xl transition-all"
+                                                    className="w-full h-12 text-[10px] text-purple-300 hover:text-white hover:bg-purple-500/20 rounded-xl transition-all"
                                                     onClick={() => setIsSupplyWizardOpen(true)}
                                                 >
-                                                    <Zap className="mr-2 h-4 w-4" />
+                                                    <Zap className="mr-1.5 h-3.5 w-3.5" />
                                                     Поставка
                                                 </Button>
                                                 <Button
                                                     variant="ghost"
-                                                    className="w-full h-12 text-sm text-red-300 hover:text-white hover:bg-red-500/20 rounded-xl transition-all"
+                                                    className="w-full h-12 text-[10px] text-red-300 hover:text-white hover:bg-red-500/20 rounded-xl transition-all"
                                                     onClick={() => setIsWriteOffWizardOpen(true)}
                                                 >
-                                                    <Ban className="mr-2 h-4 w-4" />
+                                                    <Ban className="mr-1.5 h-3.5 w-3.5" />
                                                     Списание
+                                                </Button>
+                                                <Button
+                                                    variant="ghost"
+                                                    className="w-full h-12 text-[10px] text-emerald-300 hover:text-white hover:bg-emerald-500/20 rounded-xl transition-all"
+                                                    onClick={() => setIsTransferWizardOpen(true)}
+                                                >
+                                                    <ArrowRightLeft className="mr-1.5 h-3.5 w-3.5" />
+                                                    Перемещение
                                                 </Button>
                                             </div>
                                         </div>
@@ -642,6 +687,25 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                                                 )}
                                                 Начать смену
                                             </Button>
+
+                                            <div className="pt-2 border-t border-white/10 mt-2">
+                                                <Button
+                                                    variant="ghost"
+                                                    className="w-full h-12 text-[10px] text-white/60 hover:text-white hover:bg-white/10 rounded-xl transition-all"
+                                                    onClick={() => setIsRequestWizardOpen(true)}
+                                                >
+                                                <div className="relative">
+                                                    <MessageSquare className="mr-1.5 h-3.5 w-3.5" />
+                                                    {unreadRequestsCount > 0 && (
+                                                        <span className="absolute -top-1 -right-1 flex h-2 w-2">
+                                                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75"></span>
+                                                            <span className="relative inline-flex rounded-full h-2 w-2 bg-purple-500"></span>
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                Связаться с руководством
+                                                </Button>
+                                            </div>
                                         </div>
                                     )}
                                 </CardContent>
@@ -971,6 +1035,23 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                 userId={currentUserId}
                 activeShiftId={activeShift?.id?.toString()}
                 currentSalary={stats?.month_earnings || 0}
+            />
+
+            {/* Transfer Wizard */}
+            <EmployeeTransferWizard
+                isOpen={isTransferWizardOpen}
+                onClose={() => setIsTransferWizardOpen(false)}
+                clubId={clubId}
+                userId={currentUserId}
+                activeShiftId={activeShift?.id?.toString()}
+            />
+
+            {/* Support Requests Wizard */}
+            <EmployeeRequestWizard
+                isOpen={isRequestWizardOpen}
+                onClose={() => setIsRequestWizardOpen(false)}
+                clubId={clubId}
+                userId={currentUserId}
             />
 
             {/* Intermediate Indicators Modal */}

@@ -188,8 +188,8 @@ export function SuppliesTab({ supplies, products, warehouses, suppliers, current
                             <TableRow key={supply.id} className="hover:bg-slate-50/50 cursor-pointer group" onClick={() => handleOpenSupply(supply)}>
                                 <TableCell className="font-medium">
                                     <div className="flex flex-col">
-                                        <span className="text-sm text-slate-900 font-bold">{new Date(supply.created_at).toLocaleDateString()}</span>
-                                        <span className="text-[10px] text-slate-400">{new Date(supply.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                                        <span className="text-sm text-slate-900 font-bold">{new Date(supply.created_at).toLocaleDateString('ru-RU')}</span>
+                                        <span className="text-[10px] text-slate-400">{new Date(supply.created_at).toLocaleTimeString('ru-RU', {hour: '2-digit', minute:'2-digit'})}</span>
                                     </div>
                                 </TableCell>
                                 <TableCell>
@@ -236,7 +236,7 @@ export function SuppliesTab({ supplies, products, warehouses, suppliers, current
                         <div className="flex justify-between items-start mb-3">
                             <div className="flex flex-col">
                                 <span className="text-[10px] text-slate-400 uppercase font-black tracking-widest mb-0.5">
-                                    {new Date(supply.created_at).toLocaleDateString()} в {new Date(supply.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                    {new Date(supply.created_at).toLocaleDateString('ru-RU')} в {new Date(supply.created_at).toLocaleTimeString('ru-RU', {hour: '2-digit', minute:'2-digit'})}
                                 </span>
                                 <h4 className="font-black text-slate-900 text-base leading-tight">{supply.supplier_name}</h4>
                             </div>
@@ -260,7 +260,7 @@ export function SuppliesTab({ supplies, products, warehouses, suppliers, current
                             </div>
                             <div className="text-right">
                                 <p className="text-[10px] text-slate-400 uppercase font-black tracking-widest mb-0.5">Сумма</p>
-                                <p className="text-xl font-black text-blue-600">{Number(supply.total_cost).toLocaleString()} ₽</p>
+                                <p className="text-xl font-black text-blue-600">{Number(supply.total_cost).toLocaleString('ru-RU')} ₽</p>
                             </div>
                         </div>
                     </div>
@@ -275,7 +275,7 @@ export function SuppliesTab({ supplies, products, warehouses, suppliers, current
                             <div>
                                 <DialogTitle className="text-xl">Поставка #{viewingSupply?.id}</DialogTitle>
                                 <div className="text-sm text-muted-foreground flex items-center gap-3 mt-1">
-                                    <span>{viewingSupply && new Date(viewingSupply.created_at).toLocaleString()}</span>
+                                    <span>{viewingSupply && new Date(viewingSupply.created_at).toLocaleString('ru-RU')}</span>
                                     {viewingSupply?.status === 'DRAFT' ? (
                                         <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 text-[10px]">Черновик</Badge>
                                     ) : (
@@ -300,7 +300,7 @@ export function SuppliesTab({ supplies, products, warehouses, suppliers, current
                         </div>
                         <div className="space-y-1 text-right">
                             <p className="text-[10px] uppercase font-black text-slate-400 tracking-wider">Итоговая сумма</p>
-                            <p className="text-lg font-black text-blue-600">{viewingSupply?.total_cost.toLocaleString()} ₽</p>
+                            <p className="text-lg font-black text-blue-600">{viewingSupply?.total_cost.toLocaleString('ru-RU')} ₽</p>
                         </div>
                         {viewingSupply?.notes && (
                             <div className="col-span-3 space-y-1 pt-2">

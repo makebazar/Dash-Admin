@@ -1267,13 +1267,13 @@ export function ProductsTab({ products, categories, warehouses, currentUserId, p
                                             return (
                                                 <TableRow key={idx} className="hover:bg-slate-50/50">
                                                     <TableCell className="text-sm font-medium text-slate-700">
-                                                        {new Date(entry.created_at).toLocaleDateString()}
+                                                        {new Date(entry.created_at).toLocaleDateString('ru-RU')}
                                                     </TableCell>
                                                     <TableCell className="text-sm text-slate-600 font-semibold">
                                                         {entry.supplier_name}
                                                     </TableCell>
                                                     <TableCell className="text-right font-black text-slate-900">
-                                                        {entry.cost_price.toLocaleString()} ₽
+                                                        {entry.cost_price.toLocaleString('ru-RU')} ₽
                                                     </TableCell>
                                                     <TableCell className="text-right">
                                                         {idx < editingProduct.price_history!.length - 1 ? (

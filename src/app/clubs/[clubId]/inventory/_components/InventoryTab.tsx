@@ -186,10 +186,10 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
                                     <TableCell>
                                         <div className="flex flex-col">
                                             <span className="font-medium">
-                                                {new Date(inv.started_at).toLocaleDateString()}
+                                                {new Date(inv.started_at).toLocaleDateString('ru-RU')}
                                             </span>
-                                            <span className="text-[10px] text-muted-foreground uppercase font-bold">
-                                                {new Date(inv.started_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                            <span className="text-[10px] text-slate-400 font-bold uppercase">
+                                                {new Date(inv.started_at).toLocaleTimeString('ru-RU', {hour: '2-digit', minute:'2-digit'})}
                                             </span>
                                         </div>
                                     </TableCell>
@@ -270,8 +270,8 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
                             <div className="flex justify-between items-start mb-3">
                                 <div className="flex flex-col">
                                     <div className="flex items-center gap-2 mb-1">
-                                        <span className="font-bold text-slate-900">{new Date(inv.started_at).toLocaleDateString()}</span>
-                                        <span className="text-[10px] text-slate-400 font-bold uppercase">{new Date(inv.started_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                                        <span className="font-bold text-slate-900">{new Date(inv.started_at).toLocaleDateString('ru-RU')}</span>
+                                        <span className="text-[10px] text-slate-400 font-bold uppercase">{new Date(inv.started_at).toLocaleTimeString('ru-RU', {hour: '2-digit', minute:'2-digit'})}</span>
                                     </div>
                                     <div className="flex items-center gap-2 text-xs text-slate-500 font-medium">
                                         <WarehouseIcon className="h-3 w-3 shrink-0" />

@@ -377,8 +377,16 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
                                                 </TableRow>
                                             </TableHeader>
                                             <TableBody>
-                                                {items.map((sale, saleIdx) => (
-                                                    <TableRow key={`${sale.id}-${saleIdx}`} className="hover:bg-slate-50/50 group h-12">
+                                                {items.map((sale, saleIdx) => {
+                                                    const isSalaryDeduction = sale.reason?.toLowerCase().includes('в счет зп')
+                                                    return (
+                                                        <TableRow 
+                                                            key={`${sale.id}-${saleIdx}`} 
+                                                            className={cn(
+                                                                "hover:bg-slate-50/50 group h-12 transition-colors",
+                                                                isSalaryDeduction && "bg-purple-50/30 hover:bg-purple-50/50"
+                                                            )}
+                                                        >
                                                         <TableCell className="text-center p-0">
                                                             <Checkbox 
                                                                 checked={selectedIds.includes(sale.id)}
@@ -388,8 +396,20 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
                                                             />
                                                         </TableCell>
                                                         <TableCell className="py-2">
-                                                            <div className="flex flex-col">
-                                                                <span className="text-sm font-bold text-slate-700">{sale.product_name}</span>
+                                                            <div className="flex flex-col gap-0.5">
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="text-sm font-bold text-slate-700">{sale.product_name}</span>
+                                                                    {sale.reason?.toLowerCase().includes('в счет зп') && (
+                                                                        <Badge className="bg-purple-100 text-purple-700 border-purple-200 text-[9px] h-4 px-1 px-1.5 uppercase font-black">
+                                                                            В счет ЗП
+                                                                        </Badge>
+                                                                    )}
+                                                                </div>
+                                                                {sale.reason && (
+                                                                    <span className="text-[10px] text-blue-600 font-medium italic leading-tight">
+                                                                        {sale.reason}
+                                                                    </span>
+                                                                )}
                                                                 <span className="text-[10px] text-slate-400">{sale.warehouse_name}</span>
                                                             </div>
                                                         </TableCell>
@@ -423,7 +443,7 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
                                                             {(Math.abs(sale.change_amount) * (sale.price_at_time || sale.current_price || 0)).toLocaleString()} ₽
                                                         </TableCell>
                                                         <TableCell className="text-right text-[10px] text-slate-400 font-mono">
-                                                            {new Date(sale.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                            {new Date(sale.created_at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
                                                         </TableCell>
                                                         <TableCell className="text-right">
                                                             <div className="flex justify-end items-center gap-1">
@@ -477,15 +497,24 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
                                                             </div>
                                                         </TableCell>
                                                     </TableRow>
-                                                ))}
+                                                    )
+                                                })}
                                             </TableBody>
                                         </Table>
                                     </div>
 
                                     {/* Mobile Card List */}
                                     <div className="md:hidden divide-y divide-slate-100 bg-slate-50/30">
-                                        {items.map((sale, saleIdx) => (
-                                            <div key={`${sale.id}-${saleIdx}`} className="p-4 flex items-center gap-3 active:bg-slate-100 transition-colors group">
+                                        {items.map((sale, saleIdx) => {
+                                            const isSalaryDeduction = sale.reason?.toLowerCase().includes('в счет зп')
+                                            return (
+                                                <div 
+                                                    key={`${sale.id}-${saleIdx}`} 
+                                                    className={cn(
+                                                        "p-4 flex items-center gap-3 transition-colors group",
+                                                        isSalaryDeduction ? "bg-purple-50/40 active:bg-purple-100/50" : "active:bg-slate-100"
+                                                    )}
+                                                >
                                                 <div className="flex-none">
                                                     <Checkbox 
                                                         checked={selectedIds.includes(sale.id)}
@@ -495,13 +524,25 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
                                                 </div>
                                                 
                                                 <div className="flex-1 min-w-0">
-                                                    <h4 className="font-bold text-slate-900 text-sm leading-tight truncate">{sale.product_name}</h4>
-                                                    <div className="flex items-center gap-2 text-[10px] text-slate-500 mt-0.5">
-                                                        <Clock className="h-2.5 w-2.5" />
-                                                        {new Date(sale.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                                        <span className="mx-1">•</span>
-                                                        <span className="text-blue-600 font-bold">{Math.abs(sale.change_amount)} шт</span>
+                                                    <div className="flex items-center gap-2 mb-0.5">
+                                                        <h4 className="font-bold text-slate-900 text-sm leading-tight truncate">{sale.product_name}</h4>
+                                                        {sale.reason?.toLowerCase().includes('в счет зп') && (
+                                                            <Badge className="bg-purple-100 text-purple-700 border-purple-200 text-[8px] h-3.5 px-1 uppercase font-black">
+                                                                ЗП
+                                                            </Badge>
+                                                        )}
                                                     </div>
+                                                    {sale.reason && (
+                                                        <p className="text-[10px] text-blue-600 font-medium italic mb-1 line-clamp-2 leading-tight">
+                                                            {sale.reason}
+                                                        </p>
+                                                    )}
+                                                    <div className="flex items-center gap-2 text-[10px] text-slate-500 mt-0.5">
+                                                         <Clock className="h-2.5 w-2.5" />
+                                                         {new Date(sale.created_at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
+                                                         <span className="mx-1">•</span>
+                                                         <span className="text-blue-600 font-bold">{Math.abs(sale.change_amount)} шт</span>
+                                                     </div>
                                                 </div>
 
                                                 <div className="flex flex-col items-end gap-1 px-2">
@@ -548,9 +589,10 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
                                                          <Trash2 className="h-4 w-4" />
                                                      </Button>
                                                  </div>
-                                            </div>
-                                        ))}
-                                    </div>
+                                             </div>
+                                             )
+                                         })}
+                                     </div>
                                 </div>
                             )}
                         </div>

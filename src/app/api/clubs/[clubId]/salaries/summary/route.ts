@@ -102,7 +102,9 @@ export async function GET(
         // Process employees to merge formula into the object structure expected by logic
         const employees = employeesRes.rows.map((row: any) => {
             const formula = row.scheme_formula || {};
-            const periodBonuses = row.period_bonuses || formula.period_bonuses || [];
+            const periodBonuses = (Array.isArray(row.period_bonuses) && row.period_bonuses.length > 0)
+                ? row.period_bonuses
+                : (formula.period_bonuses || []);
             const bonuses = formula.bonuses || [];
             
             return {
@@ -444,8 +446,22 @@ export async function GET(
                             current_reward_type = bonus.reward_type === 'FIXED' ? 'FIXED' : 'PERCENT';
                         }
                     } else {
-                        target_value = mode === 'SHIFT' ? shifts_count * (bonus.target_per_shift || 0) : (bonus.target_per_shift || 0) / (standard_shifts || 1) * shifts_count;
+                        // Single target KPI (not progressive)
+                        target_value = mode === 'SHIFT' 
+                            ? (bonus.target_per_shift || 0) * shifts_count 
+                            : (bonus.target_value || 0) / (standard_shifts || 1) * shifts_count;
+                        
                         is_met = shifts_count > 0 && current_value >= target_value;
+                        
+                        if (is_met) {
+                            if (bonus.reward_type === 'FIXED') {
+                                current_reward_value = bonus.reward_value;
+                            } else {
+                                current_reward_value = bonus.reward_value; // Store percent value
+                            }
+                        } else {
+                            current_reward_value = 0;
+                        }
                     }
 
                     progress_percent = target_value > 0 ? (current_value / target_value) * 100 : (shifts_count > 0 ? 100 : 0);

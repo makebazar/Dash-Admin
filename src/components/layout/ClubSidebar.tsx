@@ -21,7 +21,9 @@ import {
     Wrench,
     Monitor,
     Shield,
-    Loader2
+    Loader2,
+    MessageSquare,
+    BookOpen
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -73,9 +75,11 @@ export function ClubSidebarContent({ club, clubId, onLinkClick }: ClubSidebarCon
         { href: `/clubs/${clubId}/schedule`, label: 'График работы', icon: <Calendar className="h-4 w-4" />, visible: hasPermission('view_schedule') },
         { href: `/clubs/${clubId}/employees`, label: 'Сотрудники', icon: <Users className="h-4 w-4" />, visible: hasPermission('manage_employees') },
         { href: `/clubs/${clubId}/salaries`, label: 'Зарплаты', icon: <Wallet className="h-4 w-4" />, visible: hasPermission('view_salaries') },
+        { href: `/clubs/${clubId}/requests`, label: 'Запросы сотрудников', icon: <MessageSquare className="h-4 w-4" />, visible: hasPermission('manage_employees') },
         { href: `/clubs/${clubId}/finance`, label: 'Финансы', icon: <DollarSign className="h-4 w-4" />, visible: hasPermission('view_finance') },
         { href: `/clubs/${clubId}/inventory`, label: 'Склад', icon: <Package className="h-4 w-4" />, visible: hasPermission('manage_inventory') },
         { href: `/clubs/${clubId}/equipment`, label: 'Оборудование', icon: <Monitor className="h-4 w-4" />, visible: hasPermission('manage_equipment') },
+        { href: `/clubs/${clubId}/kb`, label: 'База знаний', icon: <BookOpen className="h-4 w-4" />, visible: true },
         { href: `/clubs/${clubId}/reviews`, label: 'Центр проверок', icon: <ClipboardCheck className="h-4 w-4" />, visible: hasPermission('view_reviews') },
     ]
 

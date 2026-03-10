@@ -420,7 +420,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                             {isClosed ? <Badge className="bg-green-500">Завершено</Badge> : <Badge className="bg-amber-500">В процессе</Badge>}
                         </h2>
                         <p className="text-sm text-muted-foreground">
-                            Начата: {new Date(inventory.started_at).toLocaleString()} 
+                            Начата: {new Date(inventory.started_at).toLocaleString('ru-RU')} 
                             {inventory.target_metric_key && (
                                 <> | Метрика: <code className="bg-slate-100 px-1 rounded">{inventory.target_metric_key}</code></>
                             )}
@@ -614,7 +614,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                                                             </TableCell>
                                                             {inventory.target_metric_key && (
                                                                 <TableCell className="text-right font-bold">
-                                                                    {revenue.toLocaleString()} ₽
+                                                                    {revenue.toLocaleString('ru-RU')} ₽
                                                                 </TableCell>
                                                             )}
                                                         </>
@@ -683,7 +683,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                                                                     {difference === 0 ? "OK" : difference > 0 ? `-${difference}` : `+${Math.abs(difference)}`}
                                                                 </span>
                                                                 {inventory.target_metric_key && (
-                                                                    <span className="text-xs font-bold text-slate-700">{revenue.toLocaleString()} ₽</span>
+                                                                    <span className="text-xs font-bold text-slate-700">{revenue.toLocaleString('ru-RU')} ₽</span>
                                                                 )}
                                                             </div>
                                                         </div>
