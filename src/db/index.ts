@@ -10,16 +10,13 @@ const envLocalPath = path.resolve(process.cwd(), '.env.local');
 
 // Load .env if exists
 if (fs.existsSync(envPath)) {
-    dotenv.config({ path: envPath });
+    dotenv.config({ path: envPath, quiet: true });
 }
 
 // Load .env.local if exists (will override .env values)
 if (fs.existsSync(envLocalPath)) {
-    dotenv.config({ path: envLocalPath, override: true });
+    dotenv.config({ path: envLocalPath, override: true, quiet: true });
 }
-
-// Fallback to default dotenv.config() which loads .env
-dotenv.config();
 
 
 // Use a global variable to store the pool in development to avoid connection exhaustion

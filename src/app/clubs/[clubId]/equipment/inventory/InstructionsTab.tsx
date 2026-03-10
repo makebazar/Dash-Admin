@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect } from "react"
 import { useParams } from "next/navigation"
 import {
     Loader2,
@@ -45,10 +45,6 @@ export function InstructionsTab() {
     const [interval, setInterval] = useState<number>(30)
     const [applyToExisting, setApplyToExisting] = useState(false)
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
-
-    useEffect(() => {
-        import("quill")
-    }, [])
 
     useEffect(() => {
         fetchData()

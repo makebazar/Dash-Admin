@@ -8,8 +8,8 @@ const envLocalPath = path.resolve(process.cwd(), '.env.local');
 const envPath = path.resolve(process.cwd(), '.env');
 
 // Load in reverse order: .env first, then .env.local (overrides)
-dotenv.config({ path: envPath });
-dotenv.config({ path: envLocalPath });
+dotenv.config({ path: envPath, quiet: true });
+dotenv.config({ path: envLocalPath, quiet: true });
 
 const nextConfig: NextConfig = {
   output: 'standalone',
