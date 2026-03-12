@@ -1094,18 +1094,93 @@ export function ShiftClosingWizard({
                             <div className="grid gap-5">
                                 {reportTemplate?.schema.map((field: any, idx: number) => (
                                     <div key={idx} className="space-y-2">
-                                        <Label className="text-slate-400 text-xs uppercase tracking-wider ml-1">
-                                            {field.custom_label}
-                                            {field.is_required && <span className="text-red-500 ml-1">*</span>}
-                                        </Label>
-                                        <Input
-                                            required={field.is_required}
-                                            type={field.metric_key.includes('comment') ? 'text' : 'number'}
-                                            inputMode={field.metric_key.includes('comment') ? 'text' : 'numeric'}
-                                            className="bg-slate-900 border-slate-800 h-12 rounded-xl focus:ring-2 focus:ring-purple-500 transition-all text-lg font-medium"
-                                            value={reportData[field.metric_key] || ''}
-                                            onChange={(e) => setReportData({ ...reportData, [field.metric_key]: e.target.value })}
-                                        />
+                                        {field.field_type === 'EXPENSE_LIST' ? (
+                                            <div className="space-y-3">
+                                                <div className="flex items-center justify-between">
+                                                    <Label className="text-slate-400 text-xs uppercase tracking-wider ml-1">
+                                                        {field.custom_label || field.metric_key}
+                                                        {field.is_required && <span className="text-red-500 ml-1">*</span>}
+                                                    </Label>
+                                                    <Button 
+                                                        variant="ghost" 
+                                                        size="sm" 
+                                                        onClick={() => {
+                                                            const currentList = reportData[field.metric_key] || []
+                                                            setReportData({
+                                                                ...reportData,
+                                                                [field.metric_key]: [...currentList, { amount: '', comment: '' }]
+                                                            })
+                                                        }}
+                                                        className="h-7 text-[10px] text-purple-400 hover:text-purple-300 hover:bg-purple-400/10"
+                                                    >
+                                                        <Plus className="h-3 w-3 mr-1" /> Добавить расход
+                                                    </Button>
+                                                </div>
+                                                
+                                                <div className="space-y-3">
+                                                    {(reportData[field.metric_key] || []).map((item: any, itemIdx: number) => (
+                                                        <div key={itemIdx} className="flex gap-2 items-start animate-in slide-in-from-right-2 duration-200">
+                                                            <div className="flex-1 space-y-2">
+                                                                <Input
+                                                                    type="number"
+                                                                    placeholder="Сумма"
+                                                                    className="bg-slate-900 border-slate-800 h-10 rounded-xl focus:ring-2 focus:ring-purple-500"
+                                                                    value={item.amount}
+                                                                    onChange={(e) => {
+                                                                        const newList = [...(reportData[field.metric_key] || [])]
+                                                                        newList[itemIdx] = { ...newList[itemIdx], amount: e.target.value }
+                                                                        setReportData({ ...reportData, [field.metric_key]: newList })
+                                                                    }}
+                                                                />
+                                                                <Input
+                                                                    placeholder="На что потрачено?"
+                                                                    className="bg-slate-900 border-slate-800 h-10 rounded-xl text-xs focus:ring-2 focus:ring-purple-500"
+                                                                    value={item.comment}
+                                                                    onChange={(e) => {
+                                                                        const newList = [...(reportData[field.metric_key] || [])]
+                                                                        newList[itemIdx] = { ...newList[itemIdx], comment: e.target.value }
+                                                                        setReportData({ ...reportData, [field.metric_key]: newList })
+                                                                    }}
+                                                                />
+                                                            </div>
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                onClick={() => {
+                                                                    const newList = [...(reportData[field.metric_key] || [])]
+                                                                    newList.splice(itemIdx, 1)
+                                                                    setReportData({ ...reportData, [field.metric_key]: newList })
+                                                                }}
+                                                                className="h-10 w-10 text-slate-500 hover:text-red-400"
+                                                            >
+                                                                <Trash2 className="h-4 w-4" />
+                                                            </Button>
+                                                        </div>
+                                                    ))}
+                                                    
+                                                    {(!reportData[field.metric_key] || reportData[field.metric_key].length === 0) && (
+                                                        <div className="text-center py-4 bg-slate-900/30 border border-dashed border-slate-800 rounded-xl text-slate-500 text-[10px] uppercase font-bold">
+                                                            Расходов не зафиксировано
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <>
+                                                <Label className="text-slate-400 text-xs uppercase tracking-wider ml-1">
+                                                    {field.custom_label}
+                                                    {field.is_required && <span className="text-red-500 ml-1">*</span>}
+                                                </Label>
+                                                <Input
+                                                    required={field.is_required}
+                                                    type={field.metric_key.includes('comment') ? 'text' : 'number'}
+                                                    inputMode={field.metric_key.includes('comment') ? 'text' : 'numeric'}
+                                                    className="bg-slate-900 border-slate-800 h-12 rounded-xl focus:ring-2 focus:ring-purple-500 transition-all text-lg font-medium"
+                                                    value={reportData[field.metric_key] || ''}
+                                                    onChange={(e) => setReportData({ ...reportData, [field.metric_key]: e.target.value })}
+                                                />
+                                            </>
+                                        )}
                                     </div>
                                 ))}
                             </div>

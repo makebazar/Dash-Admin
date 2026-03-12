@@ -688,7 +688,11 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
         return reportFields.map(field => {
             const total = filteredShifts.reduce((sum, s) => {
                 if (s.report_data && s.report_data[field.metric_key]) {
-                    return sum + (parseFloat(String(s.report_data[field.metric_key])) || 0)
+                    const value = s.report_data[field.metric_key]
+                    if (field.field_type === 'EXPENSE_LIST' && Array.isArray(value)) {
+                        return sum + value.reduce((itemSum, item) => itemSum + (parseFloat(String(item.amount)) || 0), 0)
+                    }
+                    return sum + (parseFloat(String(value)) || 0)
                 }
                 return sum
             }, 0)
@@ -704,7 +708,7 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
 
     const totalCustomExpenses = useMemo(() => 
         customFieldTotals
-            .filter(f => f.field_type === 'EXPENSE')
+            .filter(f => f.field_type === 'EXPENSE' || f.field_type === 'EXPENSE_LIST')
             .reduce((sum, f) => sum + f.total, 0),
     [customFieldTotals])
 
@@ -943,9 +947,9 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                     </CardContent>
                 </Card>
 
-                {/* Dynamic Expense Cards */}
-                {customFieldTotals.filter(f => f.field_type === 'EXPENSE' && f.show_in_stats).map(field => (
-                    <Card key={field.metric_key} className="overflow-hidden relative border-none bg-red-500/5 shadow-none">
+                {/* Expense Cards */}
+                {customFieldTotals.filter(f => (f.field_type === 'EXPENSE' || f.field_type === 'EXPENSE_LIST') && f.show_in_stats).map(field => (
+                    <Card key={field.metric_key} className="overflow-hidden relative border-none bg-rose-500/5 shadow-none">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
                             <CardTitle className="text-sm font-medium text-red-600">{field.custom_label}</CardTitle>
                             <TrendingUp className="h-4 w-4 text-red-500" />

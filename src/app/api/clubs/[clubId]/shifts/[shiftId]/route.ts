@@ -26,9 +26,10 @@ async function createFinanceTransactionsFromShift(
 
     const schema = templateResult.rows[0].schema;
     const incomeFields = schema.filter((field: any) => field.field_type === 'INCOME');
+    const expenseFields = schema.filter((field: any) => ['EXPENSE', 'EXPENSE_LIST'].includes(field.field_type));
 
     // Get "Выручка клуба" category
-    const categoryResult = await query(
+    const incomeCategoryResult = await query(
         `SELECT id FROM finance_categories 
          WHERE name = 'Выручка клуба' AND type = 'income'
          AND (club_id = $1 OR club_id IS NULL)
@@ -36,11 +37,21 @@ async function createFinanceTransactionsFromShift(
         [clubId]
     );
 
-    if (categoryResult.rows.length === 0) {
+    // Get "Прочие расходы" category for expenses
+    const expenseCategoryResult = await query(
+        `SELECT id FROM finance_categories 
+         WHERE name = 'Прочие расходы' AND type = 'expense'
+         AND (club_id = $1 OR club_id IS NULL)
+         ORDER BY club_id DESC NULLS LAST LIMIT 1`,
+        [clubId]
+    );
+
+    if (incomeCategoryResult.rows.length === 0) {
         throw new Error('Revenue category not found');
     }
 
-    const categoryId = categoryResult.rows[0].id;
+    const incomeCategoryId = incomeCategoryResult.rows[0].id;
+    const expenseCategoryId = expenseCategoryResult.rows[0]?.id || 10; // Fallback to system ID 10
 
     // Create transactions for each income field
     for (const field of incomeFields) {
@@ -50,6 +61,9 @@ async function createFinanceTransactionsFromShift(
             amount = Number(shiftData.cash_income) || 0;
         } else if (field.metric_key === 'card_income') {
             amount = Number(shiftData.card_income) || 0;
+        } else if (field.metric_key === 'Bar') {
+            // Bar revenue is already included in cash/card income
+            continue;
         } else {
             // Custom fields from report_data
             amount = Number(shiftData.report_data?.[field.metric_key]) || 0;
@@ -64,7 +78,7 @@ async function createFinanceTransactionsFromShift(
                 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
                 [
                     clubId,
-                    categoryId,
+                    incomeCategoryId,
                     amount,
                     'income',
                     field.metric_key,
@@ -76,6 +90,65 @@ async function createFinanceTransactionsFromShift(
                     userId
                 ]
             );
+        }
+    }
+
+    // Create transactions for each expense field
+    for (const field of expenseFields) {
+        const value = shiftData.report_data?.[field.metric_key];
+        
+        if (field.field_type === 'EXPENSE_LIST' && Array.isArray(value)) {
+            for (const item of value) {
+                const amount = Number(item.amount) || 0;
+                if (amount > 0) {
+                    await query(
+                        `INSERT INTO finance_transactions (
+                            club_id, category_id, amount, type, payment_method,
+                            account_id, related_shift_report_id, transaction_date,
+                            description, status, created_by
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+                        [
+                            clubId,
+                            expenseCategoryId,
+                            amount,
+                            'expense',
+                            'cash',
+                            field.account_id || 9, // Fallback to Kassa
+                            shiftId,
+                            shiftData.check_in,
+                            item.comment || field.custom_label || field.metric_key,
+                            'completed',
+                            userId
+                        ]
+                    );
+                }
+            }
+        } else {
+            // Handle both simple number/string and fallback for non-array EXPENSE_LIST
+            const amount = Number(value) || 0;
+
+            if (amount > 0) {
+                await query(
+                    `INSERT INTO finance_transactions (
+                        club_id, category_id, amount, type, payment_method,
+                        account_id, related_shift_report_id, transaction_date,
+                        description, status, created_by
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+                    [
+                        clubId,
+                        expenseCategoryId,
+                        amount,
+                        'expense',
+                        'cash', // Expenses from shifts are usually cash
+                        field.account_id || 9, // Fallback to Kassa
+                        shiftId,
+                        shiftData.check_in,
+                        field.custom_label || field.metric_key,
+                        'completed',
+                        userId
+                    ]
+                );
+            }
         }
     }
 }

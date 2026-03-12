@@ -19,6 +19,7 @@ export async function POST(
             body = {};
         }
         const photos = body.photos || null;
+        const notes = body.notes || null;
 
         if (!userId) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -84,12 +85,13 @@ export async function POST(
                  completed_at = CURRENT_TIMESTAMP,
                  completed_by = $2,
                  photos = $3,
-                 bonus_earned = $4,
-                 kpi_points = $5,
-                 applied_kpi_multiplier = $6
+                 notes = $4,
+                 bonus_earned = $5,
+                 kpi_points = $6,
+                 applied_kpi_multiplier = $7
              WHERE id = $1
              RETURNING equipment_id`,
-            [taskId, userId, photos, bonusEarned, kpiPoints, appliedMultiplier]
+            [taskId, userId, photos, notes, bonusEarned, kpiPoints, appliedMultiplier]
         );
 
         if ((completeTask.rowCount || 0) === 0) {

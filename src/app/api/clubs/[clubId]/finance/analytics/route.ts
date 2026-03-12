@@ -150,6 +150,36 @@ export async function GET(
             values
         );
 
+        // 6. DDS BREAKDOWN (Cash Flow Statement)
+        const ddsBreakdown = await query(
+            `SELECT 
+                fc.activity_type,
+                ft.type,
+                SUM(ft.amount) as total_amount
+            FROM finance_transactions ft
+            JOIN finance_categories fc ON ft.category_id = fc.id
+            WHERE ft.club_id = $1 ${dateCondition} AND ft.status = 'completed'
+            GROUP BY fc.activity_type, ft.type
+            ORDER BY fc.activity_type, ft.type`,
+            values
+        );
+
+        const dds = {
+            operating: { income: 0, expense: 0, net: 0 },
+            investing: { income: 0, expense: 0, net: 0 },
+            financing: { income: 0, expense: 0, net: 0 }
+        };
+
+        ddsBreakdown.rows.forEach(row => {
+            const type = row.activity_type as keyof typeof dds;
+            if (row.type === 'income') {
+                dds[type].income = parseFloat(row.total_amount || 0);
+            } else {
+                dds[type].expense = parseFloat(row.total_amount || 0);
+            }
+            dds[type].net = dds[type].income - dds[type].expense;
+        });
+
         return NextResponse.json({
             summary: {
                 total_income: totalIncome,
@@ -177,6 +207,7 @@ export async function GET(
                 ...r,
                 total_amount: parseFloat(r.total_amount)
             })),
+            dds_breakdown: dds,
             break_even_point: 0,
             upcoming_payments: []
         });

@@ -48,6 +48,7 @@ export function MaintenanceSessionWizard({ isOpen, onClose, tasks, onComplete }:
     const [hasIssue, setHasIssue] = useState(false)
     const [issueTitle, setIssueTitle] = useState("")
     const [issueDescription, setIssueDescription] = useState("")
+    const [generalNotes, setGeneralNotes] = useState("")
     
     // Photo upload state
     const [photos, setPhotos] = useState<File[]>([])
@@ -88,6 +89,7 @@ export function MaintenanceSessionWizard({ isOpen, onClose, tasks, onComplete }:
         setHasIssue(false)
         setIssueTitle("")
         setIssueDescription("")
+        setGeneralNotes("")
         setPhotos([])
     }
 
@@ -124,7 +126,10 @@ export function MaintenanceSessionWizard({ isOpen, onClose, tasks, onComplete }:
             await fetch(`/api/clubs/${clubId}/equipment/maintenance/${currentTask.id}/complete`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ photos: photoUrls })
+                body: JSON.stringify({ 
+                    photos: photoUrls,
+                    notes: hasIssue ? `[ИНЦИДЕНТ] ${issueTitle}: ${issueDescription}` : generalNotes 
+                })
             })
 
             // 2. Report issue if any
@@ -301,7 +306,7 @@ export function MaintenanceSessionWizard({ isOpen, onClose, tasks, onComplete }:
                                 </div>
                             </div>
 
-                            {hasIssue && (
+                            {hasIssue ? (
                                 <div className="space-y-4 animate-in fade-in slide-in-from-top-4 duration-300">
                                     <div className="space-y-2">
                                         <Label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Что случилось?</Label>
@@ -319,6 +324,18 @@ export function MaintenanceSessionWizard({ isOpen, onClose, tasks, onComplete }:
                                             className="resize-none h-24 rounded-xl border-slate-200 focus:ring-indigo-500/20" 
                                             value={issueDescription}
                                             onChange={(e) => setIssueDescription(e.target.value)}
+                                        />
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="space-y-4 animate-in fade-in slide-in-from-top-4 duration-300">
+                                    <div className="space-y-2">
+                                        <Label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Примечание (необязательно)</Label>
+                                        <Textarea 
+                                            placeholder="Напр: Есть небольшая потертость, в целом всё ок" 
+                                            className="resize-none h-24 rounded-xl border-slate-200 focus:ring-indigo-500/20" 
+                                            value={generalNotes}
+                                            onChange={(e) => setGeneralNotes(e.target.value)}
                                         />
                                     </div>
                                 </div>

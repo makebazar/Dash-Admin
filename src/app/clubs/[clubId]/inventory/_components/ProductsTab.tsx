@@ -352,7 +352,7 @@ export function ProductsTab({ products, categories, warehouses, currentUserId, p
                         {filteredProducts.map(product => {
                             const isLowStock = product.min_stock_level > 0 && product.current_stock <= product.min_stock_level
                             return (
-                                <TableRow key={product.id} className={isLowStock ? "bg-red-50 hover:bg-red-100" : ""}>
+                                <TableRow key={product.id}>
                                     <TableCell>
                                         <input 
                                             type="checkbox"
@@ -395,7 +395,6 @@ export function ProductsTab({ products, categories, warehouses, currentUserId, p
                                                 </div>
                                             )}
                                         </div>
-                                        {isLowStock && <span className="ml-2 text-xs text-red-600 font-bold">!</span>}
                                     </TableCell>
                                     <TableCell>
                                         {product.category_name ? (
@@ -424,7 +423,7 @@ export function ProductsTab({ products, categories, warehouses, currentUserId, p
                                     </TableCell>
                                     <TableCell className="text-right whitespace-nowrap">
                                         <div className="flex flex-col items-end">
-                                            <span className={`text-sm font-medium ${isLowStock ? "text-red-600 font-bold" : ""}`}>
+                                            <span className="text-sm font-medium">
                                                 {product.current_stock} шт
                                             </span>
                                             {product.stocks && product.stocks.length > 0 && (
@@ -507,7 +506,6 @@ export function ProductsTab({ products, categories, warehouses, currentUserId, p
             {/* Mobile List View */}
             <div className="md:hidden space-y-3">
                 {filteredProducts.map(product => {
-                    const isLowStock = product.min_stock_level > 0 && product.current_stock <= product.min_stock_level
                     return (
                         <div key={product.id} className="bg-white rounded-xl border p-4 shadow-sm relative overflow-hidden active:bg-slate-50 transition-colors" onClick={() => {
                             setEditingProduct(product)
@@ -517,8 +515,6 @@ export function ProductsTab({ products, categories, warehouses, currentUserId, p
                             }
                             setIsDialogOpen(true)
                         }}>
-                            {isLowStock && <div className="absolute top-0 left-0 w-1.5 h-full bg-red-500" />}
-                            
                             <div className="flex justify-between items-start mb-3">
                                 <div className="flex gap-3">
                                     <div onClick={(e) => e.stopPropagation()}>
@@ -611,7 +607,7 @@ export function ProductsTab({ products, categories, warehouses, currentUserId, p
                                 <div className="text-right">
                                     <p className="text-[10px] text-slate-400 uppercase font-black tracking-widest mb-1">В наличии</p>
                                     <div className="flex items-center justify-end gap-1.5">
-                                        <span className={isLowStock ? "text-xl font-black text-red-600" : "text-xl font-black text-slate-900"}>
+                                        <span className="text-xl font-black text-slate-900">
                                             {product.current_stock}
                                         </span>
                                         <span className="text-xs text-slate-400 font-bold">шт</span>

@@ -7,8 +7,9 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
-import { Loader2, Plus, GripVertical, Save, Trash2, ArrowLeft } from "lucide-react"
+import { Loader2, Plus, GripVertical, Save, Trash2, ArrowLeft, Minus, List } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
+import { cn } from "@/lib/utils"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import Link from "next/link"
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from "@dnd-kit/core"
@@ -29,7 +30,7 @@ interface TemplateField {
     metric_key: string
     custom_label: string // Владелец может переименовать "Cash" в "Касса Бар"
     is_required: boolean
-    field_type: 'INCOME' | 'EXPENSE' | 'OTHER'
+    field_type: 'INCOME' | 'EXPENSE' | 'EXPENSE_LIST' | 'OTHER'
     show_in_stats: boolean
     show_for_employee?: boolean
     account_id?: number // For INCOME fields - which account to credit
@@ -132,10 +133,10 @@ function SortableField({
 
                     <div className="space-y-3">
                         <Label className="text-xs font-medium text-muted-foreground">Тип операции</Label>
-                        <div className="grid grid-cols-3 gap-2 bg-muted/50 p-1 rounded-lg">
+                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 bg-muted/50 p-1 rounded-lg">
                             <button
                                 onClick={() => onUpdate(index, 'field_type', 'INCOME')}
-                                className={`flex items-center justify-center gap-1.5 py-1.5 text-xs font-medium rounded-md transition-all ${
+                                className={`flex items-center justify-center gap-1.5 py-1.5 text-[10px] lg:text-xs font-medium rounded-md transition-all ${
                                     field.field_type === 'INCOME'
                                         ? 'bg-emerald-500 text-white shadow-sm'
                                         : 'text-muted-foreground hover:bg-background/50'
@@ -145,17 +146,27 @@ function SortableField({
                             </button>
                             <button
                                 onClick={() => onUpdate(index, 'field_type', 'EXPENSE')}
-                                className={`flex items-center justify-center gap-1.5 py-1.5 text-xs font-medium rounded-md transition-all ${
+                                className={`flex items-center justify-center gap-1.5 py-1.5 text-[10px] lg:text-xs font-medium rounded-md transition-all ${
                                     field.field_type === 'EXPENSE'
                                         ? 'bg-orange-500 text-white shadow-sm'
                                         : 'text-muted-foreground hover:bg-background/50'
                                 }`}
                             >
-                                <Trash2 className="h-3 w-3 rotate-180" /> Расход
+                                <Minus className="h-3 w-3" /> Расход
+                            </button>
+                            <button
+                                onClick={() => onUpdate(index, 'field_type', 'EXPENSE_LIST')}
+                                className={`flex items-center justify-center gap-1.5 py-1.5 text-[10px] lg:text-xs font-medium rounded-md transition-all ${
+                                    field.field_type === 'EXPENSE_LIST'
+                                        ? 'bg-purple-500 text-white shadow-sm'
+                                        : 'text-muted-foreground hover:bg-background/50'
+                                }`}
+                            >
+                                <List className="h-3 w-3" /> Список
                             </button>
                             <button
                                 onClick={() => onUpdate(index, 'field_type', 'OTHER')}
-                                className={`flex items-center justify-center gap-1.5 py-1.5 text-xs font-medium rounded-md transition-all ${
+                                className={`flex items-center justify-center gap-1.5 py-1.5 text-[10px] lg:text-xs font-medium rounded-md transition-all ${
                                     field.field_type === 'OTHER' || !field.field_type
                                         ? 'bg-background text-foreground shadow-sm'
                                         : 'text-muted-foreground hover:bg-background/50'
@@ -166,17 +177,28 @@ function SortableField({
                         </div>
                     </div>
 
-                    {field.field_type === 'INCOME' && (
+                    {(field.field_type === 'INCOME' || field.field_type === 'EXPENSE' || field.field_type === 'EXPENSE_LIST') && (
                         <div className="animate-in fade-in slide-in-from-top-2 duration-300">
-                            <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-100/50 space-y-3">
-                                <div className="flex items-center gap-2 text-emerald-700">
-                                    <Label className="text-[11px] font-bold uppercase tracking-wider">Куда зачислять деньги?</Label>
+                            <div className={cn(
+                                "p-4 rounded-xl border space-y-3",
+                                field.field_type === 'INCOME' ? "bg-emerald-50/50 border-emerald-100/50" : "bg-orange-50/50 border-orange-100/50"
+                            )}>
+                                <div className={cn(
+                                    "flex items-center gap-2",
+                                    field.field_type === 'INCOME' ? "text-emerald-700" : "text-orange-700"
+                                )}>
+                                    <Label className="text-[11px] font-bold uppercase tracking-wider">
+                                        {field.field_type === 'INCOME' ? "Куда зачислять деньги?" : "Откуда списывать деньги?"}
+                                    </Label>
                                 </div>
                                 <Select
                                     value={field.account_id?.toString()}
                                     onValueChange={(value: string) => onUpdate(index, 'account_id', parseInt(value))}
                                 >
-                                    <SelectTrigger className="bg-background border-emerald-200/50 h-10 font-medium hover:border-emerald-300 transition-colors shadow-none">
+                                    <SelectTrigger className={cn(
+                                        "bg-background h-10 font-medium hover:border-emerald-300 transition-colors shadow-none",
+                                        field.field_type === 'INCOME' ? "border-emerald-200/50" : "border-orange-200/50"
+                                    )}>
                                         <SelectValue placeholder="Выберите счёт" />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -190,8 +212,13 @@ function SortableField({
                                         ))}
                                     </SelectContent>
                                 </Select>
-                                <p className="text-[10px] text-emerald-600/70 leading-relaxed">
-                                    Сумма из этого поля будет автоматически добавлена на выбранный баланс.
+                                <p className={cn(
+                                    "text-[10px] leading-relaxed",
+                                    field.field_type === 'INCOME' ? "text-emerald-600/70" : "text-orange-600/70"
+                                )}>
+                                    {field.field_type === 'INCOME' 
+                                        ? "Сумма из этого поля будет автоматически добавлена на выбранный баланс."
+                                        : "Суммы расходов будут автоматически вычитаться с выбранного баланса."}
                                 </p>
                             </div>
                         </div>

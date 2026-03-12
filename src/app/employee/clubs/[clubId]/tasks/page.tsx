@@ -26,7 +26,7 @@ import { MaintenanceSessionWizard } from "@/app/clubs/[clubId]/equipment/mainten
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
-import { Fragment } from "react"
+import { Progress } from "@/components/ui/progress"
 
 interface MaintenanceTask {
     id: string
@@ -49,6 +49,13 @@ export default function EmployeeTasksPage() {
     const [freeTasks, setFreeTasks] = useState<MaintenanceTask[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [isUpdating, setIsUpdating] = useState<string | null>(null)
+    const [apiStats, setApiStats] = useState<{
+        overdue_count: number;
+        due_today_count: number;
+        upcoming_count: number;
+        completed_count: number;
+    } | null>(null)
+    const [filterMode, setFilterMode] = useState<'current' | 'all'>('current')
     
     // Session Wizard State
     const [isSessionOpen, setIsSessionOpen] = useState(false)
@@ -89,7 +96,17 @@ export default function EmployeeTasksPage() {
             const assignedData = await assignedRes.json()
             const freeData = await freeRes.json()
 
-            if (assignedRes.ok) setTasks(assignedData.tasks || [])
+            if (assignedRes.ok) {
+                setTasks(assignedData.tasks || [])
+                if (assignedData.stats) {
+                    setApiStats({
+                        overdue_count: parseInt(assignedData.stats.overdue_count || '0'),
+                        due_today_count: parseInt(assignedData.stats.due_today_count || '0'),
+                        upcoming_count: parseInt(assignedData.stats.upcoming_count || '0'),
+                        completed_count: parseInt(assignedData.stats.completed_count || '0')
+                    })
+                }
+            }
             if (freeRes.ok) setFreeTasks(freeData.tasks || [])
         } catch (error) {
             console.error("Error fetching tasks:", error)
@@ -160,8 +177,16 @@ export default function EmployeeTasksPage() {
 
     const groupedTasks = useMemo(() => {
         const groups: Record<string, MaintenanceTask[]> = {}
+        const todayStr = format(new Date(), 'yyyy-MM-dd')
         
         tasks.forEach(task => {
+            if (filterMode === 'current') {
+                const isOverdue = task.status === 'PENDING' && task.due_date < todayStr
+                const isTodayTask = task.status === 'PENDING' && task.due_date === todayStr
+                const isInProgress = task.status === 'IN_PROGRESS'
+                if (!isOverdue && !isTodayTask && !isInProgress) return
+            }
+
             const location = task.workstation_name || "Склад"
             if (!groups[location]) groups[location] = []
             groups[location].push(task)
@@ -172,7 +197,7 @@ export default function EmployeeTasksPage() {
             if (b === "Склад") return 1
             return a.localeCompare(b)
         })
-    }, [tasks])
+    }, [tasks, filterMode])
 
     const groupedFreeTasks = useMemo(() => {
         const groups: Record<string, MaintenanceTask[]> = {}
@@ -346,62 +371,195 @@ export default function EmployeeTasksPage() {
                 </div>
             </div>
 
-            {/* Stats Summary */}
-            <div className="grid grid-cols-3 gap-3 md:gap-6">
-                <Card className="border-none shadow-sm bg-blue-50/50 dark:bg-blue-900/10">
-                    <CardContent className="p-3 md:p-6">
-                        <div className="flex items-center justify-between">
-                            <div className="min-w-0">
-                                <p className="text-[9px] md:text-xs font-black uppercase tracking-widest text-blue-600 dark:text-blue-400 mb-0.5">Всего</p>
-                                <p className="text-xl md:text-3xl font-black text-blue-900 dark:text-blue-100">{stats.total}</p>
+            {/* Progress and Stats */}
+            <div className="space-y-4">
+                {/* Monthly Plan Progress */}
+                {apiStats && (
+                    <Card className="border-none shadow-sm bg-white dark:bg-slate-800/50">
+                        <CardContent className="p-4 md:p-6">
+                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+                                <div>
+                                    <h3 className="text-sm font-black uppercase tracking-wider">План на месяц</h3>
+                                    <p className="text-xs text-muted-foreground mt-0.5">Общий прогресс по обслуживанию</p>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <div className="text-right">
+                                        <span className="text-xl font-black text-emerald-600">
+                                            {apiStats.completed_count}
+                                        </span>
+                                        <span className="text-sm font-bold text-muted-foreground ml-1">
+                                            / {apiStats.completed_count + apiStats.overdue_count + apiStats.due_today_count + apiStats.upcoming_count}
+                                        </span>
+                                    </div>
+                                    <Badge variant="secondary" className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 font-bold">
+                                        {Math.round((apiStats.completed_count / (apiStats.completed_count + apiStats.overdue_count + apiStats.due_today_count + apiStats.upcoming_count || 1)) * 100)}%
+                                    </Badge>
+                                </div>
                             </div>
-                            <div className="hidden md:flex h-10 w-10 bg-white dark:bg-slate-800 rounded-xl items-center justify-center text-blue-600 shadow-sm">
-                                <Monitor className="h-5 w-5" />
+                            <Progress 
+                                value={(apiStats.completed_count / (apiStats.completed_count + apiStats.overdue_count + apiStats.due_today_count + apiStats.upcoming_count || 1)) * 100} 
+                                className="h-2 bg-slate-100 dark:bg-slate-700"
+                            />
+                        </CardContent>
+                    </Card>
+                )}
+
+                {/* Stats Grid */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-6">
+                    {/* Overdue */}
+                    <Card className={cn(
+                        "border-none shadow-sm transition-all",
+                        (apiStats?.overdue_count || 0) > 0 
+                            ? "bg-rose-50/80 dark:bg-rose-900/10 ring-1 ring-rose-200 dark:ring-rose-900/30" 
+                            : "bg-white dark:bg-slate-800/50"
+                    )}>
+                        <CardContent className="p-3 md:p-6">
+                            <div className="flex items-center justify-between">
+                                <div className="min-w-0">
+                                    <p className={cn(
+                                        "text-[9px] md:text-xs font-black uppercase tracking-widest mb-0.5",
+                                        (apiStats?.overdue_count || 0) > 0 ? "text-rose-600" : "text-muted-foreground"
+                                    )}>Просрочено</p>
+                                    <p className={cn(
+                                        "text-xl md:text-3xl font-black",
+                                        (apiStats?.overdue_count || 0) > 0 ? "text-rose-700 dark:text-rose-300" : "text-slate-900 dark:text-slate-100"
+                                    )}>{apiStats?.overdue_count || 0}</p>
+                                </div>
+                                <div className={cn(
+                                    "h-8 w-8 md:h-10 md:w-10 rounded-xl flex items-center justify-center shadow-sm",
+                                    (apiStats?.overdue_count || 0) > 0 ? "bg-rose-500 text-white" : "bg-slate-100 dark:bg-slate-700 text-slate-400"
+                                )}>
+                                    <AlertCircle className="h-4 w-4 md:h-5 md:w-5" />
+                                </div>
                             </div>
-                        </div>
-                    </CardContent>
-                </Card>
-                <Card className="border-none shadow-sm bg-indigo-50/50 dark:bg-indigo-900/10">
-                    <CardContent className="p-3 md:p-6">
-                        <div className="flex items-center justify-between">
-                            <div className="min-w-0">
-                                <p className="text-[9px] md:text-xs font-black uppercase tracking-widest text-indigo-600 dark:text-indigo-400 mb-0.5">В работе</p>
-                                <p className="text-xl md:text-3xl font-black text-indigo-900 dark:text-indigo-100">{stats.in_progress}</p>
+                        </CardContent>
+                    </Card>
+
+                    {/* Today */}
+                    <Card className={cn(
+                        "border-none shadow-sm transition-all",
+                        (apiStats?.due_today_count || 0) > 0 
+                            ? "bg-blue-50/80 dark:bg-blue-900/10 ring-1 ring-blue-200 dark:ring-blue-900/30" 
+                            : "bg-white dark:bg-slate-800/50"
+                    )}>
+                        <CardContent className="p-3 md:p-6">
+                            <div className="flex items-center justify-between">
+                                <div className="min-w-0">
+                                    <p className={cn(
+                                        "text-[9px] md:text-xs font-black uppercase tracking-widest mb-0.5",
+                                        (apiStats?.due_today_count || 0) > 0 ? "text-blue-600" : "text-muted-foreground"
+                                    )}>На сегодня</p>
+                                    <p className={cn(
+                                        "text-xl md:text-3xl font-black",
+                                        (apiStats?.due_today_count || 0) > 0 ? "text-blue-700 dark:text-blue-300" : "text-slate-900 dark:text-slate-100"
+                                    )}>{apiStats?.due_today_count || 0}</p>
+                                </div>
+                                <div className={cn(
+                                    "h-8 w-8 md:h-10 md:w-10 rounded-xl flex items-center justify-center shadow-sm",
+                                    (apiStats?.due_today_count || 0) > 0 ? "bg-blue-500 text-white" : "bg-slate-100 dark:bg-slate-700 text-slate-400"
+                                )}>
+                                    <Clock className="h-4 w-4 md:h-5 md:w-5" />
+                                </div>
                             </div>
-                            <div className="hidden md:flex h-10 w-10 bg-white dark:bg-slate-800 rounded-xl items-center justify-center text-indigo-600 shadow-sm">
-                                <Play className="h-5 w-5" />
+                        </CardContent>
+                    </Card>
+
+                    {/* In Progress */}
+                    <Card className={cn(
+                        "border-none shadow-sm transition-all",
+                        stats.in_progress > 0 
+                            ? "bg-indigo-50/80 dark:bg-indigo-900/10 ring-1 ring-indigo-200 dark:ring-indigo-900/30" 
+                            : "bg-white dark:bg-slate-800/50"
+                    )}>
+                        <CardContent className="p-3 md:p-6">
+                            <div className="flex items-center justify-between">
+                                <div className="min-w-0">
+                                    <p className={cn(
+                                        "text-[9px] md:text-xs font-black uppercase tracking-widest mb-0.5",
+                                        stats.in_progress > 0 ? "text-indigo-600" : "text-muted-foreground"
+                                    )}>В работе</p>
+                                    <p className={cn(
+                                        "text-xl md:text-3xl font-black",
+                                        stats.in_progress > 0 ? "text-indigo-700 dark:text-indigo-300" : "text-slate-900 dark:text-slate-100"
+                                    )}>{stats.in_progress}</p>
+                                </div>
+                                <div className={cn(
+                                    "h-8 w-8 md:h-10 md:w-10 rounded-xl flex items-center justify-center shadow-sm",
+                                    stats.in_progress > 0 ? "bg-indigo-500 text-white" : "bg-slate-100 dark:bg-slate-700 text-slate-400"
+                                )}>
+                                    <Play className="h-4 w-4 md:h-5 md:w-5" />
+                                </div>
                             </div>
-                        </div>
-                    </CardContent>
-                </Card>
-                <Card className="border-none shadow-sm bg-rose-50/50 dark:bg-rose-900/10">
-                    <CardContent className="p-3 md:p-6">
-                        <div className="flex items-center justify-between">
-                            <div className="min-w-0">
-                                <p className="text-[9px] md:text-xs font-black uppercase tracking-widest text-rose-600 dark:text-rose-400 mb-0.5">Срок</p>
-                                <p className="text-xl md:text-3xl font-black text-rose-900 dark:text-rose-100">{stats.overdue}</p>
+                        </CardContent>
+                    </Card>
+
+                    {/* Completed */}
+                    <Card className="border-none shadow-sm bg-emerald-50/50 dark:bg-emerald-900/10">
+                        <CardContent className="p-3 md:p-6">
+                            <div className="flex items-center justify-between">
+                                <div className="min-w-0">
+                                    <p className="text-[9px] md:text-xs font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400 mb-0.5">Выполнено</p>
+                                    <p className="text-xl md:text-3xl font-black text-emerald-900 dark:text-emerald-100">{apiStats?.completed_count || 0}</p>
+                                </div>
+                                <div className="h-8 w-8 md:h-10 md:w-10 bg-emerald-500 text-white rounded-xl flex items-center justify-center shadow-sm">
+                                    <CheckCircle2 className="h-4 w-4 md:h-5 md:w-5" />
+                                </div>
                             </div>
-                            <div className="hidden md:flex h-10 w-10 bg-white dark:bg-slate-800 rounded-xl items-center justify-center text-rose-600 shadow-sm">
-                                <AlertCircle className="h-5 w-5" />
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
+                        </CardContent>
+                    </Card>
+                </div>
             </div>
 
             {/* Tasks List */}
             <div className="space-y-6">
+                <div className="flex items-center justify-between px-1">
+                    <h2 className="text-xl font-black tracking-tight uppercase">
+                        {filterMode === 'current' ? 'Актуальные задачи' : 'Все задачи на месяц'}
+                    </h2>
+                    <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800 p-1 rounded-lg">
+                        <Button
+                            size="sm"
+                            variant={filterMode === 'current' ? 'default' : 'ghost'}
+                            className={cn("h-7 px-3 text-[10px] font-bold uppercase tracking-wider rounded-md", filterMode === 'current' ? "bg-indigo-500 shadow-none" : "text-muted-foreground")}
+                            onClick={() => setFilterMode('current')}
+                        >
+                            Сейчас
+                        </Button>
+                        <Button
+                            size="sm"
+                            variant={filterMode === 'all' ? 'default' : 'ghost'}
+                            className={cn("h-7 px-3 text-[10px] font-bold uppercase tracking-wider rounded-md", filterMode === 'all' ? "bg-indigo-500 shadow-none" : "text-muted-foreground")}
+                            onClick={() => setFilterMode('all')}
+                        >
+                            Весь план
+                        </Button>
+                    </div>
+                </div>
+
                 {isLoading ? (
                     <div className="h-64 flex items-center justify-center">
                         <Loader2 className="h-8 w-8 animate-spin text-purple-500" />
                     </div>
-                ) : tasks.length === 0 ? (
+                ) : groupedTasks.length === 0 ? (
                     <div className="text-center py-20 bg-white dark:bg-slate-800/50 rounded-[40px] border-2 border-dashed border-slate-200 dark:border-slate-700">
                         <div className="h-20 w-20 bg-slate-50 dark:bg-slate-800 rounded-3xl flex items-center justify-center mx-auto mb-4 shadow-sm text-green-500">
                             <CheckCircle2 className="h-10 w-10" />
                         </div>
-                        <h3 className="text-lg font-bold">Нет активных задач</h3>
-                        <p className="text-sm text-muted-foreground">На данный момент у вас нет назначенных задач по чистке.</p>
+                        <h3 className="text-lg font-bold">
+                            {filterMode === 'current' ? 'Нет актуальных задач' : 'Нет задач на месяц'}
+                        </h3>
+                        <p className="text-sm text-muted-foreground">
+                            {filterMode === 'current' ? 'Все текущие задачи выполнены. Можно отдохнуть или взять свободную задачу.' : 'На данный момент у вас нет назначенных задач.'}
+                        </p>
+                        {filterMode === 'current' && tasks.length > 0 && (
+                            <Button 
+                                variant="link" 
+                                className="mt-4 text-indigo-500 font-bold"
+                                onClick={() => setFilterMode('all')}
+                            >
+                                Посмотреть весь план ({tasks.length})
+                            </Button>
+                        )}
                     </div>
                 ) : (
                     <div className="grid gap-8">
@@ -458,18 +616,7 @@ export default function EmployeeTasksPage() {
                 </div>
             )}
 
-            {/* DEBUG: Reset Button */}
-            <div className="pt-12 pb-6 border-t border-slate-200 dark:border-slate-800 flex justify-center opacity-50 hover:opacity-100 transition-opacity">
-                <Button 
-                    variant="destructive" 
-                    size="sm" 
-                    onClick={handleResetAll}
-                    className="bg-red-100 text-red-600 hover:bg-red-200 border-none shadow-none"
-                >
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    [DEBUG] Удалить ВСЕ записи и сбросить даты
-                </Button>
-            </div>
+
 
             <MaintenanceSessionWizard
                 isOpen={isSessionOpen}

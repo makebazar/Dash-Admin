@@ -6,13 +6,23 @@ import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
     TrendingUp, TrendingDown, DollarSign,
-    Percent, ChevronLeft, ChevronRight, Settings, Plus
+    Percent, ChevronLeft, ChevronRight, Settings, Plus,
+    Calendar as CalendarIcon, Info, CreditCard, Wallet, Banknote
 } from "lucide-react"
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import TransactionList from '@/components/finance/TransactionList'
 import FinanceReports from '@/components/finance/FinanceReports'
 import { AccountBalances } from '@/components/finance/AccountBalances'
+import {
+    AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
+} from 'recharts'
+import {
+    Tooltip as UITooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
+} from "@/components/ui/tooltip"
 
 interface FinanceStats {
     total_income: number
@@ -70,10 +80,15 @@ interface AnalyticsData {
         total_amount: number
         transaction_count: number
     }>
+    dds_breakdown: {
+        operating: { income: number; expense: number; net: number }
+        investing: { income: number; expense: number; net: number }
+        financing: { income: number; expense: number; net: number }
+    }
     break_even_point: number
 }
 
-import { CheckCircle2, AlertCircle, Zap } from "lucide-react"
+import { CheckCircle2, Zap } from "lucide-react"
 import { PaymentModal } from "./_components/PaymentModal"
 
 export default function FinancePage() {
@@ -156,18 +171,14 @@ export default function FinancePage() {
 
         const paidAmount = relevantTransactions.reduce((sum, t) => {
             const amount = typeof t.amount === 'string' ? parseFloat(t.amount) : t.amount
-            // Substract if it was an expense refund (though unlikely for bills)
-            // Assuming all transactions linked are payments (expenses)
             return sum + (t.type === 'expense' ? amount : -amount)
         }, 0)
 
-        // If targetAmount is 0 (e.g. variable consumption), it's only paid if we have actually paid something (> 0)
         let status = 'unpaid'
         if (targetAmount > 0) {
             if (paidAmount >= targetAmount) status = 'paid'
             else if (paidAmount > 0) status = 'partial'
         } else {
-            // For variable amount items (target = 0)
             if (paidAmount > 0) status = 'paid'
         }
 
@@ -179,8 +190,6 @@ export default function FinancePage() {
     }
 
     const openPaymentModal = (rp: RecurringPayment, initialAmount?: number) => {
-        // If initialAmount is provided (partial payment remainder), override the default amount
-        // We do this by creating a copy of the payment object with the modified amount
         const paymentToEdit = initialAmount !== undefined
             ? { ...rp, amount: initialAmount }
             : rp
@@ -202,14 +211,14 @@ export default function FinancePage() {
                     type: 'expense',
                     transaction_date: data.date,
                     notes: data.notes,
-                    payment_method: 'cash', // Keep as fallback or derive from account type
+                    payment_method: 'cash',
                     account_id: data.accountId,
                     status: 'completed'
                 })
             });
 
             if (res.ok) {
-                await fetchAnalytics(); // Refresh data
+                await fetchAnalytics();
             } else {
                 alert('Ошибка создания транзакции');
             }
@@ -234,12 +243,18 @@ export default function FinancePage() {
         }).format(amount) + ' ₽'
     }
 
+    const formatShortCurrency = (amount: number) => {
+        if (amount >= 1000000) return (amount / 1000000).toFixed(1) + 'M ₽'
+        if (amount >= 1000) return (amount / 1000).toFixed(0) + 'K ₽'
+        return amount + ' ₽'
+    }
+
     if (loading) {
         return (
-            <div className="flex items-center justify-center h-screen">
+            <div className="flex items-center justify-center h-[calc(100vh-200px)]">
                 <div className="text-center">
                     <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-                    <p className="text-muted-foreground">Загрузка финансовых данных...</p>
+                    <p className="text-muted-foreground animate-pulse font-medium">Загрузка финансовых данных...</p>
                 </div>
             </div>
         )
@@ -252,233 +267,481 @@ export default function FinancePage() {
         profitability: 0
     }
 
+    const COLORS = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316'];
+
     return (
-        <div className="p-6 space-y-6">
-            {/* Header */}
-            <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                    <h1 className="text-3xl font-bold tracking-tight">💰 Финансы</h1>
-                    <div className="flex items-center gap-2">
-                        <Button variant="ghost" size="icon" onClick={() => navigateMonth(-1)}>
-                            <ChevronLeft className="h-5 w-5" />
+        <div className="p-4 md:p-8 space-y-8 bg-slate-50/50 min-h-screen">
+            {/* Header Redesign */}
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+                <div className="space-y-1">
+                    <h1 className="text-2xl md:text-3xl font-black tracking-tight text-slate-900">Управление финансами</h1>
+                    <p className="text-slate-500 text-xs md:text-sm font-medium">Аналитика, ДДС и планирование платежей</p>
+                </div>
+                
+                <div className="flex flex-col sm:flex-row items-center gap-4 w-full lg:w-auto">
+                    <div className="flex items-center gap-1 bg-white p-1 rounded-2xl shadow-sm border w-full sm:w-auto justify-between sm:justify-start">
+                        <Button variant="ghost" size="icon" onClick={() => navigateMonth(-1)} className="hover:bg-slate-100 rounded-xl h-9 w-9 shrink-0">
+                            <ChevronLeft className="h-4 w-4" />
                         </Button>
-                        <div className="text-lg font-medium min-w-[160px] text-center">
-                            {monthNames[selectedMonth - 1]} {selectedYear}
+                        <div className="flex items-center gap-2 px-4 py-1 font-bold text-slate-700 whitespace-nowrap">
+                            <CalendarIcon className="h-4 w-4 text-primary" />
+                            <span className="min-w-[110px] text-center text-sm">
+                                {monthNames[selectedMonth - 1]} {selectedYear}
+                            </span>
                         </div>
-                        <Button variant="ghost" size="icon" onClick={() => navigateMonth(1)}>
-                            <ChevronRight className="h-5 w-5" />
+                        <Button variant="ghost" size="icon" onClick={() => navigateMonth(1)} className="hover:bg-slate-100 rounded-xl h-9 w-9 shrink-0">
+                            <ChevronRight className="h-4 w-4" />
                         </Button>
                     </div>
-                </div>
-                <div className="flex items-center gap-2">
-                    <Link href={`/clubs/${clubId}/finance/settings`}>
-                        <Button variant="outline">
-                            <Settings className="h-4 w-4 mr-2" />
-                            Настройки
+
+                    <div className="flex items-center gap-2 w-full sm:w-auto">
+                        <Link href={`/clubs/${clubId}/finance/settings`} className="flex-1 sm:flex-none">
+                            <Button variant="outline" className="w-full rounded-2xl border-slate-200 hover:bg-slate-50 font-bold text-xs h-11 px-4">
+                                <Settings className="h-4 w-4 mr-2 text-slate-500" />
+                                <span className="hidden sm:inline">Настройки</span>
+                                <span className="sm:hidden">Настройки</span>
+                            </Button>
+                        </Link>
+                        <Button 
+                            onClick={() => { setActiveTab('transactions'); setTimeout(() => setTransactionDialogOpen(true), 100); }}
+                            className="flex-[2] sm:flex-none rounded-2xl shadow-lg shadow-primary/20 font-black text-xs h-11 px-6"
+                        >
+                            <Plus className="h-4 w-4 mr-2" />
+                            Новая операция
                         </Button>
-                    </Link>
+                    </div>
                 </div>
             </div>
 
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                <TabsList className="flex flex-wrap w-full h-auto bg-muted p-1">
-                    <TabsTrigger value="dashboard" className="flex-1">📊 Обзор</TabsTrigger>
-                    <TabsTrigger value="transactions" className="flex-1">📝 Транзакции</TabsTrigger>
-                    <TabsTrigger value="reports" className="flex-1">📈 Отчеты</TabsTrigger>
+                <TabsList className="w-full md:w-auto bg-white border p-1 rounded-xl mb-6 shadow-sm">
+                    <TabsTrigger value="dashboard" className="rounded-lg px-6 font-medium data-[state=active]:bg-slate-100 data-[state=active]:text-primary">📊 Дашборд</TabsTrigger>
+                    <TabsTrigger value="transactions" className="rounded-lg px-6 font-medium data-[state=active]:bg-slate-100 data-[state=active]:text-primary">📝 Операции</TabsTrigger>
+                    <TabsTrigger value="reports" className="rounded-lg px-6 font-medium data-[state=active]:bg-slate-100 data-[state=active]:text-primary">📈 Отчеты ДДС</TabsTrigger>
                 </TabsList>
 
-                <TabsContent value="dashboard" className="space-y-6">
-                    {/* Key Metrics */}
+                <TabsContent value="dashboard" className="space-y-6 focus-visible:outline-none">
+                    {/* Education block for beginners */}
+                    <div className="bg-blue-600 rounded-3xl p-6 text-white relative overflow-hidden shadow-xl shadow-blue-200">
+                        <div className="absolute -right-10 -top-10 w-40 h-40 bg-white/10 rounded-full blur-3xl" />
+                        <div className="flex flex-col md:flex-row items-center gap-6 relative z-10">
+                            <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center text-3xl shadow-inner">
+                                💡
+                            </div>
+                            <div className="flex-1 text-center md:text-left space-y-1">
+                                <h3 className="text-xl font-black tracking-tight">Добро пожаловать в центр управления финансами!</h3>
+                                <p className="text-blue-100 text-sm font-medium leading-relaxed max-w-3xl">
+                                    Здесь вы можете видеть реальную прибыль клуба, контролировать остатки на счетах и планировать бюджет. 
+                                    Используйте подсказки <Info className="inline h-3.5 w-3.5 opacity-70" /> на карточках, чтобы лучше разобраться в показателях.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Key Metrics Redesign */}
                     <div className="grid gap-4 md:grid-cols-4">
-                        <Card>
-                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-sm font-medium text-muted-foreground">
-                                    Доходы
-                                </CardTitle>
-                                <div className="rounded-lg bg-emerald-100 p-2 text-emerald-700">
-                                    <TrendingUp className="h-4 w-4" />
+                        <TooltipProvider>
+                            <Card className="border-none shadow-sm bg-white overflow-hidden relative group">
+                                <div className="absolute top-0 left-0 w-1 h-full bg-emerald-500" />
+                                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                    <CardTitle className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                                        Доходы
+                                    </CardTitle>
+                                    <UITooltip>
+                                        <TooltipTrigger>
+                                            <TrendingUp className="h-4 w-4 text-emerald-500 cursor-help" />
+                                        </TooltipTrigger>
+                                        <TooltipContent side="top" className="max-w-[200px] p-3 leading-relaxed">
+                                            Сумма всех поступлений за выбранный месяц: выручка от смен, продажи на баре и прочие доходы.
+                                        </TooltipContent>
+                                    </UITooltip>
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="text-2xl font-black text-slate-900">
+                                        {formatCurrency(summary.total_income)}
+                                    </div>
+                                    <div className="flex items-center gap-1 mt-1">
+                                        <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 rounded uppercase">За месяц</span>
+                                    </div>
+                                </CardContent>
+                            </Card>
+
+                            <Card className="border-none shadow-sm bg-white overflow-hidden relative group">
+                                <div className="absolute top-0 left-0 w-1 h-full bg-rose-500" />
+                                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                    <CardTitle className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                                        Расходы
+                                    </CardTitle>
+                                    <UITooltip>
+                                        <TooltipTrigger>
+                                            <TrendingDown className="h-4 w-4 text-rose-500 cursor-help" />
+                                        </TooltipTrigger>
+                                        <TooltipContent side="top" className="max-w-[200px] p-3 leading-relaxed">
+                                            Все выплаты: зарплаты, закупка товаров, аренда и коммуналка. Показывает реальный отток денег.
+                                        </TooltipContent>
+                                    </UITooltip>
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="text-2xl font-black text-slate-900">
+                                        {formatCurrency(summary.total_expense)}
+                                    </div>
+                                    <div className="flex items-center gap-1 mt-1">
+                                        <span className="text-[10px] font-bold text-rose-600 bg-rose-50 px-1.5 rounded uppercase">Оплачено</span>
+                                    </div>
+                                </CardContent>
+                            </Card>
+
+                            <Card className="border-none shadow-sm bg-white overflow-hidden relative group">
+                                <div className="absolute top-0 left-0 w-1 h-full bg-blue-500" />
+                                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                    <CardTitle className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                                        Чистая прибыль
+                                    </CardTitle>
+                                    <UITooltip>
+                                        <TooltipTrigger>
+                                            <DollarSign className="h-4 w-4 text-blue-500 cursor-help" />
+                                        </TooltipTrigger>
+                                        <TooltipContent side="top" className="max-w-[200px] p-3 leading-relaxed">
+                                            Остаток после вычета всех расходов из доходов. Если число отрицательное — клуб работает в убыток.
+                                        </TooltipContent>
+                                    </UITooltip>
+                                </CardHeader>
+                                <CardContent>
+                                    <div className={`text-2xl font-black ${summary.profit >= 0 ? 'text-slate-900' : 'text-rose-600'}`}>
+                                        {formatCurrency(summary.profit)}
+                                    </div>
+                                    <div className="flex items-center gap-1 mt-1">
+                                        <span className={`text-[10px] font-bold px-1.5 rounded uppercase ${summary.profit >= 0 ? 'text-blue-600 bg-blue-50' : 'text-rose-600 bg-rose-50'}`}>
+                                            {summary.profit >= 0 ? 'Профит' : 'Убыток'}
+                                        </span>
+                                    </div>
+                                </CardContent>
+                            </Card>
+
+                            <Card className="border-none shadow-sm bg-primary text-primary-foreground overflow-hidden relative group">
+                                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                    <CardTitle className="text-xs font-bold uppercase tracking-wider opacity-80">
+                                        Рентабельность
+                                    </CardTitle>
+                                    <UITooltip>
+                                        <TooltipTrigger>
+                                            <Percent className="h-4 w-4 opacity-80 cursor-help" />
+                                        </TooltipTrigger>
+                                        <TooltipContent side="top" className="max-w-[200px] p-3 leading-relaxed bg-slate-900 text-white">
+                                            Процент прибыли от выручки. Показывает эффективность бизнеса. Хороший показатель для клуба — от 20%.
+                                        </TooltipContent>
+                                    </UITooltip>
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="text-3xl font-black">
+                                        {summary.profitability.toFixed(1)}%
+                                    </div>
+                                    <p className="text-[10px] font-bold uppercase opacity-80 mt-1 text-primary-foreground/70">
+                                        Эффективность клуба
+                                    </p>
+                                </CardContent>
+                            </Card>
+                        </TooltipProvider>
+                    </div>
+
+                    {/* Main Charts & Accounts Grid */}
+                    <div className="grid gap-6 lg:grid-cols-3">
+                        {/* Area Chart - Trend */}
+                        <Card className="lg:col-span-2 border-none shadow-sm">
+                            <CardHeader className="flex flex-row items-center justify-between">
+                                <div>
+                                    <div className="flex items-center gap-2">
+                                        <CardTitle className="text-lg font-bold">Динамика потоков</CardTitle>
+                                        <TooltipProvider>
+                                            <UITooltip>
+                                                <TooltipTrigger>
+                                                    <Info className="h-3.5 w-3.5 text-slate-300" />
+                                                </TooltipTrigger>
+                                                <TooltipContent className="max-w-[250px]">
+                                                    Сравнение доходов и расходов во времени. В идеале линия <strong>Дохода</strong> (зеленая) должна быть всегда выше <strong>Расхода</strong> (красная).
+                                                </TooltipContent>
+                                            </UITooltip>
+                                        </TooltipProvider>
+                                    </div>
+                                    <CardDescription className="text-xs font-medium">Доходы и расходы за последние 6 месяцев</CardDescription>
+                                </div>
+                                <div className="flex gap-4 text-[10px] font-bold uppercase">
+                                    <div className="flex items-center gap-1.5">
+                                        <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                                        <span>Доход</span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                        <div className="w-2 h-2 rounded-full bg-rose-500" />
+                                        <span>Расход</span>
+                                    </div>
                                 </div>
                             </CardHeader>
-                            <CardContent>
-                                <div className="text-2xl font-bold tracking-tight text-emerald-600">
-                                    {formatCurrency(summary.total_income)}
-                                </div>
-                                <p className="text-xs text-muted-foreground mt-1">
-                                    за выбранный период
-                                </p>
+                            <CardContent className="h-[300px] mt-4">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <AreaChart data={analytics?.monthly_trend || []}>
+                                        <defs>
+                                            <linearGradient id="colorIncome" x1="0" y1="0" x2="0" y2="1">
+                                                <stop offset="5%" stopColor="#10b981" stopOpacity={0.1}/>
+                                                <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                                            </linearGradient>
+                                            <linearGradient id="colorExpense" x1="0" y1="0" x2="0" y2="1">
+                                                <stop offset="5%" stopColor="#ef4444" stopOpacity={0.1}/>
+                                                <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
+                                            </linearGradient>
+                                        </defs>
+                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                        <XAxis 
+                                            dataKey="month" 
+                                            axisLine={false} 
+                                            tickLine={false} 
+                                            tick={{fontSize: 10, fontWeight: 600, fill: '#64748b'}}
+                                            tickFormatter={(val) => new Date(val).toLocaleDateString('ru-RU', {month: 'short'})}
+                                        />
+                                        <YAxis 
+                                            axisLine={false} 
+                                            tickLine={false} 
+                                            tick={{fontSize: 10, fontWeight: 600, fill: '#64748b'}}
+                                            tickFormatter={(val) => formatShortCurrency(val)}
+                                        />
+                                        <Tooltip 
+                                            contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontSize: '12px'}}
+                                            formatter={(val: any) => [formatCurrency(Number(val)), '']}
+                                            labelFormatter={(val) => new Date(val).toLocaleDateString('ru-RU', {month: 'long', year: 'numeric'})}
+                                        />
+                                        <Area type="monotone" dataKey="income" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorIncome)" />
+                                        <Area type="monotone" dataKey="expense" stroke="#ef4444" strokeWidth={3} fillOpacity={1} fill="url(#colorExpense)" />
+                                    </AreaChart>
+                                </ResponsiveContainer>
                             </CardContent>
                         </Card>
 
-                        <Card>
-                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-sm font-medium text-muted-foreground">
-                                    Расходы
-                                </CardTitle>
-                                <div className="rounded-lg bg-red-100 p-2 text-red-700">
-                                    <TrendingDown className="h-4 w-4" />
+                        {/* Account Balances Widget */}
+                        <Card className="border-none shadow-sm flex flex-col">
+                            <CardHeader className="pb-2">
+                                <div className="flex items-center justify-between">
+                                    <CardTitle className="text-lg font-bold">Счета и остатки</CardTitle>
+                                    <TooltipProvider>
+                                        <UITooltip>
+                                            <TooltipTrigger>
+                                                <Info className="h-4 w-4 text-slate-400" />
+                                            </TooltipTrigger>
+                                            <TooltipContent className="max-w-[200px]">
+                                                Общий баланс по всем активным счетам клуба
+                                            </TooltipContent>
+                                        </UITooltip>
+                                    </TooltipProvider>
                                 </div>
                             </CardHeader>
-                            <CardContent>
-                                <div className="text-2xl font-bold tracking-tight text-red-600">
-                                    {formatCurrency(summary.total_expense)}
-                                </div>
-                                <p className="text-xs text-muted-foreground mt-1">
-                                    за выбранный период
-                                </p>
-                            </CardContent>
-                        </Card>
-
-                        <Card>
-                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-sm font-medium text-muted-foreground">
-                                    Прибыль
-                                </CardTitle>
-                                <div className={`rounded-lg p-2 ${summary.profit >= 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
-                                    <DollarSign className="h-4 w-4" />
-                                </div>
-                            </CardHeader>
-                            <CardContent>
-                                <div className={`text-2xl font-bold tracking-tight ${summary.profit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                                    {formatCurrency(summary.profit)}
-                                </div>
-                                <p className="text-xs text-muted-foreground mt-1">
-                                    {summary.profit >= 0 ? 'положительная' : 'убыток'}
-                                </p>
-                            </CardContent>
-                        </Card>
-
-                        <Card className="border-2 border-primary/20 bg-gradient-to-br from-primary/5 to-primary/10">
-                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-sm font-medium text-muted-foreground">
-                                    Рентабельность
-                                </CardTitle>
-                                <div className="rounded-lg bg-primary/20 p-2 text-primary">
-                                    <Percent className="h-4 w-4" />
-                                </div>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="text-2xl font-bold tracking-tight text-primary">
-                                    {summary.profitability.toFixed(1)}%
-                                </div>
-                                <p className="text-xs text-muted-foreground mt-1">
-                                    ключевой показатель
-                                </p>
+                            <CardContent className="flex-1 overflow-auto max-h-[380px] scrollbar-hide">
+                                <AccountBalances clubId={clubId} />
                             </CardContent>
                         </Card>
                     </div>
 
-                    {/* Account Balances */}
-                    <div>
-                        <h3 className="text-lg font-semibold mb-4">Остатки на счетах</h3>
-                        <AccountBalances clubId={clubId} />
-                    </div>
-
-                    <div className="grid gap-4 md:grid-cols-2">
-                        {/* Quick Add Transaction Widget */}
-                        <Card className="md:col-span-1 bg-gradient-to-br from-primary/5 to-primary/10 border-2 border-primary/20">
-                            <CardHeader>
-                                <CardTitle className="text-lg flex items-center gap-2">
-                                    <Plus className="h-5 w-5 text-primary" />
-                                    Быстрое добавление
-                                </CardTitle>
-                                <CardDescription>Создать транзакцию в один клик</CardDescription>
+                    <div className="grid gap-6 lg:grid-cols-3">
+                        {/* DDS Mini Summary */}
+                        <Card className="lg:col-span-2 border-none shadow-sm">
+                            <CardHeader className="pb-0">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <CardTitle className="text-lg font-bold">Сводка ДДС</CardTitle>
+                                        <CardDescription className="text-xs font-medium">Чистый поток по видам деятельности</CardDescription>
+                                    </div>
+                                    <Link href="#" onClick={(e) => { e.preventDefault(); setActiveTab('reports'); }} className="text-xs font-bold text-primary hover:underline">Детальный отчет</Link>
+                                </div>
                             </CardHeader>
-                            <CardContent className="flex flex-col items-center justify-center py-8">
-                                <Button
-                                    size="lg"
-                                    className="w-full max-w-xs"
-                                    onClick={() => {
-                                        setActiveTab('transactions');
-                                        setTimeout(() => setTransactionDialogOpen(true), 100);
-                                    }}
-                                >
-                                    <Plus className="h-4 w-4 mr-2" />
-                                    Создать транзакцию
-                                </Button>
-                                <p className="text-xs text-muted-foreground mt-4 text-center">
-                                    Переключит на вкладку транзакций и откроет форму создания
-                                </p>
+                            <CardContent className="pt-6">
+                                {analytics?.dds_breakdown && (
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                        <TooltipProvider>
+                                            <UITooltip>
+                                                <TooltipTrigger asChild>
+                                                    <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 space-y-2 group hover:border-blue-200 transition-colors cursor-help">
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="p-1.5 rounded-lg bg-blue-100 text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                                                                <Wallet className="h-4 w-4" />
+                                                            </div>
+                                                            <span className="text-[10px] font-bold uppercase text-slate-500">Операционный</span>
+                                                        </div>
+                                                        <div className={`text-xl font-black ${analytics.dds_breakdown.operating.net >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                                            {formatCurrency(analytics.dds_breakdown.operating.net)}
+                                                        </div>
+                                                        <div className="flex justify-between text-[10px] font-medium text-slate-400">
+                                                            <span>+ {formatShortCurrency(analytics.dds_breakdown.operating.income)}</span>
+                                                            <span>- {formatShortCurrency(analytics.dds_breakdown.operating.expense)}</span>
+                                                        </div>
+                                                    </div>
+                                                </TooltipTrigger>
+                                                <TooltipContent side="bottom" className="max-w-[250px] p-3 leading-relaxed">
+                                                    <strong>Операционная деятельность</strong>: это «жизнь» клуба. Выручка, зарплаты, аренда и закупка товаров.
+                                                </TooltipContent>
+                                            </UITooltip>
+
+                                            <UITooltip>
+                                                <TooltipTrigger asChild>
+                                                    <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 space-y-2 group hover:border-amber-200 transition-colors cursor-help">
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="p-1.5 rounded-lg bg-amber-100 text-amber-600 group-hover:bg-amber-600 group-hover:text-white transition-colors">
+                                                                <CreditCard className="h-4 w-4" />
+                                                            </div>
+                                                            <span className="text-[10px] font-bold uppercase text-slate-500">Инвестиционный</span>
+                                                        </div>
+                                                        <div className={`text-xl font-black ${analytics.dds_breakdown.investing.net >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                                            {formatCurrency(analytics.dds_breakdown.investing.net)}
+                                                        </div>
+                                                        <div className="flex justify-between text-[10px] font-medium text-slate-400">
+                                                            <span>+ {formatShortCurrency(analytics.dds_breakdown.investing.income)}</span>
+                                                            <span>- {formatShortCurrency(analytics.dds_breakdown.investing.expense)}</span>
+                                                        </div>
+                                                    </div>
+                                                </TooltipTrigger>
+                                                <TooltipContent side="bottom" className="max-w-[250px] p-3 leading-relaxed">
+                                                    <strong>Инвестиционная деятельность</strong>: вложения в развитие. Покупка компов, ремонт и оборудование.
+                                                </TooltipContent>
+                                            </UITooltip>
+
+                                            <UITooltip>
+                                                <TooltipTrigger asChild>
+                                                    <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 space-y-2 group hover:border-emerald-200 transition-colors cursor-help">
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="p-1.5 rounded-lg bg-emerald-100 text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+                                                                <Banknote className="h-4 w-4" />
+                                                            </div>
+                                                            <span className="text-[10px] font-bold uppercase text-slate-500">Финансовый</span>
+                                                        </div>
+                                                        <div className={`text-xl font-black ${analytics.dds_breakdown.financing.net >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                                            {formatCurrency(analytics.dds_breakdown.financing.net)}
+                                                        </div>
+                                                        <div className="flex justify-between text-[10px] font-medium text-slate-400">
+                                                            <span>+ {formatShortCurrency(analytics.dds_breakdown.financing.income)}</span>
+                                                            <span>- {formatShortCurrency(analytics.dds_breakdown.financing.expense)}</span>
+                                                        </div>
+                                                    </div>
+                                                </TooltipTrigger>
+                                                <TooltipContent side="bottom" className="max-w-[250px] p-3 leading-relaxed">
+                                                    <strong>Финансовая деятельность</strong>: кредиты, вложения владельцев и выплата дивидендов.
+                                                </TooltipContent>
+                                            </UITooltip>
+                                        </TooltipProvider>
+                                    </div>
+                                )}
                             </CardContent>
                         </Card>
 
-                        {/* Monthly Bills Widget */}
-                        <Card className="md:col-span-1">
+                        {/* Top Expenses Redesign */}
+                        <Card className="border-none shadow-sm">
                             <CardHeader>
-                                <CardTitle className="text-lg flex items-center gap-2">
-                                    <AlertCircle className="h-5 w-5 text-amber-500" />
-                                    Счета к оплате
-                                </CardTitle>
-                                <CardDescription>Обязательные платежи за этот месяц</CardDescription>
+                                <div className="flex items-center gap-2">
+                                    <CardTitle className="text-lg font-bold">Основные расходы</CardTitle>
+                                    <TooltipProvider>
+                                        <UITooltip>
+                                            <TooltipTrigger>
+                                                <Info className="h-3.5 w-3.5 text-slate-300" />
+                                            </TooltipTrigger>
+                                            <TooltipContent className="max-w-[200px]">
+                                                Топ-5 категорий, на которые клуб тратит больше всего денег в этом месяце.
+                                            </TooltipContent>
+                                        </UITooltip>
+                                    </TooltipProvider>
+                                </div>
+                                <CardDescription className="text-xs font-medium">Топ категорий за текущий месяц</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="space-y-4">
+                                    {analytics?.top_expenses.length === 0 ? (
+                                        <div className="text-center py-8 text-slate-400 font-medium">Расходы не найдены</div>
+                                    ) : (
+                                        analytics?.top_expenses.slice(0, 5).map((expense, idx) => (
+                                            <div key={idx} className="space-y-1.5">
+                                                <div className="flex items-center justify-between text-xs font-bold">
+                                                    <span className="flex items-center gap-2 text-slate-600">
+                                                        <span className="text-lg">{expense.icon}</span>
+                                                        {expense.category_name}
+                                                    </span>
+                                                    <span className="text-slate-900">{formatCurrency(expense.total_amount)}</span>
+                                                </div>
+                                                <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                                    <div 
+                                                        className="h-full rounded-full transition-all duration-1000"
+                                                        style={{ 
+                                                            width: `${(expense.total_amount / (analytics?.summary.total_expense || 1)) * 100}%`,
+                                                            backgroundColor: COLORS[idx % COLORS.length]
+                                                        }}
+                                                    />
+                                                </div>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </div>
+
+                    <div className="grid gap-6 lg:grid-cols-3">
+                        {/* Monthly Bills Widget Redesign */}
+                        <Card className="lg:col-span-3 border-none shadow-sm">
+                            <CardHeader className="flex flex-row items-center justify-between">
+                                <div>
+                                    <CardTitle className="text-lg font-bold">Планируемые платежи</CardTitle>
+                                    <CardDescription className="text-xs font-medium">Регулярные обязательства этого месяца</CardDescription>
+                                </div>
+                                <Link href={`/clubs/${clubId}/finance/settings`}>
+                                    <Button variant="ghost" size="sm" className="text-xs font-bold text-primary">Настроить</Button>
+                                </Link>
                             </CardHeader>
                             <CardContent>
                                 {recurringPayments.length === 0 ? (
-                                    <div className="text-center py-8 text-muted-foreground">
-                                        Нет регулярных платежей.
-                                        <br />
-                                        <Link href={`/clubs/${clubId}/finance/settings`} className="text-primary hover:underline">
-                                            Настроить в Settings
-                                        </Link>
+                                    <div className="text-center py-12 bg-slate-50 rounded-2xl border border-dashed">
+                                        <p className="text-slate-400 font-medium text-sm">Нет регулярных платежей</p>
                                     </div>
                                 ) : (
-                                    <div className="space-y-4">
+                                    <div className="grid gap-4 md:grid-cols-2">
                                         {recurringPayments.sort((a, b) => a.day_of_month - b.day_of_month).map(rp => {
                                             const { status, paidAmount, remainingAmount } = getPaymentStatus(rp.id, rp.amount)
                                             const isPaid = status === 'paid'
                                             const isPartial = status === 'partial'
 
                                             return (
-                                                <div key={rp.id} className={`p-3 border rounded-lg ${isPaid ? 'bg-muted/50 opacity-70' : 'bg-card'}`}>
-                                                    <div className="flex items-center justify-between mb-2">
+                                                <div key={rp.id} className={`p-4 rounded-2xl border transition-all ${isPaid ? 'bg-emerald-50/30 border-emerald-100 opacity-80' : 'bg-white border-slate-100 hover:border-primary/20 shadow-sm'}`}>
+                                                    <div className="flex items-start justify-between gap-3">
                                                         <div className="flex items-center gap-3">
-                                                            <div className="w-8 h-8 rounded flex items-center justify-center bg-primary/10 text-primary">
+                                                            <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-slate-100 text-lg shadow-inner">
                                                                 {rp.category_icon || '📅'}
                                                             </div>
                                                             <div>
-                                                                <div className="font-medium flex items-center gap-2">
+                                                                <div className="font-bold text-slate-900 text-sm flex items-center gap-1.5">
                                                                     {rp.name}
-                                                                    {isPaid && <CheckCircle2 className="h-4 w-4 text-green-500" />}
+                                                                    {isPaid && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />}
                                                                 </div>
-                                                                <div className="text-xs text-muted-foreground">
-                                                                    Срок: до {rp.day_of_month}-го числа
+                                                                <div className="text-[10px] font-bold text-slate-400 uppercase">
+                                                                    Дедлайн: {rp.day_of_month}-е число
                                                                 </div>
                                                             </div>
                                                         </div>
 
                                                         {isPaid ? (
-                                                            <div className="text-sm font-medium text-green-600">
-                                                                Оплачено
-                                                            </div>
+                                                            <span className="text-[10px] font-black text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded uppercase">Оплачено</span>
                                                         ) : (
-                                                            <div className="flex flex-col items-end gap-1">
-                                                                <Button
-                                                                    size="sm"
-                                                                    onClick={() => openPaymentModal(rp, isPartial ? remainingAmount : undefined)}
-                                                                    className={rp.is_consumption_based ? "bg-amber-600 hover:bg-amber-700" : ""}
-                                                                    variant={isPartial ? "secondary" : "default"}
-                                                                >
-                                                                    {rp.is_consumption_based ? (
-                                                                        <>
-                                                                            <Zap className="h-3 w-3 mr-1" />
-                                                                            Внести
-                                                                        </>
-                                                                    ) : (
-                                                                        isPartial ? `Доплатить ${formatCurrency(remainingAmount)}` : `Оплатить ${formatCurrency(rp.amount)}`
-                                                                    )}
-                                                                </Button>
-                                                            </div>
+                                                            <Button
+                                                                size="sm"
+                                                                onClick={() => openPaymentModal(rp, isPartial ? remainingAmount : undefined)}
+                                                                className={`h-8 text-[11px] font-bold rounded-lg ${rp.is_consumption_based ? "bg-amber-600 hover:bg-amber-700" : ""}`}
+                                                                variant={isPartial ? "secondary" : "default"}
+                                                            >
+                                                                {rp.is_consumption_based ? <><Zap className="h-3 w-3 mr-1" /> Внести</> : isPartial ? `+${formatShortCurrency(remainingAmount)}` : formatShortCurrency(rp.amount)}
+                                                            </Button>
                                                         )}
                                                     </div>
 
-                                                    {/* Progress Bar for Partial Payments */}
                                                     {isPartial && !rp.is_consumption_based && (
-                                                        <div className="space-y-1">
-                                                            <div className="flex justify-between text-xs text-muted-foreground">
-                                                                <span>Оплачено: {formatCurrency(paidAmount)}</span>
-                                                                <span>из {formatCurrency(rp.amount)}</span>
+                                                        <div className="mt-3 space-y-1">
+                                                            <div className="flex justify-between text-[10px] font-bold text-slate-500 uppercase">
+                                                                <span>Оплачено: {formatShortCurrency(paidAmount)}</span>
+                                                                <span>{Math.round((paidAmount / rp.amount) * 100)}%</span>
                                                             </div>
-                                                            <div className="h-2 bg-secondary rounded-full overflow-hidden">
+                                                            <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
                                                                 <div
-                                                                    className="h-full bg-green-500 rounded-full transition-all duration-500"
+                                                                    className="h-full bg-emerald-500 rounded-full transition-all duration-500"
                                                                     style={{ width: `${Math.min(100, (paidAmount / rp.amount) * 100)}%` }}
                                                                 />
                                                             </div>
@@ -491,51 +754,35 @@ export default function FinancePage() {
                                 )}
                             </CardContent>
                         </Card>
-
-                        <PaymentModal
-                            isOpen={isPaymentModalOpen}
-                            onClose={() => setIsPaymentModalOpen(false)}
-                            payment={selectedPayment}
-                            accounts={accounts}
-                            onConfirm={handleConfirmPayment}
-                        />
-
-                        {/* Top Expenses Preview */}
-                        <Card className="md:col-span-1">
-                            <CardHeader>
-                                <CardTitle className="text-sm">Топ-5 расходов</CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="space-y-2">
-                                    {analytics?.top_expenses.slice(0, 5).map((expense, idx) => (
-                                        <div key={idx} className="flex items-center justify-between text-sm p-2 hover:bg-muted/50 rounded transition-colors">
-                                            <span className="flex items-center gap-2">
-                                                <span className="text-xl">{expense.icon}</span>
-                                                <span className="text-muted-foreground">{expense.category_name}</span>
-                                            </span>
-                                            <span className="font-bold">{formatCurrency(expense.total_amount)}</span>
-                                        </div>
-                                    ))}
-                                </div>
-                            </CardContent>
-                        </Card>
                     </div>
                 </TabsContent>
 
-                <TabsContent value="transactions" className="space-y-4">
-                    <TransactionList
-                        clubId={clubId as string}
-                        startDate={startDateStr}
-                        endDate={endDateStr}
-                        dialogOpen={transactionDialogOpen}
-                        onDialogOpenChange={setTransactionDialogOpen}
-                    />
+                <TabsContent value="transactions" className="space-y-4 focus-visible:outline-none">
+                    <Card className="border-none shadow-sm overflow-hidden">
+                        <CardContent className="p-0">
+                            <TransactionList
+                                clubId={clubId as string}
+                                startDate={startDateStr}
+                                endDate={endDateStr}
+                                dialogOpen={transactionDialogOpen}
+                                onDialogOpenChange={setTransactionDialogOpen}
+                            />
+                        </CardContent>
+                    </Card>
                 </TabsContent>
 
-                <TabsContent value="reports">
+                <TabsContent value="reports" className="focus-visible:outline-none">
                     <FinanceReports clubId={clubId} />
                 </TabsContent>
             </Tabs>
+
+            <PaymentModal
+                isOpen={isPaymentModalOpen}
+                onClose={() => setIsPaymentModalOpen(false)}
+                payment={selectedPayment}
+                accounts={accounts}
+                onConfirm={handleConfirmPayment}
+            />
         </div>
     )
 }

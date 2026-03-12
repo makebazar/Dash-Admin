@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import {
     TrendingUp, TrendingDown, DollarSign, PieChart,
-    Download, Calendar as CalendarIcon
+    Download, Calendar as CalendarIcon, FileText
 } from "lucide-react"
 import {
     Select,
@@ -16,6 +16,33 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
+import DDSReport from "./DDSReport"
+
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
+} from "@/components/ui/tooltip"
+import { Info } from "lucide-react"
+
+const UITooltip = Tooltip
+
+interface AnalyticsData {
+    summary: {
+        total_income: number
+        total_expense: number
+        profit: number
+        profitability: number
+        income_count: number
+        expense_count: number
+    }
+    category_breakdown: {
+        income: any[]
+        expense: any[]
+    }
+    dds_breakdown?: any
+}
 
 interface FinanceReportsProps {
     clubId: string
@@ -106,238 +133,251 @@ export default function FinanceReports({ clubId }: FinanceReportsProps) {
     }
 
     return (
-        <div className="space-y-6">
-            {/* Header */}
-            <div>
-                <h3 className="text-lg font-semibold">Финансовые отчеты</h3>
-                <p className="text-sm text-muted-foreground">
-                    Детальная аналитика и экспорт данных
-                </p>
+        <div className="space-y-8">
+            {/* Header Redesign */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                    <h3 className="text-2xl font-black text-slate-900">Финансовая аналитика</h3>
+                    <p className="text-sm font-medium text-slate-500">Глубокий анализ показателей и формирование отчетности</p>
+                </div>
+                <div className="flex gap-2">
+                    <Button variant="outline" onClick={exportToCSV} disabled={!analytics} className="rounded-xl border-slate-200 hover:bg-slate-50 font-bold text-xs">
+                        <Download className="h-4 w-4 mr-2 text-slate-500" />
+                        Экспорт CSV
+                    </Button>
+                    <Button onClick={fetchAnalytics} disabled={loading} className="rounded-xl font-bold text-xs shadow-sm shadow-primary/10">
+                        <PieChart className="h-4 w-4 mr-2" />
+                        {loading ? 'Обновление...' : 'Сформировать'}
+                    </Button>
+                </div>
             </div>
 
-            {/* Filters */}
-            <Card>
-                <CardHeader>
-                    <CardTitle className="text-base">Параметры отчета</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div>
-                            <Label>Дата начала</Label>
+            {/* Filters Redesign */}
+            <Card className="border-none shadow-sm bg-white overflow-hidden">
+                <CardContent className="p-6">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div className="space-y-2">
+                            <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Начало периода</Label>
                             <Input
                                 type="date"
                                 value={startDate}
                                 onChange={(e) => setStartDate(e.target.value)}
+                                className="rounded-xl border-slate-200 bg-slate-50 focus:bg-white transition-colors"
                             />
                         </div>
-                        <div>
-                            <Label>Дата окончания</Label>
+                        <div className="space-y-2">
+                            <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Конец периода</Label>
                             <Input
                                 type="date"
                                 value={endDate}
                                 onChange={(e) => setEndDate(e.target.value)}
+                                className="rounded-xl border-slate-200 bg-slate-50 focus:bg-white transition-colors"
                             />
                         </div>
-                        <div>
-                            <Label>Тип отчета</Label>
+                        <div className="space-y-2">
+                            <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1 flex items-center gap-1.5">
+                                Формат отчета
+                                <TooltipProvider>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <Info className="h-3 w-3 text-slate-300 cursor-help" />
+                                        </TooltipTrigger>
+                                        <TooltipContent side="top" className="max-w-[200px]">
+                                            <strong>ДДС</strong> — показывает движение реальных денег. <strong>Сводка</strong> — общие итоги по категориям.
+                                        </TooltipContent>
+                                    </Tooltip>
+                                </TooltipProvider>
+                            </Label>
                             <Select value={reportType} onValueChange={setReportType}>
-                                <SelectTrigger>
+                                <SelectTrigger className="rounded-xl border-slate-200 bg-slate-50">
                                     <SelectValue />
                                 </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="summary">Общая сводка</SelectItem>
-                                    <SelectItem value="detailed">Детальный</SelectItem>
-                                    <SelectItem value="comparison">Сравнение периодов</SelectItem>
+                                <SelectContent className="rounded-xl">
+                                    <SelectItem value="summary">📊 Общая сводка</SelectItem>
+                                    <SelectItem value="dds">📑 Отчет ДДС (Cash Flow)</SelectItem>
+                                    <SelectItem value="detailed">📋 Детальный анализ</SelectItem>
+                                    <SelectItem value="comparison">🔄 Сравнение периодов</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>
                     </div>
-
-                    <div className="flex gap-2">
-                        <Button onClick={fetchAnalytics} disabled={loading}>
-                            <PieChart className="h-4 w-4 mr-2" />
-                            {loading ? 'Загрузка...' : 'Сформировать отчет'}
-                        </Button>
-                        <Button variant="outline" onClick={exportToCSV} disabled={!analytics}>
-                            <Download className="h-4 w-4 mr-2" />
-                            Экспорт в CSV
-                        </Button>
-                    </div>
                 </CardContent>
             </Card>
 
-            {/* Summary Report */}
-            {analytics && (
-                <>
+            {/* DDS Report Integration */}
+            {analytics && reportType === 'dds' && analytics.dds_breakdown && (
+                <DDSReport 
+                    data={analytics.dds_breakdown} 
+                    formatCurrency={formatCurrency} 
+                />
+            )}
+
+            {/* Summary Report Redesign */}
+            {analytics && reportType === 'summary' && (
+                <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
                     <div className="grid gap-4 md:grid-cols-4">
-                        <Card>
-                            <CardHeader className="pb-2">
-                                <CardDescription>Доходы</CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="text-2xl font-bold text-emerald-600">
+                        <TooltipProvider>
+                            <div className="p-6 rounded-3xl bg-white border border-slate-100 shadow-sm space-y-1 group hover:border-emerald-200 transition-all cursor-help">
+                                <div className="flex items-center justify-between">
+                                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-tighter">Суммарный доход</p>
+                                    <UITooltip>
+                                        <TooltipTrigger>
+                                            <Info className="h-3 w-3 text-slate-300" />
+                                        </TooltipTrigger>
+                                        <TooltipContent side="top">Все пришедшие деньги за период.</TooltipContent>
+                                    </UITooltip>
+                                </div>
+                                <div className="text-2xl font-black text-emerald-600">
                                     {formatCurrency(analytics.summary.total_income)}
                                 </div>
-                                <p className="text-xs text-muted-foreground mt-1">
-                                    {analytics.summary.income_count} транзакций
+                                <p className="text-[10px] font-bold text-slate-400 uppercase">
+                                    {analytics.summary.income_count} операций
                                 </p>
-                            </CardContent>
-                        </Card>
+                            </div>
 
-                        <Card>
-                            <CardHeader className="pb-2">
-                                <CardDescription>Расходы</CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="text-2xl font-bold text-red-600">
+                            <div className="p-6 rounded-3xl bg-white border border-slate-100 shadow-sm space-y-1 group hover:border-rose-200 transition-all cursor-help">
+                                <div className="flex items-center justify-between">
+                                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-tighter">Суммарный расход</p>
+                                    <UITooltip>
+                                        <TooltipTrigger>
+                                            <Info className="h-3 w-3 text-slate-300" />
+                                        </TooltipTrigger>
+                                        <TooltipContent side="top">Все выплаты и траты за период.</TooltipContent>
+                                    </UITooltip>
+                                </div>
+                                <div className="text-2xl font-black text-rose-600">
                                     {formatCurrency(analytics.summary.total_expense)}
                                 </div>
-                                <p className="text-xs text-muted-foreground mt-1">
-                                    {analytics.summary.expense_count} транзакций
+                                <p className="text-[10px] font-bold text-slate-400 uppercase">
+                                    {analytics.summary.expense_count} операций
                                 </p>
-                            </CardContent>
-                        </Card>
+                            </div>
 
-                        <Card>
-                            <CardHeader className="pb-2">
-                                <CardDescription>Прибыль</CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                <div className={`text-2xl font-bold ${analytics.summary.profit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                            <div className="p-6 rounded-3xl bg-slate-900 shadow-xl shadow-slate-200 space-y-1 relative overflow-hidden group cursor-help">
+                                <div className="absolute -right-4 -top-4 w-16 h-16 bg-white/5 rounded-full blur-xl group-hover:bg-white/10 transition-all" />
+                                <div className="flex items-center justify-between relative z-10">
+                                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-tighter">Чистая прибыль</p>
+                                    <UITooltip>
+                                        <TooltipTrigger>
+                                            <Info className="h-3 w-3 text-slate-600" />
+                                        </TooltipTrigger>
+                                        <TooltipContent side="top">Доход минус Расход. Ваша реальная выгода.</TooltipContent>
+                                    </UITooltip>
+                                </div>
+                                <div className={`text-2xl font-black relative z-10 ${analytics.summary.profit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                                     {formatCurrency(analytics.summary.profit)}
                                 </div>
-                            </CardContent>
-                        </Card>
+                            </div>
 
-                        <Card>
-                            <CardHeader className="pb-2">
-                                <CardDescription>Рентабельность</CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                <div className={`text-2xl font-bold ${analytics.summary.profitability >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                            <div className="p-6 rounded-3xl bg-primary shadow-xl shadow-primary/20 space-y-1 relative overflow-hidden group cursor-help">
+                                <div className="absolute -right-4 -top-4 w-16 h-16 bg-white/10 rounded-full blur-xl group-hover:bg-white/20 transition-all" />
+                                <div className="flex items-center justify-between relative z-10">
+                                    <p className="text-[10px] font-black uppercase text-primary-foreground/60 tracking-tighter">Рентабельность</p>
+                                    <UITooltip>
+                                        <TooltipTrigger>
+                                            <Info className="h-3 w-3 text-primary-foreground/40" />
+                                        </TooltipTrigger>
+                                        <TooltipContent side="top">Эффективность: сколько копеек прибыли в каждом рубле выручки.</TooltipContent>
+                                    </UITooltip>
+                                </div>
+                                <div className="text-3xl font-black text-white relative z-10">
                                     {analytics.summary.profitability.toFixed(1)}%
                                 </div>
-                            </CardContent>
-                        </Card>
+                            </div>
+                        </TooltipProvider>
                     </div>
 
-                    {/* Category Breakdown */}
-                    <div className="grid gap-6 md:grid-cols-2">
+                    {/* Category Breakdown Redesign */}
+                    <div className="grid gap-8 md:grid-cols-2">
                         {/* Income Categories */}
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="text-base flex items-center gap-2">
-                                    <TrendingUp className="h-4 w-4 text-emerald-600" />
-                                    Категории доходов
-                                </CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="space-y-3">
-                                    {analytics.category_breakdown.income.map((cat: any, idx: number) => (
-                                        <div key={idx} className="flex items-center justify-between">
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-xl">{cat.icon}</span>
+                        <div className="space-y-4">
+                            <div className="flex items-center gap-3 ml-2">
+                                <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shadow-inner">
+                                    <TrendingUp className="h-4 w-4" />
+                                </div>
+                                <h4 className="font-black text-slate-900 uppercase tracking-tight text-sm">Структура доходов</h4>
+                            </div>
+                            <div className="bg-white border border-slate-100 rounded-3xl p-6 shadow-sm space-y-4">
+                                {analytics.category_breakdown.income.map((cat: any, idx: number) => (
+                                    <div key={idx} className="space-y-2 group">
+                                        <div className="flex items-center justify-between">
+                                            <div className="flex items-center gap-3">
+                                                <span className="text-xl group-hover:scale-110 transition-transform">{cat.icon}</span>
                                                 <div>
-                                                    <div className="font-medium text-sm">{cat.name}</div>
-                                                    <div className="text-xs text-muted-foreground">
-                                                        {cat.transaction_count} транзакций
+                                                    <div className="font-black text-slate-800 text-sm">{cat.name}</div>
+                                                    <div className="text-[10px] font-bold text-slate-400 uppercase">
+                                                        {cat.transaction_count} транз.
                                                     </div>
                                                 </div>
                                             </div>
                                             <div className="text-right">
-                                                <div className="font-bold text-emerald-600">
+                                                <div className="font-black text-emerald-600 text-sm">
                                                     {formatCurrency(cat.total_amount)}
                                                 </div>
-                                                <div className="text-xs text-muted-foreground">
-                                                    {cat.percentage?.toFixed(1)}%
+                                                <div className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">
+                                                    {cat.percentage?.toFixed(1)}% от общего
                                                 </div>
                                             </div>
                                         </div>
-                                    ))}
-                                    {analytics.category_breakdown.income.length === 0 && (
-                                        <p className="text-center text-muted-foreground py-4">
-                                            Нет данных
-                                        </p>
-                                    )}
-                                </div>
-                            </CardContent>
-                        </Card>
+                                        <div className="h-1 bg-slate-50 rounded-full overflow-hidden">
+                                            <div 
+                                                className="h-full bg-emerald-500 rounded-full transition-all duration-1000"
+                                                style={{ width: `${cat.percentage}%` }}
+                                            />
+                                        </div>
+                                    </div>
+                                ))}
+                                {analytics.category_breakdown.income.length === 0 && (
+                                    <div className="text-center py-12 text-slate-400 font-bold text-xs uppercase tracking-widest">Нет данных</div>
+                                )}
+                            </div>
+                        </div>
 
                         {/* Expense Categories */}
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="text-base flex items-center gap-2">
-                                    <TrendingDown className="h-4 w-4 text-red-600" />
-                                    Категории расходов
-                                </CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="space-y-3">
-                                    {analytics.category_breakdown.expense.map((cat: any, idx: number) => (
-                                        <div key={idx} className="flex items-center justify-between">
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-xl">{cat.icon}</span>
+                        <div className="space-y-4">
+                            <div className="flex items-center gap-3 ml-2">
+                                <div className="w-8 h-8 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shadow-inner">
+                                    <TrendingDown className="h-4 w-4" />
+                                </div>
+                                <h4 className="font-black text-slate-900 uppercase tracking-tight text-sm">Структура расходов</h4>
+                            </div>
+                            <div className="bg-white border border-slate-100 rounded-3xl p-6 shadow-sm space-y-4">
+                                {analytics.category_breakdown.expense.map((cat: any, idx: number) => (
+                                    <div key={idx} className="space-y-2 group">
+                                        <div className="flex items-center justify-between">
+                                            <div className="flex items-center gap-3">
+                                                <span className="text-xl group-hover:scale-110 transition-transform">{cat.icon}</span>
                                                 <div>
-                                                    <div className="font-medium text-sm">{cat.name}</div>
-                                                    <div className="text-xs text-muted-foreground">
-                                                        {cat.transaction_count} транзакций
+                                                    <div className="font-black text-slate-800 text-sm">{cat.name}</div>
+                                                    <div className="text-[10px] font-bold text-slate-400 uppercase">
+                                                        {cat.transaction_count} транз.
                                                     </div>
                                                 </div>
                                             </div>
                                             <div className="text-right">
-                                                <div className="font-bold text-red-600">
+                                                <div className="font-black text-rose-600 text-sm">
                                                     {formatCurrency(cat.total_amount)}
                                                 </div>
-                                                <div className="text-xs text-muted-foreground">
-                                                    {cat.percentage?.toFixed(1)}%
+                                                <div className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">
+                                                    {cat.percentage?.toFixed(1)}% от общего
                                                 </div>
                                             </div>
                                         </div>
-                                    ))}
-                                    {analytics.category_breakdown.expense.length === 0 && (
-                                        <p className="text-center text-muted-foreground py-4">
-                                            Нет данных
-                                        </p>
-                                    )}
-                                </div>
-                            </CardContent>
-                        </Card>
+                                        <div className="h-1 bg-slate-50 rounded-full overflow-hidden">
+                                            <div 
+                                                className="h-full bg-rose-500 rounded-full transition-all duration-1000"
+                                                style={{ width: `${cat.percentage}%` }}
+                                            />
+                                        </div>
+                                    </div>
+                                ))}
+                                {analytics.category_breakdown.expense.length === 0 && (
+                                    <div className="text-center py-12 text-slate-400 font-bold text-xs uppercase tracking-widest">Нет данных</div>
+                                )}
+                            </div>
+                        </div>
                     </div>
-
-                    {/* Monthly Trend */}
-                    {analytics.monthly_trend?.length > 0 && (
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="text-base">Динамика по месяцам</CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="space-y-2">
-                                    {analytics.monthly_trend.map((month: any, idx: number) => {
-                                        const date = new Date(month.month)
-                                        const monthName = date.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })
-
-                                        return (
-                                            <div key={idx} className="flex items-center justify-between py-2 border-b last:border-0">
-                                                <div className="font-medium">{monthName}</div>
-                                                <div className="flex gap-6 text-sm">
-                                                    <span className="text-emerald-600">
-                                                        ↑ {formatCurrency(month.income)}
-                                                    </span>
-                                                    <span className="text-red-600">
-                                                        ↓ {formatCurrency(month.expense)}
-                                                    </span>
-                                                    <span className={`font-bold ${month.profit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                                                        = {formatCurrency(month.profit)}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        )
-                                    })}
-                                </div>
-                            </CardContent>
-                        </Card>
-                    )}
-                </>
+                </div>
             )}
         </div>
     )

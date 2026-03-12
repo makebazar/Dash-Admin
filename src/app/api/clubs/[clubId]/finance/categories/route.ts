@@ -26,6 +26,7 @@ export async function GET(
                 fc.icon,
                 fc.color,
                 fc.is_system,
+                fc.activity_type,
                 fc.is_active,
                 fc.created_at,
                 COUNT(ft.id) as transaction_count,
@@ -72,7 +73,7 @@ export async function POST(
 
         const { clubId } = await params;
         const body = await request.json();
-        const { name, type, icon = '💰', color = '#3b82f6' } = body;
+        const { name, type, icon = '💰', color = '#3b82f6', activity_type = 'operating' } = body;
 
         if (!name || !type) {
             return NextResponse.json(
@@ -88,12 +89,19 @@ export async function POST(
             );
         }
 
+        if (!['operating', 'investing', 'financing'].includes(activity_type)) {
+            return NextResponse.json(
+                { error: 'Invalid activity type' },
+                { status: 400 }
+            );
+        }
+
         const result = await query(
             `INSERT INTO finance_categories 
-                (club_id, name, type, icon, color, is_system, is_active)
-             VALUES ($1, $2, $3, $4, $5, false, true)
+                (club_id, name, type, icon, color, is_system, activity_type, is_active)
+             VALUES ($1, $2, $3, $4, $5, false, $6, true)
              RETURNING *`,
-            [clubId, name, type, icon, color]
+            [clubId, name, type, icon, color, activity_type]
         );
 
         return NextResponse.json({
@@ -126,16 +134,16 @@ export async function PUT(
 
         const { clubId } = await params;
         const body = await request.json();
-        const { id, name, icon, color, is_active } = body;
+        const { id, name, icon, color, is_active, activity_type } = body;
 
         if (!id) {
             return NextResponse.json({ error: 'Category ID is required' }, { status: 400 });
         }
 
-        // Check if category belongs to club and is not system
+        // Check if category belongs to club or is system
         const checkResult = await query(
             `SELECT is_system FROM finance_categories 
-             WHERE id = $1 AND club_id = $2`,
+             WHERE id = $1 AND (club_id = $2 OR club_id IS NULL)`,
             [id, clubId]
         );
 
@@ -143,9 +151,12 @@ export async function PUT(
             return NextResponse.json({ error: 'Category not found' }, { status: 404 });
         }
 
-        if (checkResult.rows[0].is_system) {
+        // Allow system categories to be updated with activity_type only if needed, 
+        // but generally users shouldn't change system category names/icons.
+        // For now, let's keep it simple: only non-system categories can be updated by user.
+        if (checkResult.rows[0].is_system && (name || icon || color)) {
             return NextResponse.json(
-                { error: 'Cannot modify system categories' },
+                { error: 'Cannot modify core system category properties' },
                 { status: 403 }
             );
         }
@@ -155,10 +166,11 @@ export async function PUT(
              SET name = COALESCE($1, name),
                  icon = COALESCE($2, icon),
                  color = COALESCE($3, color),
-                 is_active = COALESCE($4, is_active)
-             WHERE id = $5 AND club_id = $6
+                 is_active = COALESCE($4, is_active),
+                 activity_type = COALESCE($5, activity_type)
+             WHERE id = $6 AND (club_id = $7 OR club_id IS NULL)
              RETURNING *`,
-            [name, icon, color, is_active, id, clubId]
+            [name, icon, color, is_active, activity_type, id, clubId]
         );
 
         return NextResponse.json({

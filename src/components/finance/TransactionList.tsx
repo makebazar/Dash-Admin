@@ -21,9 +21,15 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
-import { Plus, Search, Filter, TrendingUp, TrendingDown, Edit, Trash2, ChevronDown } from "lucide-react"
+import { Plus, Search, Filter, TrendingUp, TrendingDown, Edit, Trash2, ChevronDown, Info } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
+} from "@/components/ui/tooltip"
 
 interface Transaction {
     id: number
@@ -311,18 +317,19 @@ export default function TransactionList({
         const regularTransactions = filteredTransactions.filter(t => !t.related_shift_report_id)
 
         // Group shift transactions by shift_report_id
-        const groupsMap = new Map<number, Transaction[]>()
+        const groupsMap = new Map<string, Transaction[]>()
         shiftTransactions.forEach(t => {
             if (t.related_shift_report_id) {
-                if (!groupsMap.has(t.related_shift_report_id)) {
-                    groupsMap.set(t.related_shift_report_id, [])
+                const shiftId = String(t.related_shift_report_id)
+                if (!groupsMap.has(shiftId)) {
+                    groupsMap.set(shiftId, [])
                 }
-                groupsMap.get(t.related_shift_report_id)!.push(t)
+                groupsMap.get(shiftId)!.push(t)
             }
         })
 
         // Convert groups to TransactionGroup objects
-        const groups: TransactionGroup[] = Array.from(groupsMap.entries()).map(([id, trans]) => ({
+        const groups: any[] = Array.from(groupsMap.entries()).map(([id, trans]) => ({
             shift_report_id: id,
             shift_date: trans[0].transaction_date,
             transactions: trans,
@@ -330,7 +337,7 @@ export default function TransactionList({
                 const amount = typeof t.amount === 'string' ? parseFloat(t.amount) : t.amount
                 return sum + (t.type === 'income' ? amount : -amount)
             }, 0),
-            is_expanded: expandedGroups.has(id)
+            is_expanded: expandedGroups.has(id as any)
         }))
 
         // Sort groups by date (newest first)
@@ -343,236 +350,236 @@ export default function TransactionList({
     }
 
     return (
-        <div className="space-y-4">
-            {/* Filters and Actions */}
-            <div className="flex flex-wrap gap-4 items-end">
-                <div className="flex-1 min-w-[200px]">
-                    <Label>Поиск</Label>
-                    <div className="relative">
-                        <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+        <div className="space-y-6">
+            {/* Filters Redesign */}
+            <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm space-y-4">
+                <div className="flex flex-wrap gap-3 items-center">
+                    <div className="flex-1 min-w-[240px] relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                         <Input
                             placeholder="Поиск по описанию..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
-                            className="pl-9"
+                            className="pl-10 rounded-xl border-slate-200 bg-slate-50/50 focus:bg-white transition-colors"
                         />
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                        <Select value={typeFilter} onValueChange={setTypeFilter}>
+                            <SelectTrigger className="w-[130px] rounded-xl border-slate-200">
+                                <SelectValue placeholder="Тип" />
+                            </SelectTrigger>
+                            <SelectContent className="rounded-xl">
+                                <SelectItem value="all">Все типы</SelectItem>
+                                <SelectItem value="income">Доходы</SelectItem>
+                                <SelectItem value="expense">Расходы</SelectItem>
+                            </SelectContent>
+                        </Select>
+
+                        <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                            <SelectTrigger className="w-[180px] rounded-xl border-slate-200">
+                                <SelectValue placeholder="Категория" />
+                            </SelectTrigger>
+                            <SelectContent className="rounded-xl">
+                                <SelectItem value="all">Все категории</SelectItem>
+                                {categories.map(cat => (
+                                    <SelectItem key={cat.id} value={cat.id.toString()}>
+                                        {cat.icon} {cat.name}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+
+                        <Select value={statusFilter} onValueChange={setStatusFilter}>
+                            <SelectTrigger className="w-[150px] rounded-xl border-slate-200">
+                                <SelectValue placeholder="Статус" />
+                            </SelectTrigger>
+                            <SelectContent className="rounded-xl">
+                                <SelectItem value="all">Все статусы</SelectItem>
+                                <SelectItem value="completed">Выполнено</SelectItem>
+                                <SelectItem value="pending">Ожидает</SelectItem>
+                                <SelectItem value="planned">Планово</SelectItem>
+                            </SelectContent>
+                        </Select>
                     </div>
                 </div>
 
-                <div className="w-[150px]">
-                    <Label>Тип</Label>
-                    <Select value={typeFilter} onValueChange={setTypeFilter}>
-                        <SelectTrigger>
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">Все</SelectItem>
-                            <SelectItem value="income">Доходы</SelectItem>
-                            <SelectItem value="expense">Расходы</SelectItem>
-                        </SelectContent>
-                    </Select>
-                </div>
+                <div className="flex items-center justify-between pt-2 border-t border-slate-50">
+                    <div className="flex items-center gap-4">
+                        <TooltipProvider>
+                            <div className="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100">
+                                <Switch
+                                    checked={hideImported}
+                                    onCheckedChange={setHideImported}
+                                    id="hide-imported"
+                                    className="scale-75"
+                                />
+                                <Label htmlFor="hide-imported" className="cursor-pointer text-[11px] font-black uppercase text-slate-500 tracking-tight">
+                                    Скрыть импорт смен
+                                </Label>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Info className="h-3 w-3 text-slate-300 cursor-help" />
+                                    </TooltipTrigger>
+                                    <TooltipContent side="top" className="max-w-[200px]">
+                                        Выручка смен попадает сюда автоматически. Включите этот фильтр, чтобы видеть только ручные операции.
+                                    </TooltipContent>
+                                </Tooltip>
+                            </div>
+                        </TooltipProvider>
+                    </div>
 
-                <div className="w-[180px]">
-                    <Label>Категория</Label>
-                    <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                        <SelectTrigger>
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">Все категории</SelectItem>
-                            {categories.map(cat => (
-                                <SelectItem key={cat.id} value={cat.id.toString()}>
-                                    {cat.icon} {cat.name}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
+                    <Button 
+                        onClick={() => { resetForm(); setDialogOpen(true); }}
+                        className="rounded-xl font-bold text-xs px-6 h-9 shadow-sm shadow-primary/10"
+                    >
+                        <Plus className="h-4 w-4 mr-2" />
+                        Добавить операцию
+                    </Button>
                 </div>
-
-                <div className="w-[150px]">
-                    <Label>Статус</Label>
-                    <Select value={statusFilter} onValueChange={setStatusFilter}>
-                        <SelectTrigger>
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">Все</SelectItem>
-                            <SelectItem value="completed">Выполнено</SelectItem>
-                            <SelectItem value="pending">Ожидает</SelectItem>
-                            <SelectItem value="planned">Запланировано</SelectItem>
-                        </SelectContent>
-                    </Select>
-                </div>
-
-                <div className="flex items-center gap-2 border rounded-md px-3 py-2 bg-background">
-                    <Switch
-                        checked={hideImported}
-                        onCheckedChange={setHideImported}
-                        id="hide-imported"
-                    />
-                    <Label htmlFor="hide-imported" className="cursor-pointer text-sm">
-                        Скрыть импорт смен
-                    </Label>
-                </div>
-
-                <Button onClick={() => { resetForm(); setDialogOpen(true); }}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Добавить
-                </Button>
             </div>
 
-            {/* Transactions Table */}
-            <Card>
-                <CardHeader>
-                    <CardTitle>Список транзакций</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    {loading ? (
-                        <div className="text-center py-8 text-muted-foreground">
-                            Загрузка...
-                        </div>
-                    ) : transactions.length === 0 ? (
-                        <div className="text-center py-8 text-muted-foreground">
-                            Нет транзакций
-                        </div>
-                    ) : (
-                        <div className="space-y-2">
-                            {groupTransactions().map((item) => {
-                                // Check if it's a group or single transaction
-                                if ('shift_report_id' in item) {
-                                    // It's a TransactionGroup
-                                    const group = item as TransactionGroup
-                                    return (
-                                        <div key={`group-${group.shift_report_id}`} className="border rounded-lg">
-                                            {/* Group Header */}
-                                            <div
-                                                className="flex items-center justify-between p-4 cursor-pointer hover:bg-muted/50 transition-colors"
-                                                onClick={() => toggleGroup(group.shift_report_id)}
-                                            >
-                                                <div className="flex items-center gap-4 flex-1">
-                                                    <div className="w-10 h-10 rounded-lg flex items-center justify-center text-2xl bg-blue-50">
-                                                        📊
-                                                    </div>
-                                                    <div className="flex-1">
-                                                        <div className="flex items-center gap-2">
-                                                            <span className="font-medium">Выручка смены</span>
-                                                            <Badge variant="outline">Импорт</Badge>
-                                                        </div>
-                                                        <div className="text-sm text-muted-foreground mt-1">
-                                                            {new Date(group.shift_date).toLocaleDateString('ru-RU')} • {group.transactions.length} транзакций
-                                                        </div>
-                                                    </div>
-                                                </div>
-
-                                                <div className="flex items-center gap-4">
-                                                    <div className="text-lg font-bold text-emerald-600">
-                                                        +{formatCurrency(group.total)}
-                                                    </div>
-                                                    <ChevronDown
-                                                        className={`h-5 w-5 text-muted-foreground transition-transform ${group.is_expanded ? 'rotate-180' : ''
-                                                            }`}
-                                                    />
-                                                </div>
-                                            </div>
-
-                                            {/* Group Details (collapsible) */}
-                                            {group.is_expanded && (
-                                                <div className="border-t bg-muted/20 p-4 space-y-2">
-                                                    {group.transactions.map((transaction) => (
-                                                        <div
-                                                            key={transaction.id}
-                                                            className="flex items-center justify-between p-3 bg-background border rounded-md"
-                                                        >
-                                                            <div className="flex items-center gap-3 flex-1">
-                                                                <div className="text-lg">
-                                                                    {transaction.account_name === 'Касса' ? '💵' : transaction.account_name === 'Тбанк' ? '💳' : '🏦'}
-                                                                </div>
-                                                                <div className="flex-1">
-                                                                    <div className="font-medium text-sm">
-                                                                        {transaction.description || transaction.payment_method}
-                                                                    </div>
-                                                                    <div className="text-xs text-muted-foreground">
-                                                                        {transaction.account_name}
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                            <div className="text-sm font-semibold text-emerald-600">
-                                                                +{formatCurrency(transaction.amount)}
-                                                            </div>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            )}
-                                        </div>
-                                    )
-                                } else {
-                                    // It's a regular Transaction
-                                    const transaction = item as Transaction
-                                    return (
+            {/* List View */}
+            <div className="space-y-3">
+                {loading ? (
+                    <div className="flex flex-col items-center justify-center py-20 space-y-4">
+                        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary" />
+                        <p className="text-slate-400 font-bold text-xs uppercase tracking-widest">Загрузка данных...</p>
+                    </div>
+                ) : transactions.length === 0 ? (
+                    <div className="bg-white border border-dashed rounded-3xl py-20 flex flex-col items-center justify-center text-slate-400">
+                        <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-4 text-2xl">🔍</div>
+                        <p className="font-bold text-sm">Операции не найдены</p>
+                        <p className="text-xs">Попробуйте изменить параметры фильтрации</p>
+                    </div>
+                ) : (
+                    <div className="grid gap-3">
+                        {groupTransactions().map((item) => {
+                            if ('shift_report_id' in item) {
+                                const group = item as TransactionGroup
+                                return (
+                                    <div key={`group-${group.shift_report_id}`} className="bg-white border border-slate-100 rounded-2xl shadow-sm overflow-hidden transition-all hover:shadow-md">
                                         <div
-                                            key={transaction.id}
-                                            className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
+                                            className="flex items-center justify-between p-4 cursor-pointer hover:bg-slate-50/50 transition-colors"
+                                            onClick={() => toggleGroup(group.shift_report_id)}
                                         >
-                                            <div className="flex items-center gap-4 flex-1">
-                                                <div
-                                                    className="w-10 h-10 rounded-lg flex items-center justify-center text-2xl"
-                                                    style={{ backgroundColor: resolveColor(transaction.category_color) + '20' }}
-                                                >
-                                                    {transaction.category_icon}
+                                            <div className="flex items-center gap-4">
+                                                <div className="w-12 h-12 rounded-2xl bg-blue-50 text-2xl flex items-center justify-center shadow-inner">
+                                                    🕒
                                                 </div>
-                                                <div className="flex-1">
+                                                <div>
                                                     <div className="flex items-center gap-2">
-                                                        <span className="font-medium">{transaction.category_name}</span>
-                                                        {getStatusBadge(transaction.status)}
+                                                        <span className="font-black text-slate-900">Импорт выручки</span>
+                                                        <span className="text-[10px] font-black uppercase bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded">Отчет смены</span>
                                                     </div>
-                                                    <div className="text-sm text-muted-foreground flex items-center gap-2 mt-1">
-                                                        <span>{new Date(transaction.transaction_date).toLocaleDateString('ru-RU')}</span>
-                                                        <span>•</span>
-                                                        <span>{getPaymentMethodLabel(transaction.payment_method)}</span>
-                                                        {transaction.description && (
-                                                            <>
-                                                                <span>•</span>
-                                                                <span>{transaction.description}</span>
-                                                            </>
-                                                        )}
+                                                    <div className="text-[11px] font-bold text-slate-400 uppercase mt-0.5">
+                                                        {new Date(group.shift_date).toLocaleDateString('ru-RU', {day: 'numeric', month: 'long', year: 'numeric'})} • {group.transactions.length} поз.
                                                     </div>
                                                 </div>
                                             </div>
 
-                                            <div className="flex items-center gap-4">
-                                                <div
-                                                    className={`text-lg font-bold ${transaction.type === 'income' ? 'text-emerald-600' : 'text-red-600'
-                                                        }`}
-                                                >
-                                                    {transaction.type === 'income' ? '+' : '-'}
-                                                    {formatCurrency(transaction.amount)}
+                                            <div className="flex items-center gap-6">
+                                                <div className="text-right">
+                                                    <div className={`text-lg font-black ${group.total >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                                        {group.total >= 0 ? '+' : ''}{formatCurrency(group.total)}
+                                                    </div>
+                                                    <div className="text-[10px] font-black text-slate-400 uppercase">Суммарно за смену</div>
                                                 </div>
-                                                <div className="flex gap-2">
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        onClick={() => handleEdit(transaction)}
-                                                    >
-                                                        <Edit className="h-4 w-4" />
-                                                    </Button>
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        onClick={() => handleDelete(transaction.id)}
-                                                    >
-                                                        <Trash2 className="h-4 w-4" />
-                                                    </Button>
+                                                <div className={`w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center transition-transform ${group.is_expanded ? 'rotate-180 bg-slate-100' : ''}`}>
+                                                    <ChevronDown className="h-4 w-4 text-slate-400" />
                                                 </div>
                                             </div>
                                         </div>
-                                    )
-                                }
-                            })}
-                        </div>
-                    )}
-                </CardContent>
-            </Card>
+
+                                        {group.is_expanded && (
+                                            <div className="bg-slate-50/30 border-t border-slate-100 p-4 pt-2 space-y-2">
+                                                {group.transactions.map((transaction) => {
+                                                    const isInc = transaction.type === 'income'
+                                                    return (
+                                                        <div key={transaction.id} className="flex items-center justify-between p-3 bg-white border border-slate-100 rounded-xl group/item">
+                                                            <div className="flex items-center gap-3">
+                                                                <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center text-sm shadow-inner">
+                                                                    {transaction.account_name?.includes('Касса') ? '💵' : '💳'}
+                                                                </div>
+                                                                <div>
+                                                                    <div className="text-xs font-bold text-slate-700">{transaction.description || transaction.payment_method}</div>
+                                                                    <div className="text-[10px] font-bold text-slate-400 uppercase">{transaction.account_name}</div>
+                                                                </div>
+                                                            </div>
+                                                            <div className={`text-sm font-black ${transaction.type === 'income' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                                                {transaction.type === 'income' ? '+' : '-'}{formatCurrency(Math.abs(transaction.amount))}
+                                                            </div>
+                                                        </div>
+                                                    )
+                                                })}
+                                            </div>
+                                        )}
+                                    </div>
+                                )
+                            } else {
+                                const transaction = item as Transaction
+                                const isIncome = transaction.type === 'income'
+                                return (
+                                    <div key={transaction.id} className="bg-white border border-slate-100 rounded-2xl shadow-sm p-4 flex items-center justify-between transition-all hover:shadow-md hover:border-primary/10 group">
+                                        <div className="flex items-center gap-4">
+                                            <div
+                                                className="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl shadow-inner transition-transform group-hover:scale-105"
+                                                style={{ backgroundColor: resolveColor(transaction.category_color) + '15' }}
+                                            >
+                                                {transaction.category_icon}
+                                            </div>
+                                            <div>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="font-black text-slate-900">{transaction.category_name}</span>
+                                                    <span className={`text-[10px] font-black uppercase px-1.5 py-0.5 rounded ${
+                                                        transaction.status === 'completed' ? 'bg-emerald-100 text-emerald-600' :
+                                                        transaction.status === 'pending' ? 'bg-amber-100 text-amber-600' :
+                                                        'bg-slate-100 text-slate-500'
+                                                    }`}>
+                                                        {transaction.status === 'completed' ? 'Оплачено' : 
+                                                         transaction.status === 'pending' ? 'Ожидание' : 'Планово'}
+                                                    </span>
+                                                </div>
+                                                <div className="text-[11px] font-bold text-slate-400 uppercase mt-0.5 flex items-center gap-2">
+                                                    <span>{new Date(transaction.transaction_date).toLocaleDateString('ru-RU')}</span>
+                                                    <span className="w-1 h-1 rounded-full bg-slate-300" />
+                                                    <span>{transaction.account_name || getPaymentMethodLabel(transaction.payment_method)}</span>
+                                                    {transaction.description && (
+                                                        <>
+                                                            <span className="w-1 h-1 rounded-full bg-slate-300" />
+                                                            <span className="normal-case text-slate-500 italic max-w-[200px] truncate">{transaction.description}</span>
+                                                        </>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex items-center gap-6">
+                                            <div className="text-right">
+                                                <div className={`text-lg font-black ${isIncome ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                                    {isIncome ? '+' : '-'}{formatCurrency(Math.abs(transaction.amount))}
+                                                </div>
+                                                <div className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">
+                                                    {transaction.created_by_name}
+                                                </div>
+                                            </div>
+                                            
+                                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <Button variant="ghost" size="icon" onClick={() => handleEdit(transaction)} className="h-8 w-8 rounded-lg hover:bg-slate-100 hover:text-primary">
+                                                    <Edit className="h-4 w-4" />
+                                                </Button>
+                                                <Button variant="ghost" size="icon" onClick={() => handleDelete(transaction.id)} className="h-8 w-8 rounded-lg hover:bg-rose-50 hover:text-rose-600">
+                                                    <Trash2 className="h-4 w-4" />
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )
+                            }
+                        })}
+                    </div>
+                )}
+            </div>
 
             {/* Add/Edit Dialog */}
             <Dialog open={effectiveDialogOpen} onOpenChange={setDialogOpen}>
@@ -587,34 +594,35 @@ export default function TransactionList({
                     </DialogHeader>
 
                     <form onSubmit={handleSubmit} className="space-y-4">
-                        <div>
-                            <Label>Тип</Label>
+                        <div className="space-y-2">
+                            <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Тип операции</Label>
                             <Select
                                 value={formData.type}
                                 onValueChange={(value: 'income' | 'expense') =>
                                     setFormData({ ...formData, type: value })
                                 }
                             >
-                                <SelectTrigger>
+                                <SelectTrigger className="rounded-xl h-11">
                                     <SelectValue />
                                 </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="income">💰 Доход</SelectItem>
-                                    <SelectItem value="expense">💸 Расход</SelectItem>
+                                <SelectContent className="rounded-xl">
+                                    <SelectItem value="income">💰 Доход (Поступление денег)</SelectItem>
+                                    <SelectItem value="expense">💸 Расход (Выплата/Трата)</SelectItem>
                                 </SelectContent>
                             </Select>
+                            <p className="text-[10px] text-slate-400 ml-1">Выберите «Доход», если деньги пришли, или «Расход», если вы их потратили.</p>
                         </div>
 
-                        <div>
-                            <Label>Категория</Label>
+                        <div className="space-y-2">
+                            <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Категория</Label>
                             <Select
                                 value={formData.category_id}
                                 onValueChange={(value) => setFormData({ ...formData, category_id: value })}
                             >
-                                <SelectTrigger>
+                                <SelectTrigger className="rounded-xl h-11">
                                     <SelectValue placeholder="Выберите категорию" />
                                 </SelectTrigger>
-                                <SelectContent>
+                                <SelectContent className="rounded-xl">
                                     {categories
                                         .filter(cat => cat.type === formData.type)
                                         .map(cat => (
@@ -624,66 +632,73 @@ export default function TransactionList({
                                         ))}
                                 </SelectContent>
                             </Select>
+                            <p className="text-[10px] text-slate-400 ml-1">Нужна для отчетов. Если подходящей нет — добавьте её в настройках.</p>
                         </div>
 
-                        <div>
-                            <Label>Сумма</Label>
-                            <Input
-                                type="number"
-                                placeholder="0"
-                                value={formData.amount}
-                                onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-                                required
-                            />
+                        <div className="space-y-2">
+                            <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Сумма</Label>
+                            <div className="relative">
+                                <Input
+                                    type="number"
+                                    placeholder="0.00"
+                                    value={formData.amount}
+                                    onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+                                    required
+                                    className="rounded-xl h-11 pr-8 font-bold"
+                                />
+                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">₽</span>
+                            </div>
                         </div>
 
-                        <div>
-                            <Label>Дата платежа</Label>
-                            <Input
-                                type="date"
-                                value={formData.transaction_date}
-                                onChange={(e) => setFormData({ ...formData, transaction_date: e.target.value })}
-                                required
-                            />
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Дата</Label>
+                                <Input
+                                    type="date"
+                                    value={formData.transaction_date}
+                                    onChange={(e) => setFormData({ ...formData, transaction_date: e.target.value })}
+                                    required
+                                    className="rounded-xl h-11"
+                                />
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Счёт</Label>
+                                <Select
+                                    value={formData.account_id}
+                                    onValueChange={(value) => setFormData({ ...formData, account_id: value })}
+                                >
+                                    <SelectTrigger className="rounded-xl h-11">
+                                        <SelectValue placeholder="Откуда/Куда?" />
+                                    </SelectTrigger>
+                                    <SelectContent className="rounded-xl">
+                                        {accounts.map(acc => (
+                                            <SelectItem key={acc.id} value={acc.id.toString()}>
+                                                {acc.icon} {acc.name}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
                         </div>
 
-                        <div>
-                            <Label>Счёт</Label>
-                            <Select
-                                value={formData.account_id}
-                                onValueChange={(value) => setFormData({ ...formData, account_id: value })}
-                            >
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Выберите счёт" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {accounts.map(acc => (
-                                        <SelectItem key={acc.id} value={acc.id.toString()}>
-                                            {acc.icon} {acc.name}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-
-
-
-                        <div>
-                            <Label>Описание</Label>
+                        <div className="space-y-2">
+                            <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Описание (необязательно)</Label>
                             <Textarea
-                                placeholder="Дополнительная информация..."
+                                placeholder="Например: Закупка хозтоваров для админов"
                                 value={formData.description}
                                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                                rows={3}
+                                rows={2}
+                                className="rounded-xl border-slate-200 resize-none"
                             />
                         </div>
 
-                        <DialogFooter>
-                            <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
+                        <DialogFooter className="pt-2">
+                            <Button type="button" variant="ghost" onClick={() => setDialogOpen(false)} className="rounded-xl font-bold text-slate-500">
                                 Отмена
                             </Button>
-                            <Button type="submit">
-                                {editingTransaction ? 'Сохранить' : 'Создать'}
+                            <Button type="submit" className="rounded-xl font-black px-8">
+                                {editingTransaction ? 'Сохранить изменения' : 'Создать операцию'}
                             </Button>
                         </DialogFooter>
                     </form>

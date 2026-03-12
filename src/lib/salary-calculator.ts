@@ -269,14 +269,16 @@ export async function calculateSalary(
 
             if (bonus.type !== 'checklist' && bonus.type !== 'maintenance_kpi') {
                 const payoutType = bonus.payout_type || 'REAL_MONEY';
+                const isMonthly = bonus.mode === 'MONTH';
                 
                 breakdown.bonuses.push({
                     name: bonus.name || bonus.type,
-                    type: 'SHIFT_BONUS',
+                    type: isMonthly ? 'PERIOD_BONUS_CONTRIBUTION' : 'SHIFT_BONUS',
                     amount: parseFloat(bonusAmount.toFixed(2)),
                     source_key: sourceKey,
                     source_value: metricValue,
-                    payout_type: payoutType
+                    payout_type: payoutType,
+                    mode: bonus.mode
                 });
                 
                 // Разделяем по типу выплаты

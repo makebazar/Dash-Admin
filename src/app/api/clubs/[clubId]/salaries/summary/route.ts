@@ -302,17 +302,18 @@ export async function GET(
             // - Tasks from past months that were COMPLETED by user IN THIS MONTH (cleared backlog)
             const efficiencyRes = await query(
                 `SELECT 
-                    COUNT(*) as total_tasks,
+                    COUNT(*) FILTER (WHERE status != 'CANCELLED' AND (assigned_user_id = $1 OR status = 'COMPLETED')) as total_tasks,
                     COUNT(*) FILTER (WHERE status = 'COMPLETED' AND completed_at >= $2 AND completed_at <= $3) as completed_tasks
                  FROM equipment_maintenance_tasks
                  WHERE 
                     (
-                        -- 1. Tasks due this month (Assigned or Completed by user)
-                        ((assigned_user_id = $1 OR completed_by = $1) AND due_date >= $2 AND due_date <= $3)
+                        -- 1. Tasks due this month
+                        (due_date >= $2 AND due_date <= $3)
                         OR
                         -- 2. Backlog tasks completed this month by user
                         (completed_by = $1 AND status = 'COMPLETED' AND completed_at >= $2 AND completed_at <= $3 AND due_date < $2)
-                    )`,
+                    )
+                    AND (assigned_user_id = $1 OR completed_by = $1)`,
                 [emp.id, startOfMonth, endOfMonth]
             );
             const monthTotalTasks = parseInt(efficiencyRes.rows[0]?.total_tasks || '0');
@@ -584,14 +585,30 @@ export async function GET(
             // shift_bonuses - бонусы, привязанные К СМЕНЕ (кроме периодических и обслуживания)
             const shift_bonuses = processedShifts.reduce((sum: number, s: any) => {
                 const bonuses = (s.breakdown?.bonuses || [])
-                    .filter((b: any) => (b.type === 'SHIFT_BONUS' || b.type === 'CHECKLIST_BONUS') && b.payout_type !== 'VIRTUAL_BALANCE')
+                    .filter((b: any) => {
+                        // Exclude anything that's already in bonuses_status (monthly KPIs)
+                        const isMonthlyKPI = bonuses_status.some(bs => bs.name === b.name || (b.id && bs.id === b.id));
+                        const isContribution = b.type === 'PERIOD_BONUS_CONTRIBUTION' || b.mode === 'MONTH';
+                        
+                        return (b.type === 'SHIFT_BONUS' || b.type === 'CHECKLIST_BONUS') && 
+                               b.payout_type !== 'VIRTUAL_BALANCE' && 
+                               !isMonthlyKPI && !isContribution;
+                    })
                     .reduce((bSum: number, b: any) => bSum + (b.amount || 0), 0);
                 return sum + bonuses;
             }, 0);
 
             const virtual_shift_bonuses = processedShifts.reduce((sum: number, s: any) => {
                 const bonuses = (s.breakdown?.bonuses || [])
-                    .filter((b: any) => (b.type === 'SHIFT_BONUS' || b.type === 'CHECKLIST_BONUS') && b.payout_type === 'VIRTUAL_BALANCE')
+                    .filter((b: any) => {
+                        // Exclude anything that's already in bonuses_status (monthly KPIs)
+                        const isMonthlyKPI = bonuses_status.some(bs => bs.name === b.name || (b.id && bs.id === b.id));
+                        const isContribution = b.type === 'PERIOD_BONUS_CONTRIBUTION' || b.mode === 'MONTH';
+                        
+                        return (b.type === 'SHIFT_BONUS' || b.type === 'CHECKLIST_BONUS') && 
+                               b.payout_type === 'VIRTUAL_BALANCE' && 
+                               !isMonthlyKPI && !isContribution;
+                    })
                     .reduce((bSum: number, b: any) => bSum + (b.amount || 0), 0);
                 return sum + bonuses;
             }, 0);
@@ -599,7 +616,11 @@ export async function GET(
             // Shift bonus breakdown for UI
             const shift_bonuses_breakdown = processedShifts.reduce((acc: any[], s: any) => {
                 (s.breakdown?.bonuses || []).forEach((b: any) => {
-                    if (b.type === 'SHIFT_BONUS' || b.type === 'CHECKLIST_BONUS' || b.type === 'PROGRESSIVE_BONUS') {
+                    // Exclude anything that's already in bonuses_status (monthly KPIs)
+                    const isMonthlyKPI = bonuses_status.some(bs => bs.name === b.name || (b.id && bs.id === b.id));
+                    const isContribution = b.type === 'PERIOD_BONUS_CONTRIBUTION' || b.mode === 'MONTH';
+
+                    if ((b.type === 'SHIFT_BONUS' || b.type === 'CHECKLIST_BONUS' || b.type === 'PROGRESSIVE_BONUS') && !isMonthlyKPI && !isContribution) {
                         const existing = acc.find(item => item.name === b.name && item.payout_type === b.payout_type);
                         if (existing) {
                             existing.amount += b.amount;
@@ -797,7 +818,7 @@ export async function GET(
                 shifts_count,
                 planned_shifts,
                 base_salary,
-                total_accrued: final_total_accrued,
+                total_accrued: final_total_accrued - total_bar_purchases,
                 kpi_bonus_amount: final_total_accrued - base_salary,
                 virtual_balance_accrued: final_virtual_balance_accrued,
                 total_paid,
