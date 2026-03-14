@@ -47,6 +47,7 @@ COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/src/db ./src/db
 COPY --from=builder /app/migrations ./migrations
 COPY --from=builder /app/scripts/start.sh ./scripts/start.sh
+COPY --from=builder /app/scripts/migrate.js ./scripts/migrate.js
 
 # Install pg module for migrations (simpler than copying individual modules)
 RUN npm install pg --omit=dev --no-save --no-audit --no-fund
