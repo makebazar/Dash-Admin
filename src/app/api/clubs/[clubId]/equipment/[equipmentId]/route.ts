@@ -160,7 +160,11 @@ export async function PATCH(
             'cleaning_interval_days', 'last_cleaned_at', 'is_active', 'notes',
             'thermal_paste_last_changed_at', 'thermal_paste_interval_days',
             'thermal_paste_type', 'thermal_paste_note', 'maintenance_enabled',
-            'assigned_user_id'
+            'assigned_user_id',
+            'cpu_thermal_paste_last_changed_at', 'cpu_thermal_paste_interval_days',
+            'cpu_thermal_paste_type', 'cpu_thermal_paste_note',
+            'gpu_thermal_paste_last_changed_at', 'gpu_thermal_paste_interval_days',
+            'gpu_thermal_paste_type', 'gpu_thermal_paste_note'
         ];
 
         // Logic: if assigned_user_id is set to a user or free pool, maintenance must be enabled

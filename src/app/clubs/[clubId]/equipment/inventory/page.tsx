@@ -110,6 +110,7 @@ interface Equipment {
     notes: string | null
     maintenance_enabled?: boolean
     assigned_user_id?: string | null
+    open_issues_count?: number
     // Extended fields for prototype
     status?: EquipmentStatus
     purchase_date?: string
@@ -145,11 +146,10 @@ export default function EquipmentInventory() {
     const [isLoading, setIsLoading] = useState(true)
     const [isSaving, setIsSaving] = useState(false)
 
-    // Pagination
+    // Pagination (by places)
     const [page, setPage] = useState(1)
-    const [limit] = useState(50)
-    const [totalItems, setTotalItems] = useState(0)
-    const totalPages = Math.ceil(totalItems / limit)
+    const placesPerPage = 20
+    const fetchLimit = 5000
 
     // Stats state
     const [inventoryStats, setInventoryStats] = useState({
@@ -163,9 +163,10 @@ export default function EquipmentInventory() {
     const [search, setSearch] = useState("")
     const [debouncedSearch, setDebouncedSearch] = useState("")
     const [typeFilter, setTypeFilter] = useState("all")
+    const [zoneFilter, setZoneFilter] = useState("all")
     const [workstationFilter, setWorkstationFilter] = useState("all")
     const [statusFilter, setStatusFilter] = useState<string>("all")
-    const [isGrouped, setIsGrouped] = useState(true)
+    const isGrouped = true
 
     // Selection
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
@@ -211,11 +212,10 @@ export default function EquipmentInventory() {
     const fetchData = useCallback(async () => {
         setIsLoading(true)
         try {
-            const offset = (page - 1) * limit
             const params = new URLSearchParams({
                 include_inactive: 'true',
-                limit: limit.toString(),
-                offset: offset.toString()
+                limit: fetchLimit.toString(),
+                offset: "0"
             })
 
             if (debouncedSearch) params.append('search', debouncedSearch)
@@ -244,20 +244,6 @@ export default function EquipmentInventory() {
                     maintenance_enabled: !!e.maintenance_enabled
                 }))
                 setEquipment(enriched)
-                setTotalItems(eqData.total || 0)
-                
-                // Automatically expand groups that have items when data is loaded
-                if (enriched.length > 0) {
-                    const groupIds = new Set<string>()
-                    enriched.forEach((e: any) => {
-                        groupIds.add(e.workstation_id || 'unassigned')
-                    })
-                    setExpandedGroups(prev => {
-                        const newSet = new Set(prev)
-                        groupIds.forEach(id => newSet.add(id))
-                        return newSet
-                    })
-                }
             }
             if (typeRes.ok) setTypes(typeData || [])
             if (wsRes.ok) setWorkstations(wsData || [])
@@ -276,7 +262,7 @@ export default function EquipmentInventory() {
         } finally {
             setIsLoading(false)
         }
-    }, [clubId, page, limit, debouncedSearch, typeFilter, workstationFilter, statusFilter])
+    }, [clubId, fetchLimit, debouncedSearch, typeFilter, workstationFilter, statusFilter])
 
     useEffect(() => {
         fetchData()
@@ -294,7 +280,36 @@ export default function EquipmentInventory() {
         setPage(1)
     }
 
-    const filteredEquipment = equipment // Now filtered on server side
+    const zones = useMemo(() => {
+        return Array.from(new Set(workstations.map(w => w.zone).filter(Boolean))).sort((a, b) => a.localeCompare(b, "ru"))
+    }, [workstations])
+
+    const filteredWorkstations = useMemo(() => {
+        if (zoneFilter === "all") return workstations
+        return workstations.filter(w => w.zone === zoneFilter)
+    }, [workstations, zoneFilter])
+
+    useEffect(() => {
+        if (workstationFilter === "all" || workstationFilter === "unassigned") return
+        const ws = workstations.find(w => w.id === workstationFilter)
+        if (!ws) return
+        if (zoneFilter !== "all" && ws.zone !== zoneFilter) setWorkstationFilter("all")
+    }, [zoneFilter, workstationFilter, workstations])
+
+    useEffect(() => {
+        if (workstationFilter !== "all" && workstationFilter !== "unassigned") {
+            setExpandedGroups(new Set([workstationFilter]))
+        } else if (workstationFilter === "unassigned") {
+            setExpandedGroups(new Set(["unassigned"]))
+        } else {
+            setExpandedGroups(new Set())
+        }
+    }, [workstationFilter])
+
+    const filteredEquipment = useMemo(() => {
+        if (zoneFilter === "all") return equipment
+        return equipment.filter(e => e.workstation_zone === zoneFilter)
+    }, [equipment, zoneFilter])
 
     const groupedEquipment = useMemo(() => {
         const groups: Record<string, { name: string, zone?: string, items: Equipment[] }> = {
@@ -325,9 +340,21 @@ export default function EquipmentInventory() {
             .sort(([idA, groupA], [idB, groupB]) => {
                 if (idA === 'unassigned') return -1
                 if (idB === 'unassigned') return 1
-                return groupA.name.localeCompare(groupB.name)
+                return groupA.name.localeCompare(groupB.name, "ru")
             })
     }, [filteredEquipment, workstations])
+
+    const totalPlaces = groupedEquipment.length
+    const totalPlacePages = Math.max(1, Math.ceil(totalPlaces / placesPerPage))
+
+    useEffect(() => {
+        if (page > totalPlacePages) setPage(totalPlacePages)
+    }, [page, totalPlacePages])
+
+    const pagedGroupedEquipment = useMemo(() => {
+        const start = (page - 1) * placesPerPage
+        return groupedEquipment.slice(start, start + placesPerPage)
+    }, [groupedEquipment, page, placesPerPage])
 
     const toggleGroup = (groupId: string) => {
         const newSet = new Set(expandedGroups)
@@ -514,6 +541,22 @@ export default function EquipmentInventory() {
         }
     }
 
+    const isCleaningOverdue = (item: Equipment) => {
+        if (item.maintenance_enabled === false) return false
+        if (!item.last_cleaned_at) return false
+
+        const last = new Date(item.last_cleaned_at)
+        if (Number.isNaN(last.valueOf())) return false
+
+        const due = new Date(last)
+        due.setHours(0, 0, 0, 0)
+        due.setDate(due.getDate() + (item.cleaning_interval_days ?? 30))
+
+        const today = new Date()
+        today.setHours(0, 0, 0, 0)
+        return due < today
+    }
+
     // --- Stats calculation removed (now from server) ---
 
     return (
@@ -628,14 +671,26 @@ export default function EquipmentInventory() {
                             </SelectContent>
                         </Select>
 
+                        <Select value={zoneFilter} onValueChange={handleFilterChange(setZoneFilter)}>
+                            <SelectTrigger className="w-[160px] bg-slate-50 border-slate-200">
+                                <SelectValue placeholder="Зона" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">Все зоны</SelectItem>
+                                {zones.map(z => (
+                                    <SelectItem key={z} value={z}>{z}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+
                         <Select value={workstationFilter} onValueChange={handleFilterChange(setWorkstationFilter)}>
                             <SelectTrigger className="w-[160px] bg-slate-50 border-slate-200">
-                                <SelectValue placeholder="Локация" />
+                                <SelectValue placeholder="Место" />
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="all">Все локации</SelectItem>
                                 <SelectItem value="unassigned">Склад (Не назначено)</SelectItem>
-                                {workstations.map(w => (
+                                {filteredWorkstations.map(w => (
                                     <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
                                 ))}
                             </SelectContent>
@@ -652,18 +707,10 @@ export default function EquipmentInventory() {
                             </SelectContent>
                         </Select>
 
-                        <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-md px-3 h-10">
-                            <Label htmlFor="grouping-toggle" className="text-xs font-medium text-slate-500 cursor-pointer">Группировка</Label>
-                            <Switch 
-                                id="grouping-toggle"
-                                checked={isGrouped}
-                                onCheckedChange={setIsGrouped}
-                            />
-                        </div>
-                        
                         <Button variant="ghost" size="icon" onClick={() => {
                             setSearch("")
                             setTypeFilter("all")
+                            setZoneFilter("all")
                             setWorkstationFilter("all")
                             setStatusFilter("all")
                             setPage(1)
@@ -695,24 +742,26 @@ export default function EquipmentInventory() {
             <Card className="border-none shadow-sm overflow-hidden">
                 <div className="overflow-x-auto">
                     <Table>
-                        <TableHeader className="bg-slate-50">
-                            <TableRow>
-                                <TableHead className="w-[40px]">
-                                    <input 
-                                        type="checkbox" 
-                                        className="rounded border-gray-300"
-                                        checked={selectedIds.size === filteredEquipment.length && filteredEquipment.length > 0}
-                                        onChange={handleSelectAll}
-                                    />
-                                </TableHead>
-                                <TableHead className="w-[300px]">Оборудование</TableHead>
-                                <TableHead>Идентификация</TableHead>
-                                <TableHead>Расположение</TableHead>
-                                <TableHead>Состояние</TableHead>
-                                <TableHead>Гарантия</TableHead>
-                                <TableHead className="text-right">Действия</TableHead>
-                            </TableRow>
-                        </TableHeader>
+                        {!isGrouped && (
+                            <TableHeader className="bg-slate-50">
+                                <TableRow>
+                                    <TableHead className="w-[40px]">
+                                        <input 
+                                            type="checkbox" 
+                                            className="rounded border-gray-300"
+                                            checked={selectedIds.size === filteredEquipment.length && filteredEquipment.length > 0}
+                                            onChange={handleSelectAll}
+                                        />
+                                    </TableHead>
+                                    <TableHead className="w-[300px]">Оборудование</TableHead>
+                                    <TableHead>Идентификация</TableHead>
+                                    <TableHead>Расположение</TableHead>
+                                    <TableHead>Состояние</TableHead>
+                                    <TableHead>Гарантия</TableHead>
+                                    <TableHead className="text-right">Действия</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                        )}
                         <TableBody>
                             {isLoading ? (
                                 <TableRow>
@@ -722,16 +771,19 @@ export default function EquipmentInventory() {
                                     </TableCell>
                                 </TableRow>
                             ) : (isGrouped && groupedEquipment.length > 0) ? (
-                                groupedEquipment.map(([groupId, group]) => {
+                                pagedGroupedEquipment.map(([groupId, group]) => {
                                     const isExpanded = expandedGroups.has(groupId)
                                     const allGroupSelected = group.items.every(item => selectedIds.has(item.id))
                                     const someGroupSelected = group.items.some(item => selectedIds.has(item.id)) && !allGroupSelected
+                                    const issuesCount = group.items.reduce((sum, item) => sum + (item.open_issues_count || 0), 0)
+                                    const maintenanceOffCount = group.items.filter(i => i.maintenance_enabled === false).length
+                                    const overdueCount = group.items.filter(i => isCleaningOverdue(i)).length
 
                                     return (
                                         <Fragment key={groupId}>
                                             {/* Group Header Row */}
                                             <TableRow 
-                                                className="bg-slate-100 hover:bg-slate-200 transition-colors border-y-2 border-slate-300 cursor-pointer sticky top-0 z-10"
+                                                className="bg-slate-100 hover:bg-slate-200 transition-colors border-y-2 border-slate-300 cursor-pointer"
                                                 onClick={() => toggleGroup(groupId)}
                                             >
                                                 <TableCell className="w-[40px]" onClick={(e) => e.stopPropagation()}>
@@ -768,21 +820,35 @@ export default function EquipmentInventory() {
                                                         </div>
                                                         
                                                         <div className="flex items-center gap-4 text-[10px] text-slate-500 font-black uppercase tracking-widest">
-                                                            <span className="text-green-600">{group.items.filter(i => i.is_active).length} активных</span>
+                                                            <span className={cn(issuesCount > 0 ? "text-orange-700" : "text-slate-400")}>Проблемы {issuesCount}</span>
                                                             <div className="h-3 w-px bg-slate-300" />
-                                                            <span className="text-rose-600">{group.items.filter(i => !i.is_active).length} списано</span>
+                                                            <span className={cn(maintenanceOffCount > 0 ? "text-slate-700" : "text-slate-400")}>Откл. обслуж {maintenanceOffCount}</span>
+                                                            <div className="h-3 w-px bg-slate-300" />
+                                                            <span className={cn(overdueCount > 0 ? "text-amber-700" : "text-slate-400")}>Чистка просроч. {overdueCount}</span>
                                                         </div>
                                                     </div>
                                                 </TableCell>
                                             </TableRow>
 
                                             {/* Group Items */}
+                                            {isExpanded && (
+                                                <TableRow className="bg-white border-b border-slate-200">
+                                                    <TableCell className="w-[40px]" />
+                                                    <TableCell className="text-[10px] font-black uppercase tracking-widest text-slate-500 py-2">Оборудование</TableCell>
+                                                    <TableCell className="text-[10px] font-black uppercase tracking-widest text-slate-500 py-2">Идентификация</TableCell>
+                                                    <TableCell className="text-[10px] font-black uppercase tracking-widest text-slate-500 py-2">Расположение</TableCell>
+                                                    <TableCell className="text-[10px] font-black uppercase tracking-widest text-slate-500 py-2">Состояние</TableCell>
+                                                    <TableCell className="text-[10px] font-black uppercase tracking-widest text-slate-500 py-2">Гарантия</TableCell>
+                                                    <TableCell className="text-[10px] font-black uppercase tracking-widest text-slate-500 py-2 text-right pr-6">Действия</TableCell>
+                                                </TableRow>
+                                            )}
                                             {isExpanded && group.items.map((item) => (
                                                 <TableRow 
                                                     key={item.id} 
                                                     className={cn(
                                                         "group hover:bg-slate-50 transition-colors cursor-pointer border-l-4 border-l-transparent",
-                                                        selectedIds.has(item.id) && "bg-indigo-50/50 hover:bg-indigo-50 border-l-indigo-600"
+                                                        selectedIds.has(item.id) && "bg-indigo-50/50 hover:bg-indigo-50 border-l-indigo-600",
+                                                        !selectedIds.has(item.id) && (item.open_issues_count || 0) > 0 && "bg-orange-50/40 hover:bg-orange-50/60 border-l-orange-500"
                                                     )}
                                                     onClick={(e) => {
                                                         if ((e.target as HTMLElement).closest('button') || (e.target as HTMLElement).closest('input')) return
@@ -799,11 +865,22 @@ export default function EquipmentInventory() {
                                                     </TableCell>
                                                     <TableCell>
                                                         <div className="flex items-center gap-3">
-                                                            <div className="h-10 w-10 bg-white rounded-xl flex items-center justify-center text-slate-400 group-hover:text-indigo-600 group-hover:shadow-md transition-all border border-slate-100 group-hover:border-indigo-100">
+                                                            <div className={cn(
+                                                                "h-10 w-10 bg-white rounded-xl flex items-center justify-center text-slate-400 group-hover:shadow-md transition-all border border-slate-100",
+                                                                (item.open_issues_count || 0) > 0 ? "text-orange-700 border-orange-200 group-hover:border-orange-300" : "group-hover:text-indigo-600 group-hover:border-indigo-100"
+                                                            )}>
                                                                 {getEquipmentIcon(item.type)}
                                                             </div>
                                                             <div>
-                                                                <p className="font-bold text-sm text-slate-800">{item.name}</p>
+                                                                <div className="flex items-center gap-2">
+                                                                    <p className="font-bold text-sm text-slate-800">{item.name}</p>
+                                                                    {(item.open_issues_count || 0) > 0 && (
+                                                                        <Badge className="bg-orange-600 text-white border-none text-[10px] font-black px-2 py-0">
+                                                                            <AlertCircle className="h-3 w-3 mr-1" />
+                                                                            {(item.open_issues_count || 0)} проблем
+                                                                        </Badge>
+                                                                    )}
+                                                                </div>
                                                                 <p className="text-[10px] text-slate-400 uppercase tracking-widest font-black">{item.type_name || item.type}</p>
                                                             </div>
                                                         </div>
@@ -993,10 +1070,10 @@ export default function EquipmentInventory() {
                 </div>
                 
                 {/* Pagination Controls */}
-                {!isLoading && totalItems > 0 && (
+                {!isLoading && totalPlaces > 0 && (
                     <div className="px-6 py-4 bg-slate-50 border-t flex items-center justify-between">
                         <p className="text-xs text-muted-foreground">
-                            Показано <span className="font-medium">{Math.min(totalItems, (page - 1) * limit + 1)}</span> - <span className="font-medium">{Math.min(totalItems, page * limit)}</span> из <span className="font-medium">{totalItems}</span> позиций
+                            Показано <span className="font-medium">{Math.min(totalPlaces, (page - 1) * placesPerPage + 1)}</span> - <span className="font-medium">{Math.min(totalPlaces, page * placesPerPage)}</span> из <span className="font-medium">{totalPlaces}</span> мест
                         </p>
                         <div className="flex items-center gap-2">
                             <Button
@@ -1009,12 +1086,12 @@ export default function EquipmentInventory() {
                                 Назад
                             </Button>
                             <div className="flex items-center gap-1">
-                                {[...Array(Math.min(5, totalPages))].map((_, i) => {
+                                {[...Array(Math.min(5, totalPlacePages))].map((_, i) => {
                                     // Logic for showing pages near current page
                                     let pageNum = page;
-                                    if (totalPages <= 5) pageNum = i + 1;
+                                    if (totalPlacePages <= 5) pageNum = i + 1;
                                     else if (page <= 3) pageNum = i + 1;
-                                    else if (page >= totalPages - 2) pageNum = totalPages - 4 + i;
+                                    else if (page >= totalPlacePages - 2) pageNum = totalPlacePages - 4 + i;
                                     else pageNum = page - 2 + i;
 
                                     return (
@@ -1029,16 +1106,16 @@ export default function EquipmentInventory() {
                                         </Button>
                                     );
                                 })}
-                                {totalPages > 5 && page < totalPages - 2 && (
+                                {totalPlacePages > 5 && page < totalPlacePages - 2 && (
                                     <>
                                         <span className="text-muted-foreground px-1 text-xs">...</span>
                                         <Button
                                             variant="outline"
                                             size="sm"
-                                            onClick={() => setPage(totalPages)}
+                                            onClick={() => setPage(totalPlacePages)}
                                             className="h-8 w-8 p-0 bg-white"
                                         >
-                                            {totalPages}
+                                            {totalPlacePages}
                                         </Button>
                                     </>
                                 )}
@@ -1046,8 +1123,8 @@ export default function EquipmentInventory() {
                             <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                                disabled={page === totalPages}
+                                onClick={() => setPage(p => Math.min(totalPlacePages, p + 1))}
+                                disabled={page === totalPlacePages}
                                 className="h-8 bg-white"
                             >
                                 Вперед

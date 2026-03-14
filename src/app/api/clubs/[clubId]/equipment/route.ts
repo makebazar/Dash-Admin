@@ -94,6 +94,9 @@ export async function GET(
             SELECT 
                 e.id, e.club_id, e.workstation_id, e.type, e.name, e.identifier, e.brand, e.model,
                 e.purchase_date, e.warranty_expires, e.last_cleaned_at, e.is_active, e.cleaning_interval_days,
+                e.thermal_paste_last_changed_at, e.thermal_paste_interval_days, e.thermal_paste_type, e.thermal_paste_note,
+                e.cpu_thermal_paste_last_changed_at, e.cpu_thermal_paste_interval_days, e.cpu_thermal_paste_type, e.cpu_thermal_paste_note,
+                e.gpu_thermal_paste_last_changed_at, e.gpu_thermal_paste_interval_days, e.gpu_thermal_paste_type, e.gpu_thermal_paste_note,
                 e.maintenance_enabled, e.assigned_user_id,
                 w.name as workstation_name,
                 w.zone as workstation_zone,

@@ -6,11 +6,9 @@ set -a  # Automatically export all variables
 if [ -f .env.local ]; then
     source .env.local
     echo "✓ Loaded .env.local"
-    echo "  DATABASE_URL: ${DATABASE_URL:0:50}..."
 elif [ -f .env ]; then
     source .env
     echo "✓ Loaded .env (fallback)"
-    echo "  DATABASE_URL: ${DATABASE_URL:0:50}..."
 else
     echo "✗ No .env.local or .env found!"
 fi
