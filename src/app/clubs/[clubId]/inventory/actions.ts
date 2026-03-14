@@ -66,19 +66,51 @@ export type Warehouse = {
     is_active: boolean
 }
 
-async function assertUserCanAccessClub(clubId: string, userId: string) {
-    void clubId
-    try {
-        const sessionUserId = (await cookies()).get("session_user_id")?.value
-        if (!sessionUserId || sessionUserId !== userId) {
-            throw new Error("Недостаточно прав для выполнения операции")
-        }
-    } catch {
-        return
-    }
-    if (!userId) {
+async function assertSessionUserCanAccessClub(clubId: string, sessionUserId: string) {
+    if (!sessionUserId) throw new Error("Недостаточно прав для выполнения операции")
+
+    // Club access: owner, active employee, or super admin.
+    const accessRes = await query(
+        `
+        SELECT 1
+        FROM clubs c
+        JOIN users u ON u.id = $2
+        LEFT JOIN club_employees ce
+          ON ce.club_id = c.id
+         AND ce.user_id = $2
+         AND ce.is_active = true
+        WHERE c.id = $1
+          AND (u.is_super_admin = true OR c.owner_id = $2 OR ce.id IS NOT NULL)
+        LIMIT 1
+        `,
+        [clubId, sessionUserId]
+    )
+    if ((accessRes.rowCount || 0) === 0) {
         throw new Error("Недостаточно прав для выполнения операции")
     }
+}
+
+async function requireClubAccess(clubId: string) {
+    const sessionUserId = await requireSessionUserId()
+    await assertSessionUserCanAccessClub(clubId, sessionUserId)
+    return sessionUserId
+}
+
+async function requireSessionUserId() {
+    const sessionUserId = (await cookies()).get("session_user_id")?.value
+    if (!sessionUserId) throw new Error("Недостаточно прав для выполнения операции")
+    return sessionUserId
+}
+
+async function assertUserCanAccessClub(clubId: string, userId: string) {
+    if (!userId) throw new Error("Недостаточно прав для выполнения операции")
+
+    const sessionUserId = (await cookies()).get("session_user_id")?.value
+    if (!sessionUserId || sessionUserId !== userId) {
+        throw new Error("Недостаточно прав для выполнения операции")
+    }
+
+    await assertSessionUserCanAccessClub(clubId, userId)
 }
 
 export type Supply = {
@@ -139,6 +171,7 @@ export type InventoryItem = {
 // --- CATEGORIES ---
 
 export async function getCategories(clubId: string) {
+    await requireClubAccess(clubId)
     const res = await query(`
         SELECT c.*, p.name as parent_name,
         (SELECT COUNT(*) FROM warehouse_products WHERE category_id = c.id) as products_count
@@ -208,6 +241,7 @@ export async function deleteCategory(id: number, clubId: string, userId: string)
 // --- WAREHOUSES ---
 
 export async function getWarehouses(clubId: string) {
+    await requireClubAccess(clubId)
     const res = await query(`
         SELECT w.*, u.full_name as responsible_name
         FROM warehouses w
@@ -282,6 +316,7 @@ export async function deleteWarehouse(id: number, clubId: string, userId: string
 }
 
 export async function getEmployees(clubId: string) {
+    await requireClubAccess(clubId)
     const res = await query(`
         SELECT u.id, u.full_name, 'Сотрудник' as role 
         FROM club_employees ce
@@ -299,6 +334,12 @@ export async function transferStock(clubId: string, userId: string, data: { sour
         await client.query('BEGIN')
 
         const { source_warehouse_id, target_warehouse_id, product_id, quantity } = data
+        if (!Number.isFinite(quantity) || !Number.isInteger(quantity) || quantity <= 0) {
+            throw new Error("Количество для перемещения должно быть целым положительным числом")
+        }
+        await assertWarehouseBelongsToClub(client, clubId, source_warehouse_id)
+        await assertWarehouseBelongsToClub(client, clubId, target_warehouse_id)
+        await assertProductBelongsToClub(client, clubId, product_id)
 
         if (source_warehouse_id === target_warehouse_id) {
             throw new Error('Склады отправления и назначения должны быть разными')
@@ -313,26 +354,27 @@ export async function transferStock(clubId: string, userId: string, data: { sour
         }
 
         // 2. Update source stock
-        const sourceNewStock = sourcePrevStock - quantity
-        await client.query('UPDATE warehouse_stock SET quantity = $1 WHERE warehouse_id = $2 AND product_id = $3', [sourceNewStock, source_warehouse_id, product_id])
+        const { previousStock: sourcePrev, newStock: sourceNewStock } = await applyWarehouseStockDelta(
+            client,
+            source_warehouse_id,
+            product_id,
+            -quantity
+        )
 
         // 3. Update target stock
-        const targetStockRes = await client.query('SELECT quantity FROM warehouse_stock WHERE warehouse_id = $1 AND product_id = $2', [target_warehouse_id, product_id])
-        const targetPrevStock = targetStockRes.rows[0]?.quantity || 0
-        const targetNewStock = targetPrevStock + quantity
-        
-        await client.query(`
-            INSERT INTO warehouse_stock (warehouse_id, product_id, quantity)
-            VALUES ($1, $2, $3)
-            ON CONFLICT (warehouse_id, product_id) DO UPDATE SET quantity = warehouse_stock.quantity + $3
-        `, [target_warehouse_id, product_id, quantity])
+        const { previousStock: targetPrevStock, newStock: targetNewStock } = await applyWarehouseStockDelta(
+            client,
+            target_warehouse_id,
+            product_id,
+            quantity
+        )
 
         // 4. Log movements
         const notes = data.notes ? `: ${data.notes}` : ''
         
         // Log out from source
         await logStockMovement(
-            client, clubId, userId, product_id, -quantity, sourcePrevStock, sourceNewStock, 
+            client, clubId, userId, product_id, -quantity, sourcePrev, sourceNewStock, 
             'ADJUSTMENT', `Перемещение на склад #${target_warehouse_id}${notes}`, 
             'TRANSFER', null, null, source_warehouse_id
         )
@@ -363,6 +405,15 @@ export async function createTransfer(clubId: string, userId: string, data: { sou
         await client.query('BEGIN')
 
         const { source_warehouse_id, target_warehouse_id, items, notes, shift_id } = data
+        if (!items || items.length === 0) throw new Error("Нужно выбрать товары для перемещения")
+        for (const i of items) {
+            if (!Number.isFinite(i.quantity) || !Number.isInteger(i.quantity) || i.quantity <= 0) {
+                throw new Error("Количество для перемещения должно быть целым положительным числом")
+            }
+        }
+        await assertWarehouseBelongsToClub(client, clubId, source_warehouse_id)
+        await assertWarehouseBelongsToClub(client, clubId, target_warehouse_id)
+        await assertProductsBelongToClub(client, clubId, items.map(i => i.product_id))
 
         if (source_warehouse_id === target_warehouse_id) {
             throw new Error('Склады отправления и назначения должны быть разными')
@@ -376,31 +427,32 @@ export async function createTransfer(clubId: string, userId: string, data: { sou
             const sourcePrevStock = sourceStockRes.rows[0]?.quantity || 0
             
             if (sourcePrevStock < quantity) {
-                const prodRes = await client.query('SELECT name FROM warehouse_products WHERE id = $1', [product_id])
-                throw new Error(`Недостаточно товара "${prodRes.rows[0]?.name}" на складе отправления. Доступно: ${sourcePrevStock}`)
+                const prodRes = await client.query('SELECT name FROM warehouse_products WHERE id = $1 AND club_id = $2', [product_id, clubId])
+                throw new Error(`Недостаточно товара "${prodRes.rows[0]?.name || `#${product_id}`}" на складе отправления. Доступно: ${sourcePrevStock}`)
             }
 
             // 2. Update source stock
-            const sourceNewStock = sourcePrevStock - quantity
-            await client.query('UPDATE warehouse_stock SET quantity = $1 WHERE warehouse_id = $2 AND product_id = $3', [sourceNewStock, source_warehouse_id, product_id])
+            const { previousStock: sourcePrev, newStock: sourceNewStock } = await applyWarehouseStockDelta(
+                client,
+                source_warehouse_id,
+                product_id,
+                -quantity
+            )
 
             // 3. Update target stock
-            const targetStockRes = await client.query('SELECT quantity FROM warehouse_stock WHERE warehouse_id = $1 AND product_id = $2 FOR UPDATE', [target_warehouse_id, product_id])
-            const targetPrevStock = targetStockRes.rows[0]?.quantity || 0
-            const targetNewStock = targetPrevStock + quantity
-            
-            await client.query(`
-                INSERT INTO warehouse_stock (warehouse_id, product_id, quantity)
-                VALUES ($1, $2, $3)
-                ON CONFLICT (warehouse_id, product_id) DO UPDATE SET quantity = warehouse_stock.quantity + $3
-            `, [target_warehouse_id, product_id, quantity])
+            const { previousStock: targetPrevStock, newStock: targetNewStock } = await applyWarehouseStockDelta(
+                client,
+                target_warehouse_id,
+                product_id,
+                quantity
+            )
 
             // 4. Log movements
             const notesStr = notes ? `: ${notes}` : ''
             
             // Log out from source
             await logStockMovement(
-                client, clubId, userId, product_id, -quantity, sourcePrevStock, sourceNewStock, 
+                client, clubId, userId, product_id, -quantity, sourcePrev, sourceNewStock, 
                 'ADJUSTMENT', `Перемещение на склад #${target_warehouse_id}${notesStr}`, 
                 'TRANSFER', null, shift_id || null, source_warehouse_id
             )
@@ -416,8 +468,8 @@ export async function createTransfer(clubId: string, userId: string, data: { sou
             await client.query(`
                 UPDATE warehouse_products
                 SET current_stock = (SELECT COALESCE(SUM(quantity), 0) FROM warehouse_stock WHERE product_id = $1)
-                WHERE id = $1
-            `, [product_id])
+                WHERE id = $1 AND club_id = $2
+            `, [product_id, clubId])
         }
 
         await client.query('COMMIT')
@@ -433,6 +485,7 @@ export async function createTransfer(clubId: string, userId: string, data: { sou
 }
 
 export async function getStockMovements(clubId: string, limit: number = 100) {
+    await requireClubAccess(clubId)
     const res = await query(`
         SELECT m.*, p.name as product_name, u.full_name as user_name, w.name as warehouse_name
         FROM warehouse_stock_movements m
@@ -457,7 +510,8 @@ export interface ReplenishmentRule {
     target_warehouse_name?: string
 }
 
-export async function getReplenishmentRulesForProduct(productId: number) {
+export async function getReplenishmentRulesForProduct(clubId: string, productId: number) {
+    await requireClubAccess(clubId)
     const res = await query(`
         SELECT r.*, 
                sw.name as source_warehouse_name, 
@@ -465,14 +519,17 @@ export async function getReplenishmentRulesForProduct(productId: number) {
         FROM warehouse_replenishment_rules r
         JOIN warehouses sw ON r.source_warehouse_id = sw.id
         JOIN warehouses tw ON r.target_warehouse_id = tw.id
-        WHERE r.product_id = $1
-    `, [productId])
+        WHERE r.product_id = $2
+          AND sw.club_id = $1
+          AND tw.club_id = $1
+    `, [clubId, productId])
     return res.rows as ReplenishmentRule[]
 }
 
 // --- REPLENISHMENT RULES ---
 
 export async function getReplenishmentRules(clubId: string) {
+    await requireClubAccess(clubId)
     const res = await query(`
         SELECT r.*, 
                sw.name as source_warehouse_name, 
@@ -488,6 +545,20 @@ export async function getReplenishmentRules(clubId: string) {
 }
 
 export async function createReplenishmentRule(clubId: string, data: { source_warehouse_id: number, target_warehouse_id: number, product_id: number, min_stock_level: number, max_stock_level: number }) {
+    await requireClubAccess(clubId)
+    const checks = await query(
+        `
+        SELECT
+          (SELECT 1 FROM warehouses WHERE id = $2 AND club_id = $1) as source_ok,
+          (SELECT 1 FROM warehouses WHERE id = $3 AND club_id = $1) as target_ok,
+          (SELECT 1 FROM warehouse_products WHERE id = $4 AND club_id = $1) as product_ok
+        `,
+        [clubId, data.source_warehouse_id, data.target_warehouse_id, data.product_id]
+    )
+    const row = checks.rows[0] || {}
+    if (!row.source_ok || !row.target_ok) throw new Error("Склад не найден или не принадлежит клубу")
+    if (!row.product_ok) throw new Error("Товар не найден или не принадлежит клубу")
+
     await query(`
         INSERT INTO warehouse_replenishment_rules (source_warehouse_id, target_warehouse_id, product_id, min_stock_level, max_stock_level)
         VALUES ($1, $2, $3, $4, $5)
@@ -502,7 +573,19 @@ export async function createReplenishmentRule(clubId: string, data: { source_war
 }
 
 export async function deleteReplenishmentRule(id: number, clubId: string) {
-    await query('DELETE FROM warehouse_replenishment_rules WHERE id = $1', [id])
+    await requireClubAccess(clubId)
+    await query(
+        `
+        DELETE FROM warehouse_replenishment_rules r
+        USING warehouses sw, warehouses tw
+        WHERE r.id = $1
+          AND r.source_warehouse_id = sw.id
+          AND r.target_warehouse_id = tw.id
+          AND sw.club_id = $2
+          AND tw.club_id = $2
+        `,
+        [id, clubId]
+    )
     revalidatePath(`/clubs/${clubId}/inventory`)
 }
 
@@ -515,17 +598,21 @@ async function checkReplenishmentNeeds(clubId: string) {
         // Find rules where Target Stock <= Min Level
         const needs = await client.query(`
             SELECT r.*, 
-                   ws_target.quantity as current_target_stock,
-                   ws_source.quantity as current_source_stock,
+                   COALESCE(ws_target.quantity, 0) as current_target_stock,
+                   COALESCE(ws_source.quantity, 0) as current_source_stock,
                    p.name as product_name,
                    tw.name as target_warehouse_name
             FROM warehouse_replenishment_rules r
+            JOIN warehouses tw ON r.target_warehouse_id = tw.id
+            JOIN warehouses sw ON r.source_warehouse_id = sw.id
+            JOIN warehouse_products p ON r.product_id = p.id
             LEFT JOIN warehouse_stock ws_target ON r.target_warehouse_id = ws_target.warehouse_id AND r.product_id = ws_target.product_id
             LEFT JOIN warehouse_stock ws_source ON r.source_warehouse_id = ws_source.warehouse_id AND r.product_id = ws_source.product_id
-            JOIN warehouse_products p ON r.product_id = p.id
-            JOIN warehouses tw ON r.target_warehouse_id = tw.id
             WHERE r.is_active = true
-        `)
+              AND tw.club_id = $1
+              AND sw.club_id = $1
+              AND p.club_id = $1
+        `, [clubId])
         
         for (const rule of needs.rows) {
             const current = rule.current_target_stock || 0
@@ -568,11 +655,12 @@ async function checkReplenishmentNeeds(clubId: string) {
 
 // Override completeTask to handle warehouse transfers
 export async function completeTask(taskId: number, userId: string, clubId: string) {
+    await assertUserCanAccessClub(clubId, userId)
     const client = await import("@/db").then(m => m.getClient())
     try {
         await client.query('BEGIN')
 
-        const taskRes = await client.query('SELECT * FROM club_tasks WHERE id = $1', [taskId])
+        const taskRes = await client.query('SELECT * FROM club_tasks WHERE id = $1 AND club_id = $2', [taskId, clubId])
         const task = taskRes.rows[0]
         if (!task) throw new Error('Задача не найдена')
 
@@ -587,8 +675,11 @@ export async function completeTask(taskId: number, userId: string, clubId: strin
                 SELECT r.*, ws_target.quantity as current
                 FROM warehouse_replenishment_rules r
                 LEFT JOIN warehouse_stock ws_target ON r.target_warehouse_id = ws_target.warehouse_id AND r.product_id = ws_target.product_id
+                JOIN warehouses tw ON r.target_warehouse_id = tw.id
+                JOIN warehouses sw ON r.source_warehouse_id = sw.id
                 WHERE r.product_id = $1 AND r.is_active = true
-            `, [productId])
+                  AND tw.club_id = $2 AND sw.club_id = $2
+            `, [productId, clubId])
             
             for (const rule of rules.rows) {
                 const current = rule.current || 0
@@ -596,28 +687,58 @@ export async function completeTask(taskId: number, userId: string, clubId: strin
                     const amountNeeded = rule.max_stock_level - current
                     
                     // Check source stock
-                    const sourceRes = await client.query('SELECT quantity FROM warehouse_stock WHERE warehouse_id = $1 AND product_id = $2', [rule.source_warehouse_id, productId])
-                    const sourceStock = sourceRes.rows[0]?.quantity || 0
+                    const sourceRes = await client.query(
+                        'SELECT quantity FROM warehouse_stock WHERE warehouse_id = $1 AND product_id = $2 FOR UPDATE',
+                        [rule.source_warehouse_id, productId]
+                    )
+                    const sourceStock = Number(sourceRes.rows[0]?.quantity || 0)
                     
                     const transferAmount = Math.min(amountNeeded, sourceStock)
                     
                     if (transferAmount > 0) {
-                        // Execute Transfer
-                        // 1. Decrease Source
-                        await client.query(`
-                            UPDATE warehouse_stock SET quantity = quantity - $1 
-                            WHERE warehouse_id = $2 AND product_id = $3
-                        `, [transferAmount, rule.source_warehouse_id, productId])
-                        
-                        // 2. Increase Target
-                        await client.query(`
-                            INSERT INTO warehouse_stock (warehouse_id, product_id, quantity)
-                            VALUES ($1, $2, $3)
-                            ON CONFLICT (warehouse_id, product_id) DO UPDATE SET quantity = warehouse_stock.quantity + $3
-                        `, [rule.target_warehouse_id, productId, transferAmount])
-                        
-                        await logStockMovement(client, clubId, userId, productId, -transferAmount, sourceStock, sourceStock - transferAmount, 'INTERNAL_MOVE', `To ${rule.target_warehouse_id}`, 'WAREHOUSE', rule.source_warehouse_id, null, rule.source_warehouse_id)
-                        await logStockMovement(client, clubId, userId, productId, transferAmount, current, current + transferAmount, 'INTERNAL_MOVE', `From ${rule.source_warehouse_id}`, 'WAREHOUSE', rule.target_warehouse_id, null, rule.target_warehouse_id)
+                        const { previousStock: sourcePrev, newStock: sourceNew } = await applyWarehouseStockDelta(
+                            client,
+                            rule.source_warehouse_id,
+                            productId,
+                            -transferAmount
+                        )
+                        const { previousStock: targetPrev, newStock: targetNew } = await applyWarehouseStockDelta(
+                            client,
+                            rule.target_warehouse_id,
+                            productId,
+                            transferAmount
+                        )
+
+                        await logStockMovement(
+                            client,
+                            clubId,
+                            userId,
+                            productId,
+                            -transferAmount,
+                            sourcePrev,
+                            sourceNew,
+                            'INTERNAL_MOVE',
+                            `To ${rule.target_warehouse_id}`,
+                            'WAREHOUSE',
+                            rule.source_warehouse_id,
+                            null,
+                            rule.source_warehouse_id
+                        )
+                        await logStockMovement(
+                            client,
+                            clubId,
+                            userId,
+                            productId,
+                            transferAmount,
+                            targetPrev,
+                            targetNew,
+                            'INTERNAL_MOVE',
+                            `From ${rule.source_warehouse_id}`,
+                            'WAREHOUSE',
+                            rule.target_warehouse_id,
+                            null,
+                            rule.target_warehouse_id
+                        )
                     }
                 }
             }
@@ -642,6 +763,7 @@ export async function completeTask(taskId: number, userId: string, clubId: strin
 // --- ANALYTICS & PROCUREMENT ---
 
 export async function calculateAnalytics(clubId: string) {
+    await requireClubAccess(clubId)
     const client = await import("@/db").then(m => m.getClient())
     try {
         await client.query('BEGIN')
@@ -727,6 +849,7 @@ export async function calculateAnalytics(clubId: string) {
 }
 
 export async function generateProcurementList(clubId: string, userId: string) {
+    await assertUserCanAccessClub(clubId, userId)
     const client = await import("@/db").then(m => m.getClient())
     try {
         await client.query('BEGIN')
@@ -807,6 +930,7 @@ export async function generateProcurementList(clubId: string, userId: string) {
 }
 
 export async function getProcurementLists(clubId: string) {
+    await requireClubAccess(clubId)
     const res = await query(`
         SELECT l.*, u.full_name as creator_name,
                (SELECT COUNT(*) FROM warehouse_procurement_items WHERE list_id = l.id) as items_count
@@ -818,7 +942,8 @@ export async function getProcurementLists(clubId: string) {
     return res.rows
 }
 
-export async function getProcurementListItems(listId: number) {
+export async function getProcurementListItems(clubId: string, listId: number) {
+    await requireClubAccess(clubId)
     const res = await query(`
         SELECT i.*, p.name as product_name, p.cost_price, p.sales_velocity, p.ideal_stock_days, p.abc_category,
                i.units_per_box as units_per_box,
@@ -827,29 +952,56 @@ export async function getProcurementListItems(listId: number) {
                    ELSE NULL 
                END as days_left
         FROM warehouse_procurement_items i
+        JOIN warehouse_procurement_lists l ON i.list_id = l.id
         JOIN warehouse_products p ON i.product_id = p.id
-        WHERE i.list_id = $1
+        WHERE l.club_id = $1 AND i.list_id = $2
         ORDER BY CASE WHEN p.abc_category = 'A' THEN 1 WHEN p.abc_category = 'B' THEN 2 ELSE 3 END, p.name
-    `, [listId])
+    `, [clubId, listId])
     return res.rows
 }
 
 export async function updateProcurementItem(itemId: number, data: { quantity?: number, units_per_box?: number }, clubId: string) {
+    await requireClubAccess(clubId)
     if (data.quantity !== undefined) {
-        await query('UPDATE warehouse_procurement_items SET actual_quantity = $1 WHERE id = $2', [data.quantity, itemId])
+        await query(
+            `
+            UPDATE warehouse_procurement_items i
+            SET actual_quantity = $1
+            FROM warehouse_procurement_lists l
+            WHERE i.id = $2 AND i.list_id = l.id AND l.club_id = $3
+            `,
+            [data.quantity, itemId, clubId]
+        )
     }
     if (data.units_per_box !== undefined) {
-        await query('UPDATE warehouse_procurement_items SET units_per_box = $1 WHERE id = $2', [data.units_per_box, itemId])
+        await query(
+            `
+            UPDATE warehouse_procurement_items i
+            SET units_per_box = $1
+            FROM warehouse_procurement_lists l
+            WHERE i.id = $2 AND i.list_id = l.id AND l.club_id = $3
+            `,
+            [data.units_per_box, itemId, clubId]
+        )
     }
     revalidatePath(`/clubs/${clubId}/inventory`)
 }
 
 export async function bulkUpdateProcurementItems(items: { id: number, quantity: number }[], clubId: string) {
+    await requireClubAccess(clubId)
     const client = await import("@/db").then(m => m.getClient())
     try {
         await client.query('BEGIN')
         for (const item of items) {
-            await client.query('UPDATE warehouse_procurement_items SET actual_quantity = $1 WHERE id = $2', [item.quantity, item.id])
+            await client.query(
+                `
+                UPDATE warehouse_procurement_items i
+                SET actual_quantity = $1
+                FROM warehouse_procurement_lists l
+                WHERE i.id = $2 AND i.list_id = l.id AND l.club_id = $3
+                `,
+                [item.quantity, item.id, clubId]
+            )
         }
         await client.query('COMMIT')
     } catch (e) {
@@ -862,23 +1014,43 @@ export async function bulkUpdateProcurementItems(items: { id: number, quantity: 
 }
 
 export async function deleteProcurementItem(itemId: number, clubId: string) {
-    await query('DELETE FROM warehouse_procurement_items WHERE id = $1', [itemId])
+    await requireClubAccess(clubId)
+    await query(
+        `
+        DELETE FROM warehouse_procurement_items i
+        USING warehouse_procurement_lists l
+        WHERE i.id = $1 AND i.list_id = l.id AND l.club_id = $2
+        `,
+        [itemId, clubId]
+    )
     revalidatePath(`/clubs/${clubId}/inventory`)
 }
 
 export async function addProductToProcurementList(listId: number, productId: number, clubId: string) {
+    await requireClubAccess(clubId)
     const client = await import("@/db").then(m => m.getClient())
     try {
         await client.query('BEGIN')
 
         // Check if already in list
-        const existing = await client.query('SELECT id FROM warehouse_procurement_items WHERE list_id = $1 AND product_id = $2', [listId, productId])
+        const existing = await client.query(
+            `
+            SELECT i.id
+            FROM warehouse_procurement_items i
+            JOIN warehouse_procurement_lists l ON i.list_id = l.id
+            WHERE i.list_id = $1 AND i.product_id = $2 AND l.club_id = $3
+            `,
+            [listId, productId, clubId]
+        )
         if (existing.rowCount && existing.rowCount > 0) {
             throw new Error("Товар уже есть в списке")
         }
 
         // Get product data for initial suggestion
-        const productRes = await client.query('SELECT current_stock, sales_velocity, ideal_stock_days, min_stock_level, units_per_box FROM warehouse_products WHERE id = $1', [productId])
+        const productRes = await client.query(
+            'SELECT current_stock, sales_velocity, ideal_stock_days, min_stock_level, units_per_box FROM warehouse_products WHERE id = $1 AND club_id = $2',
+            [productId, clubId]
+        )
         const p = productRes.rows[0]
         if (!p) throw new Error("Товар не найден")
 
@@ -915,7 +1087,8 @@ export async function addProductToProcurementList(listId: number, productId: num
 }
 
 export async function deleteProcurementList(listId: number, clubId: string) {
-    await query('DELETE FROM warehouse_procurement_lists WHERE id = $1', [listId])
+    await requireClubAccess(clubId)
+    await query('DELETE FROM warehouse_procurement_lists WHERE id = $1 AND club_id = $2', [listId, clubId])
     revalidatePath(`/clubs/${clubId}/inventory`)
 }
 
@@ -933,19 +1106,78 @@ async function logStockMovement(
     relatedEntityType: string | null = null,
     relatedEntityId: number | null = null,
     shiftId: string | null = null,
-    warehouseId: number | null = null
+    warehouseId: number | null = null,
+    priceAtTime: number | null = null
 ) {
-    await client.query(`
+    const res = await client.query(`
         INSERT INTO warehouse_stock_movements 
         (club_id, product_id, user_id, change_amount, previous_stock, new_stock, type, reason, related_entity_type, related_entity_id, shift_id, warehouse_id, price_at_time)
-        SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, selling_price
+        SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, COALESCE($13, selling_price)
         FROM warehouse_products
-        WHERE id = $2
-    `, [clubId, productId, userId, changeAmount, previousStock, newStock, type, reason, relatedEntityType, relatedEntityId, shiftId, warehouseId])
+        WHERE id = $2 AND club_id = $1
+        RETURNING id
+    `, [clubId, productId, userId, changeAmount, previousStock, newStock, type, reason, relatedEntityType, relatedEntityId, shiftId, warehouseId, priceAtTime])
+    return (res.rows[0]?.id ?? null) as number | null
+}
+
+async function assertWarehouseBelongsToClub(db: { query: (sql: string, params?: any[]) => Promise<any> }, clubId: string, warehouseId: number) {
+    const res = await db.query('SELECT 1 FROM warehouses WHERE id = $1 AND club_id = $2 LIMIT 1', [warehouseId, clubId])
+    if ((res.rowCount || 0) === 0) throw new Error("Склад не найден или не принадлежит клубу")
+}
+
+async function assertProductBelongsToClub(db: { query: (sql: string, params?: any[]) => Promise<any> }, clubId: string, productId: number) {
+    const res = await db.query('SELECT 1 FROM warehouse_products WHERE id = $1 AND club_id = $2 LIMIT 1', [productId, clubId])
+    if ((res.rowCount || 0) === 0) throw new Error("Товар не найден или не принадлежит клубу")
+}
+
+async function assertProductsBelongToClub(db: { query: (sql: string, params?: any[]) => Promise<any> }, clubId: string, productIds: number[]) {
+    const unique = Array.from(new Set(productIds.filter((id) => Number.isFinite(id)))) as number[]
+    if (unique.length === 0) return
+    const res = await db.query(
+        'SELECT COUNT(*)::int as cnt FROM warehouse_products WHERE club_id = $1 AND id = ANY($2)',
+        [clubId, unique]
+    )
+    const cnt = Number(res.rows?.[0]?.cnt || 0)
+    if (cnt !== unique.length) throw new Error("Список товаров содержит позиции, которые не принадлежат клубу")
+}
+
+async function applyWarehouseStockDelta(
+    client: any,
+    warehouseId: number,
+    productId: number,
+    delta: number
+): Promise<{ previousStock: number, newStock: number }> {
+    if (!Number.isFinite(delta)) throw new Error("Некорректное количество")
+    if (!Number.isInteger(delta)) throw new Error("Количество должно быть целым числом")
+
+    if (delta === 0) {
+        const stockRes = await client.query(
+            'SELECT quantity FROM warehouse_stock WHERE warehouse_id = $1 AND product_id = $2',
+            [warehouseId, productId]
+        )
+        const q = Number(stockRes.rows[0]?.quantity || 0)
+        return { previousStock: q, newStock: q }
+    }
+
+    // Atomic upsert that works even when the row does not exist.
+    const res = await client.query(
+        `
+        INSERT INTO warehouse_stock (warehouse_id, product_id, quantity)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (warehouse_id, product_id)
+        DO UPDATE SET quantity = warehouse_stock.quantity + EXCLUDED.quantity
+        RETURNING quantity
+        `,
+        [warehouseId, productId, delta]
+    )
+    const newStock = Number(res.rows[0]?.quantity || 0)
+    const previousStock = newStock - delta
+    return { previousStock, newStock }
 }
 
 // --- TASKS ---
 export async function getClubTasks(clubId: string) {
+    await requireClubAccess(clubId)
     const res = await query(`
         SELECT t.*, u.full_name as assignee_name, p.name as product_name
         FROM club_tasks t
@@ -962,6 +1194,7 @@ export async function getClubTasks(clubId: string) {
 // --- PRODUCTS ---
 
 export async function manualTriggerReplenishment(clubId: string) {
+    await requireClubAccess(clubId)
     try {
         await calculateAnalytics(clubId)
         await checkReplenishmentNeeds(clubId)
@@ -974,6 +1207,7 @@ export async function manualTriggerReplenishment(clubId: string) {
 }
 
 export async function getSalesAnalytics(clubId: string, limit: number = 200) {
+    await requireClubAccess(clubId)
     const res = await query(`
         SELECT sm.*, 
                p.name as product_name, 
@@ -1001,6 +1235,7 @@ export async function getSalesAnalytics(clubId: string, limit: number = 200) {
 }
 
 export async function getActiveShiftsForClub(clubId: string) {
+    await requireClubAccess(clubId)
     const res = await query(`
         SELECT id, check_in, check_out, 
                (SELECT full_name FROM users WHERE id = user_id) as employee_name
@@ -1013,12 +1248,13 @@ export async function getActiveShiftsForClub(clubId: string) {
 }
 
 export async function correctInventoryItem(inventoryId: number, productId: number, newActualStock: number, clubId: string, userId: string) {
+    await assertUserCanAccessClub(clubId, userId)
     const client = await getClient()
     try {
         await client.query('BEGIN')
 
         // 1. Get current inventory and item info
-        const invRes = await client.query('SELECT * FROM warehouse_inventories WHERE id = $1', [inventoryId])
+        const invRes = await client.query('SELECT * FROM warehouse_inventories WHERE id = $1 AND club_id = $2', [inventoryId, clubId])
         if (invRes.rows.length === 0) throw new Error("Инвентаризация не найдена")
         const inventory = invRes.rows[0]
 
@@ -1034,7 +1270,7 @@ export async function correctInventoryItem(inventoryId: number, productId: numbe
         const price = Number(item.selling_price_snapshot)
 
         // 2. Calculate New Stats for the Item
-        const newDifference = expectedStock - newActualStock
+        const newDifference = newActualStock - expectedStock
         const newCalculatedRevenue = newActualStock < expectedStock ? (expectedStock - newActualStock) * price : 0
 
         // 3. Calculate Deltas for the Header
@@ -1058,8 +1294,8 @@ export async function correctInventoryItem(inventoryId: number, productId: numbe
             UPDATE warehouse_inventories 
             SET calculated_revenue = (calculated_revenue + $1::numeric)::numeric,
                 revenue_difference = (revenue_difference - $1::numeric)::numeric
-            WHERE id = $2
-        `, [revenueChange, inventoryId])
+            WHERE id = $2 AND club_id = $3
+        `, [revenueChange, inventoryId, clubId])
 
         // 6. Update physical stock and movements if inventory is closed
         if (inventory.status === 'CLOSED') {
@@ -1079,33 +1315,24 @@ export async function correctInventoryItem(inventoryId: number, productId: numbe
 
                 if (!warehouseId) throw new Error("Не найден склад для корректировки остатков")
 
-                // Update physical stock in the warehouse
-                await client.query(`
-                    INSERT INTO warehouse_stock (warehouse_id, product_id, quantity)
-                    VALUES ($1, $2, $3)
-                    ON CONFLICT (warehouse_id, product_id) 
-                    DO UPDATE SET quantity = warehouse_stock.quantity + EXCLUDED.quantity
-                `, [warehouseId, productId, stockDelta])
+                const { previousStock, newStock } = await applyWarehouseStockDelta(client, warehouseId, productId, stockDelta)
 
                 // Update product cache (sum of all warehouses)
                 await client.query(`
                     UPDATE warehouse_products
                     SET current_stock = (SELECT COALESCE(SUM(quantity), 0) FROM warehouse_stock WHERE product_id = $1)
-                    WHERE id = $1
-                `, [productId])
+                    WHERE id = $1 AND club_id = $2
+                `, [productId, clubId])
 
                 // Log the correction movement
-                const totalStockRes = await client.query('SELECT current_stock FROM warehouse_products WHERE id = $1', [productId])
-                const currentTotalStock = Number(totalStockRes.rows[0]?.current_stock || 0)
-                
                 await logStockMovement(
                     client, 
                     clubId, 
                     userId, 
                     productId, 
                     stockDelta, 
-                    currentTotalStock - stockDelta, 
-                    currentTotalStock, 
+                    previousStock, 
+                    newStock, 
                     'ADJUSTMENT', 
                     `Корректировка инвентаризации #${inventoryId}`, 
                     'INVENTORY', 
@@ -1128,13 +1355,14 @@ export async function correctInventoryItem(inventoryId: number, productId: numbe
     }
 }
 
-export async function correctStockMovement(movementId: number, newAmount: number, newReason?: string) {
+export async function correctStockMovement(movementId: number, clubId: string, userId: string, newAmount: number, newReason?: string) {
+    await assertUserCanAccessClub(clubId, userId)
     const client = await getClient()
     try {
         await client.query('BEGIN')
 
         // 1. Находим само движение
-        const mRes = await client.query('SELECT * FROM warehouse_stock_movements WHERE id = $1', [movementId])
+        const mRes = await client.query('SELECT * FROM warehouse_stock_movements WHERE id = $1 AND club_id = $2', [movementId, clubId])
         if (mRes.rows.length === 0) throw new Error("Движение не найдено")
         const movement = mRes.rows[0]
         const { club_id, product_id, warehouse_id, change_amount: oldAmount, type, related_entity_type, related_entity_id } = movement
@@ -1178,8 +1406,8 @@ export async function correctStockMovement(movementId: number, newAmount: number
             await client.query(`
                 UPDATE warehouse_products
                 SET current_stock = (SELECT COALESCE(SUM(quantity), 0) FROM warehouse_stock WHERE product_id = $1)
-                WHERE id = $1
-            `, [product_id])
+                WHERE id = $1 AND club_id = $2
+            `, [product_id, clubId])
         }
 
         // 5. Если движение было частью инвентаризации, правим её финансовые итоги
@@ -1206,7 +1434,7 @@ export async function correctStockMovement(movementId: number, newAmount: number
         }
 
         await client.query('COMMIT')
-        revalidatePath(`/clubs/${club_id}/inventory`)
+        revalidatePath(`/clubs/${clubId}/inventory`)
         return { success: true, wasStockAdjusted: !hasLaterInventory }
     } catch (e: any) {
         await client.query('ROLLBACK')
@@ -1218,6 +1446,7 @@ export async function correctStockMovement(movementId: number, newAmount: number
 }
 
 export async function deleteStockMovement(id: number, clubId: string, options?: { revertToWarehouseId?: number }) {
+    await requireClubAccess(clubId)
     const client = await import("@/db").then(m => m.getClient())
     try {
         await client.query('BEGIN')
@@ -1242,8 +1471,8 @@ export async function deleteStockMovement(id: number, clubId: string, options?: 
             await client.query(`
                 UPDATE warehouse_products
                 SET current_stock = (SELECT COALESCE(SUM(quantity), 0) FROM warehouse_stock WHERE product_id = $1)
-                WHERE id = $1
-            `, [move.product_id])
+                WHERE id = $1 AND club_id = $2
+            `, [move.product_id, clubId])
         }
 
         // 3. If it was an inventory sale, update the inventory header's calculated revenue (to fix differences)
@@ -1278,36 +1507,29 @@ export async function deleteStockMovement(id: number, clubId: string, options?: 
 }
 
 export async function createManualSale(clubId: string, userId: string, data: { product_id: number, quantity: number, warehouse_id: number, shift_id?: string, notes?: string }) {
+    await assertUserCanAccessClub(clubId, userId)
     const client = await import("@/db").then(m => m.getClient())
     try {
         await client.query('BEGIN')
 
         const { product_id, quantity, warehouse_id, shift_id, notes } = data
+        if (!Number.isFinite(quantity) || !Number.isInteger(quantity) || quantity <= 0) {
+            throw new Error("Количество должно быть целым положительным числом")
+        }
+        await assertWarehouseBelongsToClub(client, clubId, warehouse_id)
+        await assertProductBelongsToClub(client, clubId, product_id)
 
-        // 1. Get product info and current stock
-        const prodRes = await client.query('SELECT selling_price, name FROM warehouse_products WHERE id = $1', [product_id])
-        if (prodRes.rows.length === 0) throw new Error("Товар не найден")
-        const product = prodRes.rows[0]
+        // 1. Update stock
+        const { previousStock: prevStock, newStock } = await applyWarehouseStockDelta(client, warehouse_id, product_id, -quantity)
 
-        const stockRes = await client.query('SELECT quantity FROM warehouse_stock WHERE warehouse_id = $1 AND product_id = $2', [warehouse_id, product_id])
-        const prevStock = stockRes.rows[0]?.quantity || 0
-        const newStock = prevStock - quantity
-
-        // 2. Update stock
-        await client.query(`
-            UPDATE warehouse_stock 
-            SET quantity = $1 
-            WHERE warehouse_id = $2 AND product_id = $3
-        `, [newStock, warehouse_id, product_id])
-
-        // 3. Update product cache
+        // 2. Update product cache
         await client.query(`
             UPDATE warehouse_products
             SET current_stock = (SELECT COALESCE(SUM(quantity), 0) FROM warehouse_stock WHERE product_id = $1)
-            WHERE id = $1
-        `, [product_id])
+            WHERE id = $1 AND club_id = $2
+        `, [product_id, clubId])
 
-        // 4. Log movement
+        // 3. Log movement
         const reason = `Ручная продажа (Админ): ${notes || ''}`
         await logStockMovement(
             client, clubId, userId, product_id, -quantity, prevStock, newStock, 
@@ -1326,7 +1548,641 @@ export async function createManualSale(clubId: string, userId: string, data: { p
     }
 }
 
-export async function assignShiftToMovement(movementId: number, shiftId: number | null, clubId: string) {
+export type ShiftSaleItem = {
+    id: number
+    product_id: number
+    product_name: string
+    quantity: number
+    warehouse_id: number
+    warehouse_name: string
+    selling_price_snapshot: number
+    cost_price_snapshot: number
+    notes?: string | null
+    created_at: string
+    committed_at?: string | null
+}
+
+export async function getOpenShiftSales(clubId: string, userId: string, shiftId: string) {
+    await assertUserCanAccessClub(clubId, userId)
+    const res = await query(
+        `
+        SELECT 
+            ss.id,
+            ss.product_id,
+            p.name as product_name,
+            ss.quantity,
+            ss.warehouse_id,
+            w.name as warehouse_name,
+            ss.selling_price_snapshot,
+            ss.cost_price_snapshot,
+            ss.notes,
+            ss.created_at,
+            ss.committed_at
+        FROM shift_sales ss
+        JOIN warehouse_products p ON ss.product_id = p.id
+        JOIN warehouses w ON ss.warehouse_id = w.id
+        WHERE ss.club_id = $1
+          AND ss.shift_id = $2
+          AND ss.created_by = $3
+          AND ss.committed_at IS NULL
+        ORDER BY ss.created_at DESC
+        `,
+        [clubId, shiftId, userId]
+    )
+    return res.rows as ShiftSaleItem[]
+}
+
+export async function addShiftSaleItem(
+    clubId: string,
+    userId: string,
+    data: { shift_id: string, product_id: number, quantity: number, warehouse_id: number, notes?: string }
+) {
+    await assertUserCanAccessClub(clubId, userId)
+    if (!data.quantity || data.quantity <= 0) throw new Error("Количество должно быть больше 0")
+
+    const client = await import("@/db").then(m => m.getClient())
+    try {
+        await client.query('BEGIN')
+
+        const shiftCheck = await client.query(
+            `SELECT 1 FROM shifts WHERE id = $1 AND club_id = $2 AND user_id = $3 AND check_out IS NULL`,
+            [data.shift_id, clubId, userId]
+        )
+        if (shiftCheck.rowCount === 0) throw new Error("Смена не найдена или уже завершена")
+
+        const prodRes = await client.query(
+            `SELECT cost_price, selling_price FROM warehouse_products WHERE id = $1 AND club_id = $2`,
+            [data.product_id, clubId]
+        )
+        if (prodRes.rowCount === 0) throw new Error("Товар не найден")
+
+        const { cost_price, selling_price } = prodRes.rows[0]
+
+        await client.query(
+            `
+            INSERT INTO shift_sales (
+                club_id, shift_id, created_by, product_id, warehouse_id, quantity,
+                selling_price_snapshot, cost_price_snapshot, notes
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            ON CONFLICT (shift_id, product_id, warehouse_id) WHERE committed_at IS NULL
+            DO UPDATE SET 
+                quantity = shift_sales.quantity + EXCLUDED.quantity,
+                notes = COALESCE(NULLIF(EXCLUDED.notes, ''), shift_sales.notes)
+            `,
+            [
+                clubId,
+                data.shift_id,
+                userId,
+                data.product_id,
+                data.warehouse_id,
+                data.quantity,
+                selling_price || 0,
+                cost_price || 0,
+                data.notes || null
+            ]
+        )
+
+        await client.query('COMMIT')
+        revalidatePath(`/employee/clubs/${clubId}`)
+        return { success: true }
+    } catch (e) {
+        await client.query('ROLLBACK')
+        throw e
+    } finally {
+        client.release()
+    }
+}
+
+export async function updateShiftSaleItemQuantity(
+    clubId: string,
+    userId: string,
+    id: number,
+    quantity: number
+) {
+    await assertUserCanAccessClub(clubId, userId)
+    if (!quantity || quantity <= 0) throw new Error("Количество должно быть больше 0")
+
+    await query(
+        `
+        UPDATE shift_sales
+        SET quantity = $1
+        WHERE id = $2 AND club_id = $3 AND created_by = $4 AND committed_at IS NULL
+        `,
+        [quantity, id, clubId, userId]
+    )
+    revalidatePath(`/employee/clubs/${clubId}`)
+}
+
+export async function deleteShiftSaleItem(clubId: string, userId: string, id: number) {
+    await assertUserCanAccessClub(clubId, userId)
+    await query(
+        `DELETE FROM shift_sales WHERE id = $1 AND club_id = $2 AND created_by = $3 AND committed_at IS NULL`,
+        [id, clubId, userId]
+    )
+    revalidatePath(`/employee/clubs/${clubId}`)
+}
+
+export async function commitShiftSalesToMovements(clubId: string, userId: string, shiftId: string) {
+    await assertUserCanAccessClub(clubId, userId)
+    const client = await import("@/db").then(m => m.getClient())
+    try {
+        await client.query('BEGIN')
+
+        const shiftCheck = await client.query(
+            `SELECT 1 FROM shifts WHERE id = $1 AND club_id = $2 AND user_id = $3 AND check_out IS NULL`,
+            [shiftId, clubId, userId]
+        )
+        if (shiftCheck.rowCount === 0) throw new Error("Смена не найдена или уже завершена")
+
+        const salesRes = await client.query(
+            `
+            SELECT * 
+            FROM shift_sales
+            WHERE club_id = $1 AND shift_id = $2 AND created_by = $3 AND committed_at IS NULL
+            ORDER BY created_at ASC
+            FOR UPDATE
+            `,
+            [clubId, shiftId, userId]
+        )
+
+        if (salesRes.rowCount === 0) {
+            await client.query('COMMIT')
+            return { success: true, committedCount: 0 }
+        }
+
+        const productIds: number[] = []
+
+        for (const s of salesRes.rows) {
+            const productId = Number(s.product_id)
+            const warehouseId = Number(s.warehouse_id)
+            const qty = Number(s.quantity)
+            if (!productIds.includes(productId)) productIds.push(productId)
+
+            const stockRes = await client.query(
+                `SELECT quantity FROM warehouse_stock WHERE warehouse_id = $1 AND product_id = $2 FOR UPDATE`,
+                [warehouseId, productId]
+            )
+            const prevStock = stockRes.rows[0]?.quantity ?? 0
+            const newStock = Number(prevStock) - qty
+
+            await client.query(
+                `
+                INSERT INTO warehouse_stock (warehouse_id, product_id, quantity)
+                VALUES ($1, $2, $3)
+                ON CONFLICT (warehouse_id, product_id) DO UPDATE
+                SET quantity = warehouse_stock.quantity + $3
+                `,
+                [warehouseId, productId, -qty]
+            )
+
+            const movementId = await logStockMovement(
+                client,
+                clubId,
+                userId,
+                productId,
+                -qty,
+                Number(prevStock),
+                newStock,
+                'SALE',
+                `Продажа за смену: ${s.notes || ''}`.trim(),
+                'SHIFT_SALE',
+                Number(s.id),
+                shiftId,
+                warehouseId,
+                Number(s.selling_price_snapshot || 0)
+            )
+
+            await client.query(
+                `UPDATE shift_sales SET committed_at = NOW(), committed_movement_id = $1 WHERE id = $2`,
+                [movementId, s.id]
+            )
+        }
+
+        if (productIds.length > 0) {
+            await client.query(
+                `
+                UPDATE warehouse_products p
+                SET current_stock = (SELECT COALESCE(SUM(quantity), 0) FROM warehouse_stock WHERE product_id = p.id)
+                WHERE id = ANY($1) AND club_id = $2
+                `,
+                [productIds, clubId]
+            )
+        }
+
+        await client.query('COMMIT')
+        revalidatePath(`/clubs/${clubId}/inventory`)
+        revalidatePath(`/employee/clubs/${clubId}`)
+        return { success: true, committedCount: salesRes.rowCount }
+    } catch (e) {
+        await client.query('ROLLBACK')
+        throw e
+    } finally {
+        client.release()
+    }
+}
+
+export type ShiftReceiptPaymentType = 'cash' | 'card' | 'mixed' | 'other'
+
+export type ShiftReceiptItem = {
+    id: number
+    receipt_id: number
+    product_id: number
+    product_name: string
+    quantity: number
+    selling_price_snapshot: number
+    cost_price_snapshot: number
+}
+
+export type ShiftReceipt = {
+    id: number
+    club_id: number
+    shift_id: string
+    created_by: string
+    warehouse_id: number
+    warehouse_name: string
+    payment_type: ShiftReceiptPaymentType
+    cash_amount: number
+    card_amount: number
+    total_amount: number
+    notes?: string | null
+    created_at: string
+    voided_at?: string | null
+    committed_at?: string | null
+    items: ShiftReceiptItem[]
+}
+
+async function resolveEmployeeDefaultWarehouseId(
+    client: any,
+    clubId: string,
+    userId: string,
+    preferredWarehouseId?: number | null
+) {
+    if (preferredWarehouseId) return preferredWarehouseId
+
+    const settingsRes = await client.query('SELECT inventory_settings FROM clubs WHERE id = $1', [clubId])
+    const settings = settingsRes.rows[0]?.inventory_settings || {}
+    const allowed = settings.employee_allowed_warehouse_ids
+    if (Array.isArray(allowed) && allowed.length > 0) {
+        const candidate = allowed[0]
+        const whRes = await client.query(
+            `SELECT id FROM warehouses WHERE id = $1 AND club_id = $2 AND is_active = true LIMIT 1`,
+            [candidate, clubId]
+        )
+        if (whRes.rowCount && whRes.rows[0]?.id) return Number(whRes.rows[0].id)
+    }
+
+    const whRes = await client.query(
+        `SELECT id FROM warehouses WHERE club_id = $1 AND is_active = true ORDER BY is_default DESC, created_at ASC LIMIT 1`,
+        [clubId]
+    )
+    const id = whRes.rows[0]?.id
+    if (!id) throw new Error("В клубе не создано ни одного склада")
+    return Number(id)
+}
+
+export async function createShiftReceipt(
+    clubId: string,
+    userId: string,
+    data: {
+        shift_id: string
+        payment_type: ShiftReceiptPaymentType
+        items: { product_id: number; quantity: number }[]
+        cash_amount?: number
+        card_amount?: number
+        notes?: string
+        warehouse_id?: number
+    }
+) {
+    await assertUserCanAccessClub(clubId, userId)
+    if (!data.items?.length) throw new Error("Пустой чек")
+
+    const client = await import("@/db").then(m => m.getClient())
+    try {
+        await client.query('BEGIN')
+
+        const normalizedItems = data.items
+            .map(i => ({ product_id: Number(i.product_id), quantity: Number(i.quantity) }))
+            .filter(i => Number.isFinite(i.product_id) && Number.isFinite(i.quantity))
+
+        if (normalizedItems.length === 0) throw new Error("Пустой чек")
+        for (const i of normalizedItems) {
+            if (!Number.isInteger(i.product_id) || i.product_id <= 0) throw new Error("Некорректный товар в чеке")
+            if (!Number.isInteger(i.quantity) || i.quantity <= 0) throw new Error("Количество должно быть целым числом больше 0")
+        }
+
+        const shiftCheck = await client.query(
+            `SELECT 1 FROM shifts WHERE id = $1 AND club_id = $2 AND user_id = $3 AND check_out IS NULL`,
+            [data.shift_id, clubId, userId]
+        )
+        if (shiftCheck.rowCount === 0) throw new Error("Смена не найдена или уже завершена")
+
+        const warehouseId = await resolveEmployeeDefaultWarehouseId(client, clubId, userId, data.warehouse_id ?? null)
+
+        const productIds = Array.from(new Set(normalizedItems.map(i => i.product_id)))
+        const pricesRes = await client.query(
+            `
+            SELECT id, cost_price, selling_price
+            FROM warehouse_products
+            WHERE club_id = $1 AND id = ANY($2)
+            `,
+            [clubId, productIds]
+        )
+        if (pricesRes.rowCount !== productIds.length) throw new Error("Некоторые товары не найдены")
+        const priceMap = new Map<number, { cost_price: number; selling_price: number }>()
+        for (const r of pricesRes.rows) {
+            priceMap.set(Number(r.id), { cost_price: Number(r.cost_price || 0), selling_price: Number(r.selling_price || 0) })
+        }
+
+        const itemsTotal = normalizedItems.reduce((acc, i) => {
+            const p = priceMap.get(i.product_id)
+            if (!p) return acc
+            return acc + (Number(i.quantity) * Number(p.selling_price || 0))
+        }, 0)
+
+        let cashAmount = Number(data.cash_amount || 0)
+        let cardAmount = Number(data.card_amount || 0)
+        if (data.payment_type === 'cash') {
+            cashAmount = itemsTotal
+            cardAmount = 0
+        } else if (data.payment_type === 'card') {
+            cardAmount = itemsTotal
+            cashAmount = 0
+        } else if (data.payment_type === 'mixed') {
+            if (cashAmount + cardAmount === 0) {
+                cashAmount = itemsTotal
+            }
+        } else {
+            cashAmount = cashAmount || 0
+            cardAmount = cardAmount || 0
+        }
+
+        // Monetary sanity checks (avoid storing inconsistent mixed payments).
+        const totalRounded = Math.round(itemsTotal * 100) / 100
+        cashAmount = Math.round(cashAmount * 100) / 100
+        cardAmount = Math.round(cardAmount * 100) / 100
+        if (data.payment_type === 'mixed') {
+            const sumRounded = Math.round((cashAmount + cardAmount) * 100) / 100
+            if (sumRounded !== totalRounded) {
+                throw new Error("Сумма наличных + карта должна равняться итогу")
+            }
+        }
+
+        const receiptRes = await client.query(
+            `
+            INSERT INTO shift_receipts (
+                club_id, shift_id, created_by, warehouse_id,
+                payment_type, cash_amount, card_amount, total_amount, notes
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            RETURNING id
+            `,
+            [
+                clubId,
+                data.shift_id,
+                userId,
+                warehouseId,
+                data.payment_type,
+                cashAmount,
+                cardAmount,
+                itemsTotal,
+                data.notes || null
+            ]
+        )
+        const receiptId = Number(receiptRes.rows[0].id)
+
+        for (const item of normalizedItems) {
+            if (!item.quantity || item.quantity <= 0) continue
+            const p = priceMap.get(item.product_id)
+            if (!p) continue
+            await client.query(
+                `
+                INSERT INTO shift_receipt_items (receipt_id, product_id, quantity, selling_price_snapshot, cost_price_snapshot)
+                VALUES ($1, $2, $3, $4, $5)
+                `,
+                [receiptId, item.product_id, item.quantity, p.selling_price, p.cost_price]
+            )
+        }
+
+        await client.query('COMMIT')
+        revalidatePath(`/employee/clubs/${clubId}`)
+        return { success: true, id: receiptId }
+    } catch (e) {
+        await client.query('ROLLBACK')
+        throw e
+    } finally {
+        client.release()
+    }
+}
+
+export async function getShiftReceipts(clubId: string, userId: string, shiftId: string, options?: { includeVoided?: boolean }) {
+    await assertUserCanAccessClub(clubId, userId)
+    const includeVoided = options?.includeVoided ?? false
+
+    const res = await query(
+        `
+        SELECT 
+            r.*,
+            w.name as warehouse_name
+        FROM shift_receipts r
+        JOIN warehouses w ON r.warehouse_id = w.id
+        WHERE r.club_id = $1
+          AND r.shift_id = $2
+          AND r.created_by = $3
+          AND ($4::boolean = true OR r.voided_at IS NULL)
+        ORDER BY r.created_at DESC
+        LIMIT 100
+        `,
+        [clubId, shiftId, userId, includeVoided]
+    )
+
+    const receiptIds = res.rows.map(r => Number(r.id))
+    const itemsRes = receiptIds.length
+        ? await query(
+            `
+            SELECT 
+                i.*,
+                p.name as product_name
+            FROM shift_receipt_items i
+            JOIN warehouse_products p ON i.product_id = p.id
+            WHERE i.receipt_id = ANY($1)
+            ORDER BY i.id ASC
+            `,
+            [receiptIds]
+        )
+        : { rows: [] as any[] }
+
+    const itemsByReceipt = new Map<number, ShiftReceiptItem[]>()
+    for (const r of itemsRes.rows) {
+        const rid = Number(r.receipt_id)
+        const arr = itemsByReceipt.get(rid) || []
+        arr.push({
+            id: Number(r.id),
+            receipt_id: rid,
+            product_id: Number(r.product_id),
+            product_name: String(r.product_name),
+            quantity: Number(r.quantity),
+            selling_price_snapshot: Number(r.selling_price_snapshot || 0),
+            cost_price_snapshot: Number(r.cost_price_snapshot || 0)
+        })
+        itemsByReceipt.set(rid, arr)
+    }
+
+    return res.rows.map((r: any) => ({
+        id: Number(r.id),
+        club_id: Number(r.club_id),
+        shift_id: String(r.shift_id),
+        created_by: String(r.created_by),
+        warehouse_id: Number(r.warehouse_id),
+        warehouse_name: String(r.warehouse_name),
+        payment_type: r.payment_type as ShiftReceiptPaymentType,
+        cash_amount: Number(r.cash_amount || 0),
+        card_amount: Number(r.card_amount || 0),
+        total_amount: Number(r.total_amount || 0),
+        notes: r.notes,
+        created_at: r.created_at,
+        voided_at: r.voided_at,
+        committed_at: r.committed_at,
+        items: itemsByReceipt.get(Number(r.id)) || []
+    })) as ShiftReceipt[]
+}
+
+export async function voidShiftReceipt(clubId: string, userId: string, receiptId: number) {
+    await assertUserCanAccessClub(clubId, userId)
+    await query(
+        `
+        UPDATE shift_receipts
+        SET voided_at = NOW()
+        WHERE id = $1 AND club_id = $2 AND created_by = $3 AND committed_at IS NULL AND voided_at IS NULL
+        `,
+        [receiptId, clubId, userId]
+    )
+    revalidatePath(`/employee/clubs/${clubId}`)
+}
+
+export async function commitShiftReceiptsToMovements(clubId: string, userId: string, shiftId: string) {
+    await assertUserCanAccessClub(clubId, userId)
+    const client = await import("@/db").then(m => m.getClient())
+    try {
+        await client.query('BEGIN')
+
+        const shiftCheck = await client.query(
+            `SELECT 1 FROM shifts WHERE id = $1 AND club_id = $2 AND user_id = $3 AND check_out IS NULL`,
+            [shiftId, clubId, userId]
+        )
+        if (shiftCheck.rowCount === 0) throw new Error("Смена не найдена или уже завершена")
+
+        const receiptsRes = await client.query(
+            `
+            SELECT * 
+            FROM shift_receipts
+            WHERE club_id = $1 AND shift_id = $2 AND created_by = $3
+              AND committed_at IS NULL AND voided_at IS NULL
+            ORDER BY created_at ASC
+            FOR UPDATE
+            `,
+            [clubId, shiftId, userId]
+        )
+
+        if (receiptsRes.rowCount === 0) {
+            await client.query('COMMIT')
+            return { success: true, committedCount: 0 }
+        }
+
+        const receiptIds = receiptsRes.rows.map((r: any) => Number(r.id))
+        const itemsRes = await client.query(
+            `
+            SELECT * FROM shift_receipt_items
+            WHERE receipt_id = ANY($1)
+            ORDER BY id ASC
+            FOR UPDATE
+            `,
+            [receiptIds]
+        )
+
+        const receiptWarehouse = new Map<number, number>()
+        for (const r of receiptsRes.rows) receiptWarehouse.set(Number(r.id), Number(r.warehouse_id))
+
+        const productIds: number[] = []
+
+        for (const item of itemsRes.rows) {
+            const receiptId = Number(item.receipt_id)
+            const warehouseId = receiptWarehouse.get(receiptId)
+            if (!warehouseId) continue
+
+            const productId = Number(item.product_id)
+            const qty = Number(item.quantity)
+            if (!productIds.includes(productId)) productIds.push(productId)
+
+            const stockRes = await client.query(
+                `SELECT quantity FROM warehouse_stock WHERE warehouse_id = $1 AND product_id = $2 FOR UPDATE`,
+                [warehouseId, productId]
+            )
+            const prevStock = stockRes.rows[0]?.quantity ?? 0
+            const newStock = Number(prevStock) - qty
+
+            await client.query(
+                `
+                INSERT INTO warehouse_stock (warehouse_id, product_id, quantity)
+                VALUES ($1, $2, $3)
+                ON CONFLICT (warehouse_id, product_id) DO UPDATE
+                SET quantity = warehouse_stock.quantity + $3
+                `,
+                [warehouseId, productId, -qty]
+            )
+
+            await logStockMovement(
+                client,
+                clubId,
+                userId,
+                productId,
+                -qty,
+                Number(prevStock),
+                newStock,
+                'SALE',
+                `Чек #${receiptId}`,
+                'SHIFT_RECEIPT',
+                receiptId,
+                shiftId,
+                warehouseId,
+                Number(item.selling_price_snapshot || 0)
+            )
+        }
+
+        await client.query(
+            `
+            UPDATE shift_receipts
+            SET committed_at = NOW(), committed_by = $1
+            WHERE id = ANY($2)
+            `,
+            [userId, receiptIds]
+        )
+
+        if (productIds.length > 0) {
+            await client.query(
+                `
+                UPDATE warehouse_products p
+                SET current_stock = (SELECT COALESCE(SUM(quantity), 0) FROM warehouse_stock WHERE product_id = p.id)
+                WHERE id = ANY($1) AND club_id = $2
+                `,
+                [productIds, clubId]
+            )
+        }
+
+        await client.query('COMMIT')
+        revalidatePath(`/clubs/${clubId}/inventory`)
+        revalidatePath(`/employee/clubs/${clubId}`)
+        return { success: true, committedCount: receiptsRes.rowCount }
+    } catch (e) {
+        await client.query('ROLLBACK')
+        throw e
+    } finally {
+        client.release()
+    }
+}
+
+export async function assignShiftToMovement(movementId: number, shiftId: string | null, clubId: string) {
+    await requireClubAccess(clubId)
     await query(`
         UPDATE warehouse_stock_movements 
         SET shift_id = $1 
@@ -1335,7 +2191,8 @@ export async function assignShiftToMovement(movementId: number, shiftId: number 
     revalidatePath(`/clubs/${clubId}/inventory`)
 }
 
-export async function massAssignShiftToMovements(movementIds: number[], shiftId: number | null, clubId: string) {
+export async function massAssignShiftToMovements(movementIds: number[], shiftId: string | null, clubId: string) {
+    await requireClubAccess(clubId)
     await query(`
         UPDATE warehouse_stock_movements 
         SET shift_id = $1 
@@ -1345,9 +2202,18 @@ export async function massAssignShiftToMovements(movementIds: number[], shiftId:
 }
 
 export async function createWriteOff(clubId: string, userId: string, data: { items: { product_id: number, quantity: number, type: 'WASTE' | 'SALARY_DEDUCTION', custom_price?: number }[], notes: string, shift_id?: string, warehouse_id?: number }) {
+    await assertUserCanAccessClub(clubId, userId)
     const client = await import("@/db").then(m => m.getClient())
     try {
         await client.query('BEGIN')
+
+        if (!data.items || data.items.length === 0) throw new Error("Не выбраны товары для списания")
+        for (const i of data.items) {
+            if (!Number.isFinite(i.quantity) || !Number.isInteger(i.quantity) || i.quantity <= 0) {
+                throw new Error("Количество должно быть целым положительным числом")
+            }
+        }
+        await assertProductsBelongToClub(client, clubId, data.items.map(i => i.product_id))
 
         // Find warehouse (passed explicitly, or default, or fallback to first available)
         let warehouseId = data.warehouse_id
@@ -1377,6 +2243,7 @@ export async function createWriteOff(clubId: string, userId: string, data: { ite
         }
         
         if (!warehouseId) throw new Error("В клубе не создано ни одного склада")
+        await assertWarehouseBelongsToClub(client, clubId, warehouseId)
 
         // 0. Check for existing inventory OR create one if it's a salary deduction
         let inventoryId: number | null = null
@@ -1416,52 +2283,42 @@ export async function createWriteOff(clubId: string, userId: string, data: { ite
         }
 
         for (const item of data.items) {
-            // 1. Get current stock
-            const stockRes = await client.query('SELECT quantity FROM warehouse_stock WHERE warehouse_id = $1 AND product_id = $2', [warehouseId, item.product_id])
-            const previousStock = stockRes.rows[0]?.quantity || 0
-            const newStock = previousStock - item.quantity
-
-            // 2. Update stock
-            await client.query(`
-                UPDATE warehouse_stock 
-                SET quantity = $1 
-                WHERE warehouse_id = $2 AND product_id = $3
-            `, [newStock, warehouseId, item.product_id])
+            // 1. Update stock
+            const { previousStock, newStock } = await applyWarehouseStockDelta(client, warehouseId, item.product_id, -item.quantity)
 
             // 3. Update product cache
             await client.query(`
                 UPDATE warehouse_products
                 SET current_stock = (SELECT COALESCE(SUM(quantity), 0) FROM warehouse_stock WHERE product_id = $1)
-                WHERE id = $1
-            `, [item.product_id])
-
-            // 3b. If an inventory is OPEN, adjust its expected_stock
-            if (inventoryId) {
-                await client.query(`
-                    UPDATE warehouse_inventory_items
-                    SET expected_stock = expected_stock - $1
-                    WHERE inventory_id = $2 AND product_id = $3
-                `, [item.quantity, inventoryId, item.product_id])
-            }
+                WHERE id = $1 AND club_id = $2
+            `, [item.product_id, clubId])
 
             // 4. Log movement
             const reason = item.type === 'SALARY_DEDUCTION' ? `В счет ЗП: ${data.notes}` : `Списание: ${data.notes}`
             const movementType = item.type === 'SALARY_DEDUCTION' ? 'SALE' : 'ADJUSTMENT' // SALARY_DEDUCTION is essentially a sale to employee
             
             // If custom price is provided, we use it for logging the movement
-            const priceToUse = item.custom_price;
-
-            await client.query(`
-                INSERT INTO warehouse_stock_movements 
-                (club_id, product_id, user_id, change_amount, previous_stock, new_stock, type, reason, related_entity_type, related_entity_id, shift_id, warehouse_id, price_at_time)
-                SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, COALESCE($13, selling_price)
-                FROM warehouse_products
-                WHERE id = $2
-            `, [clubId, item.product_id, userId, -item.quantity, previousStock, newStock, movementType, reason, 'WRITE_OFF', null, data.shift_id || null, warehouseId, priceToUse])
+            const priceToUse = item.custom_price ?? null
+            await logStockMovement(
+                client,
+                clubId,
+                userId,
+                item.product_id,
+                -item.quantity,
+                previousStock,
+                newStock,
+                movementType,
+                reason,
+                'WRITE_OFF',
+                null,
+                data.shift_id || null,
+                warehouseId,
+                priceToUse
+            )
 
             // 5. If Salary Deduction, update Shift
             if (item.type === 'SALARY_DEDUCTION') {
-                const prodRes = await client.query('SELECT selling_price FROM warehouse_products WHERE id = $1', [item.product_id])
+                const prodRes = await client.query('SELECT selling_price FROM warehouse_products WHERE id = $1 AND club_id = $2', [item.product_id, clubId])
                 const defaultPrice = prodRes.rows[0]?.selling_price || 0
                 const price = item.custom_price ?? defaultPrice
                 const totalDeduction = price * item.quantity
@@ -1470,8 +2327,8 @@ export async function createWriteOff(clubId: string, userId: string, data: { ite
                     await client.query(`
                         UPDATE shifts 
                         SET bar_purchases = COALESCE(bar_purchases, 0) + $1 
-                        WHERE id = $2
-                    `, [totalDeduction, data.shift_id])
+                        WHERE id = $2 AND club_id = $3
+                    `, [totalDeduction, data.shift_id, clubId])
                 }
             }
         }
@@ -1488,6 +2345,7 @@ export async function createWriteOff(clubId: string, userId: string, data: { ite
 }
 
 export async function getProducts(clubId: string) {
+    await requireClubAccess(clubId)
     const client = await import("@/db").then(m => m.getClient())
     try {
         const res = await client.query(`
@@ -1539,9 +2397,14 @@ export async function getProducts(clubId: string) {
 }
 
 export async function createProduct(clubId: string, userId: string, data: { name: string, barcode?: string | null, barcodes?: string[], category_id: number | null, cost_price: number, selling_price: number, current_stock: number, min_stock_level?: number, units_per_box?: number }) {
+    await assertUserCanAccessClub(clubId, userId)
     const client = await import("@/db").then(m => m.getClient())
     try {
         await client.query('BEGIN')
+
+        if (!Number.isFinite(data.current_stock) || !Number.isInteger(data.current_stock) || data.current_stock < 0) {
+            throw new Error("Начальный остаток должен быть целым неотрицательным числом")
+        }
         
         // 1. Create Product
         const res = await client.query(`
@@ -1557,14 +2420,34 @@ export async function createProduct(clubId: string, userId: string, data: { name
             const whRes = await client.query('SELECT id FROM warehouses WHERE club_id = $1 ORDER BY is_default DESC LIMIT 1', [clubId])
             const warehouseId = whRes.rows[0]?.id
             
-            if (warehouseId) {
-                await client.query(`
-                    INSERT INTO warehouse_stock (warehouse_id, product_id, quantity)
-                    VALUES ($1, $2, $3)
-                `, [warehouseId, productId, data.current_stock])
-                
-                await logStockMovement(client, clubId, userId, productId, data.current_stock, 0, data.current_stock, 'SUPPLY', 'Initial Stock', 'WAREHOUSE', productId, null, warehouseId)
+            if (!warehouseId) {
+                throw new Error("Нельзя установить начальный остаток: в клубе не создано ни одного склада")
             }
+
+            await client.query(
+                `
+                INSERT INTO warehouse_stock (warehouse_id, product_id, quantity)
+                VALUES ($1, $2, $3)
+                ON CONFLICT (warehouse_id, product_id) DO UPDATE SET quantity = EXCLUDED.quantity
+                `,
+                [warehouseId, productId, data.current_stock]
+            )
+
+            await logStockMovement(
+                client,
+                clubId,
+                userId,
+                productId,
+                data.current_stock,
+                0,
+                data.current_stock,
+                'SUPPLY',
+                'Initial Stock',
+                'WAREHOUSE',
+                warehouseId,
+                null,
+                warehouseId
+            )
         }
         
         await client.query('COMMIT')
@@ -1579,6 +2462,7 @@ export async function createProduct(clubId: string, userId: string, data: { name
 }
 
 export async function updateProduct(id: number, clubId: string, userId: string, data: { name: string, barcode?: string | null, barcodes?: string[], category_id: number | null, cost_price: number, selling_price: number, min_stock_level?: number, is_active: boolean, units_per_box?: number }) {
+    await assertUserCanAccessClub(clubId, userId)
     const client = await import("@/db").then(m => m.getClient())
     try {
         await client.query('BEGIN')
@@ -1606,9 +2490,15 @@ export async function adjustWarehouseStock(clubId: string, userId: string, produ
     const client = await import("@/db").then(m => m.getClient())
     try {
         await client.query('BEGIN')
+
+        if (!Number.isFinite(newQuantity) || !Number.isInteger(newQuantity) || newQuantity < 0) {
+            throw new Error("Новый остаток должен быть целым неотрицательным числом")
+        }
+        await assertWarehouseBelongsToClub(client, clubId, warehouseId)
+        await assertProductBelongsToClub(client, clubId, productId)
         
         // Get old stock
-        const stockRes = await client.query('SELECT quantity FROM warehouse_stock WHERE warehouse_id = $1 AND product_id = $2', [warehouseId, productId])
+        const stockRes = await client.query('SELECT quantity FROM warehouse_stock WHERE warehouse_id = $1 AND product_id = $2 FOR UPDATE', [warehouseId, productId])
         const oldQuantity = stockRes.rows[0]?.quantity || 0
         const diff = newQuantity - oldQuantity
         
@@ -1618,20 +2508,16 @@ export async function adjustWarehouseStock(clubId: string, userId: string, produ
         }
 
         // Update Stock
-        await client.query(`
-            INSERT INTO warehouse_stock (warehouse_id, product_id, quantity)
-            VALUES ($1, $2, $3)
-            ON CONFLICT (warehouse_id, product_id) DO UPDATE SET quantity = $3
-        `, [warehouseId, productId, newQuantity])
+        const { previousStock, newStock } = await applyWarehouseStockDelta(client, warehouseId, productId, diff)
         
         // Update Total Cache in Products Table
         await client.query(`
             UPDATE warehouse_products p
             SET current_stock = (SELECT COALESCE(SUM(quantity), 0) FROM warehouse_stock WHERE product_id = p.id)
-            WHERE id = $1
-        `, [productId])
+            WHERE id = $1 AND club_id = $2
+        `, [productId, clubId])
 
-        await logStockMovement(client, clubId, userId, productId, diff, oldQuantity, newQuantity, 'MANUAL_EDIT', reason, 'WAREHOUSE', warehouseId, null, warehouseId)
+        await logStockMovement(client, clubId, userId, productId, diff, previousStock, newStock, 'MANUAL_EDIT', reason, 'WAREHOUSE', warehouseId, null, warehouseId)
         
         await client.query('COMMIT')
     } catch (e) {
@@ -1648,6 +2534,11 @@ export async function writeOffProduct(clubId: string, userId: string, productId:
     const client = await import("@/db").then(m => m.getClient())
     try {
         await client.query('BEGIN')
+
+        if (!Number.isFinite(amount) || !Number.isInteger(amount) || amount <= 0) {
+            throw new Error("Количество для списания должно быть целым положительным числом")
+        }
+        await assertProductBelongsToClub(client, clubId, productId)
         
         // Find warehouse with enough stock
         // Strategy: First Default, then others
@@ -1656,8 +2547,9 @@ export async function writeOffProduct(clubId: string, userId: string, productId:
             FROM warehouse_stock ws
             JOIN warehouses w ON ws.warehouse_id = w.id
             WHERE ws.product_id = $1
+              AND w.club_id = $2
             ORDER BY w.is_default DESC, ws.quantity DESC
-        `, [productId])
+        `, [productId, clubId])
         
         let remaining = amount
         const writeOffs: { warehouseId: number, amount: number }[] = []
@@ -1678,21 +2570,30 @@ export async function writeOffProduct(clubId: string, userId: string, productId:
         
         // Apply updates
         for (const wo of writeOffs) {
-            await client.query(`
-                UPDATE warehouse_stock 
-                SET quantity = quantity - $1
-                WHERE warehouse_id = $2 AND product_id = $3
-            `, [wo.amount, wo.warehouseId, productId])
-            
-            await logStockMovement(client, clubId, userId, productId, -wo.amount, 0, 0, 'WRITE_OFF', reason, 'WAREHOUSE', wo.warehouseId, null, wo.warehouseId)
+            const { previousStock, newStock } = await applyWarehouseStockDelta(client, wo.warehouseId, productId, -wo.amount)
+            await logStockMovement(
+                client,
+                clubId,
+                userId,
+                productId,
+                -wo.amount,
+                previousStock,
+                newStock,
+                'WRITE_OFF',
+                reason,
+                'WAREHOUSE',
+                wo.warehouseId,
+                null,
+                wo.warehouseId
+            )
         }
         
         // Update Total Cache
         await client.query(`
             UPDATE warehouse_products p
             SET current_stock = (SELECT COALESCE(SUM(quantity), 0) FROM warehouse_stock WHERE product_id = p.id)
-            WHERE id = $1
-        `, [productId])
+            WHERE id = $1 AND club_id = $2
+        `, [productId, clubId])
         
         await client.query('COMMIT')
     } catch (e) {
@@ -1704,30 +2605,34 @@ export async function writeOffProduct(clubId: string, userId: string, productId:
     revalidatePath(`/clubs/${clubId}/inventory`)
 }
 
-export async function getProductHistory(productId: number) {
+export async function getProductHistory(clubId: string, productId: number) {
+    await requireClubAccess(clubId)
     const res = await query(`
         SELECT m.*, u.full_name as user_name
         FROM warehouse_stock_movements m
         LEFT JOIN users u ON m.user_id = u.id
-        WHERE m.product_id = $1
+        WHERE m.club_id = $1 AND m.product_id = $2
         ORDER BY m.created_at DESC
         LIMIT 50
-    `, [productId])
+    `, [clubId, productId])
     return res.rows
 }
 
 export async function deleteProduct(id: number, clubId: string) {
-    await query(`DELETE FROM warehouse_products WHERE id = $1`, [id])
+    await requireClubAccess(clubId)
+    await query(`DELETE FROM warehouse_products WHERE id = $1 AND club_id = $2`, [id, clubId])
     revalidatePath(`/clubs/${clubId}/inventory`)
 }
 
 export async function bulkUpdatePrices(ids: number[], clubId: string, type: 'fixed' | 'percent', value: number) {
+    await requireClubAccess(clubId)
+    if (!ids.length) return
     if (type === 'fixed') {
         await query(`
             UPDATE warehouse_products 
             SET selling_price = $1 
-            WHERE id = ANY($2)
-        `, [value, ids])
+            WHERE id = ANY($2) AND club_id = $3
+        `, [value, ids, clubId])
     } else {
         // Percent increase/decrease
         // value is percentage (e.g. 10 for +10%, -10 for -10%)
@@ -1735,8 +2640,8 @@ export async function bulkUpdatePrices(ids: number[], clubId: string, type: 'fix
         await query(`
             UPDATE warehouse_products 
             SET selling_price = selling_price * (1 + $1::decimal / 100)
-            WHERE id = ANY($2)
-        `, [value, ids])
+            WHERE id = ANY($2) AND club_id = $3
+        `, [value, ids, clubId])
     }
     revalidatePath(`/clubs/${clubId}/inventory`)
 }
@@ -1753,6 +2658,7 @@ export type Supplier = {
 // --- SUPPLIERS ---
 
 export async function getSuppliers(clubId: string) {
+    await requireClubAccess(clubId)
     const res = await query(`
         SELECT * FROM warehouse_suppliers 
         WHERE club_id = $1 AND is_active = true 
@@ -1762,6 +2668,7 @@ export async function getSuppliers(clubId: string) {
 }
 
 export async function createSupplier(clubId: string, name: string, contactInfo?: string) {
+    await requireClubAccess(clubId)
     // Check if exists (case insensitive)
     const existing = await query(`
         SELECT id FROM warehouse_suppliers 
@@ -1785,12 +2692,14 @@ export async function createSupplier(clubId: string, name: string, contactInfo?:
 // --- SUPPLIES ---
 
 export async function getSuppliersForSelect(clubId: string) {
+    await requireClubAccess(clubId)
     const res = await query(`SELECT id, name FROM warehouse_suppliers WHERE club_id = $1 AND is_active = true ORDER BY name`, [clubId])
     return res.rows
 }
 
 
 export async function getSupplies(clubId: string) {
+    await requireClubAccess(clubId)
     const res = await query(`
         SELECT s.*, u.full_name as created_by_name,
         (SELECT COUNT(*) FROM warehouse_supply_items WHERE supply_id = s.id) as items_count
@@ -1807,6 +2716,17 @@ export async function createSupply(clubId: string, userId: string, data: { suppl
     const client = await import("@/db").then(m => m.getClient())
     try {
         await client.query('BEGIN')
+
+        if (!data.items || data.items.length === 0) throw new Error("Поставка должна содержать хотя бы один товар")
+        for (const i of data.items) {
+            if (!Number.isFinite(i.quantity) || !Number.isInteger(i.quantity) || i.quantity <= 0) {
+                throw new Error("Количество в поставке должно быть целым положительным числом")
+            }
+            if (!Number.isFinite(i.cost_price) || i.cost_price < 0) {
+                throw new Error("Себестоимость в поставке должна быть неотрицательным числом")
+            }
+        }
+        await assertProductsBelongToClub(client, clubId, data.items.map(i => i.product_id))
 
         // 1. Get or Create Supplier
         let supplierId: number | null = null
@@ -1825,12 +2745,14 @@ export async function createSupply(clubId: string, userId: string, data: { suppl
         // 2. Create Supply
         const status = data.status || 'COMPLETED'
         const totalCost = data.items.reduce((acc, item) => acc + (item.quantity * item.cost_price), 0)
-        
+
         let warehouseId = data.warehouse_id
         if (!warehouseId) {
             const whRes = await client.query('SELECT id FROM warehouses WHERE club_id = $1 ORDER BY is_default DESC LIMIT 1', [clubId])
             warehouseId = whRes.rows[0]?.id
         }
+        if (!warehouseId) throw new Error("В клубе не создано ни одного склада")
+        await assertWarehouseBelongsToClub(client, clubId, warehouseId)
 
         const supplyRes = await client.query(`
             INSERT INTO warehouse_supplies (club_id, supplier_name, supplier_id, notes, total_cost, created_by, status, warehouse_id)
@@ -1847,20 +2769,30 @@ export async function createSupply(clubId: string, userId: string, data: { suppl
             `, [supplyId, item.product_id, item.quantity, item.cost_price, item.quantity * item.cost_price])
 
             if (status === 'COMPLETED' && warehouseId) {
-                await client.query(`
-                    INSERT INTO warehouse_stock (warehouse_id, product_id, quantity)
-                    VALUES ($1, $2, $3)
-                    ON CONFLICT (warehouse_id, product_id) DO UPDATE SET quantity = warehouse_stock.quantity + $3
-                `, [warehouseId, item.product_id, item.quantity])
+                const { previousStock, newStock } = await applyWarehouseStockDelta(client, warehouseId, item.product_id, item.quantity)
                 
                 await client.query(`
                     UPDATE warehouse_products
                     SET current_stock = (SELECT COALESCE(SUM(quantity), 0) FROM warehouse_stock WHERE product_id = $1),
                         cost_price = $2
-                    WHERE id = $1
-                `, [item.product_id, item.cost_price])
+                    WHERE id = $1 AND club_id = $3
+                `, [item.product_id, item.cost_price, clubId])
                 
-                await logStockMovement(client, clubId, userId, item.product_id, item.quantity, 0, 0, 'SUPPLY', `Supply #${supplyId}`, 'SUPPLY', supplyId, null, warehouseId)
+                await logStockMovement(
+                    client,
+                    clubId,
+                    userId,
+                    item.product_id,
+                    item.quantity,
+                    previousStock,
+                    newStock,
+                    'SUPPLY',
+                    `Supply #${supplyId}`,
+                    'SUPPLY',
+                    supplyId,
+                    null,
+                    warehouseId
+                )
             }
         }
 
@@ -1875,14 +2807,16 @@ export async function createSupply(clubId: string, userId: string, data: { suppl
     revalidatePath(`/clubs/${clubId}/inventory`)
 }
 
-export async function getSupplyItems(supplyId: number) {
+export async function getSupplyItems(clubId: string, supplyId: number) {
+    await requireClubAccess(clubId)
     const res = await query(`
         SELECT si.*, p.name as product_name
         FROM warehouse_supply_items si
+        JOIN warehouse_supplies s ON si.supply_id = s.id
         JOIN warehouse_products p ON si.product_id = p.id
-        WHERE si.supply_id = $1
+        WHERE s.club_id = $1 AND si.supply_id = $2
         ORDER BY p.name
-    `, [supplyId])
+    `, [clubId, supplyId])
     return res.rows as SupplyItem[]
 }
 
@@ -1892,7 +2826,7 @@ export async function deleteSupply(supplyId: number, clubId: string, userId: str
     try {
         await client.query('BEGIN')
         
-        const supplyRes = await client.query('SELECT * FROM warehouse_supplies WHERE id = $1', [supplyId])
+        const supplyRes = await client.query('SELECT * FROM warehouse_supplies WHERE id = $1 AND club_id = $2', [supplyId, clubId])
         if (supplyRes.rows.length === 0) throw new Error('Поставка не найдена')
         const supply = supplyRes.rows[0]
         
@@ -1918,19 +2852,19 @@ export async function deleteSupply(supplyId: number, clubId: string, userId: str
                     await client.query(`
                         UPDATE warehouse_products
                         SET current_stock = (SELECT COALESCE(SUM(quantity), 0) FROM warehouse_stock WHERE product_id = $1)
-                        WHERE id = $1
-                    `, [item.product_id])
+                        WHERE id = $1 AND club_id = $2
+                    `, [item.product_id, clubId])
                 }
                 
                 // Delete movement
                 await client.query(`
                     DELETE FROM warehouse_stock_movements 
-                    WHERE related_entity_type = 'SUPPLY' AND related_entity_id = $1 AND product_id = $2
-                `, [supplyId, item.product_id])
+                    WHERE club_id = $1 AND related_entity_type = 'SUPPLY' AND related_entity_id = $2 AND product_id = $3
+                `, [clubId, supplyId, item.product_id])
             }
         }
         
-        await client.query('DELETE FROM warehouse_supplies WHERE id = $1', [supplyId])
+        await client.query('DELETE FROM warehouse_supplies WHERE id = $1 AND club_id = $2', [supplyId, clubId])
         await logOperation(clubId, userId, 'DELETE_SUPPLY', 'SUPPLY', supplyId)
         
         await client.query('COMMIT')
@@ -1944,6 +2878,7 @@ export async function deleteSupply(supplyId: number, clubId: string, userId: str
 }
 
 export async function getProductPriceHistory(productId: number, clubId: string) {
+    await requireClubAccess(clubId)
     const res = await query(`
         SELECT si.cost_price, s.created_at, s.supplier_name, s.id as supply_id
         FROM warehouse_supply_items si
@@ -1958,6 +2893,7 @@ export async function getProductPriceHistory(productId: number, clubId: string) 
 // --- INVENTORIES ---
 
 export async function getInventories(clubId: string) {
+    await requireClubAccess(clubId)
     const res = await query(`
         SELECT i.*, u.full_name as created_by_name, w.name as warehouse_name
         FROM warehouse_inventories i
@@ -1973,20 +2909,29 @@ export async function getInventories(clubId: string) {
 }
 
 export async function getInventory(id: number) {
+    const sessionUserId = await requireSessionUserId()
+    const invClubRes = await query('SELECT club_id FROM warehouse_inventories WHERE id = $1', [id])
+    if ((invClubRes.rowCount || 0) === 0) throw new Error("Инвентаризация не найдена")
+    const clubId = String(invClubRes.rows[0].club_id)
+    await assertSessionUserCanAccessClub(clubId, sessionUserId)
+
     const res = await query(`
         SELECT i.*, u.full_name as created_by_name
         FROM warehouse_inventories i
         LEFT JOIN users u ON i.created_by = u.id
-        WHERE i.id = $1
-    `, [id])
+        WHERE i.id = $1 AND i.club_id = $2
+    `, [id, clubId])
     return res.rows[0] as Inventory
 }
 
 export async function getInventoryItems(inventoryId: number) {
     const client = await import("@/db").then(m => m.getClient())
     try {
-        const invHeader = await client.query('SELECT warehouse_id, started_at FROM warehouse_inventories WHERE id = $1', [inventoryId])
+        const sessionUserId = await requireSessionUserId()
+        const invHeader = await client.query('SELECT club_id, warehouse_id, started_at FROM warehouse_inventories WHERE id = $1', [inventoryId])
         const inv = invHeader.rows[0]
+        if (!inv) throw new Error("Инвентаризация не найдена")
+        await assertSessionUserCanAccessClub(String(inv.club_id), sessionUserId)
         
         const res = await client.query(`
             SELECT ii.*, p.name as product_name, p.barcode as barcode, p.barcodes as barcodes, c.name as category_name
@@ -2011,8 +2956,9 @@ export async function getInventoryItems(inventoryId: number) {
                     WHERE product_id = $1 
                     AND warehouse_id = $2
                     AND created_at > $3
-                    AND related_entity_type != 'INVENTORY'
-                `, [item.product_id, inv.warehouse_id, inv.started_at])
+                    AND club_id = $4
+                    AND COALESCE(related_entity_type, '') != 'INVENTORY'
+                `, [item.product_id, inv.warehouse_id, inv.started_at, inv.club_id])
                 
                 const movement = parseFloat(movementsRes.rows[0]?.movement || '0')
                 
@@ -2031,11 +2977,13 @@ export async function getInventoryItems(inventoryId: number) {
 }
 
 export async function getMetrics() {
+    await requireSessionUserId()
     const res = await query(`SELECT key, label FROM system_metrics WHERE type = 'MONEY' ORDER BY label`)
     return res.rows as { key: string, label: string }[]
 }
 
 export async function getClubSettings(clubId: string) {
+    await requireClubAccess(clubId)
     const res = await query(`
         SELECT id, owner_id, inventory_required, inventory_settings 
         FROM clubs 
@@ -2049,6 +2997,7 @@ export async function getClubSettings(clubId: string) {
         employee_allowed_warehouse_ids?: number[], 
         employee_default_metric_key?: string,
         blind_inventory_enabled?: boolean,
+        sales_capture_mode?: 'INVENTORY' | 'SHIFT',
         allow_salary_deduction?: boolean,
         employee_discount_percent?: number,
         allow_cost_price_sale?: boolean,
@@ -2122,6 +3071,7 @@ export async function updateInventoryRequired(clubId: string, userId: string, in
 }
 
 export async function getUserRoleInClub(clubId: string, userId: string) {
+    await assertUserCanAccessClub(clubId, userId)
     const res = await query(`
         SELECT role FROM club_employees 
         WHERE club_id = $1 AND user_id = $2 AND is_active = true
@@ -2132,6 +3082,7 @@ export async function getUserRoleInClub(clubId: string, userId: string) {
 }
 
 export async function createInventory(clubId: string, userId: string, targetMetricKey: string | null, categoryId?: number | null, warehouseId?: number | null, shiftId: string | null = null) {
+    await assertUserCanAccessClub(clubId, userId)
     const client = await import("@/db").then(m => m.getClient())
     try {
         await client.query('BEGIN')
@@ -2229,17 +3180,21 @@ export async function addProductToInventory(inventoryId: number, productId: numb
     try {
         await client.query('BEGIN')
 
+        // Get product details and current stock in that warehouse (even if 0)
+        // We need to know which warehouse this inventory is for
+        const sessionUserId = await requireSessionUserId()
+        const inv = await client.query(`SELECT warehouse_id, club_id FROM warehouse_inventories WHERE id = $1`, [inventoryId])
+        let warehouseId = inv.rows[0]?.warehouse_id
+        const currentClubId = inv.rows[0]?.club_id
+
+        if (!currentClubId) throw new Error("Инвентаризация не найдена")
+        await assertSessionUserCanAccessClub(String(currentClubId), sessionUserId)
+
         // Check if already exists
         const existing = await client.query(`SELECT 1 FROM warehouse_inventory_items WHERE inventory_id = $1 AND product_id = $2`, [inventoryId, productId])
         if (existing.rowCount && existing.rowCount > 0) {
             throw new Error("Этот товар уже есть в списке")
         }
-
-        // Get product details and current stock in that warehouse (even if 0)
-        // We need to know which warehouse this inventory is for
-        const inv = await client.query(`SELECT warehouse_id, club_id FROM warehouse_inventories WHERE id = $1`, [inventoryId])
-        let warehouseId = inv.rows[0]?.warehouse_id
-        const currentClubId = inv.rows[0]?.club_id
 
         if (!warehouseId) {
              // Fallback: Use default or any warehouse if not specified
@@ -2253,8 +3208,8 @@ export async function addProductToInventory(inventoryId: number, productId: numb
             SELECT p.cost_price, p.selling_price, COALESCE(ws.quantity, 0) as current_stock
             FROM warehouse_products p
             LEFT JOIN warehouse_stock ws ON p.id = ws.product_id AND ws.warehouse_id = $2
-            WHERE p.id = $1
-        `, [productId, warehouseId])
+            WHERE p.id = $1 AND p.club_id = $3
+        `, [productId, warehouseId, currentClubId])
         
         const product = productRes.rows[0]
         if (!product) throw new Error("Товар не найден")
@@ -2277,12 +3232,14 @@ export async function addProductToInventory(inventoryId: number, productId: numb
 }
 
 export async function deleteInventory(inventoryId: number, clubId: string, userId: string) {
-    await query(`DELETE FROM warehouse_inventories WHERE id = $1`, [inventoryId])
+    await assertUserCanAccessClub(clubId, userId)
+    await query(`DELETE FROM warehouse_inventories WHERE id = $1 AND club_id = $2`, [inventoryId, clubId])
     await logOperation(clubId, userId, 'DELETE_INVENTORY', 'INVENTORY', inventoryId)
     revalidatePath(`/clubs/${clubId}/inventory`)
 }
 
 export async function getAbcAnalysisData(clubId: string) {
+    await requireClubAccess(clubId)
     const client = await getClient()
     try {
         const res = await client.query(`
@@ -2371,6 +3328,7 @@ export async function getAbcAnalysisData(clubId: string) {
 }
 
 export async function getProductByBarcode(clubId: string, barcode: string) {
+    await requireClubAccess(clubId)
     const res = await query(`
         SELECT p.*,
         (
@@ -2392,25 +3350,29 @@ export async function getProductByBarcode(clubId: string, barcode: string) {
 
 export async function updateInventoryItem(itemId: number, actualStock: number | null, clubId: string) {
     // Just update the actual count
+    await requireClubAccess(clubId)
     await query(`
-        UPDATE warehouse_inventory_items
+        UPDATE warehouse_inventory_items ii
         SET actual_stock = $1
-        WHERE id = $2
-    `, [actualStock, itemId])
+        FROM warehouse_inventories i
+        WHERE ii.id = $2 AND ii.inventory_id = i.id AND i.club_id = $3
+    `, [actualStock, itemId, clubId])
 
     revalidatePath(`/clubs/${clubId}/inventory`)
 }
 
 export async function bulkUpdateInventoryItems(items: { id: number, actual_stock: number | null }[], clubId: string) {
+    await requireClubAccess(clubId)
     const client = await import("@/db").then(m => m.getClient())
     try {
         await client.query('BEGIN')
         for (const item of items) {
             await client.query(`
-                UPDATE warehouse_inventory_items
+                UPDATE warehouse_inventory_items ii
                 SET actual_stock = $1
-                WHERE id = $2
-            `, [item.actual_stock, item.id])
+                FROM warehouse_inventories i
+                WHERE ii.id = $2 AND ii.inventory_id = i.id AND i.club_id = $3
+            `, [item.actual_stock, item.id, clubId])
         }
         await client.query('COMMIT')
     } catch (e) {
@@ -2426,14 +3388,16 @@ export async function closeInventory(
     inventoryId: number, 
     clubId: string, 
     reportedRevenue: number,
-    unaccountedSales: { product_id: number, quantity: number, selling_price: number, cost_price: number }[] = []
+    unaccountedSales: { product_id: number, quantity: number, selling_price: number, cost_price: number }[] = [],
+    options?: { salesRecognition?: 'INVENTORY' | 'NONE' }
 ) {
+    await requireClubAccess(clubId)
     const client = await import("@/db").then(m => m.getClient())
     try {
         await client.query('BEGIN')
 
         // 0. Get inventory metadata
-        const invHeader = await client.query('SELECT warehouse_id, shift_id, created_by, started_at FROM warehouse_inventories WHERE id = $1', [inventoryId])
+        const invHeader = await client.query('SELECT warehouse_id, shift_id, created_by, started_at FROM warehouse_inventories WHERE id = $1 AND club_id = $2', [inventoryId, clubId])
         const inv = invHeader.rows[0]
         if (!inv) throw new Error("Инвентаризация не найдена")
         
@@ -2456,18 +3420,36 @@ export async function closeInventory(
                        FROM warehouse_stock_movements 
                        WHERE product_id = ii.product_id 
                        AND warehouse_id = $2 
+                       AND club_id = $4
                        AND created_at > $3
-                       AND (related_entity_type != 'INVENTORY' OR related_entity_id != $1) -- Exclude this inventory's own potential movements
+                       AND NOT (COALESCE(related_entity_type, '') = 'INVENTORY' AND COALESCE(related_entity_id, -1) = $1) -- Exclude this inventory's own potential movements
                    ), 0) as movements_during_inventory
             FROM warehouse_inventory_items ii
             WHERE ii.inventory_id = $1
-        `, [inventoryId, warehouseId, inventoryStartTime])
+        `, [inventoryId, warehouseId, inventoryStartTime, clubId])
+
+        // Default sales recognition depends on club settings.
+        // If the club is in POS/SHIFT mode, inventory deficits should NOT be recognized as SALES by default.
+        let defaultSalesRecognition: 'INVENTORY' | 'NONE' = 'INVENTORY'
+        try {
+            const settingsRes = await client.query('SELECT inventory_settings FROM clubs WHERE id = $1', [clubId])
+            const salesMode = settingsRes.rows[0]?.inventory_settings?.sales_capture_mode
+            if (salesMode === 'SHIFT') defaultSalesRecognition = 'NONE'
+        } catch {
+            // Best effort: fall back to legacy behavior.
+        }
+        const salesRecognition = options?.salesRecognition ?? defaultSalesRecognition
 
         // 2. Update Stats & Group for Auto-Supply
         const itemsForAutoSupply: { product_id: number, quantity: number, cost_price: number }[] = []
         const isRevision = !shiftId
-        const reasonPrefix = isRevision ? `Ревизия (инвентаризация #${inventoryId})` : `Продажа за смену (инвентаризация #${inventoryId})`
-        const movementType = isRevision ? 'ADJUSTMENT' : 'SALE'
+        const recognizeAsSales = !isRevision && salesRecognition === 'INVENTORY'
+        const reasonPrefix = isRevision
+            ? `Ревизия (инвентаризация #${inventoryId})`
+            : recognizeAsSales
+                ? `Продажа за смену (инвентаризация #${inventoryId})`
+                : `Корректировка по инвентаризации #${inventoryId}`
+        const movementType = recognizeAsSales ? 'SALE' : 'ADJUSTMENT'
 
         let standardCalculatedRevenue = 0
 
@@ -2480,9 +3462,9 @@ export async function closeInventory(
             const adjustedExpected = Number(item.expected_stock) + Number(item.movements_during_inventory)
             const diffAmount = item.actual_stock - adjustedExpected
 
-            // Calculate revenue for this item
-            const itemRevenue = item.actual_stock < adjustedExpected 
-                ? (adjustedExpected - item.actual_stock) * Number(item.selling_price_snapshot) 
+            // Calculate revenue for this item (only when inventory recognizes deficit as sales)
+            const itemRevenue = recognizeAsSales && item.actual_stock < adjustedExpected
+                ? (adjustedExpected - item.actual_stock) * Number(item.selling_price_snapshot)
                 : 0
             standardCalculatedRevenue += itemRevenue
 
@@ -2505,31 +3487,67 @@ export async function closeInventory(
                 })
             } else {
                 // Deficit found - Update Stock
-                await client.query(`
-                    INSERT INTO warehouse_stock (warehouse_id, product_id, quantity)
-                    VALUES ($1, $2, $3)
-                    ON CONFLICT (warehouse_id, product_id) DO UPDATE SET quantity = warehouse_stock.quantity + $3
-                `, [warehouseId, item.product_id, diffAmount])
-
-                await logStockMovement(client, clubId, userId, item.product_id, diffAmount, adjustedExpected, item.actual_stock, movementType, reasonPrefix, 'INVENTORY', inventoryId, shiftId, warehouseId)
+                const { previousStock, newStock } = await applyWarehouseStockDelta(
+                    client,
+                    warehouseId,
+                    item.product_id,
+                    diffAmount
+                )
+                await logStockMovement(
+                    client,
+                    clubId,
+                    userId,
+                    item.product_id,
+                    diffAmount,
+                    previousStock,
+                    newStock,
+                    movementType,
+                    reasonPrefix,
+                    'INVENTORY',
+                    inventoryId,
+                    shiftId,
+                    warehouseId,
+                    Number(item.selling_price_snapshot || 0)
+                )
             }
         }
 
-        const unaccountedRevenue = unaccountedSales.reduce((acc, s) => acc + (s.quantity * s.selling_price), 0)
-        const totalCalculatedRevenue = standardCalculatedRevenue + unaccountedRevenue
-        const diff = reportedRevenue - totalCalculatedRevenue 
+        const effectiveUnaccountedSales = recognizeAsSales ? unaccountedSales : []
+        if (effectiveUnaccountedSales.length > 0) {
+            const invProductIds = new Set<number>(itemsRes.rows.map((r: any) => Number(r.product_id)))
+            const seen = new Set<number>()
+            for (const s of effectiveUnaccountedSales) {
+                if (!Number.isFinite(s.quantity) || !Number.isInteger(s.quantity) || s.quantity <= 0) {
+                    throw new Error("Неучтенные продажи: количество должно быть целым положительным числом")
+                }
+                if (!Number.isFinite(s.selling_price) || s.selling_price < 0) {
+                    throw new Error("Неучтенные продажи: цена продажи должна быть неотрицательным числом")
+                }
+                if (!Number.isFinite(s.cost_price) || s.cost_price < 0) {
+                    throw new Error("Неучтенные продажи: себестоимость должна быть неотрицательным числом")
+                }
+                if (invProductIds.has(Number(s.product_id))) {
+                    throw new Error("Неучтенные продажи содержат товар, который уже присутствует в инвентаризации (это приведет к двойному учету)")
+                }
+                if (seen.has(Number(s.product_id))) {
+                    throw new Error("Неучтенные продажи содержат повторяющиеся товары")
+                }
+                seen.add(Number(s.product_id))
+            }
+            await assertProductsBelongToClub(client, clubId, effectiveUnaccountedSales.map(s => s.product_id))
+        }
+        const unaccountedRevenue = effectiveUnaccountedSales.reduce((acc, s) => acc + (s.quantity * s.selling_price), 0)
+        const totalCalculatedRevenue = recognizeAsSales ? (standardCalculatedRevenue + unaccountedRevenue) : 0
+        const effectiveReportedRevenue = recognizeAsSales ? reportedRevenue : 0
+        const diff = effectiveReportedRevenue - totalCalculatedRevenue 
 
         // --- PART B: Handle Unaccounted Sales ---
-        for (const sale of unaccountedSales) {
+        for (const sale of effectiveUnaccountedSales) {
             itemsForAutoSupply.push({
                 product_id: sale.product_id,
                 quantity: sale.quantity,
                 cost_price: sale.cost_price
             })
-            const saleReason = isRevision 
-                ? `Неучтенный товар (ревизия #${inventoryId})` 
-                : `Продажа неучтенного товара (инвентаризация #${inventoryId})`
-            await logStockMovement(client, clubId, userId, sale.product_id, -sale.quantity, 0, 0, movementType, saleReason, 'INVENTORY', inventoryId, shiftId, warehouseId)
         }
 
         // --- PART C: Create Auto-Supply for Excesses ---
@@ -2548,28 +3566,77 @@ export async function closeInventory(
                     VALUES ($1, $2, $3, $4, $5)
                 `, [supplyId, item.product_id, item.quantity, item.cost_price, item.quantity * item.cost_price])
 
-                await client.query(`
-                    INSERT INTO warehouse_stock (warehouse_id, product_id, quantity)
-                    VALUES ($1, $2, $3)
-                    ON CONFLICT (warehouse_id, product_id) DO UPDATE SET quantity = warehouse_stock.quantity + $3
-                `, [warehouseId, item.product_id, item.quantity])
+                const { previousStock, newStock } = await applyWarehouseStockDelta(
+                    client,
+                    warehouseId,
+                    item.product_id,
+                    item.quantity
+                )
 
-                await logStockMovement(client, clubId, userId, item.product_id, item.quantity, 0, item.quantity, 'SUPPLY', `Авто-поступление #${supplyId} (Инвентаризация #${inventoryId})`, 'SUPPLY', supplyId, shiftId, warehouseId)
+                await logStockMovement(
+                    client,
+                    clubId,
+                    userId,
+                    item.product_id,
+                    item.quantity,
+                    previousStock,
+                    newStock,
+                    'SUPPLY',
+                    `Авто-поступление #${supplyId} (Инвентаризация #${inventoryId})`,
+                    'SUPPLY',
+                    supplyId,
+                    shiftId,
+                    warehouseId
+                )
+            }
+        }
+
+        // --- PART D: Apply Unaccounted Sales (net 0 stock with auto-supply) ---
+        if (effectiveUnaccountedSales.length > 0) {
+            for (const sale of effectiveUnaccountedSales) {
+                const { previousStock, newStock } = await applyWarehouseStockDelta(
+                    client,
+                    warehouseId,
+                    sale.product_id,
+                    -sale.quantity
+                )
+                const saleReason = isRevision
+                    ? `Неучтенный товар (ревизия #${inventoryId})`
+                    : `Продажа неучтенного товара (инвентаризация #${inventoryId})`
+                await logStockMovement(
+                    client,
+                    clubId,
+                    userId,
+                    sale.product_id,
+                    -sale.quantity,
+                    previousStock,
+                    newStock,
+                    'SALE',
+                    saleReason,
+                    'INVENTORY',
+                    inventoryId,
+                    shiftId,
+                    warehouseId,
+                    Number(sale.selling_price || 0)
+                )
             }
         }
 
         // 4. Update Cache for all involved products
         const allProductIds = [
             ...itemsRes.rows.map(i => i.product_id),
-            ...unaccountedSales.map(s => s.product_id)
+            ...effectiveUnaccountedSales.map(s => s.product_id)
         ]
         
         if (allProductIds.length > 0) {
-            await client.query(`
+            await client.query(
+                `
                 UPDATE warehouse_products p
                 SET current_stock = (SELECT COALESCE(SUM(quantity), 0) FROM warehouse_stock WHERE product_id = p.id)
-                WHERE id = ANY($1)
-            `, [allProductIds])
+                WHERE id = ANY($1) AND club_id = $2
+                `,
+                [allProductIds, clubId]
+            )
         }
 
         // 5. Close Inventory Header
@@ -2580,7 +3647,7 @@ export async function closeInventory(
                 calculated_revenue = $3,
                 revenue_difference = $4
             WHERE id = $1
-        `, [inventoryId, reportedRevenue, totalCalculatedRevenue, diff])
+        `, [inventoryId, effectiveReportedRevenue, totalCalculatedRevenue, diff])
 
         await client.query('COMMIT')
         await checkReplenishmentNeeds(clubId)

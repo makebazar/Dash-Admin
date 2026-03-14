@@ -733,39 +733,42 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
     }
 
     return (
-        <div className="p-8 space-y-8">
+        <div className="p-4 md:p-8 space-y-6 md:space-y-8">
             {/* Header */}
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-3xl font-bold tracking-tight">Смены</h1>
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                <div className="min-w-0">
+                    <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Смены</h1>
                     <p className="text-muted-foreground">История смен и отчетов сотрудников</p>
                 </div>
-                <div className="flex gap-2">
-                    <ShiftExcelImport
-                        clubId={clubId}
-                        employees={employees}
-                        customFields={reportFields.map(f => ({
-                            metric_key: f.metric_key,
-                            custom_label: f.custom_label || f.label || f.metric_key
-                        }))}
-                        onSuccess={() => {
-                            console.log(`[Import] Import successful, refreshing current month data`)
-                            fetchShifts(clubId, filterStartDate, filterEndDate)
-                        }}
-                    />
-                    <Button 
-                        variant="outline" 
-                        size="icon" 
+                <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 w-full md:w-auto">
+                    <div className="w-full sm:w-auto [&_button]:w-full sm:[&_button]:w-auto">
+                        <ShiftExcelImport
+                            clubId={clubId}
+                            employees={employees}
+                            customFields={reportFields.map(f => ({
+                                metric_key: f.metric_key,
+                                custom_label: f.custom_label || f.label || f.metric_key
+                            }))}
+                            onSuccess={() => {
+                                console.log(`[Import] Import successful, refreshing current month data`)
+                                fetchShifts(clubId, filterStartDate, filterEndDate)
+                            }}
+                        />
+                    </div>
+                    <Button
+                        variant="outline"
                         onClick={() => {
                             console.log(`[Refresh] Manual refresh triggered`)
                             fetchShifts(clubId, filterStartDate, filterEndDate)
                         }}
                         disabled={isLoading}
                         title="Обновить данные"
+                        className="w-full sm:w-auto gap-2"
                     >
                         <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+                        Обновить
                     </Button>
-                    <Button onClick={openCreateModal} className="gap-2">
+                    <Button onClick={openCreateModal} className="gap-2 w-full sm:w-auto">
                         <Clock className="h-4 w-4" />
                         Добавить смену
                     </Button>
@@ -774,14 +777,13 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
 
             {/* Date Filters */}
             <Card className="border-dashed bg-transparent shadow-none border-none p-0">
-                <div className="flex flex-wrap items-center gap-4 bg-background border rounded-lg p-2 shadow-sm">
-                    {/* Month Selector */}
+                <div className="grid grid-cols-1 gap-3 bg-background border rounded-lg p-3 shadow-sm sm:flex sm:flex-wrap sm:items-center sm:gap-4">
                     <Popover>
                         <PopoverTrigger asChild>
                             <Button
                                 variant="outline"
                                 className={cn(
-                                    "justify-start text-left font-normal w-[180px] capitalize",
+                                    "justify-start text-left font-normal w-full sm:w-[220px] capitalize",
                                     !selectedMonth && "text-muted-foreground"
                                 )}
                             >
@@ -805,13 +807,12 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                                         const target = new Date(now.getFullYear(), now.getMonth() + offset, 1);
                                         const label = target.toLocaleString('ru-RU', { month: 'long', year: 'numeric' });
                                         return (
-                                            <Button 
-                                                key={offset} 
+                                            <Button
+                                                key={offset}
                                                 variant={selectedMonth === String(offset) ? "default" : "ghost"}
                                                 className="justify-start w-full capitalize h-9 px-2.5 font-normal"
                                                 onClick={() => {
                                                     handleMonthSelect(offset);
-                                                    // Close popover logic would go here if controlled
                                                 }}
                                             >
                                                 {label}
@@ -823,46 +824,45 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                         </PopoverContent>
                     </Popover>
 
-                    <div className="h-6 w-px bg-border hidden md:block" />
+                    <div className="hidden sm:block h-6 w-px bg-border" />
 
-                    {/* Custom Range */}
-                    <div className="flex items-center gap-2">
-                        <Input
-                            placeholder="ДД.ММ.ГГГГ"
-                            value={dateToDisplay(filterStartDate)}
-                            onChange={(e) => {
-                                const formatted = formatDisplayDate(e.target.value);
-                                setFilterStartDate(dateToInternal(formatted));
-                            }}
-                            className="w-[120px]"
-                        />
-                        <span className="text-muted-foreground">—</span>
-                        <Input
-                            placeholder="ДД.ММ.ГГГГ"
-                            value={dateToDisplay(filterEndDate)}
-                            onChange={(e) => {
-                                const formatted = formatDisplayDate(e.target.value);
-                                setFilterEndDate(dateToInternal(formatted));
-                            }}
-                            className="w-[120px]"
-                        />
-                        <Button 
-                            variant="secondary" 
-                            size="sm" 
-                            onClick={handleCustomDateFilter} 
-                            className="h-9 px-3"
+                    <div className="grid grid-cols-1 gap-2 sm:flex sm:items-center sm:gap-2 w-full sm:w-auto">
+                        <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center sm:gap-2">
+                            <Input
+                                placeholder="ДД.ММ.ГГГГ"
+                                value={dateToDisplay(filterStartDate)}
+                                onChange={(e) => {
+                                    const formatted = formatDisplayDate(e.target.value);
+                                    setFilterStartDate(dateToInternal(formatted));
+                                }}
+                                className="w-full sm:w-[120px]"
+                            />
+                            <Input
+                                placeholder="ДД.ММ.ГГГГ"
+                                value={dateToDisplay(filterEndDate)}
+                                onChange={(e) => {
+                                    const formatted = formatDisplayDate(e.target.value);
+                                    setFilterEndDate(dateToInternal(formatted));
+                                }}
+                                className="w-full sm:w-[120px]"
+                            />
+                        </div>
+                        <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={handleCustomDateFilter}
+                            className="h-10 sm:h-9 w-full sm:w-auto"
                         >
                             Применить
                         </Button>
                     </div>
 
-                    <div className="h-6 w-px bg-border hidden md:block" />
+                    <div className="hidden sm:block h-6 w-px bg-border" />
 
-                    {/* Employee Filter */}
                     <select
                         value={filterEmployee}
                         onChange={e => setFilterEmployee(e.target.value)}
-                        className="h-10 w-[200px] rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                        className="h-10 w-full sm:w-[240px] rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                     >
                         <option value="">Все сотрудники</option>
                         {employees.map(emp => (
@@ -873,11 +873,11 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                     </select>
 
                     {(filterStartDate || filterEndDate || (selectedMonth && selectedMonth !== '0')) && (
-                        <Button 
-                            variant="ghost" 
+                        <Button
+                            variant="ghost"
                             size="sm"
                             onClick={clearFilters}
-                            className="ml-auto text-muted-foreground hover:text-foreground"
+                            className="w-full sm:w-auto sm:ml-auto text-muted-foreground hover:text-foreground"
                         >
                             Сбросить
                         </Button>
@@ -1061,6 +1061,168 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                     <CardDescription>Последние 100 смен с отчетами</CardDescription>
                 </CardHeader>
                 <CardContent>
+                    <div className="md:hidden space-y-3">
+                        {sortedShifts.length === 0 ? (
+                            <div className="text-center text-muted-foreground py-12">
+                                <div className="flex flex-col items-center gap-2">
+                                    <Clock className="h-8 w-8 opacity-30" />
+                                    <p>Смен пока нет</p>
+                                </div>
+                            </div>
+                        ) : (
+                            sortedShifts.map((shift) => (
+                                <div
+                                    key={shift.id}
+                                    className="rounded-lg border bg-background p-3 active:bg-muted/30 cursor-pointer"
+                                    onClick={() => handleViewShift(shift)}
+                                >
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div className="min-w-0">
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                                <span className="font-medium whitespace-nowrap">{formatDate(shift.check_in)}</span>
+                                                {shift.shift_type === 'NIGHT' ? (
+                                                    <span className="inline-flex items-center gap-1 text-blue-500 text-xs">
+                                                        <Moon className="h-3.5 w-3.5" />
+                                                        Ночь
+                                                    </span>
+                                                ) : (
+                                                    <span className="inline-flex items-center gap-1 text-orange-500 text-xs">
+                                                        <Sun className="h-3.5 w-3.5" />
+                                                        День
+                                                    </span>
+                                                )}
+                                                {shift.has_owner_corrections && (
+                                                    <Badge variant="secondary" className="text-[10px] h-5 px-2">
+                                                        Правки
+                                                    </Badge>
+                                                )}
+                                            </div>
+                                            <div className="text-sm text-foreground font-semibold truncate mt-1">
+                                                {shift.employee_name || 'Неизвестно'}
+                                            </div>
+                                            <div className="text-xs text-muted-foreground mt-0.5">
+                                                {formatTime(shift.check_in)} — {shift.check_out ? formatTime(shift.check_out) : '...'}
+                                            </div>
+                                        </div>
+
+                                        <div className="shrink-0 text-right">
+                                            <div className="text-sm font-bold text-green-600 tabular-nums">
+                                                {formatMoney(calculateShiftTotalIncome(shift))}
+                                            </div>
+                                            <div className="mt-2 flex justify-end">
+                                                {getStatusBadge(shift)}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="mt-3 grid grid-cols-2 gap-2">
+                                        <div className="rounded-md bg-muted/20 p-2">
+                                            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Нал</div>
+                                            <div className="text-sm font-medium tabular-nums">{formatMoney(shift.cash_income)}</div>
+                                        </div>
+                                        <div className="rounded-md bg-muted/20 p-2">
+                                            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Безнал</div>
+                                            <div className="text-sm font-medium tabular-nums">{formatMoney(shift.card_income)}</div>
+                                        </div>
+                                        <div className="rounded-md bg-muted/20 p-2">
+                                            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Расходы</div>
+                                            <div className="text-sm font-medium text-orange-600 tabular-nums">{formatMoney(shift.expenses)}</div>
+                                        </div>
+                                        <div className="rounded-md bg-muted/20 p-2">
+                                            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Часы</div>
+                                            <div className="text-sm font-medium tabular-nums">
+                                                {shift.total_hours && !isNaN(Number(shift.total_hours))
+                                                    ? `${Number(shift.total_hours).toFixed(1)}ч`
+                                                    : '-'}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {reportFields.length > 0 && (
+                                        <details className="mt-3" open={reportFields.length <= 4}>
+                                            <summary className="text-xs text-muted-foreground select-none cursor-pointer">
+                                                Показатели ({reportFields.length})
+                                            </summary>
+                                            <div className="mt-2 grid grid-cols-2 gap-2">
+                                                {reportFields.map((field: any) => {
+                                                    const raw = shift.report_data?.[field.metric_key]
+                                                    const parsed = parseFloat(String(raw))
+                                                    const value = raw === null || raw === undefined || raw === ''
+                                                        ? '-'
+                                                        : (!Number.isNaN(parsed) ? formatMoney(parsed) : String(raw))
+                                                    return (
+                                                        <div key={field.metric_key} className="rounded-md bg-muted/20 p-2">
+                                                            <div className="text-[10px] uppercase tracking-wide text-muted-foreground truncate">
+                                                                {field.custom_label}
+                                                            </div>
+                                                            <div className="text-sm font-medium tabular-nums">{value}</div>
+                                                        </div>
+                                                    )
+                                                })}
+                                            </div>
+                                        </details>
+                                    )}
+
+                                    <div className="mt-3 flex items-center justify-end gap-1">
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-9 w-9"
+                                            onClick={(e) => {
+                                                e.stopPropagation()
+                                                openEditModal(shift)
+                                            }}
+                                            title="Редактировать"
+                                        >
+                                            <Edit className="h-4 w-4" />
+                                        </Button>
+                                        {shift.check_out && shift.status !== 'VERIFIED' && (
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-9 w-9"
+                                                onClick={(e) => {
+                                                    e.stopPropagation()
+                                                    handleVerify(shift)
+                                                }}
+                                                title="Подтвердить"
+                                            >
+                                                <CheckCircle className="h-4 w-4" />
+                                            </Button>
+                                        )}
+                                        {shift.status === 'VERIFIED' && (
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-9 w-9"
+                                                onClick={(e) => {
+                                                    e.stopPropagation()
+                                                    handleUnverify(shift)
+                                                }}
+                                                title="Отменить подтверждение"
+                                            >
+                                                <span className="text-xs font-bold">↩</span>
+                                            </Button>
+                                        )}
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-9 w-9"
+                                            onClick={(e) => {
+                                                e.stopPropagation()
+                                                handleViewShift(shift)
+                                            }}
+                                            title="Открыть"
+                                        >
+                                            <Eye className="h-4 w-4" />
+                                        </Button>
+                                    </div>
+                                </div>
+                            ))
+                        )}
+                    </div>
+
+                    <div className="hidden md:block">
                     <Table>
                         <TableHeader>
                             <TableRow>
@@ -1245,20 +1407,21 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                             ))}
                         </TableBody>
                     </Table>
+                    </div>
                 </CardContent>
             </Card>
 
             {/* View Report Modal - Redesigned V3 (Clean & Standard) */}
             <Dialog open={!!selectedShift} onOpenChange={() => setSelectedShift(null)}>
-                <DialogContent className="max-w-5xl h-[85vh] flex flex-col p-0 gap-0 overflow-hidden bg-background sm:rounded-xl">
+                <DialogContent className="p-0 gap-0 overflow-hidden bg-background rounded-none left-0 top-0 translate-x-0 translate-y-0 w-screen h-[100dvh] max-w-none flex flex-col min-h-0 sm:rounded-xl sm:left-[50%] sm:top-[50%] sm:translate-x-[-50%] sm:translate-y-[-50%] sm:w-[95vw] sm:h-[85vh] sm:max-w-5xl">
                     {/* Header Section */}
-                    <div className="flex items-center justify-between px-6 py-4 border-b bg-card shrink-0">
-                        <div className="flex items-center gap-4">
+                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between px-4 md:px-6 py-4 pr-12 border-b bg-card shrink-0">
+                        <div className="flex items-start gap-4 min-w-0">
                             <div>
                                 <DialogTitle className="text-xl font-bold flex items-center gap-2">
                                     {selectedShift?.employee_name}
                                 </DialogTitle>
-                                <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
+                                <div className="flex flex-wrap items-center gap-2 mt-1 text-sm text-muted-foreground">
                                     <span className="flex items-center gap-1">
                                         <CalendarDays className="h-3.5 w-3.5" />
                                         {selectedShift && formatDate(selectedShift.check_in)}
@@ -1275,7 +1438,7 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                                 </div>
                             </div>
                         </div>
-                        <div className="flex flex-col items-end gap-1 mr-8">
+                        <div className="flex flex-col items-start md:items-end gap-1">
                             <div className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Итоговая выручка</div>
                             <div className="text-2xl font-bold text-primary tabular-nums">
                                 +{selectedShift ? formatMoney(calculateShiftTotalIncome(selectedShift)).replace(' ₽', '') : '0'} ₽
@@ -1295,9 +1458,9 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                             <p className="text-muted-foreground animate-pulse">Загрузка данных смены...</p>
                         </div>
                     ) : (
-                        <Tabs defaultValue="overview" className="flex-1 flex flex-col overflow-hidden">
-                            <div className="px-6 border-b bg-muted/30 shrink-0">
-                                <TabsList className="h-12 w-full justify-start bg-transparent p-0 gap-8">
+                        <Tabs defaultValue="overview" className="flex-1 flex flex-col overflow-hidden min-h-0">
+                            <div className="px-4 md:px-6 border-b bg-muted/30 shrink-0">
+                                <TabsList className="h-12 w-full justify-start bg-transparent p-0 gap-4 md:gap-8 overflow-x-auto">
                                     <TabsTrigger 
                                         value="overview" 
                                         className="h-full rounded-none border-b-2 border-transparent px-0 data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:shadow-none bg-transparent font-medium"
@@ -1343,8 +1506,8 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                                 </TabsList>
                             </div>
                             
-                            <div className="flex-1 overflow-y-auto bg-muted/5">
-                                <div className="p-6 max-w-5xl mx-auto space-y-6">
+                            <div className="flex-1 overflow-y-auto bg-muted/5 min-h-0 overscroll-contain touch-pan-y">
+                                <div className="p-4 md:p-6 max-w-5xl mx-auto space-y-6 pb-24">
                                     <TabsContent value="overview" className="mt-0 space-y-6 animate-in fade-in-50 duration-300">
                                         {/* Key Metrics Cards */}
                                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -1538,10 +1701,10 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                                                                 <TableCell>
                                                                     {Math.abs(Number(sale.change_amount))} шт.
                                                                 </TableCell>
-                                                                <TableCell className="text-right text-muted-foreground">
+                                                                <TableCell className="text-right text-muted-foreground whitespace-nowrap">
                                                                     {sale.price_at_time ? formatMoney(sale.price_at_time) : '-'}
                                                                 </TableCell>
-                                                                <TableCell className="text-right font-medium">
+                                                                <TableCell className="text-right font-medium whitespace-nowrap">
                                                                     {formatMoney(Math.abs(Number(sale.change_amount)) * (Number(sale.price_at_time) || 0))}
                                                                 </TableCell>
                                                             </TableRow>
@@ -1596,22 +1759,23 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                                                                         onClick={() => setExpandedInventories(prev => ({ ...prev, [inv.id]: !prev[inv.id] }))}
                                                                     >
                                                                         {/* Left: Info */}
-                                                                        <div className="flex items-center gap-3 min-w-0 shrink-0">
+                                                                        <div className="flex items-center gap-3 min-w-0 flex-1 overflow-hidden">
                                                                             <div className={cn(
                                                                                 "p-2 rounded-lg transition-all shrink-0 bg-blue-50 text-blue-600",
                                                                                 isExpanded ? "rotate-90" : ""
                                                                             )}>
                                                                                 <ChevronRight className="h-4 w-4" />
                                                                             </div>
-                                                                            <div className="flex flex-col min-w-0">
-                                                                                <span className="text-sm font-bold text-slate-900 truncate flex items-center gap-2">
-                                                                                    <Package className="h-3.5 w-3.5 text-muted-foreground" />
+                                                                            <div className="min-w-0">
+                                                                                <div className="text-sm font-bold text-slate-900 truncate">
                                                                                     {inv.warehouse_name || 'Склад'}
-                                                                                </span>
-                                                                                <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-0.5">
-                                                                                    <span>{formatDate(inv.started_at)} {formatTime(inv.started_at)}</span>
+                                                                                </div>
+                                                                                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-slate-400 mt-0.5">
+                                                                                    <span className="whitespace-nowrap">
+                                                                                        {formatDate(inv.started_at)} {formatTime(inv.started_at)}
+                                                                                    </span>
                                                                                     {discrepancies.length > 0 && (
-                                                                                        <span className="bg-slate-100 px-1.5 py-0.5 rounded-full text-slate-600 font-medium">
+                                                                                        <span className="bg-slate-100 px-1.5 py-0.5 rounded-full text-slate-600 font-medium whitespace-nowrap">
                                                                                             {discrepancies.length} расхожд.
                                                                                         </span>
                                                                                     )}
@@ -1620,24 +1784,30 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                                                                         </div>
 
                                                                         {/* Right: Stats */}
-                                                                        <div className="flex items-center gap-3 sm:gap-6 ml-auto shrink-0">
-                                                                            <div className="flex flex-col items-end shrink-0">
-                                                                                <span className="text-[9px] text-slate-400 uppercase font-black tracking-widest leading-none mb-1">Расчет</span>
-                                                                                <span className="text-xs sm:text-sm font-black text-blue-600 leading-none whitespace-nowrap">
+                                                                        <div className="ml-3 flex-none flex flex-col items-start gap-2 text-left w-[150px] sm:w-[190px]">
+                                                                            <div className="flex items-baseline gap-3 w-full">
+                                                                                <span className="text-[10px] text-slate-400 uppercase font-black tracking-widest leading-none w-[74px] shrink-0">
+                                                                                    Расчет
+                                                                                </span>
+                                                                                <span className="text-sm font-black text-blue-600 leading-none whitespace-nowrap tabular-nums">
                                                                                     {calculated.toLocaleString()} ₽
                                                                                 </span>
                                                                             </div>
-                                                                            <div className="flex flex-col items-end shrink-0">
-                                                                                <span className="text-[9px] text-slate-400 uppercase font-black tracking-widest leading-none mb-1">Факт</span>
-                                                                                <span className="text-xs sm:text-sm font-black text-slate-700 leading-none whitespace-nowrap">
+                                                                            <div className="flex items-baseline gap-3 w-full">
+                                                                                <span className="text-[10px] text-slate-400 uppercase font-black tracking-widest leading-none w-[74px] shrink-0">
+                                                                                    Факт
+                                                                                </span>
+                                                                                <span className="text-sm font-black text-slate-700 leading-none whitespace-nowrap tabular-nums">
                                                                                     {reported.toLocaleString()} ₽
                                                                                 </span>
                                                                             </div>
-                                                                            <div className="flex flex-col items-end shrink-0">
-                                                                                <span className="text-[9px] text-slate-400 uppercase font-black tracking-widest leading-none mb-1">Разница</span>
+                                                                            <div className="flex items-baseline gap-3 w-full">
+                                                                                <span className="text-[10px] text-slate-400 uppercase font-black tracking-widest leading-none w-[74px] shrink-0">
+                                                                                    Разница
+                                                                                </span>
                                                                                 <span className={cn(
-                                                                                    "text-xs sm:text-sm font-black leading-none whitespace-nowrap",
-                                                                                    diff === 0 ? "text-green-500" : 
+                                                                                    "text-sm font-black leading-none whitespace-nowrap tabular-nums",
+                                                                                    diff === 0 ? "text-green-500" :
                                                                                     diff > 0 ? "text-green-600" : "text-red-500"
                                                                                 )}>
                                                                                     {diff > 0 ? "+" : ""}{diff.toLocaleString()} ₽

@@ -66,7 +66,7 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
         if (isNaN(val)) return
         
         startTransition(async () => {
-            const res = await correctStockMovement(id, val, editReason)
+            const res = await correctStockMovement(id, clubId, currentUserId, val, editReason)
             if (res.success) {
                 setEditingId(null)
             } else {
@@ -182,7 +182,7 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
         if (defaultWh) setSelectedRevertWarehouse(defaultWh.id.toString())
     }
 
-    const handleAssignShift = async (movementId: number, shiftId: number | null) => {
+    const handleAssignShift = async (movementId: number, shiftId: string | null) => {
         startTransition(async () => {
             try {
                 await assignShiftToMovement(movementId, shiftId, clubId)
@@ -192,7 +192,7 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
         })
     }
 
-    const handleMassAssign = async (shiftId: number | null) => {
+    const handleMassAssign = async (shiftId: string | null) => {
         if (selectedIds.length === 0) return
         startTransition(async () => {
             try {

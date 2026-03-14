@@ -59,7 +59,7 @@ export function ProcurementTab({ lists, products, currentUserId }: ProcurementTa
     const openDetails = async (list: any) => {
         setActiveList(list)
         setIsDetailsOpen(true)
-        const items = await getProcurementListItems(list.id)
+        const items = await getProcurementListItems(clubId, list.id)
         setListItems(items)
         // Reset budget input when opening a new list, round to 0 decimal places
         const total = items.reduce((acc: number, i: any) => acc + (i.actual_quantity * i.cost_price), 0)
@@ -68,7 +68,7 @@ export function ProcurementTab({ lists, products, currentUserId }: ProcurementTa
 
     const refreshItems = async () => {
         if (activeList) {
-            const items = await getProcurementListItems(activeList.id)
+            const items = await getProcurementListItems(clubId, activeList.id)
             setListItems(items)
         }
     }

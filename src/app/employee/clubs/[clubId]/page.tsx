@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {
     Clock, Loader2, LogIn, LogOut, Wallet, Activity, Calendar,
-    TrendingUp, Target, Zap, ChevronRight, Trophy, Brush, ClipboardCheck, Monitor, AlertCircle, Ban, ArrowRightLeft, MessageSquare
+    TrendingUp, Target, Zap, ChevronRight, Trophy, Brush, ClipboardCheck, Monitor, AlertCircle, Ban, ArrowRightLeft, MessageSquare, ShoppingCart
 } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -32,6 +32,7 @@ interface ClubInfo {
     inventory_settings?: {
         employee_default_metric_key?: string
         employee_allowed_warehouse_ids?: number[]
+        sales_capture_mode?: 'INVENTORY' | 'SHIFT'
     }
 }
 
@@ -638,7 +639,10 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                                                 <span className="text-center">Связаться с руководством</span>
                                             </Button>
 
-                                            <div className="pt-2 border-t border-white/10 mt-2 grid grid-cols-3 gap-2">
+                                            <div className={cn(
+                                                "pt-2 border-t border-white/10 mt-2 grid gap-2",
+                                                club?.inventory_settings?.sales_capture_mode === 'SHIFT' ? "grid-cols-4" : "grid-cols-3"
+                                            )}>
                                                 <Button
                                                     variant="ghost"
                                                     className="w-full h-12 text-[10px] text-purple-300 hover:text-white hover:bg-purple-500/20 rounded-xl transition-all"
@@ -647,6 +651,16 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                                                     <Zap className="mr-1.5 h-3.5 w-3.5" />
                                                     Поставка
                                                 </Button>
+                                                {club?.inventory_settings?.sales_capture_mode === 'SHIFT' && (
+                                                    <Button
+                                                        variant="ghost"
+                                                        className="w-full h-12 text-[10px] text-emerald-300 hover:text-white hover:bg-emerald-500/20 rounded-xl transition-all"
+                                                        onClick={() => window.open(`/employee/clubs/${clubId}/pos`, '_blank', 'noopener,noreferrer')}
+                                                    >
+                                                        <ShoppingCart className="mr-1.5 h-3.5 w-3.5" />
+                                                        Продажи
+                                                    </Button>
+                                                )}
                                                 <Button
                                                     variant="ghost"
                                                     className="w-full h-12 text-[10px] text-red-300 hover:text-white hover:bg-red-500/20 rounded-xl transition-all"

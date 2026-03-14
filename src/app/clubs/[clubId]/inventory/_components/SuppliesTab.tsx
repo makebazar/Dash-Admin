@@ -58,7 +58,7 @@ export function SuppliesTab({ supplies, products, warehouses, suppliers, current
         setViewSupply(supply)
         setIsLoadingItems(true)
         try {
-            const items = await getSupplyItems(supply.id)
+            const items = await getSupplyItems(clubId, supply.id)
             setViewItems(items)
         } catch (e) {
             console.error(e)

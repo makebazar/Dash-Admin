@@ -23,7 +23,7 @@ export async function DELETE(
         const movementRes = await client.query(`
             SELECT 
                 m.*, 
-                p.selling_price
+                COALESCE(m.price_at_time, p.selling_price) as effective_selling_price
             FROM warehouse_stock_movements m
             JOIN warehouse_products p ON m.product_id = p.id
             WHERE m.id = $1 AND m.club_id = $2 AND m.type = 'SALE' AND m.reason LIKE 'В счет ЗП%'
@@ -36,7 +36,7 @@ export async function DELETE(
         const movement = movementRes.rows[0];
         const productId = movement.product_id;
         const quantityToReturn = Math.abs(movement.change_amount);
-        const totalAmount = movement.selling_price * quantityToReturn;
+        const totalAmount = Number(movement.effective_selling_price || 0) * quantityToReturn;
         const shiftId = movement.shift_id;
         const warehouseId = movement.warehouse_id;
 

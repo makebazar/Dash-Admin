@@ -6,7 +6,20 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { createInventory, closeInventory, getInventoryItems, getProducts, InventoryItem, bulkUpdateInventoryItems, getProductByBarcode, addProductToInventory } from "@/app/clubs/[clubId]/inventory/actions"
+import {
+    addProductToInventory,
+    bulkUpdateInventoryItems,
+    closeInventory,
+    commitShiftReceiptsToMovements,
+    createShiftReceipt,
+    createInventory,
+    getInventoryItems,
+    getProductByBarcode,
+    getProducts,
+    getShiftReceipts,
+    type InventoryItem,
+    type ShiftReceipt
+} from "@/app/clubs/[clubId]/inventory/actions"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { BarcodeScanner } from "@/app/clubs/[clubId]/inventory/_components/BarcodeScanner"
@@ -27,6 +40,7 @@ interface ShiftClosingWizardProps {
         employee_default_metric_key?: string
         employee_allowed_warehouse_ids?: number[]
         blind_inventory_enabled?: boolean
+        sales_capture_mode?: 'INVENTORY' | 'SHIFT'
     }
 }
 
@@ -47,7 +61,7 @@ export function ShiftClosingWizard({
     checklistTemplates = [],
     inventorySettings
 }: ShiftClosingWizardProps) {
-    const [step, setStep] = useState<1 | 2 | 3>(1)
+    const [step, setStep] = useState<1 | 2 | 3 | 4>(1)
     const [reportData, setReportData] = useState<any>({})
     const [inventoryId, setInventoryId] = useState<number | null>(null)
     const [inventoryItems, setInventoryItems] = useState<ExtendedInventoryItem[]>([])
@@ -72,6 +86,14 @@ export function ShiftClosingWizard({
     const [selectedProductToAdd, setSelectedProductToAdd] = useState("")
     const [searchQuery, setSearchQuery] = useState("")
     const [isRefreshingCatalog, setIsRefreshingCatalog] = useState(false)
+
+    const salesMode = inventorySettings?.sales_capture_mode ?? 'INVENTORY'
+    const isShiftSalesMode = salesMode === 'SHIFT'
+    const inventoryStep = isShiftSalesMode ? 3 : 2
+    const finalizeStep = isShiftSalesMode ? 4 : 3
+    const totalSteps = isShiftSalesMode ? (skipInventory ? 2 : 4) : (skipInventory ? 1 : 3)
+
+    const [shiftReceipts, setShiftReceipts] = useState<ShiftReceipt[]>([])
 
     // Check for available daily payout
     useEffect(() => {
@@ -98,6 +120,41 @@ export function ShiftClosingWizard({
 
     // Calculate Sales Summary for Preview
     const salesPreview = useMemo(() => {
+        if (isShiftSalesMode) {
+            const agg = new Map<number, { name: string, qty: number, price: number }>()
+            for (const r of shiftReceipts) {
+                if (r.voided_at) continue
+                for (const it of r.items || []) {
+                    const current = agg.get(it.product_id)
+                    const price = Number(it.selling_price_snapshot || 0)
+                    if (!current) {
+                        agg.set(it.product_id, { name: it.product_name, qty: Number(it.quantity), price })
+                    } else {
+                        current.qty += Number(it.quantity)
+                        current.price = price
+                    }
+                }
+            }
+
+            const scanned = Array.from(agg.entries()).map(([productId, v]) => ({
+                id: productId,
+                name: v.name,
+                qty: v.qty,
+                price: v.price,
+                total: v.qty * v.price,
+                isUnaccounted: false
+            }))
+            const manualSales = unaccountedSales.map(s => ({
+                id: s.product_id,
+                name: s.name,
+                qty: s.quantity,
+                price: s.selling_price,
+                total: s.quantity * s.selling_price,
+                isUnaccounted: true
+            }))
+            return [...scanned, ...manualSales]
+        }
+
         const standardSales = inventoryItems
             .filter(i => i.actual_stock !== null && (i.expected_stock || 0) > (i.actual_stock || 0))
             .map(i => ({
@@ -119,7 +176,7 @@ export function ShiftClosingWizard({
         }))
 
         return [...standardSales, ...manualSales]
-    }, [inventoryItems, unaccountedSales])
+    }, [inventoryItems, unaccountedSales, shiftReceipts, isShiftSalesMode])
 
     const totalSalesRevenue = salesPreview.reduce((acc, s) => acc + s.total, 0)
 
@@ -127,6 +184,47 @@ export function ShiftClosingWizard({
     const forgottenItems = useMemo(() => {
         return inventoryItems.filter(i => (i.expected_stock || 0) > 0 && i.actual_stock === null)
     }, [inventoryItems])
+
+    const revenueKey = useMemo(() => {
+        return inventorySettings?.employee_default_metric_key ||
+            reportTemplate?.schema?.find((f: any) =>
+                f.metric_key.toLowerCase().includes('bar') ||
+                f.metric_key.toLowerCase().includes('revenue') ||
+                f.custom_label.toLowerCase().includes('бар') ||
+                f.custom_label.toLowerCase().includes('выручка')
+            )?.metric_key ||
+            'total_revenue'
+    }, [inventorySettings?.employee_default_metric_key, reportTemplate?.schema])
+
+    const reportedRevenueValue = useMemo(() => {
+        const raw = reportData[revenueKey] ?? reportData['bar_revenue'] ?? reportData['total_revenue'] ?? 0
+        const parsed = typeof raw === 'number' ? raw : parseFloat(String(raw))
+        return Number.isFinite(parsed) ? parsed : 0
+    }, [reportData, revenueKey])
+
+    const reconcileSnapshot = useMemo(() => {
+        return {
+            reported: reportedRevenueValue,
+            calculated: totalSalesRevenue,
+            diff: reportedRevenueValue - totalSalesRevenue
+        }
+    }, [reportedRevenueValue, totalSalesRevenue])
+
+    useEffect(() => {
+        if (!isOpen) return
+        if (!isShiftSalesMode) return
+        if (step !== 2) return
+
+        const shiftIdStr = String(activeShiftId)
+        startTransition(async () => {
+            try {
+                const receipts = await getShiftReceipts(clubId, userId, shiftIdStr, { includeVoided: true })
+                setShiftReceipts(receipts)
+            } catch (e) {
+                console.error(e)
+            }
+        })
+    }, [isOpen, isShiftSalesMode, step, clubId, userId, activeShiftId])
 
     // Lock scroll when open
     useEffect(() => {
@@ -164,6 +262,7 @@ export function ShiftClosingWizard({
                     setProblematicItems(data.problematicItems || {})
                     setCalculationResult(data.calculationResult || null)
                     setUnaccountedSales(data.unaccountedSales || [])
+                    setShiftReceipts(data.shiftReceipts || [])
                     console.log('Restored state from localStorage')
                 } catch (e) {
                     console.error('Failed to parse saved state', e)
@@ -183,7 +282,8 @@ export function ShiftClosingWizard({
                 checklistResponses,
                 problematicItems,
                 calculationResult,
-                unaccountedSales
+                unaccountedSales,
+                shiftReceipts
             }
             localStorage.setItem(persistenceKey, JSON.stringify(stateToSave))
         }
@@ -204,6 +304,7 @@ export function ShiftClosingWizard({
                 setScannedItemId(null)
                 setSearchQuery("")
                 setUnaccountedSales([])
+                setShiftReceipts([])
                 
                 const mandatory = checklistTemplates?.find((t: any) => 
                     t.type === 'shift_handover' && t.settings?.block_shift_close
@@ -290,11 +391,16 @@ export function ShiftClosingWizard({
             }
         }
 
-        if (skipInventory) {
+        if (skipInventory && !isShiftSalesMode) {
             onFinalComplete()
             return
         }
-        
+
+        if (isShiftSalesMode) {
+            setStep(2)
+            return
+        }
+
         setStep(2)
         startInventory()
     }
@@ -777,6 +883,47 @@ export function ShiftClosingWizard({
         return filtered
     }, [inventoryItems, searchQuery, allProducts])
 
+    const handleReconcileNext = () => {
+        if (!isShiftSalesMode) return
+        const shiftIdStr = String(activeShiftId)
+
+        startTransition(async () => {
+            try {
+                if (unaccountedSales.length > 0) {
+                    await createShiftReceipt(clubId, userId, {
+                        shift_id: shiftIdStr,
+                        payment_type: 'other',
+                        items: unaccountedSales.map(s => ({ product_id: s.product_id, quantity: s.quantity })),
+                        notes: "Ручная продажа при закрытии смены"
+                    })
+                    setUnaccountedSales([])
+                }
+
+                await commitShiftReceiptsToMovements(clubId, userId, shiftIdStr)
+
+                const receipts = await getShiftReceipts(clubId, userId, shiftIdStr, { includeVoided: true })
+                setShiftReceipts(receipts)
+
+                setCalculationResult({
+                    reported: reconcileSnapshot.reported,
+                    calculated: reconcileSnapshot.calculated,
+                    diff: reconcileSnapshot.diff
+                })
+
+                if (skipInventory) {
+                    onFinalComplete()
+                    return
+                }
+
+                setStep(inventoryStep)
+                startInventory()
+            } catch (e: any) {
+                console.error(e)
+                alert(e?.message || "Ошибка сверки/фиксации продаж")
+            }
+        })
+    }
+
     const handleInventorySubmit = () => {
         startTransition(async () => {
             try {
@@ -787,6 +934,11 @@ export function ShiftClosingWizard({
                 
                 if (itemsToUpdate.length > 0) {
                     await bulkUpdateInventoryItems(itemsToUpdate, clubId)
+                }
+
+                if (isShiftSalesMode) {
+                    setStep(finalizeStep)
+                    return
                 }
 
                 // Calculate total revenue (Standard Sales + Unaccounted Sales)
@@ -801,18 +953,7 @@ export function ShiftClosingWizard({
                 const unaccountedRev = unaccountedSales.reduce((acc, s) => acc + (s.quantity * s.selling_price), 0)
                 const totalCalculatedRev = standardCalculatedRev + unaccountedRev
 
-                // Find the most likely revenue metric key from the template
-                const revenueKey = inventorySettings?.employee_default_metric_key || 
-                    reportTemplate?.schema?.find((f: any) => 
-                        f.metric_key.toLowerCase().includes('bar') || 
-                        f.metric_key.toLowerCase().includes('revenue') ||
-                        f.custom_label.toLowerCase().includes('бар') ||
-                        f.custom_label.toLowerCase().includes('выручка')
-                    )?.metric_key || 'total_revenue'
-
-                const reportedRev = parseFloat(reportData[revenueKey] || reportData['bar_revenue'] || reportData['total_revenue'] || '0')
-                
-                console.log('Calculation summary:', { revenueKey, reportedRev, totalCalculatedRev, reportData })
+                const reportedRev = reportedRevenueValue
 
                 setCalculationResult({
                     reported: reportedRev,
@@ -820,7 +961,7 @@ export function ShiftClosingWizard({
                     diff: reportedRev - totalCalculatedRev
                 })
 
-                setStep(3)
+                setStep(finalizeStep)
             } catch (e) {
                 console.error('Error saving inventory:', e)
                 alert("Ошибка сохранения подсчетов")
@@ -835,24 +976,27 @@ export function ShiftClosingWizard({
         // Prevent finalize if there are uncounted items
         if (forgottenItems.length > 0) {
             alert(`Вы не посчитали ${forgottenItems.length} товаров. Укажите их остаток (даже если 0), чтобы закрыть смену.`)
-            setStep(2) // Return to inventory
+            setStep(inventoryStep) // Return to inventory
             return
         }
 
         startTransition(async () => {
             try {
-                // Close inventory in DB with unaccounted sales
-                await closeInventory(
-                    inventoryId, 
-                    clubId, 
-                    calculationResult.reported,
-                    unaccountedSales.map(s => ({
-                        product_id: s.product_id,
-                        quantity: s.quantity,
-                        selling_price: s.selling_price,
-                        cost_price: s.cost_price
-                    }))
-                )
+                if (isShiftSalesMode) {
+                    await closeInventory(inventoryId, clubId, 0, [], { salesRecognition: 'NONE' })
+                } else {
+                    await closeInventory(
+                        inventoryId,
+                        clubId,
+                        calculationResult.reported,
+                        unaccountedSales.map(s => ({
+                            product_id: s.product_id,
+                            quantity: s.quantity,
+                            selling_price: s.selling_price,
+                            cost_price: s.cost_price
+                        }))
+                    )
+                }
                 
                 // Complete shift closing
                 onFinalComplete()
@@ -910,7 +1054,7 @@ export function ShiftClosingWizard({
 
     const handleBack = () => {
         if (step > 1) {
-            setStep((prev) => (prev - 1) as 1 | 2 | 3)
+            setStep((prev) => (prev - 1) as 1 | 2 | 3 | 4)
         }
     }
 
@@ -918,7 +1062,7 @@ export function ShiftClosingWizard({
 
     return (
         <div className="fixed inset-0 h-[100dvh] bg-slate-950 text-white flex flex-col z-[9999] animate-in fade-in duration-300 overflow-hidden overscroll-none">
-            {step === 2 && (
+            {step === inventoryStep && (
                 <BarcodeScanner 
                     isOpen={isScannerOpen} 
                     onScan={handleBarcodeScan} 
@@ -932,7 +1076,9 @@ export function ShiftClosingWizard({
                         <h2 className="text-lg font-bold truncate">
                             {skipInventory ? "Закрытие смены" : 
                              step === 1 ? "Финансовый отчет" :
-                             step === 2 ? "Инвентаризация" : "Сверка итогов"}
+                             isShiftSalesMode
+                                 ? (step === 2 ? "Сверка продаж" : step === 3 ? "Инвентаризация" : "Сверка итогов")
+                                 : (step === 2 ? "Инвентаризация" : "Сверка итогов")}
                         </h2>
                         <Button 
                             variant="outline" 
@@ -947,7 +1093,7 @@ export function ShiftClosingWizard({
                     {/* Lightweight Step Progress Bar */}
                     {!skipInventory && (
                         <div className="flex gap-1.5 h-1.5 w-full">
-                            {[1, 2, 3].map((i) => (
+                            {Array.from({ length: totalSteps }, (_, idx) => idx + 1).map((i) => (
                                 <div 
                                     key={i} 
                                     className={`flex-1 rounded-full transition-all duration-500 ${
@@ -1188,8 +1334,113 @@ export function ShiftClosingWizard({
                     </div>
                 )}
 
-                {/* STEP 2: INVENTORY */}
-                {step === 2 && (
+                {/* STEP 2 (SHIFT MODE): RECONCILIATION */}
+                {isShiftSalesMode && step === 2 && (
+                    <div className="space-y-6 max-w-2xl mx-auto pb-20">
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="bg-slate-900/50 p-4 rounded-2xl border border-slate-800">
+                                <span className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Выручка (отчет)</span>
+                                <div className="text-xl font-bold mt-1">{reconcileSnapshot.reported.toLocaleString()} ₽</div>
+                                <div className="text-[10px] text-slate-500 mt-1">{revenueKey}</div>
+                            </div>
+                            <div className="bg-slate-900/50 p-4 rounded-2xl border border-slate-800">
+                                <span className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Продано (пробитое)</span>
+                                <div className="text-xl font-bold mt-1 text-blue-400">{reconcileSnapshot.calculated.toLocaleString()} ₽</div>
+                            </div>
+                        </div>
+
+                        <div className={`p-4 rounded-2xl border flex items-start gap-4 ${
+                            reconcileSnapshot.diff === 0 ? 'bg-green-900/10 border-green-900/30 text-green-400' :
+                            reconcileSnapshot.diff > 0 ? 'bg-amber-900/10 border-amber-900/30 text-amber-400' :
+                            'bg-red-900/10 border-red-900/30 text-red-400'
+                        }`}>
+                            <div className="mt-0.5">
+                                {reconcileSnapshot.diff === 0 ? <CheckCircle2 className="h-5 w-5" /> : <AlertTriangle className="h-5 w-5" />}
+                            </div>
+                            <div className="flex-1">
+                                <div className="font-bold flex justify-between items-center">
+                                    <span>{reconcileSnapshot.diff === 0 ? "Смена сходится!" : reconcileSnapshot.diff > 0 ? "Обнаружен излишек" : "Обнаружена недостача"}</span>
+                                    <span className="text-xl font-black">{reconcileSnapshot.diff > 0 ? '+' : ''}{reconcileSnapshot.diff.toLocaleString()} ₽</span>
+                                </div>
+                                <p className="text-xs opacity-80 mt-1 leading-relaxed">
+                                    {reconcileSnapshot.diff === 0 ? "Сумма в отчете соответствует пробитым товарам." :
+                                     reconcileSnapshot.diff > 0 ? "В отчете больше денег, чем по пробитым товарам. Возможно, не пробили часть продаж." :
+                                     "В отчете меньше денег, чем по пробитым товарам. Проверьте корректность отчета или пробитий."}
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="bg-slate-900/50 rounded-2xl border border-slate-800 overflow-hidden">
+                            <div className="px-4 py-3 bg-slate-900 border-b border-slate-800 flex justify-between items-center">
+                                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Детализация продаж</h4>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => {
+                                        refreshProductCatalog()
+                                        setIsUnaccountedDialogOpen(true)
+                                    }}
+                                    className="h-7 text-[10px] text-blue-400 hover:text-blue-300 hover:bg-blue-400/10"
+                                >
+                                    <Plus className="h-3 w-3 mr-1" /> Добавить вручную
+                                </Button>
+                            </div>
+                            <div className="max-h-[320px] overflow-y-auto">
+                                {salesPreview.length === 0 ? (
+                                    <div className="p-10 text-center text-slate-500 text-sm">
+                                        Продаж не зафиксировано
+                                    </div>
+                                ) : (
+                                    <Table>
+                                        <TableBody>
+                                            {salesPreview.map((s, idx) => (
+                                                <TableRow key={`${s.id}-${idx}`} className="border-slate-800 hover:bg-slate-800/30">
+                                                    <TableCell className="py-3">
+                                                        <div className="flex flex-col">
+                                                            <div className="flex items-center gap-1.5">
+                                                                {s.isUnaccounted && <span className="bg-blue-500/20 text-blue-400 text-[8px] px-1 rounded uppercase font-bold">Ручн.</span>}
+                                                                <span className="text-sm font-medium text-slate-200">{s.name}</span>
+                                                            </div>
+                                                            <span className="text-[10px] text-slate-500">{s.qty} шт × {s.price} ₽</span>
+                                                        </div>
+                                                    </TableCell>
+                                                    <TableCell className="text-right py-3 pr-6">
+                                                        <div className="flex items-center justify-end gap-2">
+                                                            <span className="font-bold text-slate-200">{s.total} ₽</span>
+                                                            {s.isUnaccounted && (
+                                                                <button
+                                                                    onClick={() => removeUnaccountedSale(s.id)}
+                                                                    className="p-1 text-slate-600 hover:text-red-400"
+                                                                >
+                                                                    <Trash2 className="h-3 w-3" />
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                )}
+                            </div>
+                        </div>
+
+                        {reconcileSnapshot.diff !== 0 && (
+                            <div className="space-y-3">
+                                <Label className="text-slate-400 text-xs uppercase tracking-wider ml-1">Причина расхождения</Label>
+                                <Input
+                                    className="bg-slate-900 border-slate-800 h-14 rounded-xl focus:ring-2 focus:ring-blue-500 transition-all text-base"
+                                    placeholder="Укажите причину..."
+                                    value={reportData['shift_comment'] || ''}
+                                    onChange={(e) => setReportData({ ...reportData, 'shift_comment': e.target.value })}
+                                />
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {/* STEP 2/3: INVENTORY */}
+                {step === inventoryStep && (
                     <div className="space-y-6 max-w-4xl mx-auto pb-20">
                         <div className="relative">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
@@ -1271,8 +1522,8 @@ export function ShiftClosingWizard({
                     </div>
                 )}
 
-                {/* STEP 3: SUMMARY */}
-                {step === 3 && calculationResult && (
+                {/* SUMMARY */}
+                {step === finalizeStep && calculationResult && (
                     <div className="space-y-6 max-w-2xl mx-auto pb-20">
                         {/* Reconciliation Summary Header */}
                         <div className="grid grid-cols-2 gap-4">
@@ -1331,7 +1582,7 @@ export function ShiftClosingWizard({
                                 </div>
                                 <div className="flex gap-2">
                                     <Button 
-                                        onClick={() => setStep(2)} 
+                                        onClick={() => setStep(inventoryStep)} 
                                         variant="outline" 
                                         className="flex-1 h-10 text-xs border-red-500/30 text-red-400 hover:bg-red-500/10"
                                     >
@@ -1352,17 +1603,19 @@ export function ShiftClosingWizard({
                         <div className="bg-slate-900/50 rounded-2xl border border-slate-800 overflow-hidden">
                             <div className="px-4 py-3 bg-slate-900 border-b border-slate-800 flex justify-between items-center">
                                 <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Детализация продаж</h4>
-                                <Button 
-                                    variant="ghost" 
-                                    size="sm" 
-                                    onClick={() => {
-                                        refreshProductCatalog()
-                                        setIsUnaccountedDialogOpen(true)
-                                    }}
-                                    className="h-7 text-[10px] text-blue-400 hover:text-blue-300 hover:bg-blue-400/10"
-                                >
-                                    <Plus className="h-3 w-3 mr-1" /> Добавить неучтенку
-                                </Button>
+                                {!isShiftSalesMode && (
+                                    <Button 
+                                        variant="ghost" 
+                                        size="sm" 
+                                        onClick={() => {
+                                            refreshProductCatalog()
+                                            setIsUnaccountedDialogOpen(true)
+                                        }}
+                                        className="h-7 text-[10px] text-blue-400 hover:text-blue-300 hover:bg-blue-400/10"
+                                    >
+                                        <Plus className="h-3 w-3 mr-1" /> Добавить неучтенку
+                                    </Button>
+                                )}
                             </div>
                             <div className="max-h-[300px] overflow-y-auto">
                                 {salesPreview.length === 0 ? (
@@ -1492,11 +1745,31 @@ export function ShiftClosingWizard({
             <footer className="p-4 pb-safe border-t border-slate-800 bg-slate-900/80 backdrop-blur-md sticky bottom-0 z-50">
                 {step === 1 && (
                     <Button onClick={handleStep1Submit} className="w-full h-14 text-lg font-bold bg-purple-600 hover:bg-purple-700 rounded-2xl shadow-lg shadow-purple-900/20">
-                        {skipInventory ? "Завершить смену" : "Далее: Инвентаризация"}
+                        {skipInventory
+                            ? "Завершить смену"
+                            : isShiftSalesMode
+                                ? "Далее: Сверка продаж"
+                                : "Далее: Инвентаризация"}
                         <ArrowRight className="ml-2 h-5 w-5" />
                     </Button>
                 )}
-                {step === 2 && (
+                {step === 2 && isShiftSalesMode && (
+                    <div className="flex gap-3">
+                        <Button 
+                            variant="outline"
+                            size="icon"
+                            onClick={handleBack}
+                            className="h-14 w-14 border-slate-800 text-slate-400 hover:bg-slate-800 rounded-2xl shrink-0"
+                        >
+                            <ArrowLeft className="h-6 w-6" />
+                        </Button>
+                        <Button onClick={handleReconcileNext} disabled={isPending} className="flex-1 h-14 text-lg font-bold bg-blue-600 hover:bg-blue-700 rounded-2xl shadow-lg shadow-blue-900/20">
+                            Далее: Инвентаризация
+                            <ArrowRight className="ml-2 h-5 w-5" />
+                        </Button>
+                    </div>
+                )}
+                {step === inventoryStep && !isShiftSalesMode && (
                     <div className="flex flex-col gap-3">
                         <Button 
                             onClick={() => setIsScannerOpen(true)}
@@ -1521,7 +1794,32 @@ export function ShiftClosingWizard({
                         </div>
                     </div>
                 )}
-                {step === 3 && (
+                {step === inventoryStep && isShiftSalesMode && (
+                    <div className="flex flex-col gap-3">
+                        <Button 
+                            onClick={() => setIsScannerOpen(true)}
+                            className="w-full h-14 text-lg font-bold bg-blue-600/20 border-blue-500/30 text-blue-400 hover:bg-blue-600/30 rounded-2xl"
+                        >
+                            <Camera className="mr-2 h-6 w-6" />
+                            Открыть Сканер
+                        </Button>
+                        <div className="flex gap-3">
+                            <Button 
+                                variant="outline"
+                                size="icon"
+                                onClick={handleBack}
+                                className="h-14 w-14 border-slate-800 text-slate-400 hover:bg-slate-800 rounded-2xl shrink-0"
+                            >
+                                <ArrowLeft className="h-6 w-6" />
+                            </Button>
+                            <Button onClick={handleInventorySubmit} disabled={isPending} className="flex-1 h-14 text-lg font-bold bg-blue-600 hover:bg-blue-700 rounded-2xl shadow-lg shadow-blue-900/20">
+                                Далее
+                                <ArrowRight className="ml-2 h-5 w-5" />
+                            </Button>
+                        </div>
+                    </div>
+                )}
+                {step === finalizeStep && (
                     <div className="flex gap-3">
                         <Button 
                             variant="outline"

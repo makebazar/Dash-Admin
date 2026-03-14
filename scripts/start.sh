@@ -52,45 +52,71 @@ async function migrate() {
       const files = fs.readdirSync(migrationsDir)
         .filter(f => f.endsWith('.sql'))
         .sort();
-      
-      for (const file of files) {
-        const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf8');
-        const checksum = crypto.createHash('sha256').update(sql).digest('hex');
 
-        const existing = await pool.query(
-          'SELECT checksum FROM schema_migrations WHERE name = $1',
-          [file]
-        );
+      // Migrations have historical dependencies but are named lexicographically.
+      // To make startup deterministic, apply in multiple passes until nothing else can be applied.
+      const maxPasses = Number.parseInt(process.env.MIGRATION_MAX_PASSES || '5', 10);
+      let pass = 0;
+      let appliedInAnyPass = false;
 
-        if (existing.rowCount > 0) {
-          const appliedChecksum = existing.rows[0].checksum;
-          if (appliedChecksum !== checksum) {
-            console.error('⚠️  Migration changed after apply:', file);
+      while (pass < maxPasses) {
+        pass += 1;
+        let appliedThisPass = false;
+        const errors = [];
+
+        for (const file of files) {
+          const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf8');
+          const checksum = crypto.createHash('sha256').update(sql).digest('hex');
+
+          const existing = await pool.query(
+            'SELECT checksum FROM schema_migrations WHERE name = $1',
+            [file]
+          );
+
+          if (existing.rowCount > 0) {
+            const appliedChecksum = existing.rows[0].checksum;
+            if (appliedChecksum !== checksum) {
+              throw new Error('Migration changed after apply: ' + file);
+            }
             continue;
           }
-          console.log('⏭️  Already applied:', file);
-          continue;
+
+          try {
+            await pool.query('BEGIN');
+            await pool.query(sql);
+            await pool.query(
+              'INSERT INTO schema_migrations (name, checksum) VALUES ($1, $2)',
+              [file, checksum]
+            );
+            await pool.query('COMMIT');
+            appliedThisPass = true;
+            appliedInAnyPass = true;
+            console.log('✅ Migration applied:', file);
+          } catch (err) {
+            await pool.query('ROLLBACK');
+            errors.push({ file, message: err.message });
+          }
         }
 
-        try {
-          await pool.query('BEGIN');
-          await pool.query(sql);
-          await pool.query(
-            'INSERT INTO schema_migrations (name, checksum) VALUES ($1, $2)',
-            [file, checksum]
-          );
-          await pool.query('COMMIT');
-          console.log('✅ Migration applied:', file);
-        } catch (err) {
-          await pool.query('ROLLBACK');
-          console.error('⚠️  Warning in', file + ':', err.message);
+        if (!appliedThisPass) {
+          // If nothing was applied in this pass, then remaining errors are not resolvable by ordering alone.
+          if (errors.length > 0) {
+            const head = errors.slice(0, 5).map(e => `- ${e.file}: ${e.message}`).join('\\n');
+            throw new Error(`Unapplied migrations remain after ${pass} pass(es):\\n${head}`);
+          }
+          break;
         }
+      }
+
+      if (!appliedInAnyPass) {
+        console.log('⏭️  No new migrations to apply');
       }
     }
 
     console.log('✅ All migrations complete');
   } catch (err) {
     console.error('❌ Critical migration error:', err.message);
+    process.exit(1);
   } finally {
     await pool.end();
   }

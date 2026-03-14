@@ -58,14 +58,12 @@ export async function GET(
             }
         });
 
-        // 2. Get hourly rate and scheme for KPI
+        // 2. Get scheme for KPI
         const schemeRes = await query(
             `SELECT 
-                ss.*, 
-                (r.default_kpi_settings->>'base_rate')::numeric as role_rate,
+                ss.*,
                 v.formula as scheme_formula
              FROM users u
-             LEFT JOIN roles r ON u.role_id = r.id
              LEFT JOIN employee_salary_assignments esa ON u.id = esa.user_id AND esa.club_id = $2
              LEFT JOIN salary_schemes ss ON ss.id = esa.scheme_id
              LEFT JOIN LATERAL (
@@ -90,7 +88,7 @@ export async function GET(
 
         const scheme = { ...rawScheme, ...formula, period_bonuses: period_bonuses_config };
         
-        const hourlyRate = parseFloat(scheme?.role_rate || scheme?.amount || '150');
+        const hourlyRate = parseFloat(scheme?.amount || '150');
         const standard_monthly_shifts = scheme?.standard_monthly_shifts || 15;
 
         // 3. Get shifts data

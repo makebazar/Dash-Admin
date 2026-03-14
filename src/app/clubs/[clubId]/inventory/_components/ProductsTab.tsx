@@ -200,7 +200,7 @@ export function ProductsTab({ products, categories, warehouses, currentUserId, p
                 })
                 
                 // Refresh rules
-                const rules = await getReplenishmentRulesForProduct(replenishmentDialog.product!.id)
+                const rules = await getReplenishmentRulesForProduct(clubId, replenishmentDialog.product!.id)
                 setReplenishmentDialog(prev => ({ ...prev, rules }))
             } catch (err: any) {
                 showMessage({ title: "Ошибка", description: err.message || "Ошибка при создании правила" })
@@ -219,7 +219,7 @@ export function ProductsTab({ products, categories, warehouses, currentUserId, p
             try {
                 await deleteReplenishmentRule(ruleId, clubId)
                 // Refresh rules
-                const rules = await getReplenishmentRulesForProduct(replenishmentDialog.product!.id)
+                const rules = await getReplenishmentRulesForProduct(clubId, replenishmentDialog.product!.id)
                 setReplenishmentDialog(prev => ({ ...prev, rules }))
             } catch (err: any) {
                 showMessage({ title: "Ошибка", description: err.message || "Ошибка при удалении" })
@@ -229,7 +229,7 @@ export function ProductsTab({ products, categories, warehouses, currentUserId, p
 
     const openReplenishment = async (product: Product) => {
         setReplenishmentDialog({ isOpen: true, product, rules: [] })
-        const rules = await getReplenishmentRulesForProduct(product.id)
+        const rules = await getReplenishmentRulesForProduct(clubId, product.id)
         setReplenishmentDialog(prev => ({ ...prev, rules }))
     }
 
@@ -316,7 +316,7 @@ export function ProductsTab({ products, categories, warehouses, currentUserId, p
 
     const openHistory = async (product: Product) => {
         setHistoryDialog({ isOpen: true, product, logs: [] })
-        const logs = await getProductHistory(product.id)
+        const logs = await getProductHistory(clubId, product.id)
         setHistoryDialog(prev => ({ ...prev, logs }))
     }
 

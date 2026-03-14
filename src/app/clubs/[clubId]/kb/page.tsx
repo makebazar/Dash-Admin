@@ -17,7 +17,8 @@ import {
     Layers,
     LayoutGrid,
     Type,
-    Image as ImageIcon
+    Image as ImageIcon,
+    Menu
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -45,6 +46,7 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { RichTextEditor } from "@/components/ui/rich-text-editor"
 import { Separator } from "@/components/ui/separator"
 
@@ -73,6 +75,7 @@ export default function KnowledgeBasePage() {
     const [articles, setArticles] = useState<Article[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [isFullAccess, setIsFullAccess] = useState(false)
+    const [isNavOpen, setIsNavOpen] = useState(false)
     
     const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null)
     const [selectedArticleId, setSelectedArticleId] = useState<number | null>(null)
@@ -260,6 +263,7 @@ export default function KnowledgeBasePage() {
                         onClick={() => {
                             setSelectedCategoryId(cat.id)
                             setSelectedArticleId(null)
+                            setIsNavOpen(false)
                         }}
                     >
                         <div className="flex items-center gap-2 overflow-hidden">
@@ -320,7 +324,10 @@ export default function KnowledgeBasePage() {
                                         selectedArticleId === art.id ? "bg-indigo-50 text-indigo-700 font-medium" : "hover:bg-slate-50 text-slate-600"
                                     )}
                                     style={{ paddingLeft: `${(depth + 1) * 16 + 12}px` }}
-                                    onClick={() => setSelectedArticleId(art.id)}
+                                    onClick={() => {
+                                        setSelectedArticleId(art.id)
+                                        setIsNavOpen(false)
+                                    }}
                                 >
                                     <div className="flex items-center gap-2 overflow-hidden">
                                         <div className="w-4 h-[1px] bg-slate-200" />
@@ -368,280 +375,362 @@ export default function KnowledgeBasePage() {
         )
     }
 
-    return (
-        <div className="flex h-[calc(100vh-64px)] overflow-hidden bg-slate-50/30">
-            {/* Sidebar */}
-            <div className="w-80 border-r bg-white flex flex-col shrink-0">
-                <div className="p-4 space-y-4">
-                    <div className="flex items-center justify-between">
-                        <h2 className="text-lg font-bold flex items-center gap-2">
-                            <BookOpen className="h-5 w-5 text-indigo-600" />
-                            База знаний
-                        </h2>
-                        {isFullAccess && (
-                            <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => {
-                                setEditingCategory(null)
-                                setCategoryForm({ name: "", description: "", parent_id: null })
-                                setIsCategoryDialogOpen(true)
-                            }}>
-                                <Plus className="h-4 w-4" />
-                            </Button>
-                        )}
-                    </div>
-                    
-                    <div className="relative">
-                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
-                        <Input 
-                            placeholder="Поиск..." 
-                            className="pl-9 bg-slate-50 border-none"
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                        />
-                    </div>
+    const mobileMenuButton = (
+        <SheetTrigger asChild>
+            <Button variant="ghost" size="icon" className="md:hidden shrink-0">
+                <Menu className="h-5 w-5" />
+            </Button>
+        </SheetTrigger>
+    )
+
+    const sidebarContent = (
+        <div className="flex flex-col h-full w-full min-w-0">
+            <div className="p-4 space-y-4">
+                <div className="flex items-center justify-between gap-3">
+                    <h2 className="text-lg font-bold flex items-center gap-2 min-w-0">
+                        <BookOpen className="h-5 w-5 text-indigo-600 shrink-0" />
+                        <span className="truncate">База знаний</span>
+                    </h2>
+                    {isFullAccess && (
+                        <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0" onClick={() => {
+                            setEditingCategory(null)
+                            setCategoryForm({ name: "", description: "", parent_id: null })
+                            setIsCategoryDialogOpen(true)
+                        }}>
+                            <Plus className="h-4 w-4" />
+                        </Button>
+                    )}
                 </div>
 
-                <div className="flex-1 px-2 overflow-y-auto">
-                    <div className="py-2">
-                        {renderCategoryTree()}
-                    </div>
+                <div className="relative w-full min-w-0">
+                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
+                    <Input
+                        placeholder="Поиск..."
+                        className="pl-9 bg-slate-50 border-none shadow-none w-full max-w-full"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                    />
                 </div>
             </div>
 
-            {/* Content Area */}
-            <div className="flex-1 flex flex-col overflow-hidden bg-white">
-                {isArticleDialogOpen ? (
-                    <div className="flex-1 flex flex-col overflow-hidden">
-                        <div className="border-b px-8 py-4 flex items-center justify-between bg-white shrink-0">
-                            <div className="flex-1 mr-4">
-                                <Input 
-                                    value={articleForm.title} 
-                                    onChange={(e) => setArticleForm({...articleForm, title: e.target.value})}
-                                    placeholder="Заголовок статьи..."
-                                    className="text-2xl font-bold border-none px-0 focus-visible:ring-0 placeholder:text-slate-300"
-                                />
-                            </div>
-                            <div className="flex gap-2">
-                                <Button variant="ghost" onClick={() => setIsArticleDialogOpen(false)}>
-                                    Отмена
-                                </Button>
-                                <Button 
-                                    onClick={handleSaveArticle} 
-                                    disabled={!articleForm.title || !articleForm.content}
-                                    className="bg-indigo-600 hover:bg-indigo-700 text-white"
-                                >
-                                    Сохранить
-                                </Button>
-                            </div>
-                        </div>
-                        <div className="flex-1 overflow-y-auto p-8">
-                            <div className="max-w-4xl mx-auto">
-                                <RichTextEditor 
-                                    value={articleForm.content} 
-                                    onChange={(content) => setArticleForm({...articleForm, content})}
-                                    className="min-h-[500px]"
-                                />
-                            </div>
-                        </div>
+            <div className="flex-1 px-2 overflow-y-auto">
+                <div className="py-2">
+                    {renderCategoryTree()}
+                </div>
+            </div>
+        </div>
+    )
+
+    return (
+        <Sheet open={isNavOpen} onOpenChange={setIsNavOpen}>
+            <div className="flex h-[calc(100vh-64px)] overflow-hidden bg-slate-50/30">
+                <div className="hidden md:flex w-80 border-r bg-white shrink-0 overflow-x-hidden">
+                    {sidebarContent}
+                </div>
+
+                <SheetContent side="left" className="md:hidden p-0 w-[85vw] max-w-[420px] overflow-x-hidden">
+                    <SheetTitle className="sr-only">База знаний</SheetTitle>
+                    <div className="h-full bg-white">
+                        {sidebarContent}
                     </div>
-                ) : selectedArticle ? (
-                    <div className="flex-1 flex flex-col overflow-hidden">
-                        <div className="border-b px-8 py-4 flex items-center justify-between bg-white shrink-0">
-                            <div>
-                                <h1 className="text-2xl font-bold text-slate-900">{selectedArticle.title}</h1>
-                                <p className="text-sm text-slate-500 flex items-center gap-2 mt-1">
-                                    <span>{new Date(selectedArticle.updated_at).toLocaleDateString()}</span>
-                                    {selectedArticle.author_name && (
-                                        <>
-                                            <span className="w-1 h-1 bg-slate-300 rounded-full" />
-                                            <span>{selectedArticle.author_name}</span>
-                                        </>
-                                    )}
-                                </p>
-                            </div>
-                            {isFullAccess && (
-                                <div className="flex gap-2">
-                                    <Button variant="outline" size="sm" onClick={() => {
-                                        setEditingArticle(selectedArticle)
-                                        setArticleForm({ 
-                                            title: selectedArticle.title, 
-                                            content: selectedArticle.content, 
-                                            category_id: selectedArticle.category_id 
-                                        })
-                                        setIsArticleDialogOpen(true)
-                                    }}>
-                                        <Pencil className="h-4 w-4 mr-2" />
-                                        Редактировать
-                                    </Button>
+                </SheetContent>
+
+                <div className="flex-1 flex flex-col overflow-hidden bg-white">
+                    {isArticleDialogOpen ? (
+                        <div className="flex-1 flex flex-col overflow-hidden">
+                            <div className="border-b px-4 md:px-8 py-4 bg-white shrink-0">
+                                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                                        {mobileMenuButton}
+                                        <div className="flex-1 min-w-0">
+                                            <Input
+                                                value={articleForm.title}
+                                                onChange={(e) => setArticleForm({ ...articleForm, title: e.target.value })}
+                                                placeholder="Заголовок статьи..."
+                                                className="text-xl md:text-2xl font-bold border-none px-0 focus-visible:ring-0 placeholder:text-slate-300"
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <Button variant="ghost" onClick={() => setIsArticleDialogOpen(false)}>
+                                            Отмена
+                                        </Button>
+                                        <Button
+                                            onClick={handleSaveArticle}
+                                            disabled={!articleForm.title || !articleForm.content}
+                                            className="bg-indigo-600 hover:bg-indigo-700 text-white"
+                                        >
+                                            Сохранить
+                                        </Button>
+                                    </div>
                                 </div>
-                            )}
-                        </div>
-                        <div className="flex-1 overflow-y-auto">
-                            <div className="px-8 py-12 max-w-4xl mx-auto prose prose-slate max-w-none">
-                                <div 
-                                    className="kb-content animate-in fade-in slide-in-from-bottom-2 duration-500"
-                                    dangerouslySetInnerHTML={{ __html: selectedArticle.content }} 
-                                />
-                                
-                                <Separator className="my-12" />
-                                <div className="flex items-center justify-between text-xs text-slate-400">
-                                    <span>Последнее обновление: {new Date(selectedArticle.updated_at).toLocaleString('ru-RU')}</span>
-                                    <span>ID: {selectedArticle.id}</span>
+                            </div>
+                            <div className="flex-1 overflow-y-auto p-4 md:p-8">
+                                <div className="max-w-4xl mx-auto">
+                                    <RichTextEditor
+                                        value={articleForm.content}
+                                        onChange={(content) => setArticleForm({ ...articleForm, content })}
+                                        className="min-h-[420px] md:min-h-[500px]"
+                                    />
                                 </div>
                             </div>
                         </div>
-                    </div>
-                ) : selectedCategory ? (
-                    <div className="flex-1 flex flex-col overflow-hidden">
-                        <div className="border-b px-8 py-4 flex items-center justify-between bg-white shrink-0">
-                            <div>
-                                <h1 className="text-2xl font-bold text-slate-900">{selectedCategory.name}</h1>
-                                {selectedCategory.description && (
-                                    <p className="text-sm text-slate-500 mt-1">{selectedCategory.description}</p>
+                    ) : selectedArticle ? (
+                        <div className="flex-1 flex flex-col overflow-hidden">
+                            <div className="border-b px-4 md:px-8 py-4 flex items-start justify-between gap-3 bg-white shrink-0">
+                                <div className="flex items-start gap-3 min-w-0">
+                                    {mobileMenuButton}
+                                    <div className="min-w-0">
+                                        <h1 className="text-xl md:text-2xl font-bold text-slate-900 break-words">{selectedArticle.title}</h1>
+                                        <p className="text-sm text-slate-500 flex flex-wrap items-center gap-2 mt-1">
+                                            <span>{new Date(selectedArticle.updated_at).toLocaleDateString()}</span>
+                                            {selectedArticle.author_name && (
+                                                <>
+                                                    <span className="w-1 h-1 bg-slate-300 rounded-full" />
+                                                    <span>{selectedArticle.author_name}</span>
+                                                </>
+                                            )}
+                                        </p>
+                                    </div>
+                                </div>
+                                {isFullAccess && (
+                                    <div className="flex gap-2 shrink-0">
+                                        <Button variant="outline" size="sm" onClick={() => {
+                                            setEditingArticle(selectedArticle)
+                                            setArticleForm({
+                                                title: selectedArticle.title,
+                                                content: selectedArticle.content,
+                                                category_id: selectedArticle.category_id
+                                            })
+                                            setIsArticleDialogOpen(true)
+                                        }}>
+                                            <Pencil className="h-4 w-4 mr-2" />
+                                            Редактировать
+                                        </Button>
+                                    </div>
+                                )}
+                            </div>
+                            <div className="flex-1 overflow-y-auto">
+                                <div className="px-4 md:px-8 py-8 md:py-12 max-w-4xl mx-auto prose prose-slate max-w-none">
+                                    <div
+                                        className="kb-content animate-in fade-in slide-in-from-bottom-2 duration-500"
+                                        dangerouslySetInnerHTML={{ __html: selectedArticle.content }}
+                                    />
+
+                                    <Separator className="my-8 md:my-12" />
+                                    <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between text-xs text-slate-400">
+                                        <span>Последнее обновление: {new Date(selectedArticle.updated_at).toLocaleString('ru-RU')}</span>
+                                        <span>ID: {selectedArticle.id}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    ) : selectedCategory ? (
+                        <div className="flex-1 flex flex-col overflow-hidden">
+                            <div className="border-b px-4 md:px-8 py-4 flex items-start justify-between gap-3 bg-white shrink-0">
+                                <div className="flex items-start gap-3 min-w-0">
+                                    {mobileMenuButton}
+                                    <div className="min-w-0">
+                                        <h1 className="text-xl md:text-2xl font-bold text-slate-900 break-words">{selectedCategory.name}</h1>
+                                        {selectedCategory.description && (
+                                            <p className="text-sm text-slate-500 mt-1 break-words">{selectedCategory.description}</p>
+                                        )}
+                                    </div>
+                                </div>
+                                {isFullAccess && (
+                                    <div className="hidden md:flex gap-2 shrink-0">
+                                        <Button variant="outline" size="sm" onClick={() => {
+                                            setCategoryForm({ name: "", description: "", parent_id: selectedCategory.id })
+                                            setEditingCategory(null)
+                                            setIsCategoryDialogOpen(true)
+                                        }}>
+                                            <FolderPlus className="h-4 w-4 mr-2" />
+                                            Добавить подкатегорию
+                                        </Button>
+                                        <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700 text-white" onClick={() => {
+                                            setArticleForm({ title: "", content: "", category_id: selectedCategory.id })
+                                            setEditingArticle(null)
+                                            setIsArticleDialogOpen(true)
+                                        }}>
+                                            <Plus className="h-4 w-4 mr-2" />
+                                            Добавить статью
+                                        </Button>
+                                        <DropdownMenu>
+                                            <DropdownMenuTrigger asChild>
+                                                <Button variant="outline" size="sm">
+                                                    Шаблоны
+                                                </Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent align="end">
+                                                {articleTemplates.map((template) => (
+                                                    <DropdownMenuItem key={template.key} onClick={() => {
+                                                        setArticleForm({
+                                                            title: template.title,
+                                                            content: template.content,
+                                                            category_id: selectedCategory.id
+                                                        })
+                                                        setEditingArticle(null)
+                                                        setIsArticleDialogOpen(true)
+                                                    }}>
+                                                        {template.label}
+                                                    </DropdownMenuItem>
+                                                ))}
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
+                                    </div>
                                 )}
                             </div>
                             {isFullAccess && (
-                                <div className="flex gap-2">
-                                    <Button variant="outline" size="sm" onClick={() => {
-                                        setCategoryForm({ name: "", description: "", parent_id: selectedCategory.id })
-                                        setEditingCategory(null)
-                                        setIsCategoryDialogOpen(true)
-                                    }}>
-                                        <FolderPlus className="h-4 w-4 mr-2" />
-                                        Добавить подкатегорию
-                                    </Button>
-                                    <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700 text-white" onClick={() => {
-                                        setArticleForm({ title: "", content: "", category_id: selectedCategory.id })
-                                        setEditingArticle(null)
-                                        setIsArticleDialogOpen(true)
-                                    }}>
-                                        <Plus className="h-4 w-4 mr-2" />
-                                        Добавить статью
-                                    </Button>
-                                    <DropdownMenu>
-                                        <DropdownMenuTrigger asChild>
-                                            <Button variant="outline" size="sm">
-                                                Шаблоны
-                                            </Button>
-                                        </DropdownMenuTrigger>
-                                        <DropdownMenuContent align="end">
-                                            {articleTemplates.map((template) => (
-                                                <DropdownMenuItem key={template.key} onClick={() => {
-                                                    setArticleForm({
-                                                        title: template.title,
-                                                        content: template.content,
-                                                        category_id: selectedCategory.id
-                                                    })
-                                                    setEditingArticle(null)
-                                                    setIsArticleDialogOpen(true)
-                                                }}>
-                                                    {template.label}
-                                                </DropdownMenuItem>
-                                            ))}
-                                        </DropdownMenuContent>
-                                    </DropdownMenu>
+                                <div className="md:hidden border-b px-4 py-3 bg-white shrink-0">
+                                    <div className="flex flex-col gap-2">
+                                        <Button variant="outline" size="sm" onClick={() => {
+                                            setCategoryForm({ name: "", description: "", parent_id: selectedCategory.id })
+                                            setEditingCategory(null)
+                                            setIsCategoryDialogOpen(true)
+                                        }}>
+                                            <FolderPlus className="h-4 w-4 mr-2" />
+                                            Добавить подкатегорию
+                                        </Button>
+                                        <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700 text-white" onClick={() => {
+                                            setArticleForm({ title: "", content: "", category_id: selectedCategory.id })
+                                            setEditingArticle(null)
+                                            setIsArticleDialogOpen(true)
+                                        }}>
+                                            <Plus className="h-4 w-4 mr-2" />
+                                            Добавить статью
+                                        </Button>
+                                        <DropdownMenu>
+                                            <DropdownMenuTrigger asChild>
+                                                <Button variant="outline" size="sm">
+                                                    Шаблоны
+                                                </Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent align="end">
+                                                {articleTemplates.map((template) => (
+                                                    <DropdownMenuItem key={template.key} onClick={() => {
+                                                        setArticleForm({
+                                                            title: template.title,
+                                                            content: template.content,
+                                                            category_id: selectedCategory.id
+                                                        })
+                                                        setEditingArticle(null)
+                                                        setIsArticleDialogOpen(true)
+                                                    }}>
+                                                        {template.label}
+                                                    </DropdownMenuItem>
+                                                ))}
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
+                                    </div>
                                 </div>
                             )}
-                        </div>
-                        <div className="flex-1 overflow-y-auto px-8 py-8">
-                            <div className="max-w-4xl mx-auto">
-                                <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-4">Статьи в категории</h3>
-                                <div className="space-y-2">
-                                    {articles.filter(a => a.category_id === selectedCategory.id).length === 0 ? (
-                                        <div className="rounded-lg border border-dashed p-6 text-center text-sm text-slate-500">
-                                            В этой категории пока нет статей
-                                        </div>
-                                    ) : (
-                                        articles
-                                            .filter(a => a.category_id === selectedCategory.id)
-                                            .map(article => (
-                                                <button
-                                                    key={article.id}
-                                                    className="w-full text-left rounded-lg border px-4 py-3 hover:bg-slate-50 transition-colors"
-                                                    onClick={() => setSelectedArticleId(article.id)}
-                                                >
-                                                    <div className="font-medium text-slate-900">{article.title}</div>
-                                                    <div className="text-xs text-slate-500 mt-1">
-                                                        Обновлено: {new Date(article.updated_at).toLocaleDateString("ru-RU")}
-                                                    </div>
-                                                </button>
-                                            ))
-                                    )}
+                            <div className="flex-1 overflow-y-auto px-4 md:px-8 py-6 md:py-8">
+                                <div className="max-w-4xl mx-auto">
+                                    <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-4">Статьи в категории</h3>
+                                    <div className="space-y-2">
+                                        {articles.filter(a => a.category_id === selectedCategory.id).length === 0 ? (
+                                            <div className="rounded-lg border border-dashed p-6 text-center text-sm text-slate-500">
+                                                В этой категории пока нет статей
+                                            </div>
+                                        ) : (
+                                            articles
+                                                .filter(a => a.category_id === selectedCategory.id)
+                                                .map(article => (
+                                                    <button
+                                                        key={article.id}
+                                                        className="w-full text-left rounded-lg border px-4 py-3 hover:bg-slate-50 transition-colors"
+                                                        onClick={() => {
+                                                            setSelectedArticleId(article.id)
+                                                            setIsNavOpen(false)
+                                                        }}
+                                                    >
+                                                        <div className="font-medium text-slate-900">{article.title}</div>
+                                                        <div className="text-xs text-slate-500 mt-1">
+                                                            Обновлено: {new Date(article.updated_at).toLocaleDateString("ru-RU")}
+                                                        </div>
+                                                    </button>
+                                                ))
+                                        )}
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
-                ) : (
-                    <div className="flex-1 flex flex-col items-center justify-center text-slate-400 p-8 text-center">
-                        <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mb-4">
-                            <BookOpen className="h-10 w-10" />
+                    ) : (
+                        <div className="flex-1 flex flex-col overflow-hidden">
+                            <div className="md:hidden border-b px-4 py-3 flex items-center gap-3 bg-white shrink-0">
+                                {mobileMenuButton}
+                                <span className="font-semibold">База знаний</span>
+                            </div>
+                            <div className="flex-1 flex flex-col items-center justify-center text-slate-400 p-6 md:p-8 text-center">
+                                <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mb-4">
+                                    <BookOpen className="h-10 w-10" />
+                                </div>
+                                <h3 className="text-lg font-medium text-slate-900 mb-1">База знаний клуба</h3>
+                                <p className="max-w-xs">Выберите статью в боковом меню или создайте новую категорию для начала работы</p>
+                                {isFullAccess && (
+                                    <Button variant="outline" className="mt-6" onClick={() => {
+                                        setEditingCategory(null)
+                                        setCategoryForm({ name: "", description: "", parent_id: null })
+                                        setIsCategoryDialogOpen(true)
+                                    }}>
+                                        <Plus className="h-4 w-4 mr-2" />
+                                        Создать категорию
+                                    </Button>
+                                )}
+                            </div>
                         </div>
-                        <h3 className="text-lg font-medium text-slate-900 mb-1">База знаний клуба</h3>
-                        <p className="max-w-xs">Выберите статью в боковом меню или создайте новую категорию для начала работы</p>
-                        {isFullAccess && (
-                            <Button variant="outline" className="mt-6" onClick={() => {
-                                setEditingCategory(null)
-                                setCategoryForm({ name: "", description: "", parent_id: null })
-                                setIsCategoryDialogOpen(true)
-                            }}>
-                                <Plus className="h-4 w-4 mr-2" />
-                                Создать категорию
-                            </Button>
-                        )}
-                    </div>
-                )}
+                    )}
+                </div>
+
+                <Dialog open={isCategoryDialogOpen} onOpenChange={setIsCategoryDialogOpen}>
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>{editingCategory ? "Изменить категорию" : "Новая категория"}</DialogTitle>
+                            <DialogDescription>
+                                Категории помогают организовать статьи по темам и подтемам.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <div className="space-y-4 py-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="cat-name">Название</Label>
+                                <Input
+                                    id="cat-name"
+                                    value={categoryForm.name}
+                                    onChange={(e) => setCategoryForm({ ...categoryForm, name: e.target.value })}
+                                    placeholder="Напр: Регламент запуска игровых ПК"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="cat-desc">Описание (необязательно)</Label>
+                                <Input
+                                    id="cat-desc"
+                                    value={categoryForm.description}
+                                    onChange={(e) => setCategoryForm({ ...categoryForm, description: e.target.value })}
+                                />
+                            </div>
+                        </div>
+                        <DialogFooter>
+                            <Button variant="outline" onClick={() => setIsCategoryDialogOpen(false)}>Отмена</Button>
+                            <Button onClick={handleSaveCategory} disabled={!categoryForm.name}>Сохранить</Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+
+                <style jsx global>{`
+                    .kb-content img {
+                        max-width: 100%;
+                        height: auto;
+                        border-radius: 0.5rem;
+                        margin: 1.5rem 0;
+                    }
+                    .kb-content h1 { font-size: 2rem; font-weight: 700; margin-bottom: 1.5rem; }
+                    .kb-content h2 { font-size: 1.5rem; font-weight: 600; margin-top: 2rem; margin-bottom: 1rem; }
+                    .kb-content h3 { font-size: 1.25rem; font-weight: 600; margin-top: 1.5rem; margin-bottom: 0.75rem; }
+                    .kb-content p { margin-bottom: 1rem; line-height: 1.6; }
+                    .kb-content ul, .kb-content ol { margin-left: 1.5rem; margin-bottom: 1rem; }
+                    .kb-content li { margin-bottom: 0.5rem; }
+                `}</style>
             </div>
-
-            {/* Category Dialog */}
-            <Dialog open={isCategoryDialogOpen} onOpenChange={setIsCategoryDialogOpen}>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>{editingCategory ? "Изменить категорию" : "Новая категория"}</DialogTitle>
-                        <DialogDescription>
-                            Категории помогают организовать статьи по темам и подтемам.
-                        </DialogDescription>
-                    </DialogHeader>
-                    <div className="space-y-4 py-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="cat-name">Название</Label>
-                            <Input 
-                                id="cat-name" 
-                                value={categoryForm.name} 
-                                onChange={(e) => setCategoryForm({...categoryForm, name: e.target.value})}
-                                placeholder="Напр: Регламент запуска игровых ПК"
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="cat-desc">Описание (необязательно)</Label>
-                            <Input 
-                                id="cat-desc" 
-                                value={categoryForm.description} 
-                                onChange={(e) => setCategoryForm({...categoryForm, description: e.target.value})}
-                            />
-                        </div>
-                    </div>
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setIsCategoryDialogOpen(false)}>Отмена</Button>
-                        <Button onClick={handleSaveCategory} disabled={!categoryForm.name}>Сохранить</Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
-
-
-
-            <style jsx global>{`
-                .kb-content img {
-                    max-width: 100%;
-                    height: auto;
-                    border-radius: 0.5rem;
-                    margin: 1.5rem 0;
-                }
-                .kb-content h1 { font-size: 2rem; font-weight: 700; margin-bottom: 1.5rem; }
-                .kb-content h2 { font-size: 1.5rem; font-weight: 600; margin-top: 2rem; margin-bottom: 1rem; }
-                .kb-content h3 { font-size: 1.25rem; font-weight: 600; margin-top: 1.5rem; margin-bottom: 0.75rem; }
-                .kb-content p { margin-bottom: 1rem; line-height: 1.6; }
-                .kb-content ul, .kb-content ol { margin-left: 1.5rem; margin-bottom: 1rem; }
-                .kb-content li { margin-bottom: 0.5rem; }
-            `}</style>
-        </div>
+        </Sheet>
     )
 }

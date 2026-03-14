@@ -25,6 +25,7 @@ interface SettingsTabProps {
         employee_allowed_warehouse_ids?: number[],
         employee_default_metric_key?: string,
         blind_inventory_enabled?: boolean,
+        sales_capture_mode?: 'INVENTORY' | 'SHIFT',
         allow_salary_deduction?: boolean,
         employee_discount_percent?: number,
         allow_cost_price_sale?: boolean,
@@ -241,6 +242,32 @@ export function SettingsTab({ products, categories, warehouses, employees, curre
                             </div>
 
                             <div className="divide-y divide-slate-100">
+                                <div className="p-6 hover:bg-slate-50/30 transition-colors">
+                                    <div className="space-y-3">
+                                        <div className="space-y-1">
+                                            <Label className="text-sm font-bold text-slate-700">
+                                                Режим учета продаж по складу
+                                            </Label>
+                                            <p className="text-xs text-slate-500 leading-relaxed max-w-[520px]">
+                                                Либо продажи фиксируются по результатам инвентаризации, либо сотрудник пробивает товар в течение смены.
+                                            </p>
+                                        </div>
+                                        <Select
+                                            value={inventorySettings?.sales_capture_mode || "INVENTORY"}
+                                            onValueChange={(val: any) => handleUpdateSetting('sales_capture_mode', val)}
+                                            disabled={isPending}
+                                        >
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Выберите режим" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="INVENTORY">Фиксировать продажи через инвентаризацию</SelectItem>
+                                                <SelectItem value="SHIFT">Пробитие товара в течение смены</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                </div>
+
                                 <div className="p-6 flex items-center justify-between hover:bg-slate-50/30 transition-colors">
                                     <div className="space-y-1">
                                         <Label className="text-sm font-bold text-slate-700">

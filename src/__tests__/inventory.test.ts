@@ -17,6 +17,12 @@ vi.mock("@/db", () => ({
     queryClient: vi.fn(),
 }))
 
+vi.mock("next/headers", () => ({
+    cookies: vi.fn(async () => ({
+        get: (name: string) => (name === "session_user_id" ? { value: "user-123" } : undefined),
+    })),
+}))
+
 vi.mock("next/cache", () => ({
     revalidatePath: vi.fn(),
 }))
@@ -41,11 +47,27 @@ describe("Warehouse System Logic", () => {
 
     beforeEach(() => {
         vi.clearAllMocks()
+        vi.mocked(query).mockImplementation(async (sql: any) => {
+            if (typeof sql === "string" && sql.includes("FROM clubs c") && sql.includes("club_employees")) {
+                return { rowCount: 1, rows: [{ ok: 1 }] } as any
+            }
+            return { rowCount: 0, rows: [] } as any
+        })
     })
 
     it("creates category successfully", async () => {
-        vi.mocked(query).mockResolvedValueOnce({ rowCount: 0, rows: [] } as any)
-        vi.mocked(query).mockResolvedValueOnce({ rows: [{ id: 101 }] } as any)
+        vi.mocked(query).mockImplementation(async (sql: any, params?: any[]) => {
+            if (typeof sql === "string" && sql.includes("FROM clubs c") && sql.includes("club_employees")) {
+                return { rowCount: 1, rows: [{ ok: 1 }] } as any
+            }
+            if (typeof sql === "string" && sql.includes("FROM warehouse_categories") && sql.includes("WHERE club_id")) {
+                return { rowCount: 0, rows: [] } as any
+            }
+            if (typeof sql === "string" && sql.includes("INSERT INTO warehouse_categories")) {
+                return { rows: [{ id: 101 }] } as any
+            }
+            return { rows: [], rowCount: 0 } as any
+        })
 
         await createCategory(clubId, userId, { name: "New Category", description: "Desc" })
 
@@ -56,12 +78,28 @@ describe("Warehouse System Logic", () => {
     })
 
     it("throws when category exists", async () => {
-        vi.mocked(query).mockResolvedValueOnce({ rowCount: 1, rows: [{}] } as any)
+        vi.mocked(query).mockImplementation(async (sql: any) => {
+            if (typeof sql === "string" && sql.includes("FROM clubs c") && sql.includes("club_employees")) {
+                return { rowCount: 1, rows: [{ ok: 1 }] } as any
+            }
+            if (typeof sql === "string" && sql.includes("FROM warehouse_categories") && sql.includes("WHERE club_id")) {
+                return { rowCount: 1, rows: [{}] } as any
+            }
+            return { rowCount: 0, rows: [] } as any
+        })
         await expect(createCategory(clubId, userId, { name: "Existing Cat" })).rejects.toThrow("Категория с таким названием уже существует")
     })
 
     it("creates warehouse successfully", async () => {
-        vi.mocked(query).mockResolvedValueOnce({ rows: [{ id: 202 }] } as any)
+        vi.mocked(query).mockImplementation(async (sql: any) => {
+            if (typeof sql === "string" && sql.includes("FROM clubs c") && sql.includes("club_employees")) {
+                return { rowCount: 1, rows: [{ ok: 1 }] } as any
+            }
+            if (typeof sql === "string" && sql.includes("INSERT INTO warehouses")) {
+                return { rows: [{ id: 202 }] } as any
+            }
+            return { rowCount: 0, rows: [] } as any
+        })
         await createWarehouse(clubId, userId, { name: "Main Warehouse", type: "GENERAL", address: "123 Street" })
         expect(query).toHaveBeenCalledWith(
             expect.stringContaining("INSERT INTO warehouses"),
@@ -70,9 +108,13 @@ describe("Warehouse System Logic", () => {
     })
 
     it("transfers stock with lock and commit", async () => {
-        const client = createMockClient((sql) => {
+        const client = createMockClient((sql, params) => {
             if (sql.includes("FOR UPDATE")) return { rows: [{ quantity: 10 }] }
-            if (sql.startsWith("SELECT quantity FROM warehouse_stock WHERE warehouse_id = $1 AND product_id = $2")) return { rows: [{ quantity: 3 }] }
+            if (sql.includes("INSERT INTO warehouse_stock") && sql.includes("RETURNING quantity")) {
+                // Best-effort: return a plausible new quantity so the action can compute prev/new stocks.
+                const delta = Number(params?.[2] ?? 0)
+                return { rows: [{ quantity: 10 + delta }], rowCount: 1 }
+            }
             return { rows: [], rowCount: 1 }
         })
         vi.mocked(getClient).mockResolvedValue(client as any)
@@ -85,10 +127,8 @@ describe("Warehouse System Logic", () => {
             notes: "test",
         })
 
-        expect(client.query).toHaveBeenCalledWith(
-            "UPDATE warehouse_stock SET quantity = $1 WHERE warehouse_id = $2 AND product_id = $3",
-            [6, 1, 55]
-        )
+        // Delta-based stock updates: source -4, target +4
+        expect(client.query).toHaveBeenCalledWith(expect.stringContaining("INSERT INTO warehouse_stock"), [1, 55, -4])
         expect(client.query).toHaveBeenCalledWith(expect.stringContaining("INSERT INTO warehouse_stock"), [2, 55, 4])
         expect(client.query).toHaveBeenCalledWith("COMMIT")
         expect(client.release).toHaveBeenCalled()
@@ -114,7 +154,11 @@ describe("Warehouse System Logic", () => {
     })
 
     it("creates completed supply and updates stock", async () => {
-        const client = createMockClient((sql) => {
+        const client = createMockClient((sql, params) => {
+            if (sql.includes("SELECT COUNT(*)::int as cnt FROM warehouse_products")) {
+                const ids = (params?.[1] || []) as any[]
+                return { rows: [{ cnt: ids.length }], rowCount: 1 }
+            }
             if (sql.startsWith("SELECT id FROM warehouse_suppliers")) return { rowCount: 0, rows: [] }
             if (sql.startsWith("INSERT INTO warehouse_suppliers")) return { rows: [{ id: 77 }] }
             if (sql.startsWith("SELECT id FROM warehouses WHERE club_id")) return { rows: [{ id: 5 }] }
@@ -131,12 +175,16 @@ describe("Warehouse System Logic", () => {
         })
 
         expect(client.query).toHaveBeenCalledWith(expect.stringContaining("INSERT INTO warehouse_stock"), [5, 10, 3])
-        expect(client.query).toHaveBeenCalledWith(expect.stringContaining("UPDATE warehouse_products"), [10, 50])
+        expect(client.query).toHaveBeenCalledWith(expect.stringContaining("UPDATE warehouse_products"), [10, 50, clubId])
         expect(client.query).toHaveBeenCalledWith("COMMIT")
     })
 
     it("creates draft supply without stock updates", async () => {
-        const client = createMockClient((sql) => {
+        const client = createMockClient((sql, params) => {
+            if (sql.includes("SELECT COUNT(*)::int as cnt FROM warehouse_products")) {
+                const ids = (params?.[1] || []) as any[]
+                return { rows: [{ cnt: ids.length }], rowCount: 1 }
+            }
             if (sql.startsWith("SELECT id FROM warehouse_suppliers")) return { rowCount: 1, rows: [{ id: 88 }] }
             if (sql.includes("INSERT INTO warehouse_supplies")) return { rows: [{ id: 124 }] }
             return { rows: [], rowCount: 1 }
@@ -211,8 +259,9 @@ describe("Warehouse System Logic", () => {
 
         await adjustWarehouseStock(clubId, userId, 9, 3, 8, "manual")
 
-        expect(client.query).toHaveBeenCalledWith(expect.stringContaining("INSERT INTO warehouse_stock"), [3, 9, 8])
-        expect(client.query).toHaveBeenCalledWith(expect.stringContaining("UPDATE warehouse_products p"), [9])
+        // Delta-based stock update: old=5, new=8, delta=+3
+        expect(client.query).toHaveBeenCalledWith(expect.stringContaining("INSERT INTO warehouse_stock"), [3, 9, 3])
+        expect(client.query).toHaveBeenCalledWith(expect.stringContaining("UPDATE warehouse_products p"), [9, clubId])
         expect(client.query).toHaveBeenCalledWith("COMMIT")
     })
 
@@ -255,9 +304,16 @@ describe("Warehouse System Logic", () => {
     })
 
     it("closes inventory with movement compensation and auto supply", async () => {
-        const mainClient = createMockClient((sql) => {
+        const mainClient = createMockClient((sql, params) => {
             if (sql.startsWith("SELECT warehouse_id, shift_id, created_by, started_at FROM warehouse_inventories")) {
                 return { rows: [{ warehouse_id: 1, shift_id: "shift-9", created_by: userId, started_at: "2026-01-01T10:00:00Z" }] }
+            }
+            if (sql.startsWith("SELECT inventory_settings FROM clubs")) {
+                return { rows: [{ inventory_settings: { sales_capture_mode: "INVENTORY" } }] }
+            }
+            if (sql.includes("SELECT COUNT(*)::int as cnt FROM warehouse_products")) {
+                const ids = (params?.[1] || []) as any[]
+                return { rows: [{ cnt: ids.length }], rowCount: 1 }
             }
             if (sql.includes("FROM warehouse_inventory_items ii")) {
                 return {
@@ -283,7 +339,7 @@ describe("Warehouse System Logic", () => {
         })
         vi.mocked(getClient).mockResolvedValueOnce(mainClient as any).mockResolvedValueOnce(replenishmentClient as any)
 
-        await closeInventory(77, clubId, 1000, [{ product_id: 55, quantity: 2, selling_price: 120, cost_price: 60 }])
+        await closeInventory(77, clubId, 1000, [{ product_id: 99, quantity: 2, selling_price: 120, cost_price: 60 }])
 
         expect(mainClient.query).toHaveBeenCalledWith(
             expect.stringContaining("UPDATE warehouse_inventories"),
@@ -298,5 +354,45 @@ describe("Warehouse System Logic", () => {
         ])
         expect(mainClient.query).toHaveBeenCalledWith("COMMIT")
         expect(mainClient.release).toHaveBeenCalled()
+    })
+
+    it("defaults to NONE sales recognition when club is in SHIFT mode", async () => {
+        const mainClient = createMockClient((sql) => {
+            if (sql.startsWith("SELECT warehouse_id, shift_id, created_by, started_at FROM warehouse_inventories")) {
+                return { rows: [{ warehouse_id: 1, shift_id: "shift-9", created_by: userId, started_at: "2026-01-01T10:00:00Z" }] }
+            }
+            if (sql.startsWith("SELECT inventory_settings FROM clubs")) {
+                return { rows: [{ inventory_settings: { sales_capture_mode: "SHIFT" } }] }
+            }
+            if (sql.includes("FROM warehouse_inventory_items ii")) {
+                return {
+                    rows: [
+                        {
+                            id: 101,
+                            product_id: 55,
+                            expected_stock: 10,
+                            actual_stock: 8,
+                            movements_during_inventory: 0,
+                            selling_price_snapshot: 100,
+                            cost_price_snapshot: 60,
+                        },
+                    ],
+                }
+            }
+            return { rows: [], rowCount: 1 }
+        })
+        const replenishmentClient = createMockClient((sql) => {
+            if (sql.includes("FROM warehouse_replenishment_rules")) return { rows: [] }
+            return { rows: [], rowCount: 1 }
+        })
+        vi.mocked(getClient).mockResolvedValueOnce(mainClient as any).mockResolvedValueOnce(replenishmentClient as any)
+
+        await closeInventory(77, clubId, 1000, [{ product_id: 55, quantity: 2, selling_price: 120, cost_price: 60 }])
+
+        // In SHIFT mode, closeInventory should not recognize inventory deficits as sales by default.
+        expect(mainClient.query).toHaveBeenCalledWith(
+            expect.stringContaining("UPDATE warehouse_inventories"),
+            [77, 0, 0, 0]
+        )
     })
 })

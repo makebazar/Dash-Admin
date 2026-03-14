@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useParams } from "next/navigation"
 import {
     Loader2,
@@ -20,6 +20,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
+import "quill/dist/quill.snow.css"
 
 interface EquipmentType {
     code: string
@@ -45,6 +46,10 @@ export function InstructionsTab() {
     const [interval, setInterval] = useState<number>(30)
     const [applyToExisting, setApplyToExisting] = useState(false)
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+    const editorRef = useRef<HTMLDivElement | null>(null)
+    const quillRef = useRef<any>(null)
+    const isSyncingRef = useRef(false)
+    const [isEditorReady, setIsEditorReady] = useState(false)
 
     useEffect(() => {
         fetchData()
@@ -54,12 +59,67 @@ export function InstructionsTab() {
     useEffect(() => {
         if (selectedType) {
             const savedInstr = instructions[selectedType]
-            setContent(savedInstr?.instructions || "")
+            const nextContent = savedInstr?.instructions || ""
+            setContent(nextContent)
+            if (quillRef.current) {
+                isSyncingRef.current = true
+                quillRef.current.root.innerHTML = nextContent
+                isSyncingRef.current = false
+            }
             setInterval(savedInstr?.default_interval_days || 30)
             setHasUnsavedChanges(false)
             setApplyToExisting(false)
         }
     }, [selectedType, instructions])
+
+    useEffect(() => {
+        if (!editorRef.current) return
+        if (quillRef.current) return
+
+        let destroyed = false
+
+        ;(async () => {
+            try {
+                const { default: Quill } = await import("quill")
+                if (destroyed) return
+
+                const q = new Quill(editorRef.current!, {
+                    theme: "snow",
+                    modules: {
+                        toolbar: [
+                            [{ header: [1, 2, 3, false] }],
+                            ["bold", "italic", "underline", "strike"],
+                            [{ list: "ordered" }, { list: "bullet" }],
+                            ["link"],
+                            ["clean"]
+                        ]
+                    }
+                })
+
+                quillRef.current = q
+                isSyncingRef.current = true
+                q.root.innerHTML = content || ""
+                isSyncingRef.current = false
+
+                q.on("text-change", () => {
+                    if (isSyncingRef.current) return
+                    const html = q.root.innerHTML
+                    setContent(html)
+                    setHasUnsavedChanges(true)
+                })
+
+                setIsEditorReady(true)
+            } catch (e) {
+                console.error("Failed to init editor:", e)
+            }
+        })()
+
+        return () => {
+            destroyed = true
+            quillRef.current = null
+            setIsEditorReady(false)
+        }
+    }, [content])
 
     const fetchData = async () => {
         try {
@@ -229,17 +289,14 @@ export function InstructionsTab() {
                              <Label className="text-sm font-bold text-slate-700 uppercase tracking-wide">Инструкция для персонала</Label>
                         </div>
                         <div className="h-[500px] flex flex-col">
-                            <textarea
-                                className="flex-1 w-full p-4 rounded-md border bg-slate-50 outline-none focus:ring-2 focus:ring-primary/20 transition-all resize-none text-sm text-slate-800 font-sans leading-relaxed"
-                                placeholder="Опишите пошаговый процесс обслуживания..."
-                                value={content}
-                                onChange={(e) => {
-                                    setContent(e.target.value)
-                                    setHasUnsavedChanges(true)
-                                }}
-                            />
+                            <div className="flex-1 w-full rounded-md border bg-white overflow-hidden">
+                                {!isEditorReady && (
+                                    <div className="p-4 text-sm text-slate-500">Загрузка редактора...</div>
+                                )}
+                                <div ref={editorRef} className="h-full" />
+                            </div>
                             <div className="mt-2 text-[10px] text-muted-foreground flex justify-between px-1">
-                                <span>Поддержка переноса строк включена</span>
+                                <span>Поддержка форматирования включена</span>
                                 {hasUnsavedChanges && <span className="text-amber-600 font-medium">Есть несохраненные изменения</span>}
                             </div>
                         </div>

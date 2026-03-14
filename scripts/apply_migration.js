@@ -22,16 +22,7 @@ async function run() {
         const sqlPath = argPath ? path.resolve(process.cwd(), argPath) : path.join(__dirname, '..', 'migrations', 'add_club_instructions.sql');
         const sql = fs.readFileSync(sqlPath, 'utf-8');
         console.log('Executing migration from:', sqlPath);
-        
-        // Split by semicolon
-        const statements = sql.split(';')
-            .map(s => s.trim())
-            .filter(s => s.length > 0);
-
-        for (const stmt of statements) {
-            console.log('Running statement:', stmt.substring(0, 50) + '...');
-            await pool.query(stmt);
-        }
+        await pool.query(sql);
         
         console.log('Migration successful!');
     } catch (e) {

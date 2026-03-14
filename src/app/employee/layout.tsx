@@ -25,6 +25,7 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
     const [expiredClubNames, setExpiredClubNames] = useState<string[]>([])
     const hideMobileHeader = pathname?.includes('/employee/clubs/') && pathname?.includes('/evaluations/')
     const showMobileHeader = !hideMobileHeader
+    const isPosRoute = pathname?.includes('/employee/clubs/') && pathname?.includes('/pos')
 
     useEffect(() => {
         fetchUserData()
@@ -60,6 +61,14 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
     const handleLogout = () => {
         document.cookie = 'session_user_id=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;'
         router.push('/login')
+    }
+
+    if (isPosRoute) {
+        return (
+            <div className="min-h-[100dvh] bg-slate-950">
+                {children}
+            </div>
+        )
     }
 
     return (
