@@ -13,8 +13,8 @@ CREATE TABLE IF NOT EXISTS payments (
     UNIQUE(club_id, user_id, month, year, created_at) -- Allow multiple payments per month
 );
 
-CREATE INDEX idx_payments_club_user ON payments(club_id, user_id);
-CREATE INDEX idx_payments_period ON payments(year, month);
+CREATE INDEX IF NOT EXISTS idx_payments_club_user ON payments(club_id, user_id);
+CREATE INDEX IF NOT EXISTS idx_payments_period ON payments(year, month);
 
 COMMENT ON TABLE payments IS 'Records of salary payments to employees';
 COMMENT ON COLUMN payments.amount IS 'Payment amount in rubles';

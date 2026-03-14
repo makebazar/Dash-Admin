@@ -32,8 +32,8 @@ CREATE TABLE IF NOT EXISTS finance_accounts (
     UNIQUE(club_id, name)
 );
 
-CREATE INDEX idx_finance_accounts_club ON finance_accounts(club_id);
-CREATE INDEX idx_finance_accounts_active ON finance_accounts(club_id, is_active);
+CREATE INDEX IF NOT EXISTS idx_finance_accounts_club ON finance_accounts(club_id);
+CREATE INDEX IF NOT EXISTS idx_finance_accounts_active ON finance_accounts(club_id, is_active);
 
 COMMENT ON TABLE finance_accounts IS 'Счета клуба (Касса, Банк, Терминал)';
 COMMENT ON COLUMN finance_accounts.account_type IS 'Тип счёта: cash=касса, bank=банк, card=терминал, other=прочее';
@@ -54,7 +54,7 @@ BEGIN
         ALTER TABLE finance_transactions 
         ADD COLUMN account_id INTEGER REFERENCES finance_accounts(id);
         
-        CREATE INDEX idx_finance_transactions_account ON finance_transactions(account_id);
+        CREATE INDEX IF NOT EXISTS idx_finance_transactions_account ON finance_transactions(account_id);
     END IF;
 END $$;
 
