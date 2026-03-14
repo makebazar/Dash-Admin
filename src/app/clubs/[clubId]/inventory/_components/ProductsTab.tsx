@@ -1,16 +1,16 @@
 "use client"
 
-import { useState, useTransition } from "react"
-import { Plus, Search, Filter, MoreVertical, Pencil, Trash2, LayoutGrid, Box, RefreshCw, Layers, Barcode, History, TrendingUp, TrendingDown, Percent } from "lucide-react"
+import { useMemo, useState, useTransition } from "react"
+import { Plus, Search, MoreVertical, Pencil, Trash2, LayoutGrid, Box, RefreshCw, Layers, Barcode, History, TrendingUp, TrendingDown, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
-import { createProduct, updateProduct, deleteProduct, bulkUpdatePrices, writeOffProduct, getProductHistory, Product, Category, adjustWarehouseStock, getReplenishmentRulesForProduct, createReplenishmentRule, deleteReplenishmentRule, ReplenishmentRule, Warehouse, PriceTagTemplate, PriceTagSettings } from "../actions"
+import { createProduct, updateProduct, deleteProduct, bulkUpdatePrices, writeOffProduct, getProductHistory, Product, Category, adjustWarehouseStock, getReplenishmentRulesForProduct, createReplenishmentRule, deleteReplenishmentRule, ReplenishmentRule, Warehouse, PriceTagSettings } from "../actions"
 import { useParams } from "next/navigation"
 import { format } from "date-fns"
 import { ru } from "date-fns/locale"
@@ -37,6 +37,10 @@ export function ProductsTab({ products, categories, warehouses, currentUserId, p
     const [categoryFilter, setCategoryFilter] = useState("all")
     const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
     const [isPrintDialogOpen, setIsPrintDialogOpen] = useState(false)
+
+    type SortKey = "name" | "category" | "cost_price" | "selling_price" | "markup" | "margin" | "stock" | "sum"
+    const [sortKey, setSortKey] = useState<SortKey | null>(null)
+    const [sortDir, setSortDir] = useState<"asc" | "desc">("asc")
     
     const [isDialogOpen, setIsDialogOpen] = useState(false)
     const [editingProduct, setEditingProduct] = useState<Partial<Product> | null>(null)
@@ -73,6 +77,62 @@ export function ProductsTab({ products, categories, warehouses, currentUserId, p
         const matchesCategory = categoryFilter === "all" || (p.category_id?.toString() === categoryFilter)
         return matchesSearch && matchesCategory
     })
+
+    const displayedProducts = useMemo(() => {
+        if (!sortKey) return filteredProducts
+
+        const dir = sortDir === "asc" ? 1 : -1
+
+        const getMarkupPercent = (p: Product) => {
+            const cost = Number(p.cost_price) || 0
+            const selling = Number(p.selling_price) || 0
+            if (cost <= 0) return null
+            return ((selling - cost) / cost) * 100
+        }
+
+        const getMarginPercent = (p: Product) => {
+            const cost = Number(p.cost_price) || 0
+            const selling = Number(p.selling_price) || 0
+            if (selling <= 0) return null
+            return ((selling - cost) / selling) * 100
+        }
+
+        const compareNullableNumber = (a: number | null, b: number | null) => {
+            if (a === null && b === null) return 0
+            if (a === null) return 1
+            if (b === null) return -1
+            return a - b
+        }
+
+        const sorted = [...filteredProducts].sort((a, b) => {
+            let cmp = 0
+            if (sortKey === "name") {
+                cmp = (a.name || "").localeCompare(b.name || "", "ru", { sensitivity: "base" })
+            } else if (sortKey === "category") {
+                cmp = (a.category_name || "").localeCompare(b.category_name || "", "ru", { sensitivity: "base" })
+            } else if (sortKey === "cost_price") {
+                cmp = (Number(a.cost_price) || 0) - (Number(b.cost_price) || 0)
+            } else if (sortKey === "selling_price") {
+                cmp = (Number(a.selling_price) || 0) - (Number(b.selling_price) || 0)
+            } else if (sortKey === "markup") {
+                cmp = compareNullableNumber(getMarkupPercent(a), getMarkupPercent(b))
+            } else if (sortKey === "margin") {
+                cmp = compareNullableNumber(getMarginPercent(a), getMarginPercent(b))
+            } else if (sortKey === "stock") {
+                cmp = (Number(a.current_stock) || 0) - (Number(b.current_stock) || 0)
+            } else if (sortKey === "sum") {
+                const aSum = (Number(a.current_stock) || 0) * (Number(a.cost_price) || 0)
+                const bSum = (Number(b.current_stock) || 0) * (Number(b.cost_price) || 0)
+                cmp = aSum - bSum
+            }
+
+            cmp *= dir
+            if (cmp !== 0) return cmp
+            return a.id - b.id
+        })
+
+        return sorted
+    }, [filteredProducts, sortDir, sortKey])
 
     // Price Calculation Logic
     const calculatePrices = (type: 'markup' | 'margin' | 'selling', value: number) => {
@@ -269,8 +329,24 @@ export function ProductsTab({ products, categories, warehouses, currentUserId, p
     }
 
     const toggleSelectAll = () => {
-        if (selectedIds.size === filteredProducts.length) setSelectedIds(new Set())
-        else setSelectedIds(new Set(filteredProducts.map(p => p.id)))
+        if (selectedIds.size === displayedProducts.length) setSelectedIds(new Set())
+        else setSelectedIds(new Set(displayedProducts.map(p => p.id)))
+    }
+
+    const toggleSort = (key: SortKey) => {
+        if (sortKey === key) {
+            setSortDir(prev => (prev === "asc" ? "desc" : "asc"))
+        } else {
+            setSortKey(key)
+            setSortDir("asc")
+        }
+    }
+
+    const renderSortIcon = (key: SortKey) => {
+        if (sortKey !== key) return <ArrowUpDown className="h-3.5 w-3.5 text-slate-300" />
+        return sortDir === "asc"
+            ? <ArrowUp className="h-3.5 w-3.5 text-blue-600" />
+            : <ArrowDown className="h-3.5 w-3.5 text-blue-600" />
     }
 
     return (
@@ -333,24 +409,63 @@ export function ProductsTab({ products, categories, warehouses, currentUserId, p
                                 <input 
                                     type="checkbox"
                                     className="rounded border-gray-300"
-                                    checked={selectedIds.size === filteredProducts.length && filteredProducts.length > 0}
+                                    checked={selectedIds.size === displayedProducts.length && displayedProducts.length > 0}
                                     onChange={toggleSelectAll}
                                 />
                             </TableHead>
-                            <TableHead>Название</TableHead>
-                            <TableHead>Категория</TableHead>
-                            <TableHead className="text-right">Закупка</TableHead>
-                            <TableHead className="text-right">Продажа</TableHead>
-                            <TableHead className="text-right">Наценка</TableHead>
-                            <TableHead className="text-right">Маржа</TableHead>
-                            <TableHead className="text-right">Остаток</TableHead>
-                            <TableHead className="text-right">Сумма</TableHead>
+                            <TableHead className="cursor-pointer hover:bg-muted/50 select-none" onClick={() => toggleSort("name")}>
+                                <div className="flex items-center gap-1">
+                                    Название
+                                    {renderSortIcon("name")}
+                                </div>
+                            </TableHead>
+                            <TableHead className="cursor-pointer hover:bg-muted/50 select-none" onClick={() => toggleSort("category")}>
+                                <div className="flex items-center gap-1">
+                                    Категория
+                                    {renderSortIcon("category")}
+                                </div>
+                            </TableHead>
+                            <TableHead className="text-right cursor-pointer hover:bg-muted/50 select-none" onClick={() => toggleSort("cost_price")}>
+                                <div className="flex items-center justify-end gap-1">
+                                    Закупка
+                                    {renderSortIcon("cost_price")}
+                                </div>
+                            </TableHead>
+                            <TableHead className="text-right cursor-pointer hover:bg-muted/50 select-none" onClick={() => toggleSort("selling_price")}>
+                                <div className="flex items-center justify-end gap-1">
+                                    Продажа
+                                    {renderSortIcon("selling_price")}
+                                </div>
+                            </TableHead>
+                            <TableHead className="text-right cursor-pointer hover:bg-muted/50 select-none" onClick={() => toggleSort("markup")}>
+                                <div className="flex items-center justify-end gap-1">
+                                    Наценка
+                                    {renderSortIcon("markup")}
+                                </div>
+                            </TableHead>
+                            <TableHead className="text-right cursor-pointer hover:bg-muted/50 select-none" onClick={() => toggleSort("margin")}>
+                                <div className="flex items-center justify-end gap-1">
+                                    Маржа
+                                    {renderSortIcon("margin")}
+                                </div>
+                            </TableHead>
+                            <TableHead className="text-right cursor-pointer hover:bg-muted/50 select-none" onClick={() => toggleSort("stock")}>
+                                <div className="flex items-center justify-end gap-1">
+                                    Остаток
+                                    {renderSortIcon("stock")}
+                                </div>
+                            </TableHead>
+                            <TableHead className="text-right cursor-pointer hover:bg-muted/50 select-none" onClick={() => toggleSort("sum")}>
+                                <div className="flex items-center justify-end gap-1">
+                                    Сумма
+                                    {renderSortIcon("sum")}
+                                </div>
+                            </TableHead>
                             <TableHead className="w-[50px]"></TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {filteredProducts.map(product => {
-                            const isLowStock = product.min_stock_level > 0 && product.current_stock <= product.min_stock_level
+                        {displayedProducts.map(product => {
                             return (
                                 <TableRow key={product.id}>
                                     <TableCell>
@@ -492,7 +607,7 @@ export function ProductsTab({ products, categories, warehouses, currentUserId, p
                                 </TableRow>
                             )
                         })}
-                        {filteredProducts.length === 0 && (
+                        {displayedProducts.length === 0 && (
                             <TableRow>
                                 <TableCell colSpan={10} className="h-24 text-center text-muted-foreground">
                                     Товары не найдены
@@ -505,7 +620,7 @@ export function ProductsTab({ products, categories, warehouses, currentUserId, p
 
             {/* Mobile List View */}
             <div className="md:hidden space-y-3">
-                {filteredProducts.map(product => {
+                {displayedProducts.map(product => {
                     return (
                         <div key={product.id} className="bg-white rounded-xl border p-4 shadow-sm relative overflow-hidden active:bg-slate-50 transition-colors" onClick={() => {
                             setEditingProduct(product)
@@ -630,7 +745,7 @@ export function ProductsTab({ products, categories, warehouses, currentUserId, p
                         </div>
                     )
                 })}
-                {filteredProducts.length === 0 && (
+                {displayedProducts.length === 0 && (
                     <div className="py-20 text-center text-muted-foreground bg-slate-50 rounded-xl border border-dashed">
                         <Box className="h-12 w-12 mx-auto opacity-10 mb-3" />
                         <p className="italic">Товары не найдены</p>
