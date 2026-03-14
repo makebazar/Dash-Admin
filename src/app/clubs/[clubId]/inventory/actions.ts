@@ -2037,16 +2037,18 @@ export async function getMetrics() {
 
 export async function getClubSettings(clubId: string) {
     const res = await query(`
-        SELECT id, owner_id, inventory_settings 
+        SELECT id, owner_id, inventory_required, inventory_settings 
         FROM clubs 
         WHERE id = $1
     `, [clubId])
     return res.rows[0] as { 
         id: number, 
         owner_id: string, 
+        inventory_required: boolean,
         inventory_settings: { 
         employee_allowed_warehouse_ids?: number[], 
         employee_default_metric_key?: string,
+        blind_inventory_enabled?: boolean,
         allow_salary_deduction?: boolean,
         employee_discount_percent?: number,
         allow_cost_price_sale?: boolean,
@@ -2101,6 +2103,21 @@ export async function updateInventorySettings(clubId: string, userId: string, se
     `, [settings, clubId])
     
     await logOperation(clubId, userId, 'UPDATE_SETTINGS', 'CLUB', Number(clubId), settings)
+    revalidatePath(`/clubs/${clubId}/inventory`)
+}
+
+export async function updateInventoryRequired(clubId: string, userId: string, inventoryRequired: boolean) {
+    await assertUserCanAccessClub(clubId, userId)
+    await query(
+        `
+        UPDATE clubs
+        SET inventory_required = $1
+        WHERE id = $2
+    `,
+        [inventoryRequired, clubId]
+    )
+
+    await logOperation(clubId, userId, 'UPDATE_SETTINGS', 'CLUB', Number(clubId), { inventory_required: inventoryRequired })
     revalidatePath(`/clubs/${clubId}/inventory`)
 }
 

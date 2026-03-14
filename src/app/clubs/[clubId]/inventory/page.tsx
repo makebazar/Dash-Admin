@@ -168,6 +168,7 @@ export default async function InventoryPage({ params, searchParams }: { params: 
                         warehouses={warehouses} 
                         employees={employees} 
                         currentUserId={userId} 
+                        inventoryRequired={clubSettings.inventory_required}
                         inventorySettings={clubSettings.inventory_settings}
                     />
                 </TabsContent>

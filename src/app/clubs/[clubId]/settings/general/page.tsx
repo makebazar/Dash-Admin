@@ -5,9 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Switch } from "@/components/ui/switch"
-import { Loader2, Save, Globe, Building, MapPin, Sun, Moon, Package, Warehouse } from "lucide-react"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Loader2, Save, Globe, Building, MapPin, Sun, Moon } from "lucide-react"
 import { PageShell, PageHeader } from "@/components/layout/PageShell"
 
 // Common Russian timezones
@@ -28,12 +26,6 @@ const TIMEZONES = [
 // Hours for selection
 const HOURS = Array.from({ length: 24 }, (_, i) => i)
 
-interface InventorySettings {
-    employee_allowed_warehouse_ids?: number[]
-    employee_default_metric_key?: string
-    blind_inventory_enabled?: boolean
-}
-
 interface ClubSettings {
     id: number
     name: string
@@ -41,8 +33,6 @@ interface ClubSettings {
     timezone: string
     day_start_hour: number
     night_start_hour: number
-    inventory_required: boolean
-    inventory_settings: InventorySettings
 }
 
 export default function GeneralSettingsPage({ params }: { params: Promise<{ clubId: string }> }) {
@@ -57,12 +47,6 @@ export default function GeneralSettingsPage({ params }: { params: Promise<{ club
     const [timezone, setTimezone] = useState('Europe/Moscow')
     const [dayStartHour, setDayStartHour] = useState(8)
     const [nightStartHour, setNightStartHour] = useState(20)
-    const [inventoryRequired, setInventoryRequired] = useState(false)
-    const [inventorySettings, setInventorySettings] = useState<InventorySettings>({})
-
-    // Additional Data for UI
-    const [warehouses, setWarehouses] = useState<{ id: number, name: string }[]>([])
-    const [metrics, setMetrics] = useState<{ key: string, label: string }[]>([])
 
     useEffect(() => {
         params.then(p => {
@@ -82,12 +66,6 @@ export default function GeneralSettingsPage({ params }: { params: Promise<{ club
                 setTimezone(data.club.timezone || 'Europe/Moscow')
                 setDayStartHour(data.club.day_start_hour ?? 8)
                 setNightStartHour(data.club.night_start_hour ?? 20)
-                setInventoryRequired(data.club.inventory_required ?? false)
-                setInventorySettings(data.club.inventory_settings || {})
-                
-                // Set additional data
-                if (data.warehouses) setWarehouses(data.warehouses)
-                if (data.metrics) setMetrics(data.metrics)
             }
         } catch (error) {
             console.error('Error:', error)
@@ -108,8 +86,6 @@ export default function GeneralSettingsPage({ params }: { params: Promise<{ club
                     timezone,
                     day_start_hour: dayStartHour,
                     night_start_hour: nightStartHour,
-                    inventory_required: inventoryRequired,
-                    inventory_settings: inventorySettings
                 })
             })
 
@@ -127,17 +103,6 @@ export default function GeneralSettingsPage({ params }: { params: Promise<{ club
         } finally {
             setIsSaving(false)
         }
-    }
-
-    const handleWarehouseToggle = (warehouseId: number) => {
-        setInventorySettings(prev => {
-            const current = prev.employee_allowed_warehouse_ids || []
-            if (current.includes(warehouseId)) {
-                return { ...prev, employee_allowed_warehouse_ids: current.filter(id => id !== warehouseId) }
-            } else {
-                return { ...prev, employee_allowed_warehouse_ids: [...current, warehouseId] }
-            }
-        })
     }
 
     const formatHour = (hour: number) => `${hour.toString().padStart(2, '0')}:00`
@@ -292,101 +257,6 @@ export default function GeneralSettingsPage({ params }: { params: Promise<{ club
                                     Ночная смена: с {formatHour(nightStartHour)} до {formatHour(dayStartHour)}
                                 </li>
                             </ul>
-                        </div>
-                    </CardContent>
-                </Card>
-
-                {/* Inventory Settings Card */}
-                <Card className="border-blue-500/20">
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <Package className="h-5 w-5 text-blue-500" />
-                            Инвентаризация
-                        </CardTitle>
-                        <CardDescription>
-                            Настройки проведения инвентаризаций при закрытии смены
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-6">
-                        <div className="flex items-center justify-between space-x-2">
-                            <Label htmlFor="inventory-required" className="flex flex-col space-y-1">
-                                <span>Обязательная инвентаризация</span>
-                                <span className="font-normal text-xs text-muted-foreground">
-                                    Если включено, администратор не сможет закрыть смену без проведения инвентаризации
-                                </span>
-                            </Label>
-                            <Switch
-                                id="inventory-required"
-                                checked={inventoryRequired}
-                                onCheckedChange={setInventoryRequired}
-                            />
-                        </div>
-                        
-                        <div className="border-t pt-4 space-y-4">
-                            <h4 className="text-sm font-medium">Правила для сотрудников</h4>
-                            
-                            {/* Allowed Warehouses */}
-                            <div className="space-y-3">
-                                <Label>Доступные склады для инвентаризации</Label>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                    {warehouses.map(w => (
-                                        <div key={w.id} className="flex items-center space-x-2 border p-2 rounded-md hover:bg-slate-50">
-                                            <Switch
-                                                id={`wh-${w.id}`}
-                                                checked={(inventorySettings.employee_allowed_warehouse_ids || []).includes(w.id)}
-                                                onCheckedChange={() => handleWarehouseToggle(w.id)}
-                                            />
-                                            <Label htmlFor={`wh-${w.id}`} className="cursor-pointer flex items-center gap-2">
-                                                <Warehouse className="h-4 w-4 text-muted-foreground" />
-                                                {w.name}
-                                            </Label>
-                                        </div>
-                                    ))}
-                                    {warehouses.length === 0 && (
-                                        <p className="text-sm text-muted-foreground">Склады не созданы</p>
-                                    )}
-                                </div>
-                                <p className="text-xs text-muted-foreground">
-                                    Отметьте склады, которые сотрудники могут инвентаризировать.
-                                </p>
-                            </div>
-
-                            {/* Default Metric */}
-                            <div className="space-y-2">
-                                <Label>Метрика выручки по умолчанию</Label>
-                                <Select 
-                                    value={inventorySettings.employee_default_metric_key || "none"} 
-                                    onValueChange={(val) => setInventorySettings(prev => ({ ...prev, employee_default_metric_key: val === "none" ? undefined : val }))}
-                                >
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Выберите метрику" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="none">Не выбрано</SelectItem>
-                                        {metrics.map(m => (
-                                            <SelectItem key={m.key} value={m.key}>{m.label}</SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                                <p className="text-xs text-muted-foreground">
-                                    Эта метрика будет автоматически выбрана для сотрудников при старте инвентаризации.
-                                </p>
-                            </div>
-
-                            {/* Blind Inventory Toggle */}
-                            <div className="flex items-center justify-between space-x-2 pt-2">
-                                <Label htmlFor="blind-inventory" className="flex flex-col space-y-1">
-                                    <span>Слепая инвентаризация</span>
-                                    <span className="font-normal text-xs text-muted-foreground">
-                                        Если включено, сотрудники не будут видеть ожидаемые остатки при пересчете
-                                    </span>
-                                </Label>
-                                <Switch
-                                    id="blind-inventory"
-                                    checked={inventorySettings.blind_inventory_enabled ?? true}
-                                    onCheckedChange={(checked) => setInventorySettings(prev => ({ ...prev, blind_inventory_enabled: checked }))}
-                                />
-                            </div>
                         </div>
                     </CardContent>
                 </Card>
