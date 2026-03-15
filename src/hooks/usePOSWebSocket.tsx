@@ -44,7 +44,6 @@ export function SSEProvider({ clubId, userId, children }: { clubId: string, user
       eventSourceRef.current = es
 
       es.onopen = () => {
-        console.log('[SSE Provider] Connected')
         setIsConnected(true)
         setRetryCount(0)
       }
@@ -54,12 +53,12 @@ export function SSEProvider({ clubId, userId, children }: { clubId: string, user
           const data: SSEMessage = JSON.parse(event.data)
           callbacksRef.current.forEach(cb => cb(data))
         } catch (e) {
-          console.error('[SSE Provider] Parse error:', e)
+          // Игнорируем ошибки парсинга
         }
       }
 
       es.onerror = (error) => {
-        console.error('[SSE Provider] Error:', error)
+        // Тихая ошибка - SSE endpoint может не существовать
         setIsConnected(false)
 
         if (eventSourceRef.current) {
@@ -69,8 +68,7 @@ export function SSEProvider({ clubId, userId, children }: { clubId: string, user
 
         if (retryCount < MAX_RETRIES) {
           const delay = RETRY_DELAYS[Math.min(retryCount, RETRY_DELAYS.length - 1)]
-          console.log(`[SSE Provider] Reconnecting in ${delay}ms (attempt ${retryCount + 1}/${MAX_RETRIES})`)
-
+          
           setTimeout(() => {
             setRetryCount(prev => prev + 1)
             connect()
@@ -78,7 +76,7 @@ export function SSEProvider({ clubId, userId, children }: { clubId: string, user
         }
       }
     } catch (e) {
-      console.error('[SSE Provider] Connection error:', e)
+      // Тихая ошибка подключения
     }
   }, [retryCount])
 
