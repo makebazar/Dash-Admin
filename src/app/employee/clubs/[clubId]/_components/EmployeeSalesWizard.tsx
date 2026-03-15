@@ -60,6 +60,76 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
     const [returnQuantity, setReturnQuantity] = useState("1")
     const [returnReason, setReturnReason] = useState("")
 
+    // USB Scanner - глобальный обработчик
+    const [barcodeBuffer, setBarcodeBuffer] = useState("")
+    const lastKeyTime = useRef<number>(0)
+    const [isScanning, setIsScanning] = useState(false)
+
+    useEffect(() => {
+        // Глобальный обработчик клавиатуры для USB сканера
+        const handleGlobalKeydown = async (e: KeyboardEvent) => {
+            // Игнорируем если фокус в input/textarea (кроме основного input)
+            const target = e.target as HTMLElement
+            const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA'
+            
+            // Если фокус в нашем основном input - даем работать обычному обработчику
+            if (inputRef.current && target === inputRef.current) return
+            
+            // Если фокус в другом input или диалоге - игнорируем
+            if (isInput || isReturnDialogOpen) return
+
+            // USB сканер вводит символы очень быстро (интервал < 30ms)
+            const now = Date.now()
+            const timeDiff = now - lastKeyTime.current
+            lastKeyTime.current = now
+
+            // Enter от сканера (после штрих-кода)
+            if (e.key === 'Enter' && barcodeBuffer.length > 3) {
+                e.preventDefault()
+                const barcode = barcodeBuffer.trim()
+                setBarcodeBuffer("")
+                setIsScanning(false)
+                
+                // Ищем товар по штрих-коду
+                try {
+                    const product = await getProductByBarcode(clubId, barcode)
+                    if (product) {
+                        addToCart(product, 1)
+                        showMessage({ 
+                            title: "📦 Товар добавлен", 
+                            description: `${product.name} × 1` 
+                        })
+                    } else {
+                        showMessage({ 
+                            title: "❌ Товар не найден", 
+                            description: `Штрих-код: ${barcode}` 
+                        })
+                    }
+                } catch (error) {
+                    console.error('[USB Scanner] Error:', error)
+                }
+                return
+            }
+
+            // Если это не первый символ и прошло мало времени - это сканер
+            if (timeDiff < 30 && timeDiff > 0) {
+                if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
+                    setBarcodeBuffer(prev => prev + e.key)
+                    setIsScanning(true)
+                }
+            } else {
+                // Первый символ или прошло много времени - сбрасываем буфер
+                if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
+                    setBarcodeBuffer(e.key)
+                    setIsScanning(true)
+                }
+            }
+        }
+
+        window.addEventListener('keydown', handleGlobalKeydown)
+        return () => window.removeEventListener('keydown', handleGlobalKeydown)
+    }, [clubId, isReturnDialogOpen, addToCart, showMessage])
+
     useEffect(() => {
         document.body.style.overflow = 'hidden'
         document.body.style.position = 'fixed'
@@ -143,7 +213,7 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
             .reduce((acc, r) => acc + Number(r.total_amount || 0), 0)
     }, [receipts])
 
-    const addToCart = (product: any, quantityToAdd: number) => {
+    const addToCart = useCallback((product: any, quantityToAdd: number) => {
         const price = Number(product.selling_price || 0)
         setCart(prev => {
             const idx = prev.findIndex(i => i.product_id === product.id)
@@ -153,7 +223,7 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
             return next
         })
         setSelectedCartProductId(product.id)
-    }
+    }, [])
 
     const isInStock = useCallback((p: Product) => {
         const stock = Number((p as any).total_stock ?? p.current_stock ?? 0)
@@ -524,6 +594,11 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
                                                 )}>
                                                     {isConnected ? '● LIVE' : '● RECONNECTING'}
                                                 </span>
+                                                {isScanning && (
+                                                    <span className="ml-2 px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-900/50 text-blue-400 border border-blue-800 animate-pulse">
+                                                        📷 СКАНИРОВАНИЕ
+                                                    </span>
+                                                )}
                                             </div>
                                             <Badge className="bg-slate-800 text-slate-300 border-slate-700 text-xs px-2 py-1">Enter</Badge>
                                         </div>
