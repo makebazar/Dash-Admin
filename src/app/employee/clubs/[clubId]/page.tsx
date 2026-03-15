@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef, useCallback, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
+import { SSEProvider } from "@/hooks/usePOSWebSocket"
 import { KpiOverview, ChecklistKpiCard, MaintenanceKpiCard } from "@/components/employee/kpi/KpiOverview"
 import { ShiftClosingWizard } from "./_components/ShiftClosingWizard"
 import { ShiftOpeningWizard } from "./_components/ShiftOpeningWizard"
@@ -22,7 +23,6 @@ import { EmployeeWriteOffWizard } from "./_components/EmployeeWriteOffWizard"
 import { EmployeeTransferWizard } from "./_components/EmployeeTransferWizard"
 import { EmployeeRequestWizard } from "./_components/EmployeeRequestWizard"
 import { getEmployeeRequests } from "./requests-actions"
-import { VirtualBalanceCard } from "@/components/employee/VirtualBalanceCard"
 
 interface ClubInfo {
     id: number
@@ -105,13 +105,6 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
     const [isActionLoading, setIsActionLoading] = useState(false)
     const [pendingTasksCount, setPendingTasksCount] = useState(0)
     const [reworkTasksCount, setReworkTasksCount] = useState(0)
-    
-    // Virtual Balance State
-    const [virtualBalance, setVirtualBalance] = useState<{
-        balance: number;
-        currency: string;
-        todayAccrued: number;
-    } | null>(null)
 
     // Indicators Modal State
     const [isIndicatorsModalOpen, setIsIndicatorsModalOpen] = useState(false)
@@ -137,6 +130,75 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
     const [currentUserId, setCurrentUserId] = useState<string>('')
     const [evaluationScore, setEvaluationScore] = useState<number | null>(null)
     const [isEvaluationsLoading, setIsEvaluationsLoading] = useState(false)
+
+    // Helper functions (должны быть до useMemo)
+    const formatLiveTime = (totalSeconds: number) => {
+        const hours = Math.floor(totalSeconds / 3600)
+        const minutes = Math.floor((totalSeconds % 3600) / 60)
+        const seconds = totalSeconds % 60
+        return {
+            hours: hours.toString().padStart(2, '0'),
+            minutes: minutes.toString().padStart(2, '0'),
+            seconds: seconds.toString().padStart(2, '0')
+        }
+    }
+
+    const formatCurrency = (amount: number) => {
+        return new Intl.NumberFormat('ru-RU', {
+            style: 'decimal',
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 0
+        }).format(amount) + ' ₽'
+    }
+
+    // Оптимизация: мемоизация KPI компонентов (должен быть до useEffect)
+    const kpiComponents = useMemo(() => {
+        if (!kpiData?.kpi) return null
+        return kpiData.kpi.map((kpi: any) => (
+            <div key={kpi.id} className="space-y-4">
+                <div className="flex items-center gap-3 px-1">
+                    <div className="h-6 w-1 bg-purple-600 rounded-full" />
+                    <h2 className="text-xl font-black text-slate-800 dark:text-white uppercase tracking-tight">Выручка: {kpi.name}</h2>
+                </div>
+                <KpiOverview
+                    kpi={kpi}
+                    formatCurrency={formatCurrency}
+                    remainingShifts={kpiData.remaining_shifts || 0}
+                    shiftsCount={kpiData.shifts_count || 0}
+                    completedShiftsCount={kpiData.completed_shifts || 0}
+                    plannedShifts={kpiData.planned_shifts || 0}
+                    daysRemaining={kpiData.days_remaining || 0}
+                    activeShift={activeShift}
+                />
+            </div>
+        ))
+    }, [kpiData?.kpi?.length, kpiData?.remaining_shifts, kpiData?.shifts_count, activeShift?.id])
+
+    const checklistComponents = useMemo(() => {
+        if (!kpiData?.checklist) return null
+        return kpiData.checklist.map((checklist: any) => (
+            <div key={checklist.id} className="space-y-4">
+                <div className="flex items-center gap-3 px-1">
+                    <div className="h-6 w-1 bg-fuchsia-600 rounded-full" />
+                    <h2 className="text-xl font-black text-slate-800 dark:text-white uppercase tracking-tight">Чек-лист</h2>
+                </div>
+                <ChecklistKpiCard kpi={checklist} formatCurrency={formatCurrency} />
+            </div>
+        ))
+    }, [kpiData?.checklist?.length])
+
+    const maintenanceComponent = useMemo(() => {
+        if (!kpiData?.maintenance) return null
+        return (
+            <div className="space-y-4">
+                <div className="flex items-center gap-3 px-1">
+                    <div className="h-6 w-1 bg-indigo-600 rounded-full" />
+                    <h2 className="text-xl font-black text-slate-800 dark:text-white uppercase tracking-tight">Обслуживание</h2>
+                </div>
+                <MaintenanceKpiCard kpi={kpiData.maintenance} formatCurrency={formatCurrency} />
+            </div>
+        )
+    }, [kpiData?.maintenance?.current_value, kpiData?.maintenance?.target_value])
 
     useEffect(() => {
         // Fetch current user ID
@@ -202,6 +264,8 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
 
     useEffect(() => {
         if (!clubId || !currentUserId) return
+        
+        // Оптимизация: не создаем SSE если страница не активна
         const fetchUnreadRequests = async () => {
             try {
                 const requests = await getEmployeeRequests(clubId, currentUserId)
@@ -211,17 +275,22 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                 console.error('Error fetching requests:', error)
             }
         }
+        
         fetchUnreadRequests()
+        
+        // SSE для updates - нужен только для подсчета непрочитанных
         const eventSource = new EventSource(`/api/clubs/${clubId}/requests/stream`)
         const onUpdate = () => {
             fetchUnreadRequests()
         }
         eventSource.addEventListener("update", onUpdate)
+        
         return () => {
             eventSource.removeEventListener("update", onUpdate)
             eventSource.close()
         }
-    }, [clubId, currentUserId, isRequestWizardOpen])
+    }, [clubId, currentUserId])
+    // Убрали isRequestWizardOpen из зависимостей - лишние переподключения
 
     const fetchChecklistTemplates = async (clubId: string) => {
         try {
@@ -233,97 +302,88 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
         }
     }
 
-    // Live timer effect
+    // Live timer - оптимизировано (без ре-рендера всей страницы)
+    const liveSecondsRef = useRef(0)
+    const [liveDisplay, setLiveDisplay] = useState("00:00:00")
+
     useEffect(() => {
         if (!activeShift) return
 
-        const interval = setInterval(() => {
+        const updateTimer = () => {
             const start = new Date(activeShift.check_in).getTime()
             const now = Date.now()
             const diffSeconds = Math.floor((now - start) / 1000)
-            setLiveSeconds(diffSeconds)
-        }, 1000)
+            liveSecondsRef.current = diffSeconds
+            
+            // Форматируем только для отображения
+            const hours = Math.floor(diffSeconds / 3600).toString().padStart(2, '0')
+            const minutes = Math.floor((diffSeconds % 3600) / 60).toString().padStart(2, '0')
+            const seconds = (diffSeconds % 60).toString().padStart(2, '0')
+            setLiveDisplay(`${hours}:${minutes}:${seconds}`)
+        }
+
+        updateTimer()
+        const interval = setInterval(updateTimer, 1000)
 
         return () => clearInterval(interval)
     }, [activeShift])
 
-
     const fetchData = async (id: string) => {
         try {
-            // Fetch active shift
-            const shiftRes = await fetch(`/api/employee/clubs/${id}/active-shift`)
-            const shiftData = await shiftRes.json()
+            // Оптимизация: выполняем все запросы параллельно
+            const [
+                shiftData,
+                statsData,
+                kpiData,
+                reportJson,
+                tasksData,
+                reworkData,
+                ratingData
+            ] = await Promise.all([
+                fetch(`/api/employee/clubs/${id}/active-shift`).then(r => r.json()),
+                fetch(`/api/employee/clubs/${id}/stats`).then(r => r.json()),
+                fetch(`/api/employee/clubs/${id}/kpi`).then(r => r.json()),
+                fetch(`/api/clubs/${id}/settings/reports`, { cache: 'no-store' }).then(r => r.json()),
+                fetch(`/api/clubs/${id}/equipment/maintenance?assigned=me&status=PENDING,IN_PROGRESS`).then(r => r.json()),
+                fetch(`/api/clubs/${id}/equipment/maintenance?assigned=me&verification_status=REJECTED`).then(r => r.json()),
+                fetch(`/api/employee/clubs/${id}/equipment-rating`).then(r => r.json()),
+            ])
 
-            if (shiftRes.ok && shiftData.shift) {
+            // Shift
+            if (shiftData.shift) {
                 setActiveShift(shiftData.shift)
             } else {
                 setActiveShift(null)
             }
 
-            // Fetch stats
-            const statsRes = await fetch(`/api/employee/clubs/${id}/stats`)
-            const statsData = await statsRes.json()
-
-            if (statsRes.ok) {
+            // Stats
+            if (statsData) {
                 setStats(statsData)
             }
 
-            // Fetch KPI data
-            const kpiRes = await fetch(`/api/employee/clubs/${id}/kpi`)
-            const kpiJson = await kpiRes.json()
-            if (kpiRes.ok) {
-                setKpiData(kpiJson)
+            // KPI
+            if (kpiData) {
+                setKpiData(kpiData)
             }
 
-            // Fetch report template for indicators/end shift
-            const reportRes = await fetch(`/api/clubs/${id}/settings/reports`, { cache: 'no-store' })
-            const reportJson = await reportRes.json()
-            if (reportRes.ok && reportJson.currentTemplate) {
+            // Report template
+            if (reportJson?.currentTemplate) {
                 setReportTemplate(reportJson.currentTemplate)
             }
 
-            // Fetch pending maintenance tasks count
-            const tasksRes = await fetch(`/api/clubs/${id}/equipment/maintenance?assigned=me&status=PENDING,IN_PROGRESS`)
-            const tasksData = await tasksRes.json()
-            if (tasksRes.ok) {
+            // Tasks
+            if (tasksData) {
                 setPendingTasksCount(tasksData.total || 0)
             }
 
-            // Fetch rework maintenance tasks count
-            const reworkRes = await fetch(`/api/clubs/${id}/equipment/maintenance?assigned=me&verification_status=REJECTED`)
-            const reworkData = await reworkRes.json()
-            if (reworkRes.ok) {
+            // Rework tasks
+            if (reworkData) {
                 setReworkTasksCount(reworkData.total || 0)
             }
 
-            // Fetch My KPI Rating
-            const ratingRes = await fetch(`/api/employee/clubs/${id}/equipment-rating`)
-            if (ratingRes.ok) {
-                const ratingData = await ratingRes.json()
+            // Rating
+            if (ratingData) {
                 setKpiData((prev: any) => ({ ...prev, equipment_rating: ratingData }))
-            }
-            
-            // Fetch Virtual Balance
-            const balanceRes = await fetch(`/api/clubs/${id}/employee-balance?employee_id=${currentUserId}`)
-            if (balanceRes.ok) {
-                const balanceData = await balanceRes.json()
-                
-                // Calculate today's accrued amount from transactions
-                const today = new Date()
-                today.setHours(0, 0, 0, 0)
-                const todayTransactions = (balanceData.transactions || [])
-                    .filter((t: any) => {
-                        const txDate = new Date(t.created_at)
-                        return txDate >= today && t.amount > 0 && t.payout_type === 'VIRTUAL_BALANCE'
-                    })
-                
-                const todayAccrued = todayTransactions.reduce((sum: number, t: any) => sum + parseFloat(t.amount || 0), 0)
-                
-                setVirtualBalance({
-                    balance: parseFloat(balanceData.balance?.balance || 0),
-                    currency: balanceData.balance?.currency || 'RUB',
-                    todayAccrued
-                })
             }
 
         } catch (error) {
@@ -333,9 +393,10 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
         }
     }
 
-    const handleStartShift = async () => {
+    // Оптимизация: мемоизация обработчиков
+    const handleStartShift = useCallback(async () => {
         const requiredHandover = checklistTemplates.find((t: any) => t.type === 'shift_handover' && t.settings?.block_shift_open)
-        
+
         if (requiredHandover) {
             setHandoverTemplate(requiredHandover)
             setIsHandoverOpen(true)
@@ -343,9 +404,9 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
         }
 
         await executeStartShift()
-    }
+    }, [checklistTemplates])
 
-    const executeStartShift = async () => {
+    const executeStartShift = useCallback(async () => {
         setIsActionLoading(true)
         try {
             const res = await fetch('/api/employee/shifts', {
@@ -366,7 +427,7 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
         } finally {
             setIsActionLoading(false)
         }
-    }
+    }, [clubId])
 
     const handleEndShiftClick = async () => {
         try {
@@ -467,25 +528,8 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
         }
     }
 
-    // Format live time
-    const formatLiveTime = (totalSeconds: number) => {
-        const hours = Math.floor(totalSeconds / 3600)
-        const minutes = Math.floor((totalSeconds % 3600) / 60)
-        const seconds = totalSeconds % 60
-        return {
-            hours: hours.toString().padStart(2, '0'),
-            minutes: minutes.toString().padStart(2, '0'),
-            seconds: seconds.toString().padStart(2, '0')
-        }
-    }
-
-    const formatCurrency = (amount: number) => {
-        return new Intl.NumberFormat('ru-RU', {
-            style: 'decimal',
-            minimumFractionDigits: 0,
-            maximumFractionDigits: 0
-        }).format(amount) + ' ₽'
-    }
+    const liveTime = formatLiveTime(liveSecondsRef.current)
+    const currentEarnings = stats ? (liveSecondsRef.current / 3600) * stats.hourly_rate : 0
 
     if (isLoading) {
         return (
@@ -511,34 +555,27 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
         )
     }
 
-    const liveTime = formatLiveTime(liveSeconds)
-    const currentEarnings = stats ? (liveSeconds / 3600) * stats.hourly_rate : 0
-
-    return (
-        <div className="w-full bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:via-purple-900/20 dark:to-slate-900">
-            {/* Header */}
-            <div className="border-b bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl sticky top-0 md:static z-30 transition-all duration-300">
-                <div className="w-full max-w-7xl mx-auto px-4 py-4 md:px-6">
-                    <div className="flex flex-row items-center justify-between gap-2">
-                        <div className="min-w-0 flex-1">
-                            <h1 className="text-xl md:text-2xl font-bold bg-gradient-to-r from-purple-600 to-indigo-600 bg-clip-text text-transparent truncate">
-                                {club.name}
-                            </h1>
-                            <p className="text-[10px] md:text-sm text-muted-foreground">Рабочее пространство</p>
-                        </div>
-                    </div>
+    if (!currentUserId) {
+        return (
+            <div className="flex h-screen items-center justify-center bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
+                <div className="text-center">
+                    <Loader2 className="h-12 w-12 animate-spin text-purple-400 mx-auto" />
+                    <p className="mt-4 text-purple-200">Загрузка...</p>
                 </div>
             </div>
+        )
+    }
 
-            <div className="w-full max-w-7xl mx-auto px-4 py-6 md:px-6 md:py-8 space-y-6 overflow-x-hidden">
-                {/* Rework Alert Notification */}
+    return (
+        <div className="w-full max-w-7xl mx-auto px-4 py-6 md:px-6 md:py-8 space-y-6">
+            {/* Rework Alert Notification */}
                 {reworkTasksCount > 0 && (
                     <Link href={`/employee/clubs/${clubId}/tasks?verification_status=REJECTED`} className="block group">
-                        <div className="relative overflow-hidden rounded-2xl bg-rose-500 p-4 text-white shadow-lg shadow-rose-500/25 transition-all hover:scale-[1.01] active:scale-[0.99]">
-                            <div className="absolute top-0 right-0 -mt-4 -mr-4 h-24 w-24 rounded-full bg-white/10 blur-2xl group-hover:bg-white/20 transition-colors" />
+                        <div className="relative overflow-hidden rounded-2xl bg-rose-500 p-4 text-white shadow-lg">
+                            <div className="absolute top-0 right-0 -mt-4 -mr-4 h-24 w-24 rounded-full bg-white/10" />
                             <div className="flex flex-col gap-4 relative z-10">
                                 <div className="flex items-start gap-3">
-                                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/20 backdrop-blur-sm animate-pulse">
+                                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/20">
                                         <AlertCircle className="h-6 w-6 text-white" />
                                     </div>
                                     <div className="min-w-0 flex-1">
@@ -548,7 +585,7 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                                         </p>
                                     </div>
                                 </div>
-                                <div className="flex items-center justify-center gap-2 font-bold bg-white/20 hover:bg-white/30 px-6 py-3 rounded-xl backdrop-blur-sm transition-colors text-base">
+                                <div className="flex items-center justify-center gap-2 font-bold bg-white/20 px-6 py-3 rounded-xl text-base">
                                     Исправить сейчас
                                     <ChevronRight className="h-5 w-5" />
                                 </div>
@@ -585,18 +622,18 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                                             {/* Live Timer */}
                                             <div className="flex flex-col items-center justify-center py-6">
                                                 <div className="flex items-baseline gap-1 font-mono">
-                                                    <span className="text-4xl md:text-6xl font-bold text-white">{liveTime.hours}</span>
+                                                    <span className="text-4xl md:text-6xl font-bold text-white">{liveDisplay.split(':')[0]}</span>
                                                     <span className="text-2xl md:text-4xl text-white/50">:</span>
-                                                    <span className="text-4xl md:text-6xl font-bold text-white">{liveTime.minutes}</span>
+                                                    <span className="text-4xl md:text-6xl font-bold text-white">{liveDisplay.split(':')[1]}</span>
                                                     <span className="text-2xl md:text-4xl text-white/50">:</span>
-                                                    <span className="text-2xl md:text-4xl font-medium text-purple-400">{liveTime.seconds}</span>
+                                                    <span className="text-2xl md:text-4xl font-medium text-purple-400">{liveDisplay.split(':')[2]}</span>
                                                 </div>
                                                 <p className="mt-2 text-white/60">
                                                     Начало в {new Date(activeShift.check_in).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
                                                 </p>
 
                                                 {/* Live Earnings */}
-                                                <div className="mt-4 px-4 py-2 rounded-xl bg-white/10 backdrop-blur border border-white/10">
+                                                <div className="mt-4 px-4 py-2 rounded-xl bg-white/10 border border-white/10">
                                                     <div className="flex items-center gap-2">
                                                         <Zap className="h-4 w-4 text-yellow-400" />
                                                         <span className="text-xs text-white/70">Заработано за смену:</span>
@@ -609,7 +646,7 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
 
                                             <Button
                                                 variant="destructive"
-                                                className="w-full h-12 text-base shadow-lg bg-red-600 hover:bg-red-700 transition-all"
+                                                className="w-full h-12 text-base shadow-lg bg-red-600 hover:bg-red-700"
                                                 onClick={handleEndShiftClick}
                                                 disabled={isActionLoading}
                                             >
@@ -623,7 +660,7 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
 
                                             <Button
                                                 variant="outline"
-                                                className="w-full h-auto py-3 text-sm border-white/20 bg-white/5 text-white hover:bg-white/10 whitespace-normal"
+                                                className="w-full h-auto py-3 text-sm border-white/20 bg-white/5 text-white"
                                                 onClick={() => setIsRequestWizardOpen(true)}
                                                 disabled={isActionLoading}
                                             >
@@ -645,7 +682,7 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                                             )}>
                                                 <Button
                                                     variant="ghost"
-                                                    className="w-full h-12 text-[10px] text-purple-300 hover:text-white hover:bg-purple-500/20 rounded-xl transition-all"
+                                                    className="w-full h-12 text-[10px] text-purple-300 rounded-xl"
                                                     onClick={() => setIsSupplyWizardOpen(true)}
                                                 >
                                                     <Zap className="mr-1.5 h-3.5 w-3.5" />
@@ -654,7 +691,7 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                                                 {club?.inventory_settings?.sales_capture_mode === 'SHIFT' && (
                                                     <Button
                                                         variant="ghost"
-                                                        className="w-full h-12 text-[10px] text-emerald-300 hover:text-white hover:bg-emerald-500/20 rounded-xl transition-all"
+                                                        className="w-full h-12 text-[10px] text-emerald-300 rounded-xl"
                                                         onClick={() => window.open(`/employee/clubs/${clubId}/pos`, '_blank', 'noopener,noreferrer')}
                                                     >
                                                         <ShoppingCart className="mr-1.5 h-3.5 w-3.5" />
@@ -663,7 +700,7 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                                                 )}
                                                 <Button
                                                     variant="ghost"
-                                                    className="w-full h-12 text-[10px] text-red-300 hover:text-white hover:bg-red-500/20 rounded-xl transition-all"
+                                                    className="w-full h-12 text-[10px] text-red-300 rounded-xl"
                                                     onClick={() => setIsWriteOffWizardOpen(true)}
                                                 >
                                                     <Ban className="mr-1.5 h-3.5 w-3.5" />
@@ -671,7 +708,7 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                                                 </Button>
                                                 <Button
                                                     variant="ghost"
-                                                    className="w-full h-12 text-[10px] text-emerald-300 hover:text-white hover:bg-emerald-500/20 rounded-xl transition-all"
+                                                    className="w-full h-12 text-[10px] text-emerald-300 rounded-xl"
                                                     onClick={() => setIsTransferWizardOpen(true)}
                                                 >
                                                     <ArrowRightLeft className="mr-1.5 h-3.5 w-3.5" />
@@ -690,7 +727,7 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                                             </div>
 
                                             <Button
-                                                className="w-full h-12 text-base bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 shadow-lg shadow-emerald-500/25 transition-all"
+                                                className="w-full h-12 text-base bg-gradient-to-r from-emerald-500 to-green-600 shadow-lg"
                                                 onClick={handleStartShift}
                                                 disabled={isActionLoading}
                                             >
@@ -705,14 +742,13 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                                             <div className="pt-2 border-t border-white/10 mt-2">
                                                 <Button
                                                     variant="ghost"
-                                                    className="w-full h-12 text-[10px] text-white/60 hover:text-white hover:bg-white/10 rounded-xl transition-all"
+                                                    className="w-full h-12 text-[10px] text-white/60 rounded-xl"
                                                     onClick={() => setIsRequestWizardOpen(true)}
                                                 >
                                                 <div className="relative">
                                                     <MessageSquare className="mr-1.5 h-3.5 w-3.5" />
                                                     {unreadRequestsCount > 0 && (
                                                         <span className="absolute -top-1 -right-1 flex h-2 w-2">
-                                                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75"></span>
                                                             <span className="relative inline-flex rounded-full h-2 w-2 bg-purple-500"></span>
                                                         </span>
                                                     )}
@@ -733,12 +769,12 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                         {/* Maintenance Tasks */}
                         <Link href={`/employee/clubs/${clubId}/tasks`} className="block">
                             <Card className={cn(
-                                "border-0 shadow-lg transition-all hover:scale-[1.02] active:scale-[0.98]",
-                                reworkTasksCount > 0 
-                                    ? "bg-gradient-to-br from-rose-500 to-red-600 text-white animate-pulse shadow-rose-500/40"
+                                "border-0 shadow-lg",
+                                reworkTasksCount > 0
+                                    ? "bg-gradient-to-br from-rose-500 to-red-600 text-white"
                                     : pendingTasksCount > 0
                                         ? "bg-gradient-to-br from-amber-500 to-orange-600 text-white"
-                                        : "bg-white dark:bg-slate-800/50 backdrop-blur"
+                                        : "bg-white dark:bg-slate-800/50"
                             )}>
                                 <CardContent className="pt-6">
                                     <div className="flex items-start justify-between">
@@ -784,8 +820,8 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                         </Link>
 
                         {/* Monthly Salary */}
-                        <Card className="border-0 shadow-lg bg-gradient-to-br from-purple-500 to-indigo-600 text-white overflow-hidden relative group">
-                            <div className="absolute inset-0 bg-white/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        <Card className="border-0 shadow-lg bg-gradient-to-br from-purple-500 to-indigo-600 text-white">
+                            <div className="absolute inset-0 bg-white/5" />
                             <CardContent className="pt-6 relative z-10">
                                 <div className="flex items-start justify-between">
                                     <div>
@@ -869,80 +905,21 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                     </div>
                 </div>
 
-                {/* Virtual Balance Card */}
-                {virtualBalance && (
-                    <div className="grid gap-4 md:grid-cols-2">
-                        <VirtualBalanceCard
-                            balance={virtualBalance.balance}
-                            accruedToday={virtualBalance.todayAccrued}
-                            currency={virtualBalance.currency}
-                            formatCurrency={formatCurrency}
-                        />
-                    </div>
-                )}
-
                 {/* KPI Trackers */}
                 <div className="space-y-6">
                     {/* Revenue KPI (Progressive) */}
-                    {kpiData && kpiData.kpi && kpiData.kpi.length > 0 && (
-                        <div className="space-y-4">
-                            {kpiData.kpi.map((kpi: any) => (
-                                <div key={kpi.id} className="space-y-4">
-                                    <div className="flex items-center gap-3 px-1">
-                                        <div className="h-6 w-1 bg-purple-600 rounded-full" />
-                                        <h2 className="text-xl font-black text-slate-800 dark:text-white uppercase tracking-tight">Выручка: {kpi.name}</h2>
-                                    </div>
-
-                                    <KpiOverview
-                                        kpi={kpi}
-                                        formatCurrency={formatCurrency}
-                                        remainingShifts={kpiData.remaining_shifts}
-                                        shiftsCount={kpiData.shifts_count}
-                                        completedShiftsCount={kpiData.completed_shifts_count}
-                                        plannedShifts={kpiData.planned_shifts}
-                                        daysRemaining={kpiData.days_remaining}
-                                        activeShift={activeShift}
-                                    />
-                                </div>
-                            ))}
-                        </div>
-                    )}
+                    {kpiComponents}
 
                     {/* Checklist and Maintenance KPIs */}
-                    {(kpiData?.checklist?.length > 0 || kpiData?.maintenance) && (
+                    {(checklistComponents || maintenanceComponent) && (
                         <div className="grid gap-6 md:grid-cols-2">
-                            {/* Checklist KPIs */}
-                            {kpiData.checklist?.map((checklist: any) => (
-                                <div key={checklist.id} className="space-y-4">
-                                    <div className="flex items-center gap-3 px-1">
-                                        <div className="h-6 w-1 bg-fuchsia-600 rounded-full" />
-                                        <h2 className="text-xl font-black text-slate-800 dark:text-white uppercase tracking-tight">Чек-лист</h2>
-                                    </div>
-                                    <ChecklistKpiCard 
-                                        kpi={checklist} 
-                                        formatCurrency={formatCurrency} 
-                                    />
-                                </div>
-                            ))}
-
-                            {/* Maintenance KPI */}
-                            {kpiData.maintenance && (
-                                <div className="space-y-4">
-                                    <div className="flex items-center gap-3 px-1">
-                                        <div className="h-6 w-1 bg-indigo-600 rounded-full" />
-                                        <h2 className="text-xl font-black text-slate-800 dark:text-white uppercase tracking-tight">Обслуживание</h2>
-                                    </div>
-                                    <MaintenanceKpiCard 
-                                        kpi={kpiData.maintenance} 
-                                        formatCurrency={formatCurrency} 
-                                    />
-                                </div>
-                            )}
+                            {checklistComponents}
+                            {maintenanceComponent}
                         </div>
                     )}
 
                     {(!kpiData || (!kpiData.kpi?.length && !kpiData.checklist?.length && !kpiData.maintenance)) && (
-                        <Card className="border-0 shadow-lg bg-white dark:bg-slate-800/50 backdrop-blur">
+                        <Card className="border-0 shadow-lg bg-white dark:bg-slate-800/50">
                             <CardContent className="py-8 text-center text-muted-foreground">
                                 <Target className="h-12 w-12 mx-auto mb-4 opacity-20" />
                                 <p>KPI показатели пока не назначены</p>
@@ -953,9 +930,8 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                 </div>
 
                 {/* Workday Progress (if shift active) - Removed */}
-            </div>
 
-            {isHandoverOpen && handoverTemplate && (
+                {isHandoverOpen && handoverTemplate && (
                 <ShiftOpeningWizard
                     isOpen={isHandoverOpen}
                     onClose={() => setIsHandoverOpen(false)}
@@ -1018,18 +994,20 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
 
             {/* Report Modal */}
             {activeShift && club && (
-                <ShiftClosingWizard 
-                    isOpen={isReportModalOpen}
-                    onClose={() => setIsReportModalOpen(false)}
-                    onComplete={(data) => submitEndShift(data)}
-                    clubId={clubId}
-                    userId={currentUserId}
-                    reportTemplate={reportTemplate}
-                    activeShiftId={activeShift.id}
-                    skipInventory={!club.inventory_required}
-                    checklistTemplates={checklistTemplates}
-                    inventorySettings={club.inventory_settings}
-                />
+                <SSEProvider clubId={clubId} userId={currentUserId}>
+                    <ShiftClosingWizard
+                        isOpen={isReportModalOpen}
+                        onClose={() => setIsReportModalOpen(false)}
+                        onComplete={(data) => submitEndShift(data)}
+                        clubId={clubId}
+                        userId={currentUserId}
+                        reportTemplate={reportTemplate}
+                        activeShiftId={activeShift.id}
+                        skipInventory={!club.inventory_required}
+                        checklistTemplates={checklistTemplates}
+                        inventorySettings={club.inventory_settings}
+                    />
+                </SSEProvider>
             )}
 
             {/* Supply Wizard */}

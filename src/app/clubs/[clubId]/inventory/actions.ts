@@ -1206,31 +1206,62 @@ export async function manualTriggerReplenishment(clubId: string) {
     }
 }
 
-export async function getSalesAnalytics(clubId: string, limit: number = 200) {
+export async function getSalesAnalytics(clubId: string, limit: number = 500) {
     await requireClubAccess(clubId)
+    let preferredMetricKey: string | null = null
+    try {
+        const s = await query(`SELECT inventory_settings FROM clubs WHERE id = $1`, [clubId])
+        preferredMetricKey = s.rows[0]?.inventory_settings?.employee_default_metric_key || null
+    } catch {
+        // Best effort: fall back to legacy keys.
+    }
+    // Get both sales and returns
     const res = await query(`
-        SELECT sm.*, 
-               p.name as product_name, 
-               p.selling_price as current_price,
-               COALESCE(sm.price_at_time, p.selling_price) as price_at_time,
-               u.full_name as user_name,
-               su.full_name as shift_employee_name,
-               s.check_in as shift_start,
-               s.check_out as shift_end,
-               s.id as shift_id_raw,
-               inv.reported_revenue as shift_reported_revenue,
-               inv.calculated_revenue as shift_calculated_revenue,
-               inv.revenue_difference as shift_revenue_difference
+        SELECT 
+            sm.*,
+            p.name as product_name,
+            p.selling_price as current_price,
+            COALESCE(sm.price_at_time, p.selling_price) as price_at_time,
+            u.full_name as user_name,
+            su.full_name as shift_employee_name,
+            s.check_in as shift_start,
+            s.check_out as shift_end,
+            s.id as shift_id_raw,
+            COALESCE(
+                CASE
+                    WHEN (s.report_data ->> $3::text) ~ '^[0-9]+(\\.[0-9]+)?$' THEN (s.report_data ->> $3::text)::numeric
+                    ELSE NULL
+                END,
+                CASE
+                    WHEN (s.report_data ->> 'bar_revenue') ~ '^[0-9]+(\\.[0-9]+)?$' THEN (s.report_data ->> 'bar_revenue')::numeric
+                    ELSE NULL
+                END,
+                CASE
+                    WHEN (s.report_data ->> 'total_revenue') ~ '^[0-9]+(\\.[0-9]+)?$' THEN (s.report_data ->> 'total_revenue')::numeric
+                    ELSE NULL
+                END,
+                inv.reported_revenue,
+                0
+            ) as shift_reported_revenue,
+            inv.calculated_revenue as shift_calculated_revenue,
+            inv.revenue_difference as shift_revenue_difference,
+            -- Mark returns
+            CASE WHEN sm.type = 'RETURN' THEN true ELSE false END as is_return,
+            sm.reason as return_reason
         FROM warehouse_stock_movements sm
         JOIN warehouse_products p ON sm.product_id = p.id
         LEFT JOIN users u ON sm.user_id = u.id
         LEFT JOIN shifts s ON sm.shift_id = s.id
         LEFT JOIN users su ON s.user_id = su.id
         LEFT JOIN warehouse_inventories inv ON s.id = inv.shift_id
-        WHERE sm.club_id = $1 AND sm.type = 'SALE'
+        -- Join for voided receipts
+        LEFT JOIN shift_receipts sr ON sm.related_entity_type = 'SHIFT_RECEIPT' AND sm.related_entity_id = sr.id AND sr.voided_at IS NOT NULL
+        WHERE sm.club_id = $1 
+          AND sm.type IN ('SALE', 'RETURN')  -- Include both sales and returns
+          AND sr.id IS NULL  -- Exclude voided receipts
         ORDER BY sm.created_at DESC
         LIMIT $2
-    `, [clubId, limit])
+    `, [clubId, limit, preferredMetricKey])
     return res.rows
 }
 
@@ -1562,225 +1593,10 @@ export type ShiftSaleItem = {
     committed_at?: string | null
 }
 
-export async function getOpenShiftSales(clubId: string, userId: string, shiftId: string) {
-    await assertUserCanAccessClub(clubId, userId)
-    const res = await query(
-        `
-        SELECT 
-            ss.id,
-            ss.product_id,
-            p.name as product_name,
-            ss.quantity,
-            ss.warehouse_id,
-            w.name as warehouse_name,
-            ss.selling_price_snapshot,
-            ss.cost_price_snapshot,
-            ss.notes,
-            ss.created_at,
-            ss.committed_at
-        FROM shift_sales ss
-        JOIN warehouse_products p ON ss.product_id = p.id
-        JOIN warehouses w ON ss.warehouse_id = w.id
-        WHERE ss.club_id = $1
-          AND ss.shift_id = $2
-          AND ss.created_by = $3
-          AND ss.committed_at IS NULL
-        ORDER BY ss.created_at DESC
-        `,
-        [clubId, shiftId, userId]
-    )
-    return res.rows as ShiftSaleItem[]
-}
-
-export async function addShiftSaleItem(
-    clubId: string,
-    userId: string,
-    data: { shift_id: string, product_id: number, quantity: number, warehouse_id: number, notes?: string }
-) {
-    await assertUserCanAccessClub(clubId, userId)
-    if (!data.quantity || data.quantity <= 0) throw new Error("Количество должно быть больше 0")
-
-    const client = await import("@/db").then(m => m.getClient())
-    try {
-        await client.query('BEGIN')
-
-        const shiftCheck = await client.query(
-            `SELECT 1 FROM shifts WHERE id = $1 AND club_id = $2 AND user_id = $3 AND check_out IS NULL`,
-            [data.shift_id, clubId, userId]
-        )
-        if (shiftCheck.rowCount === 0) throw new Error("Смена не найдена или уже завершена")
-
-        const prodRes = await client.query(
-            `SELECT cost_price, selling_price FROM warehouse_products WHERE id = $1 AND club_id = $2`,
-            [data.product_id, clubId]
-        )
-        if (prodRes.rowCount === 0) throw new Error("Товар не найден")
-
-        const { cost_price, selling_price } = prodRes.rows[0]
-
-        await client.query(
-            `
-            INSERT INTO shift_sales (
-                club_id, shift_id, created_by, product_id, warehouse_id, quantity,
-                selling_price_snapshot, cost_price_snapshot, notes
-            )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-            ON CONFLICT (shift_id, product_id, warehouse_id) WHERE committed_at IS NULL
-            DO UPDATE SET 
-                quantity = shift_sales.quantity + EXCLUDED.quantity,
-                notes = COALESCE(NULLIF(EXCLUDED.notes, ''), shift_sales.notes)
-            `,
-            [
-                clubId,
-                data.shift_id,
-                userId,
-                data.product_id,
-                data.warehouse_id,
-                data.quantity,
-                selling_price || 0,
-                cost_price || 0,
-                data.notes || null
-            ]
-        )
-
-        await client.query('COMMIT')
-        revalidatePath(`/employee/clubs/${clubId}`)
-        return { success: true }
-    } catch (e) {
-        await client.query('ROLLBACK')
-        throw e
-    } finally {
-        client.release()
-    }
-}
-
-export async function updateShiftSaleItemQuantity(
-    clubId: string,
-    userId: string,
-    id: number,
-    quantity: number
-) {
-    await assertUserCanAccessClub(clubId, userId)
-    if (!quantity || quantity <= 0) throw new Error("Количество должно быть больше 0")
-
-    await query(
-        `
-        UPDATE shift_sales
-        SET quantity = $1
-        WHERE id = $2 AND club_id = $3 AND created_by = $4 AND committed_at IS NULL
-        `,
-        [quantity, id, clubId, userId]
-    )
-    revalidatePath(`/employee/clubs/${clubId}`)
-}
-
-export async function deleteShiftSaleItem(clubId: string, userId: string, id: number) {
-    await assertUserCanAccessClub(clubId, userId)
-    await query(
-        `DELETE FROM shift_sales WHERE id = $1 AND club_id = $2 AND created_by = $3 AND committed_at IS NULL`,
-        [id, clubId, userId]
-    )
-    revalidatePath(`/employee/clubs/${clubId}`)
-}
-
-export async function commitShiftSalesToMovements(clubId: string, userId: string, shiftId: string) {
-    await assertUserCanAccessClub(clubId, userId)
-    const client = await import("@/db").then(m => m.getClient())
-    try {
-        await client.query('BEGIN')
-
-        const shiftCheck = await client.query(
-            `SELECT 1 FROM shifts WHERE id = $1 AND club_id = $2 AND user_id = $3 AND check_out IS NULL`,
-            [shiftId, clubId, userId]
-        )
-        if (shiftCheck.rowCount === 0) throw new Error("Смена не найдена или уже завершена")
-
-        const salesRes = await client.query(
-            `
-            SELECT * 
-            FROM shift_sales
-            WHERE club_id = $1 AND shift_id = $2 AND created_by = $3 AND committed_at IS NULL
-            ORDER BY created_at ASC
-            FOR UPDATE
-            `,
-            [clubId, shiftId, userId]
-        )
-
-        if (salesRes.rowCount === 0) {
-            await client.query('COMMIT')
-            return { success: true, committedCount: 0 }
-        }
-
-        const productIds: number[] = []
-
-        for (const s of salesRes.rows) {
-            const productId = Number(s.product_id)
-            const warehouseId = Number(s.warehouse_id)
-            const qty = Number(s.quantity)
-            if (!productIds.includes(productId)) productIds.push(productId)
-
-            const stockRes = await client.query(
-                `SELECT quantity FROM warehouse_stock WHERE warehouse_id = $1 AND product_id = $2 FOR UPDATE`,
-                [warehouseId, productId]
-            )
-            const prevStock = stockRes.rows[0]?.quantity ?? 0
-            const newStock = Number(prevStock) - qty
-
-            await client.query(
-                `
-                INSERT INTO warehouse_stock (warehouse_id, product_id, quantity)
-                VALUES ($1, $2, $3)
-                ON CONFLICT (warehouse_id, product_id) DO UPDATE
-                SET quantity = warehouse_stock.quantity + $3
-                `,
-                [warehouseId, productId, -qty]
-            )
-
-            const movementId = await logStockMovement(
-                client,
-                clubId,
-                userId,
-                productId,
-                -qty,
-                Number(prevStock),
-                newStock,
-                'SALE',
-                `Продажа за смену: ${s.notes || ''}`.trim(),
-                'SHIFT_SALE',
-                Number(s.id),
-                shiftId,
-                warehouseId,
-                Number(s.selling_price_snapshot || 0)
-            )
-
-            await client.query(
-                `UPDATE shift_sales SET committed_at = NOW(), committed_movement_id = $1 WHERE id = $2`,
-                [movementId, s.id]
-            )
-        }
-
-        if (productIds.length > 0) {
-            await client.query(
-                `
-                UPDATE warehouse_products p
-                SET current_stock = (SELECT COALESCE(SUM(quantity), 0) FROM warehouse_stock WHERE product_id = p.id)
-                WHERE id = ANY($1) AND club_id = $2
-                `,
-                [productIds, clubId]
-            )
-        }
-
-        await client.query('COMMIT')
-        revalidatePath(`/clubs/${clubId}/inventory`)
-        revalidatePath(`/employee/clubs/${clubId}`)
-        return { success: true, committedCount: salesRes.rowCount }
-    } catch (e) {
-        await client.query('ROLLBACK')
-        throw e
-    } finally {
-        client.release()
-    }
-}
+// ============================================================================
+// ПРИМЕЧАНИЕ: Функции shift_sales (getOpenShiftSales, addShiftSaleItem, и т.д.)
+// удалены как неиспользуемые. POS-система использует только shift_receipts.
+// ============================================================================
 
 export type ShiftReceiptPaymentType = 'cash' | 'card' | 'mixed' | 'other'
 
@@ -1790,6 +1606,8 @@ export type ShiftReceiptItem = {
     product_id: number
     product_name: string
     quantity: number
+    returned_qty?: number
+    available_qty?: number
     selling_price_snapshot: number
     cost_price_snapshot: number
 }
@@ -1917,7 +1735,7 @@ export async function createShiftReceipt(
             cardAmount = cardAmount || 0
         }
 
-        // Monetary sanity checks (avoid storing inconsistent mixed payments).
+        // Monetary sanity checks
         const totalRounded = Math.round(itemsTotal * 100) / 100
         cashAmount = Math.round(cashAmount * 100) / 100
         cardAmount = Math.round(cardAmount * 100) / 100
@@ -1928,13 +1746,31 @@ export async function createShiftReceipt(
             }
         }
 
+        // FIX: Check stock availability BEFORE creating receipt
+        for (const item of normalizedItems) {
+            const stockRes = await client.query(
+                `SELECT quantity FROM warehouse_stock WHERE warehouse_id = $1 AND product_id = $2 FOR UPDATE`,
+                [warehouseId, item.product_id]
+            )
+            const prevStock = Number(stockRes.rows[0]?.quantity ?? 0)
+            if (prevStock < item.quantity) {
+                const prodRes = await client.query(
+                    `SELECT name FROM warehouse_products WHERE id = $1 AND club_id = $2`,
+                    [item.product_id, clubId]
+                )
+                const productName = prodRes.rows[0]?.name || `Товар #${item.product_id}`
+                await client.query('ROLLBACK')
+                throw new Error(`Недостаточно товара "${productName}" на складе. Доступно: ${prevStock}, требуется: ${item.quantity}`)
+            }
+        }
+
         const receiptRes = await client.query(
             `
             INSERT INTO shift_receipts (
                 club_id, shift_id, created_by, warehouse_id,
-                payment_type, cash_amount, card_amount, total_amount, notes
+                payment_type, cash_amount, card_amount, total_amount, notes, committed_at
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
             RETURNING id
             `,
             [
@@ -1964,7 +1800,60 @@ export async function createShiftReceipt(
             )
         }
 
+        // FIX: Immediate stock write-off
+        for (const item of normalizedItems) {
+            const { previousStock, newStock } = await applyWarehouseStockDelta(
+                client,
+                warehouseId,
+                item.product_id,
+                -item.quantity
+            )
+
+            const p = priceMap.get(item.product_id)!
+            await logStockMovement(
+                client,
+                clubId,
+                userId,
+                item.product_id,
+                -item.quantity,
+                previousStock,
+                newStock,
+                'SALE',
+                `POS чек #${receiptId}`,
+                'SHIFT_RECEIPT',
+                receiptId,
+                data.shift_id,
+                warehouseId,
+                p.selling_price
+            )
+        }
+
+        // Update product cache
+        if (productIds.length > 0) {
+            await client.query(
+                `
+                UPDATE warehouse_products p
+                SET current_stock = (SELECT COALESCE(SUM(quantity), 0) FROM warehouse_stock WHERE product_id = p.id)
+                WHERE id = ANY($1) AND club_id = $2
+                `,
+                [productIds, clubId]
+            )
+        }
+
         await client.query('COMMIT')
+        
+        // FIX: Отправляем SSE уведомление всем клиентам клуба
+        try {
+            const { sendToClub } = await import('@/app/api/inventory-events/route')
+            sendToClub(clubId, {
+                type: 'RECEIPT_CREATED',
+                receipt: { id: receiptId, total_amount: itemsTotal, created_at: new Date().toISOString() },
+                timestamp: Date.now()
+            })
+        } catch (e) {
+            console.error('[SSE] Failed to send notification:', e)
+        }
+        
         revalidatePath(`/employee/clubs/${clubId}`)
         return { success: true, id: receiptId }
     } catch (e) {
@@ -1981,7 +1870,7 @@ export async function getShiftReceipts(clubId: string, userId: string, shiftId: 
 
     const res = await query(
         `
-        SELECT 
+        SELECT
             r.*,
             w.name as warehouse_name
         FROM shift_receipts r
@@ -1997,10 +1886,27 @@ export async function getShiftReceipts(clubId: string, userId: string, shiftId: 
     )
 
     const receiptIds = res.rows.map(r => Number(r.id))
+    
+    // Get returns for all receipts
+    const returnsRes = receiptIds.length > 0 ? await query(
+        `
+        SELECT receipt_id, item_id, SUM(quantity) as returned_qty
+        FROM shift_receipt_returns
+        WHERE receipt_id = ANY($1)
+        GROUP BY receipt_id, item_id
+        `,
+        [receiptIds]
+    ) : { rows: [] }
+
+    const returnsMap = new Map<string, number>()
+    for (const ret of returnsRes.rows) {
+        returnsMap.set(`${ret.receipt_id}-${ret.item_id}`, Number(ret.returned_qty))
+    }
+
     const itemsRes = receiptIds.length
         ? await query(
             `
-            SELECT 
+            SELECT
                 i.*,
                 p.name as product_name
             FROM shift_receipt_items i
@@ -2015,13 +1921,19 @@ export async function getShiftReceipts(clubId: string, userId: string, shiftId: 
     const itemsByReceipt = new Map<number, ShiftReceiptItem[]>()
     for (const r of itemsRes.rows) {
         const rid = Number(r.receipt_id)
+        const itemId = Number(r.id)
+        const key = `${rid}-${itemId}`
+        const returnedQty = returnsMap.get(key) || 0
+        
         const arr = itemsByReceipt.get(rid) || []
         arr.push({
-            id: Number(r.id),
+            id: itemId,
             receipt_id: rid,
             product_id: Number(r.product_id),
             product_name: String(r.product_name),
             quantity: Number(r.quantity),
+            returned_qty: returnedQty,
+            available_qty: Number(r.quantity) - returnedQty,
             selling_price_snapshot: Number(r.selling_price_snapshot || 0),
             cost_price_snapshot: Number(r.cost_price_snapshot || 0)
         })
@@ -2049,99 +1961,51 @@ export async function getShiftReceipts(clubId: string, userId: string, shiftId: 
 
 export async function voidShiftReceipt(clubId: string, userId: string, receiptId: number) {
     await assertUserCanAccessClub(clubId, userId)
-    await query(
-        `
-        UPDATE shift_receipts
-        SET voided_at = NOW()
-        WHERE id = $1 AND club_id = $2 AND created_by = $3 AND committed_at IS NULL AND voided_at IS NULL
-        `,
-        [receiptId, clubId, userId]
-    )
-    revalidatePath(`/employee/clubs/${clubId}`)
-}
-
-export async function commitShiftReceiptsToMovements(clubId: string, userId: string, shiftId: string) {
-    await assertUserCanAccessClub(clubId, userId)
     const client = await import("@/db").then(m => m.getClient())
     try {
         await client.query('BEGIN')
 
-        const shiftCheck = await client.query(
-            `SELECT 1 FROM shifts WHERE id = $1 AND club_id = $2 AND user_id = $3 AND check_out IS NULL`,
-            [shiftId, clubId, userId]
+        // Get receipt details (committed_at is now always set for active receipts)
+        const receiptRes = await client.query(
+            `SELECT * FROM shift_receipts WHERE id = $1 AND club_id = $2 AND created_by = $3 AND voided_at IS NULL`,
+            [receiptId, clubId, userId]
         )
-        if (shiftCheck.rowCount === 0) throw new Error("Смена не найдена или уже завершена")
+        if (receiptRes.rowCount === 0) throw new Error("Чек не найден или уже аннулирован")
 
-        const receiptsRes = await client.query(
-            `
-            SELECT * 
-            FROM shift_receipts
-            WHERE club_id = $1 AND shift_id = $2 AND created_by = $3
-              AND committed_at IS NULL AND voided_at IS NULL
-            ORDER BY created_at ASC
-            FOR UPDATE
-            `,
-            [clubId, shiftId, userId]
-        )
+        const receipt = receiptRes.rows[0]
+        const shiftId = receipt.shift_id
 
-        if (receiptsRes.rowCount === 0) {
-            await client.query('COMMIT')
-            return { success: true, committedCount: 0 }
-        }
-
-        const receiptIds = receiptsRes.rows.map((r: any) => Number(r.id))
+        // FIX #2: Always create reversal movements (receipt is already committed)
         const itemsRes = await client.query(
-            `
-            SELECT * FROM shift_receipt_items
-            WHERE receipt_id = ANY($1)
-            ORDER BY id ASC
-            FOR UPDATE
-            `,
-            [receiptIds]
+            `SELECT * FROM shift_receipt_items WHERE receipt_id = $1`,
+            [receiptId]
         )
-
-        const receiptWarehouse = new Map<number, number>()
-        for (const r of receiptsRes.rows) receiptWarehouse.set(Number(r.id), Number(r.warehouse_id))
-
-        const productIds: number[] = []
 
         for (const item of itemsRes.rows) {
-            const receiptId = Number(item.receipt_id)
-            const warehouseId = receiptWarehouse.get(receiptId)
-            if (!warehouseId) continue
-
             const productId = Number(item.product_id)
+            const warehouseId = Number(receipt.warehouse_id)
             const qty = Number(item.quantity)
-            if (!productIds.includes(productId)) productIds.push(productId)
 
-            const stockRes = await client.query(
-                `SELECT quantity FROM warehouse_stock WHERE warehouse_id = $1 AND product_id = $2 FOR UPDATE`,
-                [warehouseId, productId]
-            )
-            const prevStock = stockRes.rows[0]?.quantity ?? 0
-            const newStock = Number(prevStock) - qty
-
-            await client.query(
-                `
-                INSERT INTO warehouse_stock (warehouse_id, product_id, quantity)
-                VALUES ($1, $2, $3)
-                ON CONFLICT (warehouse_id, product_id) DO UPDATE
-                SET quantity = warehouse_stock.quantity + $3
-                `,
-                [warehouseId, productId, -qty]
+            // Return stock back
+            const { previousStock, newStock } = await applyWarehouseStockDelta(
+                client,
+                warehouseId,
+                productId,
+                qty  // Positive = add back
             )
 
+            // Create reversal movement
             await logStockMovement(
                 client,
                 clubId,
                 userId,
                 productId,
-                -qty,
-                Number(prevStock),
+                qty,
+                previousStock,
                 newStock,
                 'SALE',
-                `Чек #${receiptId}`,
-                'SHIFT_RECEIPT',
+                `Сторно: аннулирование чека #${receiptId}`,
+                'SHIFT_RECEIPT_VOID',
                 receiptId,
                 shiftId,
                 warehouseId,
@@ -2149,15 +2013,8 @@ export async function commitShiftReceiptsToMovements(clubId: string, userId: str
             )
         }
 
-        await client.query(
-            `
-            UPDATE shift_receipts
-            SET committed_at = NOW(), committed_by = $1
-            WHERE id = ANY($2)
-            `,
-            [userId, receiptIds]
-        )
-
+        // Update product cache
+        const productIds = itemsRes.rows.map((i: any) => Number(i.product_id))
         if (productIds.length > 0) {
             await client.query(
                 `
@@ -2169,10 +2026,28 @@ export async function commitShiftReceiptsToMovements(clubId: string, userId: str
             )
         }
 
+        // Mark receipt as voided
+        await client.query(
+            `UPDATE shift_receipts SET voided_at = NOW() WHERE id = $1`,
+            [receiptId]
+        )
+
         await client.query('COMMIT')
-        revalidatePath(`/clubs/${clubId}/inventory`)
+        
+        // FIX: Отправляем SSE уведомление всем клиентам клуба
+        try {
+            const { sendToClub } = await import('@/app/api/inventory-events/route')
+            sendToClub(clubId, {
+                type: 'RECEIPT_VOIDED',
+                receiptId,
+                timestamp: Date.now()
+            })
+        } catch (e) {
+            console.error('[SSE] Failed to send notification:', e)
+        }
+        
         revalidatePath(`/employee/clubs/${clubId}`)
-        return { success: true, committedCount: receiptsRes.rowCount }
+        return { success: true }
     } catch (e) {
         await client.query('ROLLBACK')
         throw e
@@ -2180,6 +2055,140 @@ export async function commitShiftReceiptsToMovements(clubId: string, userId: str
         client.release()
     }
 }
+
+// ============================================================================
+// ВОЗВРАТ ТОВАРА ИЗ ЧЕКА (ЧАСТИЧНЫЙ ВОЗВРАТ)
+// ============================================================================
+
+export async function returnReceiptItem(
+    clubId: string,
+    userId: string,
+    receiptId: number,
+    itemId: number,
+    returnQuantity: number,
+    reason: string
+) {
+    await assertUserCanAccessClub(clubId, userId)
+    
+    if (!Number.isInteger(returnQuantity) || returnQuantity <= 0) {
+        throw new Error("Количество должно быть целым положительным числом")
+    }
+    
+    const client = await import("@/db").then(m => m.getClient())
+    try {
+        await client.query('BEGIN')
+
+        // 1. Get receipt and item details
+        const receiptRes = await client.query(
+            `SELECT * FROM shift_receipts WHERE id = $1 AND club_id = $2 AND created_by = $3 AND voided_at IS NULL`,
+            [receiptId, clubId, userId]
+        )
+        if (receiptRes.rowCount === 0) throw new Error("Чек не найден или уже аннулирован")
+        const receipt = receiptRes.rows[0]
+
+        const itemRes = await client.query(
+            `SELECT * FROM shift_receipt_items WHERE id = $1 AND receipt_id = $2`,
+            [itemId, receiptId]
+        )
+        if (itemRes.rowCount === 0) throw new Error("Позиция не найдена")
+        const item = itemRes.rows[0]
+
+        const productId = Number(item.product_id)
+        const warehouseId = Number(receipt.warehouse_id)
+        const originalQty = Number(item.quantity)
+        const price = Number(item.selling_price_snapshot || 0)
+
+        // Check if already returned
+        const existingReturnRes = await client.query(
+            `SELECT COALESCE(SUM(quantity), 0) as returned_qty 
+             FROM shift_receipt_returns 
+             WHERE receipt_id = $1 AND item_id = $2`,
+            [receiptId, itemId]
+        )
+        const returnedQty = Number(existingReturnRes.rows[0]?.returned_qty || 0)
+        const availableQty = originalQty - returnedQty
+
+        if (returnQuantity > availableQty) {
+            throw new Error(`Нельзя вернуть больше чем ${availableQty} шт. (доступно из ${originalQty})`)
+        }
+
+        // 2. Return stock back to warehouse
+        const { previousStock, newStock } = await applyWarehouseStockDelta(
+            client,
+            warehouseId,
+            productId,
+            returnQuantity  // Positive = add back
+        )
+
+        // 3. Log return movement
+        await logStockMovement(
+            client,
+            clubId,
+            userId,
+            productId,
+            returnQuantity,
+            previousStock,
+            newStock,
+            'RETURN',  // Changed from 'SALE' to 'RETURN'
+            `Возврат из чека #${receiptId}: ${reason}`,
+            'SHIFT_RECEIPT_RETURN',
+            receiptId,
+            receipt.shift_id,
+            warehouseId,
+            price
+        )
+
+        // 4. Record return in database
+        const refundAmount = returnQuantity * price
+        await client.query(
+            `
+            INSERT INTO shift_receipt_returns (receipt_id, item_id, quantity, refund_amount, reason, created_by)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            `,
+            [receiptId, itemId, returnQuantity, refundAmount, reason, userId]
+        )
+
+        // 5. Update product cache
+        await client.query(
+            `
+            UPDATE warehouse_products p
+            SET current_stock = (SELECT COALESCE(SUM(quantity), 0) FROM warehouse_stock WHERE product_id = p.id)
+            WHERE id = $1 AND club_id = $2
+            `,
+            [productId, clubId]
+        )
+
+        await client.query('COMMIT')
+        
+        // Send SSE notification
+        try {
+            const { sendToClub } = await import('@/app/api/inventory-events/route')
+            sendToClub(clubId, {
+                type: 'RECEIPT_ITEM_RETURNED',
+                receiptId,
+                itemId,
+                returnQuantity,
+                refundAmount,
+                timestamp: Date.now()
+            })
+        } catch (e) {
+            console.error('[SSE] Failed to send return notification:', e)
+        }
+        
+        revalidatePath(`/employee/clubs/${clubId}`)
+        return { success: true, refundAmount }
+    } catch (e) {
+        await client.query('ROLLBACK')
+        throw e
+    } finally {
+        client.release()
+    }
+}
+
+// ============================================================================
+// ПРИМЕЧАНИЕ: commitShiftReceiptsToMovements удалена как неиспользуемая.
+// Теперь списание происходит мгновенно при создании чека (createShiftReceipt).
+// ============================================================================
 
 export async function assignShiftToMovement(movementId: number, shiftId: string | null, clubId: string) {
     await requireClubAccess(clubId)
@@ -2932,44 +2941,45 @@ export async function getInventoryItems(inventoryId: number) {
         const inv = invHeader.rows[0]
         if (!inv) throw new Error("Инвентаризация не найдена")
         await assertSessionUserCanAccessClub(String(inv.club_id), sessionUserId)
-        
+
+        // Optimized query with movements JOIN (fixes N+1 problem)
         const res = await client.query(`
-            SELECT ii.*, p.name as product_name, p.barcode as barcode, p.barcodes as barcodes, c.name as category_name
+            SELECT ii.*, 
+                   p.name as product_name, 
+                   p.barcode as barcode, 
+                   p.barcodes as barcodes, 
+                   c.name as category_name,
+                   COALESCE(movements.total_movement, 0) as movement_during_inventory
             FROM warehouse_inventory_items ii
             JOIN warehouse_products p ON ii.product_id = p.id
             LEFT JOIN warehouse_categories c ON p.category_id = c.id
+            LEFT JOIN (
+                SELECT 
+                    product_id,
+                    SUM(change_amount) as total_movement
+                FROM warehouse_stock_movements
+                WHERE warehouse_id = $2
+                  AND created_at > $3
+                  AND club_id = $4
+                  AND COALESCE(related_entity_type, '') != 'INVENTORY'
+                GROUP BY product_id
+            ) movements ON movements.product_id = ii.product_id
             WHERE ii.inventory_id = $1
             ORDER BY c.name NULLS LAST, p.name
-        `, [inventoryId])
-        
+        `, [inventoryId, inv.warehouse_id, inv.started_at, inv.club_id])
+
         const items = res.rows as InventoryItem[]
 
-        // If inventory is OPEN, calculate dynamic expected stock
-        // expected_stock (snapshot) + movements_during_inventory = adjusted_expected
-        if (inv && inv.warehouse_id) {
-            for (const item of items) {
-                // Get movements since inventory started for this item in this warehouse
-                // EXCLUDING this inventory's own adjustments (which happen at close)
-                const movementsRes = await client.query(`
-                    SELECT COALESCE(SUM(change_amount), 0) as movement
-                    FROM warehouse_stock_movements
-                    WHERE product_id = $1 
-                    AND warehouse_id = $2
-                    AND created_at > $3
-                    AND club_id = $4
-                    AND COALESCE(related_entity_type, '') != 'INVENTORY'
-                `, [item.product_id, inv.warehouse_id, inv.started_at, inv.club_id])
-                
-                const movement = parseFloat(movementsRes.rows[0]?.movement || '0')
-                
-                // Update expected stock in the returned object (not in DB)
-                // This makes the UI show the "live" expected amount
-                if (movement !== 0) {
-                    item.expected_stock = Number(item.expected_stock) + movement
-                }
+        // Apply movement adjustments to expected_stock for display
+        for (const item of items) {
+            const movement = Number(item.movement_during_inventory || 0)
+            if (movement !== 0) {
+                item.expected_stock = Number(item.expected_stock) + movement
             }
+            // Remove helper field
+            delete (item as any).movement_during_inventory
         }
-        
+
         return items
     } finally {
         client.release()
@@ -3385,8 +3395,8 @@ export async function bulkUpdateInventoryItems(items: { id: number, actual_stock
 }
 
 export async function closeInventory(
-    inventoryId: number, 
-    clubId: string, 
+    inventoryId: number,
+    clubId: string,
     reportedRevenue: number,
     unaccountedSales: { product_id: number, quantity: number, selling_price: number, cost_price: number }[] = [],
     options?: { salesRecognition?: 'INVENTORY' | 'NONE' }
@@ -3400,7 +3410,7 @@ export async function closeInventory(
         const invHeader = await client.query('SELECT warehouse_id, shift_id, created_by, started_at FROM warehouse_inventories WHERE id = $1 AND club_id = $2', [inventoryId, clubId])
         const inv = invHeader.rows[0]
         if (!inv) throw new Error("Инвентаризация не найдена")
-        
+
         let warehouseId = inv.warehouse_id
         const shiftId = inv.shift_id
         const userId = inv.created_by
@@ -3414,12 +3424,12 @@ export async function closeInventory(
 
         // 1. Fetch items and account for movements that happened DURING the inventory
         const itemsRes = await client.query(`
-            SELECT ii.*, 
+            SELECT ii.*,
                    COALESCE((
-                       SELECT SUM(change_amount) 
-                       FROM warehouse_stock_movements 
-                       WHERE product_id = ii.product_id 
-                       AND warehouse_id = $2 
+                       SELECT SUM(change_amount)
+                       FROM warehouse_stock_movements
+                       WHERE product_id = ii.product_id
+                       AND warehouse_id = $2
                        AND club_id = $4
                        AND created_at > $3
                        AND NOT (COALESCE(related_entity_type, '') = 'INVENTORY' AND COALESCE(related_entity_id, -1) = $1) -- Exclude this inventory's own potential movements
@@ -3452,19 +3462,39 @@ export async function closeInventory(
         const movementType = recognizeAsSales ? 'SALE' : 'ADJUSTMENT'
 
         let standardCalculatedRevenue = 0
+        let hasNullStock = false
 
         for (const item of itemsRes.rows) {
-            if (item.actual_stock === null) continue
+            // FIX #5: Track items with NULL actual_stock
+            if (item.actual_stock === null) {
+                hasNullStock = true
+                // Set difference and revenue to NULL for incomplete items
+                await client.query(`
+                    UPDATE warehouse_inventory_items
+                    SET difference = NULL, calculated_revenue = NULL
+                    WHERE id = $1
+                `, [item.id])
+                continue
+            }
 
             // IMPORTANT: Adjusted Expected Stock = Original Snapshot + Movements during inventory
             // Example: Snapshot was 10. Supply +5 happened. Adjusted Expected is 15.
             // If employee counted 15, then 15 - 15 = 0. Perfect.
             const adjustedExpected = Number(item.expected_stock) + Number(item.movements_during_inventory)
-            const diffAmount = item.actual_stock - adjustedExpected
+            
+            // FIX #6: Protect against negative adjustedExpected
+            if (adjustedExpected < 0) {
+                console.error(`Negative adjustedExpected for product ${item.product_id}: ${adjustedExpected}. Setting to 0.`)
+                // Log warning but continue with 0
+            }
+            const safeAdjustedExpected = Math.max(0, adjustedExpected)
+            
+            // FIX #10: Unified difference calculation (actual - expected, consistent throughout)
+            const diffAmount = item.actual_stock - safeAdjustedExpected
 
             // Calculate revenue for this item (only when inventory recognizes deficit as sales)
-            const itemRevenue = recognizeAsSales && item.actual_stock < adjustedExpected
-                ? (adjustedExpected - item.actual_stock) * Number(item.selling_price_snapshot)
+            const itemRevenue = recognizeAsSales && item.actual_stock < safeAdjustedExpected
+                ? (safeAdjustedExpected - item.actual_stock) * Number(item.selling_price_snapshot)
                 : 0
             standardCalculatedRevenue += itemRevenue
 
@@ -3512,36 +3542,85 @@ export async function closeInventory(
             }
         }
 
-        const effectiveUnaccountedSales = recognizeAsSales ? unaccountedSales : []
-        if (effectiveUnaccountedSales.length > 0) {
-            const invProductIds = new Set<number>(itemsRes.rows.map((r: any) => Number(r.product_id)))
-            const seen = new Set<number>()
-            for (const s of effectiveUnaccountedSales) {
-                if (!Number.isFinite(s.quantity) || !Number.isInteger(s.quantity) || s.quantity <= 0) {
-                    throw new Error("Неучтенные продажи: количество должно быть целым положительным числом")
-                }
-                if (!Number.isFinite(s.selling_price) || s.selling_price < 0) {
-                    throw new Error("Неучтенные продажи: цена продажи должна быть неотрицательным числом")
-                }
-                if (!Number.isFinite(s.cost_price) || s.cost_price < 0) {
-                    throw new Error("Неучтенные продажи: себестоимость должна быть неотрицательным числом")
-                }
-                if (invProductIds.has(Number(s.product_id))) {
-                    throw new Error("Неучтенные продажи содержат товар, который уже присутствует в инвентаризации (это приведет к двойному учету)")
-                }
-                if (seen.has(Number(s.product_id))) {
-                    throw new Error("Неучтенные продажи содержат повторяющиеся товары")
-                }
-                seen.add(Number(s.product_id))
-            }
-            await assertProductsBelongToClub(client, clubId, effectiveUnaccountedSales.map(s => s.product_id))
+        // FIX #5: Throw error if items have NULL actual_stock
+        if (hasNullStock) {
+            await client.query('ROLLBACK')
+            throw new Error("Не все товары посчитаны. Заполните фактический остаток для всех позиций перед закрытием.")
         }
+
+        // FIX #3: Softer validation for unaccounted sales - allow duplicates with warning logged
+        const effectiveUnaccountedSales = recognizeAsSales ? unaccountedSales : []
+        const invProductIds = new Set<number>(itemsRes.rows.map((r: any) => Number(r.product_id)))
+        const seen = new Set<number>()
+        
+        for (const s of effectiveUnaccountedSales) {
+            if (!Number.isFinite(s.quantity) || !Number.isInteger(s.quantity) || s.quantity <= 0) {
+                throw new Error("Неучтенные продажи: количество должно быть целым положительным числом")
+            }
+            if (!Number.isFinite(s.selling_price) || s.selling_price < 0) {
+                throw new Error("Неучтенные продажи: цена продажи должна быть неотрицательным числом")
+            }
+            if (!Number.isFinite(s.cost_price) || s.cost_price < 0) {
+                throw new Error("Неучтенные продажи: себестоимость должна быть неотрицательным числом")
+            }
+            // FIX #3: Changed from error to warning log
+            if (invProductIds.has(Number(s.product_id))) {
+                console.warn(`Unaccounted sale includes product ${s.product_id} already in inventory. This may cause double-counting.`)
+            }
+            if (seen.has(Number(s.product_id))) {
+                throw new Error("Неучтенные продажи содержат повторяющиеся товары")
+            }
+            seen.add(Number(s.product_id))
+        }
+        
+        // FIX #7: Verify warehouse has the products for unaccounted sales
+        if (effectiveUnaccountedSales.length > 0) {
+            await assertProductsBelongToClub(client, clubId, effectiveUnaccountedSales.map(s => s.product_id))
+            
+            // Check products exist on this warehouse
+            const warehouseProductCheck = await client.query(`
+                SELECT p.id
+                FROM warehouse_products p
+                LEFT JOIN warehouse_stock ws ON p.id = ws.product_id AND ws.warehouse_id = $2
+                WHERE p.id = ANY($1) AND p.club_id = $3
+            `, [effectiveUnaccountedSales.map(s => s.product_id), warehouseId, clubId])
+            
+            if (warehouseProductCheck.rows.length !== effectiveUnaccountedSales.length) {
+                console.warn(`Some unaccounted sale products are not on warehouse ${warehouseId}`)
+            }
+        }
+        
         const unaccountedRevenue = effectiveUnaccountedSales.reduce((acc, s) => acc + (s.quantity * s.selling_price), 0)
-        const totalCalculatedRevenue = recognizeAsSales ? (standardCalculatedRevenue + unaccountedRevenue) : 0
-        const effectiveReportedRevenue = recognizeAsSales ? reportedRevenue : 0
-        const diff = effectiveReportedRevenue - totalCalculatedRevenue 
+        
+        // FIX #2: Calculate shift revenue and ADD unaccountedRevenue
+        let shiftCalculatedRevenue: number | null = null
+        if (!isRevision && salesRecognition === 'NONE') {
+            const revRes = await client.query(
+                `
+                SELECT COALESCE(SUM(ABS(sm.change_amount) * COALESCE(sm.price_at_time, p.selling_price)), 0)::numeric as revenue
+                FROM warehouse_stock_movements sm
+                JOIN warehouse_products p ON sm.product_id = p.id
+                WHERE sm.club_id = $1
+                  AND sm.shift_id = $2
+                  AND sm.type = 'SALE'
+                  AND (sm.reason IS NULL OR LOWER(sm.reason) NOT LIKE '%в счет зп%')
+                `,
+                [clubId, shiftId]
+            )
+            shiftCalculatedRevenue = Number(revRes.rows[0]?.revenue || 0)
+        }
+
+        // FIX #2: Add unaccountedRevenue to shiftCalculatedRevenue in NONE mode
+        const totalCalculatedRevenue = recognizeAsSales
+            ? (standardCalculatedRevenue + unaccountedRevenue)
+            : ((shiftCalculatedRevenue ?? 0) + unaccountedRevenue)
+        
+        const effectiveReportedRevenue = recognizeAsSales ? reportedRevenue : (!isRevision ? reportedRevenue : 0)
+        const diff = effectiveReportedRevenue - totalCalculatedRevenue
 
         // --- PART B: Handle Unaccounted Sales ---
+        // FIX #1: Only add to auto-supply, don't do net-zero dance
+        // Unaccounted sales are ADDED back to inventory (they were sold but not recorded)
         for (const sale of effectiveUnaccountedSales) {
             itemsForAutoSupply.push({
                 product_id: sale.product_id,
@@ -3550,7 +3629,7 @@ export async function closeInventory(
             })
         }
 
-        // --- PART C: Create Auto-Supply for Excesses ---
+        // --- PART C: Create Auto-Supply for Excesses and Unaccounted Sales ---
         if (itemsForAutoSupply.length > 0) {
             const totalAutoCost = itemsForAutoSupply.reduce((acc, item) => acc + (item.quantity * item.cost_price), 0)
             const supplyRes = await client.query(`
@@ -3591,43 +3670,15 @@ export async function closeInventory(
             }
         }
 
-        // --- PART D: Apply Unaccounted Sales (net 0 stock with auto-supply) ---
-        if (effectiveUnaccountedSales.length > 0) {
-            for (const sale of effectiveUnaccountedSales) {
-                const { previousStock, newStock } = await applyWarehouseStockDelta(
-                    client,
-                    warehouseId,
-                    sale.product_id,
-                    -sale.quantity
-                )
-                const saleReason = isRevision
-                    ? `Неучтенный товар (ревизия #${inventoryId})`
-                    : `Продажа неучтенного товара (инвентаризация #${inventoryId})`
-                await logStockMovement(
-                    client,
-                    clubId,
-                    userId,
-                    sale.product_id,
-                    -sale.quantity,
-                    previousStock,
-                    newStock,
-                    'SALE',
-                    saleReason,
-                    'INVENTORY',
-                    inventoryId,
-                    shiftId,
-                    warehouseId,
-                    Number(sale.selling_price || 0)
-                )
-            }
-        }
+        // FIX #1: REMOVED PART D - No longer doing net-zero dance for unaccounted sales
+        // The auto-supply above already handles returning the goods to inventory
 
         // 4. Update Cache for all involved products
         const allProductIds = [
             ...itemsRes.rows.map(i => i.product_id),
             ...effectiveUnaccountedSales.map(s => s.product_id)
         ]
-        
+
         if (allProductIds.length > 0) {
             await client.query(
                 `
@@ -3642,8 +3693,8 @@ export async function closeInventory(
         // 5. Close Inventory Header
         await client.query(`
             UPDATE warehouse_inventories
-            SET status = 'CLOSED', closed_at = NOW(), 
-                reported_revenue = $2, 
+            SET status = 'CLOSED', closed_at = NOW(),
+                reported_revenue = $2,
                 calculated_revenue = $3,
                 revenue_difference = $4
             WHERE id = $1
@@ -3658,5 +3709,5 @@ export async function closeInventory(
     } finally {
         client.release()
     }
-    revalidatePath(`/clubs/${clubId}/inventory`)
+    revalidatePath(`/clubs/${clubId}/inventory`, 'layout')
 }

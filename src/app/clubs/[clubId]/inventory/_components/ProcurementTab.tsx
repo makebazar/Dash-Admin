@@ -342,7 +342,7 @@ export function ProcurementTab({ lists, products, currentUserId }: ProcurementTa
                                 </div>
                                 <div className="text-left md:text-right">
                                     <p className="text-[10px] md:text-xs text-slate-400 font-bold uppercase tracking-widest mb-1">Ориентировочная сумма</p>
-                                    <p className="text-2xl md:text-3xl font-black text-blue-400">{totalSum.toLocaleString()} ₽</p>
+                                    <p className="text-2xl md:text-3xl font-black text-blue-400">{totalSum.toLocaleString('ru-RU')} ₽</p>
                                 </div>
                             </div>
 
@@ -508,7 +508,7 @@ export function ProcurementTab({ lists, products, currentUserId }: ProcurementTa
                                                     </div>
                                                 </TableCell>
                                                 <TableCell className="text-right font-black text-slate-900 pr-6">
-                                                    {(item.actual_quantity * item.cost_price).toLocaleString()} ₽
+                                                    {(item.actual_quantity * item.cost_price).toLocaleString('ru-RU')} ₽
                                                 </TableCell>
                                                 <TableCell>
                                                     <Button 
@@ -591,7 +591,7 @@ export function ProcurementTab({ lists, products, currentUserId }: ProcurementTa
                                             </div>
                                             <div className="text-right flex flex-col justify-end">
                                                 <p className="text-[9px] text-slate-400 uppercase font-black tracking-widest mb-1">Сумма</p>
-                                                <p className="text-lg font-black text-slate-900">{(item.actual_quantity * item.cost_price).toLocaleString()} ₽</p>
+                                                <p className="text-lg font-black text-slate-900">{(item.actual_quantity * item.cost_price).toLocaleString('ru-RU')} ₽</p>
                                             </div>
                                         </div>
                                     </div>

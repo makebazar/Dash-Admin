@@ -12,14 +12,14 @@ describe("Migration SQL safety checks", () => {
         expect(sql).toContain("ON CONFLICT (club_id, name) DO UPDATE")
     })
 
-    it("ensures club_employees.role exists before insert into free pool", () => {
+    it("ensures employee_shift_schedules has a stable unique constraint for ON CONFLICT", () => {
         const sql = readFileSync(
-            resolve(process.cwd(), "migrations/create_free_pool_user_v3.sql"),
+            resolve(process.cwd(), "migrations/zz_ensure_employee_shift_schedules.sql"),
             "utf8"
         )
-        expect(sql).toContain("ALTER TABLE club_employees ADD COLUMN role")
-        expect(sql).toContain("ALTER TABLE club_employees ALTER COLUMN role SET NOT NULL")
-        expect(sql).toContain("INSERT INTO club_employees (club_id, user_id, role, is_active)")
+        expect(sql).toContain("CREATE TABLE IF NOT EXISTS employee_shift_schedules")
+        expect(sql).toContain("CREATE UNIQUE INDEX IF NOT EXISTS employee_shift_schedules_uniq_club_user_month_year")
+        expect(sql).toContain("ON employee_shift_schedules (club_id, user_id, month, year)")
     })
 })
 

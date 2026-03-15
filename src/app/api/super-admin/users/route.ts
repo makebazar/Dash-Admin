@@ -50,7 +50,9 @@ export async function GET() {
              ORDER BY u.created_at DESC`
         );
 
-        const users = result.rows.map(row => {
+        const users = result.rows
+            .filter(row => !String(row.phone_number || '').startsWith('__system_'))
+            .map(row => {
             const resolved = resolveSubscriptionState(row);
             return {
                 ...row,
@@ -131,7 +133,7 @@ export async function DELETE(request: Request) {
         }
 
         const userResult = await query(
-            `SELECT id, is_super_admin FROM users WHERE id = $1`,
+            `SELECT id, is_super_admin, phone_number FROM users WHERE id = $1`,
             [targetUserId]
         );
         if ((userResult.rowCount || 0) === 0) {
@@ -139,6 +141,9 @@ export async function DELETE(request: Request) {
         }
         if (userResult.rows[0].is_super_admin) {
             return NextResponse.json({ error: 'Нельзя удалить супер-админа' }, { status: 400 });
+        }
+        if (String(userResult.rows[0].phone_number || '').startsWith('__system_')) {
+            return NextResponse.json({ error: 'Нельзя удалить системного пользователя' }, { status: 400 });
         }
 
         const linkedResult = await query(

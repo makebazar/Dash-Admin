@@ -122,7 +122,9 @@ export async function GET(
             [clubId]
         );
 
-        const employees = (result.rows || []).map(row => ({
+        const employees = (result.rows || [])
+            .filter(row => !String(row.phone_number || '').startsWith('__system_'))
+            .map(row => ({
             id: row.id,
             full_name: row.full_name,
             phone_number: row.phone_number,

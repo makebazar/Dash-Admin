@@ -117,7 +117,7 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
         })
     }
 
-    // Group sales by shift
+    // Group sales by shift (returns subtract from stats)
     const groupedSales = useMemo(() => {
         const groups: Record<string, { shift: any, items: any[], totalAmount: number, totalRevenue: number }> = {
             'unassigned': { shift: null, items: [], totalAmount: 0, totalRevenue: 0 }
@@ -127,15 +127,23 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
             const shiftId = sale.shift_id_raw
             const amount = Math.abs(sale.change_amount)
             const isSalaryDeduction = sale.reason?.toLowerCase().includes('в счет зп')
+            const isReturn = sale.type === 'RETURN'  // Returns have type 'RETURN'
             const price = Number(sale.price_at_time || sale.current_price || 0)
-            
-            // Расчет выручки (пропускаем если в счет ЗП)
+
+            // Расчет выручки
             const itemRevenue = isSalaryDeduction ? 0 : (amount * price)
-            
+
             if (!shiftId) {
                 groups['unassigned'].items.push(sale)
-                groups['unassigned'].totalAmount += amount
-                groups['unassigned'].totalRevenue += itemRevenue
+                if (isReturn) {
+                    // Возвраты вычитаются из статистики
+                    groups['unassigned'].totalAmount -= amount
+                    groups['unassigned'].totalRevenue -= itemRevenue
+                } else {
+                    // Продажи добавляются
+                    groups['unassigned'].totalAmount += amount
+                    groups['unassigned'].totalRevenue += itemRevenue
+                }
             } else {
                 if (!groups[shiftId]) {
                     groups[shiftId] = {
@@ -154,8 +162,15 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
                     }
                 }
                 groups[shiftId].items.push(sale)
-                groups[shiftId].totalAmount += amount
-                groups[shiftId].totalRevenue += itemRevenue
+                if (isReturn) {
+                    // Возвраты вычитаются из статистики
+                    groups[shiftId].totalAmount -= amount
+                    groups[shiftId].totalRevenue -= itemRevenue
+                } else {
+                    // Продажи добавляются
+                    groups[shiftId].totalAmount += amount
+                    groups[shiftId].totalRevenue += itemRevenue
+                }
             }
         })
 
@@ -326,11 +341,11 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
                                         <div className="flex items-center gap-3 sm:gap-6">
                                             <div className="flex flex-col items-end shrink-0">
                                                 <span className="text-[7px] sm:text-[9px] text-slate-400 uppercase font-black tracking-tighter sm:tracking-widest leading-none mb-1">Склад</span>
-                                                <span className="text-[11px] sm:text-sm font-black text-blue-600 leading-none whitespace-nowrap">{group.totalRevenue.toLocaleString()} ₽</span>
+                                                <span className="text-[11px] sm:text-sm font-black text-blue-600 leading-none whitespace-nowrap">{group.totalRevenue.toLocaleString('ru-RU')} ₽</span>
                                             </div>
                                             <div className="flex flex-col items-end shrink-0">
                                                 <span className="text-[7px] sm:text-[9px] text-slate-400 uppercase font-black tracking-tighter sm:tracking-widest leading-none mb-1">Касса</span>
-                                                <span className="text-[11px] sm:text-sm font-black text-slate-700 leading-none whitespace-nowrap">{group.shift.reported.toLocaleString()} ₽</span>
+                                                <span className="text-[11px] sm:text-sm font-black text-slate-700 leading-none whitespace-nowrap">{group.shift.reported.toLocaleString('ru-RU')} ₽</span>
                                             </div>
                                             <div className="flex flex-col items-end shrink-0">
                                                 <span className="text-[7px] sm:text-[9px] text-slate-400 uppercase font-black tracking-tighter sm:tracking-widest leading-none mb-1">Разница</span>
@@ -339,7 +354,7 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
                                                     (group.shift.reported - group.totalRevenue) === 0 ? "text-green-500" : 
                                                     (group.shift.reported - group.totalRevenue) > 0 ? "text-amber-500" : "text-red-500"
                                                 )}>
-                                                    {(group.shift.reported - group.totalRevenue) > 0 ? "+" : ""}{(group.shift.reported - group.totalRevenue).toLocaleString()} ₽
+                                                    {(group.shift.reported - group.totalRevenue) > 0 ? "+" : ""}{(group.shift.reported - group.totalRevenue).toLocaleString('ru-RU')} ₽
                                                 </span>
                                             </div>
                                         </div>
@@ -347,7 +362,7 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
                                     {isUnassigned && (
                                         <div className="flex flex-col items-end shrink-0">
                                             <span className="text-[7px] sm:text-[9px] text-amber-600 uppercase font-black tracking-tighter sm:tracking-widest leading-none mb-1">Сумма</span>
-                                            <span className="text-[11px] sm:text-sm font-black text-amber-600 leading-none whitespace-nowrap">{group.totalRevenue.toLocaleString()} ₽</span>
+                                            <span className="text-[11px] sm:text-sm font-black text-amber-600 leading-none whitespace-nowrap">{group.totalRevenue.toLocaleString('ru-RU')} ₽</span>
                                         </div>
                                     )}
 
@@ -399,13 +414,23 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
                                                             <div className="flex flex-col gap-0.5">
                                                                 <div className="flex items-center gap-2">
                                                                     <span className="text-sm font-bold text-slate-700">{sale.product_name}</span>
+                                                                    {sale.type === 'RETURN' && (
+                                                                        <Badge className="bg-amber-100 text-amber-700 border-amber-200 text-[9px] h-4 px-1 px-1.5 uppercase font-black">
+                                                                            Возврат
+                                                                        </Badge>
+                                                                    )}
                                                                     {sale.reason?.toLowerCase().includes('в счет зп') && (
                                                                         <Badge className="bg-purple-100 text-purple-700 border-purple-200 text-[9px] h-4 px-1 px-1.5 uppercase font-black">
                                                                             В счет ЗП
                                                                         </Badge>
                                                                     )}
                                                                 </div>
-                                                                {sale.reason && (
+                                                                {sale.return_reason && (
+                                                                    <span className="text-[10px] text-amber-600 font-medium italic leading-tight">
+                                                                        {sale.return_reason}
+                                                                    </span>
+                                                                )}
+                                                                {sale.reason && sale.type !== 'RETURN' && (
                                                                     <span className="text-[10px] text-blue-600 font-medium italic leading-tight">
                                                                         {sale.reason}
                                                                     </span>
@@ -414,7 +439,7 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
                                                             </div>
                                                         </TableCell>
                                                         <TableCell className="text-right text-sm font-medium text-slate-600">
-                                                            {(sale.price_at_time || sale.current_price || 0).toLocaleString()} ₽
+                                                            {(sale.price_at_time || sale.current_price || 0).toLocaleString('ru-RU')} ₽
                                                         </TableCell>
                                                         <TableCell className="text-right">
                                                             {editingId === sale.id ? (
@@ -440,7 +465,7 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
                                                             )}
                                                         </TableCell>
                                                         <TableCell className="text-right font-black text-slate-900">
-                                                            {(Math.abs(sale.change_amount) * (sale.price_at_time || sale.current_price || 0)).toLocaleString()} ₽
+                                                            {(Math.abs(sale.change_amount) * (sale.price_at_time || sale.current_price || 0)).toLocaleString('ru-RU')} ₽
                                                         </TableCell>
                                                         <TableCell className="text-right text-[10px] text-slate-400 font-mono">
                                                             {new Date(sale.created_at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
@@ -547,10 +572,10 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
 
                                                 <div className="flex flex-col items-end gap-1 px-2">
                                                     <div className="text-sm font-black text-slate-900">
-                                                        {(Math.abs(sale.change_amount) * (sale.price_at_time || sale.current_price || 0)).toLocaleString()} ₽
+                                                        {(Math.abs(sale.change_amount) * (sale.price_at_time || sale.current_price || 0)).toLocaleString('ru-RU')} ₽
                                                     </div>
                                                     <div className="text-[10px] text-slate-400">
-                                                        {Number(sale.price_at_time || sale.current_price || 0).toLocaleString()} ₽/шт
+                                                        {Number(sale.price_at_time || sale.current_price || 0).toLocaleString('ru-RU')} ₽/шт
                                                     </div>
                                                 </div>
 

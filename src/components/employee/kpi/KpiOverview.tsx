@@ -24,7 +24,7 @@ export function MaintenanceKpiCard({ kpi, formatCurrency }: { kpi: any, formatCu
 
     return (
         <div className="space-y-4">
-            <Card className="border-0 shadow-xl bg-gradient-to-br from-slate-900 to-indigo-900 text-white overflow-hidden relative">
+            <Card className="border-0 shadow-lg bg-gradient-to-br from-slate-900 to-indigo-900 text-white overflow-hidden relative">
                 <CardContent className="p-6 relative z-10">
                     <div className="flex items-center justify-between mb-6">
                         <div className="flex items-center gap-2">
@@ -48,8 +48,8 @@ export function MaintenanceKpiCard({ kpi, formatCurrency }: { kpi: any, formatCu
 
                     <div className="space-y-4">
                         <div className="h-2 w-full bg-white/10 rounded-full overflow-hidden">
-                            <div 
-                                className="h-full bg-indigo-500 transition-all duration-1000 shadow-[0_0_10px_rgba(99,102,241,0.5)]"
+                            <div
+                                className="h-full bg-indigo-500"
                                 style={{ width: `${progressPercent}%` }}
                             />
                         </div>
@@ -126,7 +126,7 @@ export function ChecklistKpiCard({ kpi, formatCurrency }: { kpi: any, formatCurr
 
     return (
         <div className="space-y-4">
-            <Card className="border-0 shadow-xl bg-gradient-to-br from-slate-900 to-fuchsia-900 text-white overflow-hidden relative">
+            <Card className="border-0 shadow-lg bg-gradient-to-br from-slate-900 to-fuchsia-900 text-white overflow-hidden relative">
                 <CardContent className="p-6 relative z-10">
                     <div className="flex items-center justify-between mb-6">
                         <div className="flex items-center gap-2">
@@ -150,8 +150,8 @@ export function ChecklistKpiCard({ kpi, formatCurrency }: { kpi: any, formatCurr
 
                     <div className="space-y-4">
                         <div className="h-2 w-full bg-white/10 rounded-full overflow-hidden">
-                            <div 
-                                className="h-full bg-fuchsia-500 transition-all duration-1000 shadow-[0_0_10px_rgba(217,70,239,0.5)]"
+                            <div
+                                className="h-full bg-fuchsia-500"
                                 style={{ width: `${progressPercent}%` }}
                             />
                         </div>
@@ -256,13 +256,10 @@ export function KpiOverview({
     // Карточка максимального уровня
     if (maxLevel) {
         return (
-            <Card className="border-0 shadow-2xl bg-gradient-to-br from-emerald-500 via-green-600 to-teal-600 text-white overflow-hidden relative">
-                <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -mr-32 -mt-32" />
-                <div className="absolute bottom-0 left-0 w-48 h-48 bg-black/10 rounded-full blur-3xl -ml-24 -mb-24" />
-
+            <Card className="border-0 shadow-lg bg-gradient-to-br from-emerald-500 via-green-600 to-teal-600 text-white overflow-hidden relative">
                 <CardContent className="p-6 md:p-8 relative z-10">
                     <div className="text-center space-y-4">
-                        <div className="inline-flex items-center justify-center p-4 rounded-full bg-white/20 backdrop-blur">
+                        <div className="inline-flex items-center justify-center p-4 rounded-full bg-white/20">
                             <Trophy className="h-12 w-12 text-yellow-300" />
                         </div>
                         <div>
@@ -327,11 +324,7 @@ export function KpiOverview({
     return (
         <div className="space-y-4">
             {/* Main Focus Card - Что нужно сегодня */}
-            <Card className="border-0 shadow-2xl bg-gradient-to-br from-slate-900 via-purple-900 to-indigo-900 text-white overflow-hidden relative group">
-                <div className="absolute inset-0 bg-[url('/grid.svg')] opacity-5" />
-                <div className="absolute top-0 right-0 w-64 h-64 bg-purple-500/20 rounded-full blur-3xl -mr-32 -mt-32 group-hover:bg-purple-500/30 transition-all duration-700" />
-                <div className="absolute bottom-0 left-0 w-48 h-48 bg-blue-500/20 rounded-full blur-3xl -ml-24 -mb-24 group-hover:bg-blue-500/30 transition-all duration-700" />
-
+            <Card className="border-0 shadow-lg bg-gradient-to-br from-slate-900 via-purple-900 to-indigo-900 text-white overflow-hidden relative">
                 <CardContent className="p-6 md:p-8 relative z-10">
                     {/* Header */}
                     <div className="flex items-center justify-between mb-6">

@@ -220,15 +220,15 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
                                         )}
                                     </TableCell>
                                     <TableCell className="text-right font-medium">
-                                        {inv.status === 'CLOSED' && inv.reported_revenue != null ? `${Number(inv.reported_revenue).toLocaleString()} ₽` : '—'}
+                                        {inv.status === 'CLOSED' && inv.reported_revenue != null ? `${Number(inv.reported_revenue).toLocaleString('ru-RU')} ₽` : '—'}
                                     </TableCell>
                                     <TableCell className="text-right font-bold text-slate-900">
-                                        {inv.status === 'CLOSED' ? `${Number(inv.calculated_revenue).toLocaleString()} ₽` : '—'}
+                                        {inv.status === 'CLOSED' ? `${Number(inv.calculated_revenue).toLocaleString('ru-RU')} ₽` : '—'}
                                     </TableCell>
                                     <TableCell className="text-right">
                                         {inv.status === 'CLOSED' ? (
                                             <span className={inv.revenue_difference < 0 ? "text-red-600 font-black" : "text-green-600 font-black"}>
-                                                {inv.revenue_difference > 0 ? '+' : ''}{Number(inv.revenue_difference).toLocaleString()} ₽
+                                                {inv.revenue_difference > 0 ? '+' : ''}{Number(inv.revenue_difference).toLocaleString('ru-RU')} ₽
                                             </span>
                                         ) : '—'}
                                     </TableCell>
@@ -300,11 +300,11 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
                                 <div className="grid grid-cols-3 gap-2 py-3 border-y border-slate-50 mb-3 bg-slate-50/30 -mx-4 px-4">
                                     <div>
                                         <p className="text-[9px] text-slate-400 uppercase font-bold mb-0.5">Заявлено</p>
-                                        <p className="text-xs font-bold text-slate-900">{Number(inv.reported_revenue || 0).toLocaleString()} ₽</p>
+                                        <p className="text-xs font-bold text-slate-900">{Number(inv.reported_revenue || 0).toLocaleString('ru-RU')} ₽</p>
                                     </div>
                                     <div className="text-center">
                                         <p className="text-[9px] text-slate-400 uppercase font-bold mb-0.5">По факту</p>
-                                        <p className="text-xs font-bold text-slate-900">{Number(inv.calculated_revenue || 0).toLocaleString()} ₽</p>
+                                        <p className="text-xs font-bold text-slate-900">{Number(inv.calculated_revenue || 0).toLocaleString('ru-RU')} ₽</p>
                                     </div>
                                     <div className="text-right">
                                         <p className="text-[9px] text-slate-400 uppercase font-bold mb-0.5">Разница</p>
@@ -312,7 +312,7 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
                                             "text-xs font-black",
                                             inv.revenue_difference < 0 ? "text-red-600" : "text-green-600"
                                         )}>
-                                            {inv.revenue_difference > 0 ? '+' : ''}{Number(inv.revenue_difference).toLocaleString()} ₽
+                                            {inv.revenue_difference > 0 ? '+' : ''}{Number(inv.revenue_difference).toLocaleString('ru-RU')} ₽
                                         </p>
                                     </div>
                                 </div>

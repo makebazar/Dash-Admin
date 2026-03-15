@@ -209,7 +209,7 @@ export function SuppliesTab({ supplies, products, warehouses, suppliers, current
                                 </TableCell>
                                 <TableCell className="text-right text-sm font-medium text-slate-600">{supply.items_count}</TableCell>
                                 <TableCell className="text-right">
-                                    <span className="text-sm font-black text-slate-900">{Number(supply.total_cost).toLocaleString()} ₽</span>
+                                    <span className="text-sm font-black text-slate-900">{Number(supply.total_cost).toLocaleString('ru-RU')} ₽</span>
                                 </TableCell>
                                 <TableCell>
                                     <ChevronRight className="h-4 w-4 text-slate-300 group-hover:text-blue-500 transition-colors" />
@@ -339,8 +339,8 @@ export function SuppliesTab({ supplies, products, warehouses, suppliers, current
                                                     {item.quantity} шт
                                                 </Badge>
                                             </TableCell>
-                                            <TableCell className="text-right text-sm text-slate-600">{item.cost_price.toLocaleString()} ₽</TableCell>
-                                            <TableCell className="text-right font-bold text-slate-900">{item.total_cost.toLocaleString()} ₽</TableCell>
+                                            <TableCell className="text-right text-sm text-slate-600">{item.cost_price.toLocaleString('ru-RU')} ₽</TableCell>
+                                            <TableCell className="text-right font-bold text-slate-900">{item.total_cost.toLocaleString('ru-RU')} ₽</TableCell>
                                         </TableRow>
                                     ))}
                                 </TableBody>
@@ -541,7 +541,7 @@ export function SuppliesTab({ supplies, products, warehouses, suppliers, current
                                                         <span className="text-[10px] text-slate-400 font-bold">₽</span>
                                                     </div>
                                                 </TableCell>
-                                                <TableCell className="text-right py-2 font-bold text-slate-900">{(item.quantity * item.cost).toLocaleString()} ₽</TableCell>
+                                                <TableCell className="text-right py-2 font-bold text-slate-900">{(item.quantity * item.cost).toLocaleString('ru-RU')} ₽</TableCell>
                                                 <TableCell className="py-2">
                                                     <Button aria-label={`Удалить позицию ${p?.name || idx}`} variant="ghost" size="icon" className="h-7 w-7 text-slate-300 hover:text-red-500 hover:bg-red-50" onClick={() => handleRemoveItem(idx)}>
                                                         <Trash2 className="h-3.5 w-3.5" />
@@ -556,7 +556,7 @@ export function SuppliesTab({ supplies, products, warehouses, suppliers, current
                         
                         <div className="flex justify-end items-center gap-3 pt-2">
                             <span className="text-[10px] uppercase font-black text-slate-400 tracking-wider">Итого к оплате:</span>
-                            <span className="text-xl font-black text-blue-600">{totalSum.toLocaleString()} ₽</span>
+                            <span className="text-xl font-black text-blue-600">{totalSum.toLocaleString('ru-RU')} ₽</span>
                         </div>
                     </div>
 

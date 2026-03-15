@@ -364,6 +364,9 @@ describe("Warehouse System Logic", () => {
             if (sql.startsWith("SELECT inventory_settings FROM clubs")) {
                 return { rows: [{ inventory_settings: { sales_capture_mode: "SHIFT" } }] }
             }
+            if (sql.includes("FROM warehouse_stock_movements sm") && sql.includes("AND sm.type = 'SALE'")) {
+                return { rows: [{ revenue: 500 }] }
+            }
             if (sql.includes("FROM warehouse_inventory_items ii")) {
                 return {
                     rows: [
@@ -387,12 +390,12 @@ describe("Warehouse System Logic", () => {
         })
         vi.mocked(getClient).mockResolvedValueOnce(mainClient as any).mockResolvedValueOnce(replenishmentClient as any)
 
-        await closeInventory(77, clubId, 1000, [{ product_id: 55, quantity: 2, selling_price: 120, cost_price: 60 }])
+        await closeInventory(77, clubId, 1000, [])
 
         // In SHIFT mode, closeInventory should not recognize inventory deficits as sales by default.
         expect(mainClient.query).toHaveBeenCalledWith(
             expect.stringContaining("UPDATE warehouse_inventories"),
-            [77, 0, 0, 0]
+            [77, 1000, 500, 500]
         )
     })
 })

@@ -121,7 +121,16 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
         }
     }
 
+    // FIX #8: Track uncounted items
+    const uncountedItems = useMemo(() => {
+        return items.filter(i => i.actual_stock === null)
+    }, [items])
+
+    const uncountedCount = uncountedItems.length
+    const totalCount = items.length
+
     // Calculate Sales Summary for Preview
+    // Note: This shows sales (expected > actual means sold), so we use (expected - actual)
     const salesPreview = useMemo(() => {
         const standardSales = items
             .filter(i => i.actual_stock !== null && (i.expected_stock || 0) > (i.actual_stock || 0))
@@ -149,6 +158,15 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
     const totalSalesRevenue = salesPreview.reduce((acc, s) => acc + s.total, 0)
 
     const handleCloseInventory = async () => {
+        // FIX #8: Block closing if items are uncounted
+        if (uncountedCount > 0) {
+            showMessage({ 
+                title: "Не все товары посчитаны", 
+                description: `Осталось ${uncountedCount} из ${totalCount} товаров без фактического остатка. Заполните все позиции перед закрытием.` 
+            })
+            return
+        }
+
         // If owner didn't select a metric (metric is null), we don't need reported revenue
         const metricRequired = !!inventory?.target_metric_key
         if (metricRequired && !reportedRevenue) return
@@ -156,8 +174,8 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
         startTransition(async () => {
             try {
                 await closeInventory(
-                    inventoryId, 
-                    clubId, 
+                    inventoryId,
+                    clubId,
                     metricRequired ? Number(reportedRevenue) : 0,
                     unaccountedSales.map(s => ({
                         product_id: s.product_id,
@@ -420,11 +438,31 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                             {isClosed ? <Badge className="bg-green-500">Завершено</Badge> : <Badge className="bg-amber-500">В процессе</Badge>}
                         </h2>
                         <p className="text-sm text-muted-foreground">
-                            Начата: {new Date(inventory.started_at).toLocaleString('ru-RU')} 
+                            Начата: {new Date(inventory.started_at).toLocaleString('ru-RU')}
                             {inventory.target_metric_key && (
                                 <> | Метрика: <code className="bg-slate-100 px-1 rounded">{inventory.target_metric_key}</code></>
                             )}
                         </p>
+                        {/* FIX #8: Progress indicator */}
+                        {!isClosed && (
+                            <div className="flex items-center gap-2 mt-1">
+                                <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden max-w-[200px]">
+                                    <div 
+                                        className={cn(
+                                            "h-full transition-all",
+                                            uncountedCount === 0 ? "bg-green-500" : "bg-amber-500"
+                                        )}
+                                        style={{ width: `${totalCount > 0 ? ((totalCount - uncountedCount) / totalCount) * 100 : 0}%` }}
+                                    />
+                                </div>
+                                <span className={cn(
+                                    "text-xs font-bold",
+                                    uncountedCount === 0 ? "text-green-600" : "text-amber-600"
+                                )}>
+                                    {totalCount - uncountedCount} из {totalCount}
+                                </span>
+                            </div>
+                        )}
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -464,9 +502,23 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                                 <Plus className="h-4 w-4 md:mr-2" />
                                 <span className="hidden md:inline">Добавить товар</span>
                             </Button>
-                            <Button onClick={() => setIsCloseDialogOpen(true)} variant="default" className="bg-green-600 hover:bg-green-700 whitespace-nowrap">
+                            <Button 
+                                onClick={() => setIsCloseDialogOpen(true)} 
+                                variant="default" 
+                                className={cn(
+                                    "whitespace-nowrap",
+                                    uncountedCount > 0 
+                                        ? "bg-amber-600 hover:bg-amber-700" 
+                                        : "bg-green-600 hover:bg-green-700"
+                                )}
+                                disabled={uncountedCount > 0}
+                            >
                                 <CheckCircle2 className="mr-2 h-4 w-4" />
-                                {inventory.target_metric_key ? "Завершить и сверить" : "Завершить подсчет"}
+                                {uncountedCount > 0 
+                                    ? `Сначала посчитайте ${uncountedCount} тов.` 
+                                    : inventory.target_metric_key 
+                                        ? "Завершить и сверить" 
+                                        : "Завершить подсчет"}
                             </Button>
                         </>
                     )}
@@ -512,9 +564,10 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                                             </TableCell>
                                         </TableRow>
                                         {categoryItems.map(item => {
-                                            const difference = (item.expected_stock || 0) - (item.actual_stock || 0)
-                                            const revenue = difference * item.selling_price_snapshot
-                                            
+                                            // FIX #10: Unified difference (actual - expected, matches DB)
+                                            const difference = (item.actual_stock || 0) - (item.expected_stock || 0)
+                                            const revenue = Math.abs(difference) * item.selling_price_snapshot
+
                                             return (
                                                 <TableRow key={item.id} className={isClosed && difference !== 0 ? "bg-slate-50" : scannedItem?.id === item.id ? "bg-blue-50 ring-2 ring-blue-500 ring-inset" : ""}>
                                                     <TableCell className="font-medium pl-8">
@@ -608,8 +661,12 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                                                     {isClosed && (
                                                         <>
                                                             <TableCell className="text-right">
-                                                                <span className={difference > 0 ? "text-green-600" : difference < 0 ? "text-red-600" : "text-gray-400"}>
-                                                                    {difference > 0 ? `-${difference}` : `+${Math.abs(difference)}`} 
+                                                                <span className={cn(
+                                                                    "font-bold",
+                                                                    difference > 0 ? "text-green-600" : 
+                                                                    difference < 0 ? "text-red-600" : "text-gray-400"
+                                                                )}>
+                                                                    {difference > 0 ? `+${difference}` : difference < 0 ? `${difference}` : '0'}
                                                                 </span>
                                                             </TableCell>
                                                             {inventory.target_metric_key && (
@@ -643,14 +700,15 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                                     {category} ({categoryItems.length})
                                 </div>
                                 {categoryItems.map(item => {
-                                    const difference = (item.expected_stock || 0) - (item.actual_stock || 0)
-                                    const revenue = difference * item.selling_price_snapshot
+                                    // FIX #10: Unified difference (actual - expected, matches DB)
+                                    const difference = (item.actual_stock || 0) - (item.expected_stock || 0)
+                                    const revenue = Math.abs(difference) * item.selling_price_snapshot
                                     const isModified = item.actual_stock !== null
-                                    
+
                                     return (
                                         <div key={`mob-item-${item.id}`} className={cn(
                                             "p-4 flex flex-col gap-3 active:bg-slate-50 transition-colors",
-                                            isClosed && difference !== 0 ? "bg-red-50/30" : 
+                                            isClosed && difference !== 0 ? "bg-slate-50" :
                                             scannedItem?.id === item.id ? "bg-blue-50 ring-2 ring-blue-500 ring-inset" : ""
                                         )}>
                                             <div className="flex justify-between items-start gap-4">
@@ -678,9 +736,9 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                                                                 <span className={cn(
                                                                     "text-xs font-black px-1.5 py-0.5 rounded",
                                                                     difference === 0 ? "bg-slate-100 text-slate-500" :
-                                                                    difference > 0 ? "bg-red-100 text-red-600" : "bg-green-100 text-green-600"
+                                                                    difference > 0 ? "bg-green-100 text-green-600" : "bg-red-100 text-red-600"
                                                                 )}>
-                                                                    {difference === 0 ? "OK" : difference > 0 ? `-${difference}` : `+${Math.abs(difference)}`}
+                                                                    {difference === 0 ? "OK" : difference > 0 ? `+${difference}` : `${difference}`}
                                                                 </span>
                                                                 {inventory.target_metric_key && (
                                                                     <span className="text-xs font-bold text-slate-700">{revenue.toLocaleString('ru-RU')} ₽</span>

@@ -112,7 +112,7 @@ export function AbcAnalysisTab({ clubId, products }: AbcAnalysisTabProps) {
                         <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Сумма в закупе</span>
                     </div>
                     <div className="flex items-baseline gap-2">
-                        <span className="text-2xl font-black text-slate-900">{Math.round(stats.stockCost).toLocaleString()} ₽</span>
+                        <span className="text-2xl font-black text-slate-900">{Math.round(stats.stockCost).toLocaleString('ru-RU')} ₽</span>
                     </div>
                 </div>
 
@@ -124,7 +124,7 @@ export function AbcAnalysisTab({ clubId, products }: AbcAnalysisTabProps) {
                         <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Сумма в продаже</span>
                     </div>
                     <div className="flex items-baseline gap-2">
-                        <span className="text-2xl font-black text-slate-900">{Math.round(stats.stockValue).toLocaleString()} ₽</span>
+                        <span className="text-2xl font-black text-slate-900">{Math.round(stats.stockValue).toLocaleString('ru-RU')} ₽</span>
                     </div>
                 </div>
 
@@ -136,7 +136,7 @@ export function AbcAnalysisTab({ clubId, products }: AbcAnalysisTabProps) {
                         <span className="text-[10px] text-indigo-400 uppercase font-bold tracking-wider">Потенц. прибыль</span>
                     </div>
                     <div className="flex items-baseline gap-2">
-                        <span className="text-2xl font-black text-indigo-900">{Math.round(potentialProfit).toLocaleString()} ₽</span>
+                        <span className="text-2xl font-black text-indigo-900">{Math.round(potentialProfit).toLocaleString('ru-RU')} ₽</span>
                         <span className="text-xs text-indigo-600 font-bold">({stockMargin.toFixed(1)}%)</span>
                     </div>
                 </div>
@@ -208,10 +208,10 @@ export function AbcAnalysisTab({ clubId, products }: AbcAnalysisTabProps) {
                     </h4>
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
                         <span className="text-[10px] text-slate-400 uppercase font-bold tracking-widest">
-                            Выручка: {stats.totalRevenue.toLocaleString()} ₽
+                            Выручка: {stats.totalRevenue.toLocaleString('ru-RU')} ₽
                         </span>
                         <span className="text-[10px] text-green-600 uppercase font-bold tracking-widest">
-                            Прибыль: {stats.totalProfit.toLocaleString()} ₽ ({avgMargin.toFixed(1)}%)
+                            Прибыль: {stats.totalProfit.toLocaleString('ru-RU')} ₽ ({avgMargin.toFixed(1)}%)
                         </span>
                     </div>
                 </div>
@@ -251,10 +251,10 @@ export function AbcAnalysisTab({ clubId, products }: AbcAnalysisTabProps) {
                                 </div>
                                 <div className="text-right">
                                     <div className="text-sm font-black text-slate-900 leading-none">
-                                        {Number(item.total_revenue).toLocaleString()} ₽
+                                        {Number(item.total_revenue).toLocaleString('ru-RU')} ₽
                                     </div>
                                     <div className="text-[10px] font-bold text-green-600 mt-1">
-                                        +{Number(item.total_profit).toLocaleString()} ₽
+                                        +{Number(item.total_profit).toLocaleString('ru-RU')} ₽
                                     </div>
                                 </div>
                             </div>
@@ -262,7 +262,7 @@ export function AbcAnalysisTab({ clubId, products }: AbcAnalysisTabProps) {
                             <div className="grid grid-cols-3 gap-2 py-2 border-y border-slate-50 bg-slate-50/30 rounded-lg px-2">
                                 <div className="space-y-0.5">
                                     <div className="text-[9px] text-slate-400 uppercase font-bold tracking-wider">Продано</div>
-                                    <div className="text-xs font-bold text-slate-600">{Number(item.total_sold).toLocaleString()} шт.</div>
+                                    <div className="text-xs font-bold text-slate-600">{Number(item.total_sold).toLocaleString('ru-RU')} шт.</div>
                                 </div>
                                 <div className="space-y-0.5">
                                     <div className="text-[9px] text-slate-400 uppercase font-bold tracking-wider">Маржа</div>
@@ -320,13 +320,13 @@ export function AbcAnalysisTab({ clubId, products }: AbcAnalysisTabProps) {
                                         </Badge>
                                     </TableCell>
                                     <TableCell className="text-right font-medium text-slate-600">
-                                        {Number(item.total_sold).toLocaleString()} шт.
+                                        {Number(item.total_sold).toLocaleString('ru-RU')} шт.
                                     </TableCell>
                                     <TableCell className="text-right font-black text-slate-900">
-                                        {Number(item.total_revenue).toLocaleString()} ₽
+                                        {Number(item.total_revenue).toLocaleString('ru-RU')} ₽
                                     </TableCell>
                                     <TableCell className="text-right font-bold text-green-600">
-                                        {Number(item.total_profit).toLocaleString()} ₽
+                                        {Number(item.total_profit).toLocaleString('ru-RU')} ₽
                                     </TableCell>
                                     <TableCell className="text-right">
                                         <Badge variant="outline" className="font-bold border-slate-200">

@@ -7,15 +7,18 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
 import { Loader2, ShoppingCart, Trash2, CreditCard, Banknote, History, X, Search, Keyboard, ArrowLeft } from "lucide-react"
 import { useUiDialogs } from "@/app/clubs/[clubId]/inventory/_components/useUiDialogs"
+import { useSSE } from "@/hooks/usePOSWebSocket"
 import {
     createShiftReceipt,
     getProductByBarcode,
     getProducts,
     getShiftReceipts,
     voidShiftReceipt,
+    returnReceiptItem,
     type Product,
     type ShiftReceipt,
     type ShiftReceiptPaymentType
@@ -50,6 +53,13 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
     const [cashReceived, setCashReceived] = useState<string>("")
     const [receiptNotes, setReceiptNotes] = useState<string>("")
 
+    // Return/Refund State
+    const [isReturnDialogOpen, setIsReturnDialogOpen] = useState(false)
+    const [selectedReceipt, setSelectedReceipt] = useState<ShiftReceipt | null>(null)
+    const [returnItemId, setReturnItemId] = useState<number | null>(null)
+    const [returnQuantity, setReturnQuantity] = useState("1")
+    const [returnReason, setReturnReason] = useState("")
+
     useEffect(() => {
         document.body.style.overflow = 'hidden'
         document.body.style.position = 'fixed'
@@ -73,20 +83,43 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
         setReceipts(r)
     }, [activeShiftId, clubId, userId])
 
+    // Обработка WebSocket сообщений
+    const handleWebSocketMessage = useCallback((message: any) => {
+        console.log('[POS] WebSocket message:', message)
+        
+        if (message.type === 'RECEIPT_CREATED' || message.type === 'RECEIPT_VOIDED') {
+            // Обновляем только чеки, не загружая весь каталог
+            if (activeShiftId) {
+                getShiftReceipts(clubId, userId, activeShiftId)
+                    .then(setReceipts)
+                    .catch(console.error)
+            }
+        }
+        
+        if (message.type === 'STOCK_UPDATED') {
+            // Обновляем остатки конкретного товара в кэше
+            setAllProducts(prev => prev.map(p => 
+                p.id === message.productId 
+                    ? { ...p, current_stock: message.newStock }
+                    : p
+            ))
+        }
+    }, [activeShiftId, clubId, userId])
+
+    // SSE подключение (вместо polling)
+    const { isConnected } = useSSE(handleWebSocketMessage)
+
     useEffect(() => {
         refresh().catch(console.error)
     }, [refresh])
 
+    // Убрали polling interval - теперь только WebSocket
+    // Оставили refresh при фокусе для надежности
     useEffect(() => {
-        const interval = window.setInterval(() => {
-            refresh().catch(console.error)
-        }, 5000)
-
         const onFocus = () => refresh().catch(console.error)
         window.addEventListener('focus', onFocus)
 
         return () => {
-            window.clearInterval(interval)
             window.removeEventListener('focus', onFocus)
         }
     }, [refresh])
@@ -305,6 +338,39 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
         })
     }
 
+    const openReturnDialog = (receipt: ShiftReceipt, itemId: number) => {
+        setSelectedReceipt(receipt)
+        setReturnItemId(itemId)
+        setReturnQuantity("1")
+        setReturnReason("")
+        setIsReturnDialogOpen(true)
+    }
+
+    const handleReturnReceipt = () => {
+        if (!selectedReceipt || !returnItemId || !returnQuantity) return
+        
+        startTransition(async () => {
+            try {
+                await returnReceiptItem(
+                    clubId,
+                    userId,
+                    selectedReceipt.id,
+                    returnItemId,
+                    Number(returnQuantity),
+                    returnReason || "Возврат товара"
+                )
+                setIsReturnDialogOpen(false)
+                await refresh()
+                showMessage({ 
+                    title: "Возврат оформлен", 
+                    description: `Товар возвращен на склад. Сумма возврата: ${(Number(returnQuantity) * (selectedReceipt.items?.find(i => i.id === returnItemId)?.selling_price_snapshot || 0)).toLocaleString('ru-RU')} ₽` 
+                })
+            } catch (e: any) {
+                showMessage({ title: "Ошибка", description: e?.message || "Ошибка возврата" })
+            }
+        })
+    }
+
     const handleExit = () => {
         setCart([])
         setInputValue("")
@@ -452,6 +518,12 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
                                             <div className="text-xs text-slate-400 uppercase tracking-wider flex items-center gap-2">
                                                 <Search className="h-3 w-3" />
                                                 Поиск / Сканер
+                                                <span className={cn(
+                                                    "ml-2 px-1.5 py-0.5 rounded text-[9px] font-bold",
+                                                    isConnected ? "bg-green-900/50 text-green-400 border border-green-800" : "bg-amber-900/50 text-amber-400 border border-amber-800"
+                                                )}>
+                                                    {isConnected ? '● LIVE' : '● RECONNECTING'}
+                                                </span>
                                             </div>
                                             <Badge className="bg-slate-800 text-slate-300 border-slate-700 text-xs px-2 py-1">Enter</Badge>
                                         </div>
@@ -747,12 +819,41 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
                                                             </div>
                                                             {r.items?.length > 0 && (
                                                                 <div className="px-3 pb-3 space-y-1">
-                                                                    {r.items.map(it => (
-                                                                        <div key={it.id} className="flex justify-between text-[10px] text-slate-400">
-                                                                            <span className="truncate pr-2">{it.product_name}</span>
-                                                                            <span className="shrink-0">{it.quantity} × {it.selling_price_snapshot} ₽</span>
-                                                                        </div>
-                                                                    ))}
+                                                                    {r.items.map(it => {
+                                                                        const isFullyReturned = (it.available_qty || 0) <= 0
+                                                                        const returnedQty = it.returned_qty || 0
+                                                                        
+                                                                        return (
+                                                                            <div key={it.id} className="flex justify-between items-center text-[10px] text-slate-400">
+                                                                                <span className="truncate pr-2">{it.product_name}</span>
+                                                                                <div className="flex items-center gap-2 shrink-0">
+                                                                                    <span className={isFullyReturned ? "line-through text-slate-600" : ""}>
+                                                                                        {it.quantity} × {it.selling_price_snapshot} ₽
+                                                                                    </span>
+                                                                                    {returnedQty > 0 && (
+                                                                                        <span className="text-[9px] text-slate-500">
+                                                                                            (возвращено: {returnedQty})
+                                                                                        </span>
+                                                                                    )}
+                                                                                    {!isFullyReturned ? (
+                                                                                        <button
+                                                                                            type="button"
+                                                                                            onClick={() => openReturnDialog(r, it.id)}
+                                                                                            className="text-[9px] text-amber-400 hover:text-amber-300 hover:bg-amber-500/20 px-1.5 py-0.5 rounded transition-colors"
+                                                                                            title="Вернуть товар"
+                                                                                            disabled={isPending}
+                                                                                        >
+                                                                                            Возврат
+                                                                                        </button>
+                                                                                    ) : (
+                                                                                        <span className="text-[9px] text-green-500 font-bold">
+                                                                                            ✓
+                                                                                        </span>
+                                                                                    )}
+                                                                                </div>
+                                                                            </div>
+                                                                        )
+                                                                    })}
                                                                 </div>
                                                             )}
                                                         </div>
@@ -766,6 +867,66 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
                     )}
                 </div>
             </div>
+
+            {/* Return Dialog */}
+            <Dialog open={isReturnDialogOpen} onOpenChange={setIsReturnDialogOpen}>
+                <DialogContent className="bg-slate-950 border-slate-800 text-white max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Возврат товара</DialogTitle>
+                        <DialogDescription className="text-slate-400">
+                            {selectedReceipt?.items?.find(i => i.id === returnItemId)?.product_name}
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="py-4 space-y-4">
+                        <div className="p-3 bg-slate-900 rounded-xl border border-slate-800">
+                            <div className="text-xs text-slate-400 mb-1">Доступно для возврата:</div>
+                            <div className="text-lg font-bold text-white">
+                                {selectedReceipt?.items?.find(i => i.id === returnItemId)?.available_qty || 0} из {selectedReceipt?.items?.find(i => i.id === returnItemId)?.quantity} шт.
+                            </div>
+                        </div>
+                        <div className="space-y-2">
+                            <Label className="text-sm text-slate-300">Количество</Label>
+                            <Input
+                                type="number"
+                                min="1"
+                                max={selectedReceipt?.items?.find(i => i.id === returnItemId)?.available_qty}
+                                value={returnQuantity}
+                                onChange={e => setReturnQuantity(e.target.value)}
+                                className="bg-slate-900 border-slate-800 h-12 rounded-xl text-base"
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label className="text-sm text-slate-300">Причина возврата</Label>
+                            <Input
+                                value={returnReason}
+                                onChange={e => setReturnReason(e.target.value)}
+                                placeholder="Например: товар не подошел"
+                                className="bg-slate-900 border-slate-800 h-12 rounded-xl text-base"
+                            />
+                        </div>
+                        <div className="p-3 bg-slate-900 rounded-xl border border-slate-800">
+                            <div className="text-xs text-slate-400 mb-1">Сумма возврата:</div>
+                            <div className="text-2xl font-black text-emerald-400">
+                                {(Number(returnQuantity) * (selectedReceipt?.items?.find(i => i.id === returnItemId)?.selling_price_snapshot || 0)).toLocaleString('ru-RU')} ₽
+                            </div>
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setIsReturnDialogOpen(false)} className="border-slate-800">
+                            Отмена
+                        </Button>
+                        <Button 
+                            onClick={handleReturnReceipt} 
+                            disabled={!returnQuantity || Number(returnQuantity) <= 0 || isPending || Number(returnQuantity) > (selectedReceipt?.items?.find(i => i.id === returnItemId)?.available_qty || 0)}
+                            className="bg-amber-600 hover:bg-amber-700"
+                        >
+                            {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            Оформить возврат
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
             {Dialogs}
         </>
     )

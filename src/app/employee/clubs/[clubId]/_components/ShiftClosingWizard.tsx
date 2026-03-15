@@ -6,17 +6,18 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { useSSE } from "@/hooks/usePOSWebSocket"
 import {
     addProductToInventory,
     bulkUpdateInventoryItems,
     closeInventory,
-    commitShiftReceiptsToMovements,
     createShiftReceipt,
     createInventory,
     getInventoryItems,
     getProductByBarcode,
     getProducts,
     getShiftReceipts,
+    voidShiftReceipt,
     type InventoryItem,
     type ShiftReceipt
 } from "@/app/clubs/[clubId]/inventory/actions"
@@ -94,6 +95,20 @@ export function ShiftClosingWizard({
     const totalSteps = isShiftSalesMode ? (skipInventory ? 2 : 4) : (skipInventory ? 1 : 3)
 
     const [shiftReceipts, setShiftReceipts] = useState<ShiftReceipt[]>([])
+
+    // FIX #1: SSE для обновления чеков в реальном времени
+    const handleSSEMessage = useCallback((message: any) => {
+        if (message.type === 'RECEIPT_CREATED' || message.type === 'RECEIPT_VOIDED') {
+            // Обновляем чеки при создании/аннулировании
+            if (activeShiftId) {
+                getShiftReceipts(clubId, userId, String(activeShiftId), { includeVoided: true })
+                    .then(setShiftReceipts)
+                    .catch(console.error)
+            }
+        }
+    }, [activeShiftId, clubId, userId])
+
+    const { isConnected } = useSSE(handleSSEMessage)
 
     // Check for available daily payout
     useEffect(() => {
@@ -889,6 +904,7 @@ export function ShiftClosingWizard({
 
         startTransition(async () => {
             try {
+                // FIX: Sales are already committed in real-time, no need to commit
                 if (unaccountedSales.length > 0) {
                     await createShiftReceipt(clubId, userId, {
                         shift_id: shiftIdStr,
@@ -899,8 +915,7 @@ export function ShiftClosingWizard({
                     setUnaccountedSales([])
                 }
 
-                await commitShiftReceiptsToMovements(clubId, userId, shiftIdStr)
-
+                // Sales already committed in real-time, just fetch for display
                 const receipts = await getShiftReceipts(clubId, userId, shiftIdStr, { includeVoided: true })
                 setShiftReceipts(receipts)
 
@@ -919,7 +934,7 @@ export function ShiftClosingWizard({
                 startInventory()
             } catch (e: any) {
                 console.error(e)
-                alert(e?.message || "Ошибка сверки/фиксации продаж")
+                alert(e?.message || "Ошибка сверки продаж")
             }
         })
     }
@@ -981,14 +996,14 @@ export function ShiftClosingWizard({
         }
 
         startTransition(async () => {
-            try {
-                if (isShiftSalesMode) {
-                    await closeInventory(inventoryId, clubId, 0, [], { salesRecognition: 'NONE' })
-                } else {
-                    await closeInventory(
-                        inventoryId,
-                        clubId,
-                        calculationResult.reported,
+                try {
+                    if (isShiftSalesMode) {
+                        await closeInventory(inventoryId, clubId, calculationResult.reported, [], { salesRecognition: 'NONE' })
+                    } else {
+                        await closeInventory(
+                            inventoryId,
+                            clubId,
+                            calculationResult.reported,
                         unaccountedSales.map(s => ({
                             product_id: s.product_id,
                             quantity: s.quantity,

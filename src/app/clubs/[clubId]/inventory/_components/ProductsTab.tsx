@@ -554,7 +554,7 @@ export function ProductsTab({ products, categories, warehouses, currentUserId, p
                                     </TableCell>
                                     <TableCell className="text-right whitespace-nowrap">
                                         <span className="text-sm text-muted-foreground">
-                                            {(product.current_stock * product.cost_price).toLocaleString()} ₽
+                                            {((product.current_stock * product.cost_price) || 0).toLocaleString('ru-RU', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} ₽
                                         </span>
                                     </TableCell>
                                     <TableCell>
@@ -738,7 +738,7 @@ export function ProductsTab({ products, categories, warehouses, currentUserId, p
                                                 {product.stocks.length > 2 && <span>...</span>}
                                             </div>
                                         )}
-                                        <p className="text-[10px] text-slate-400 mt-0.5 font-medium italic">На сумму: {Math.round(product.current_stock * product.cost_price).toLocaleString()} ₽</p>
+                                        <p className="text-[10px] text-slate-400 mt-0.5 font-medium italic">На сумму: {Math.round(product.current_stock * product.cost_price).toLocaleString('ru-RU')} ₽</p>
                                     </div>
                                 </div>
                             </div>
@@ -1412,7 +1412,7 @@ export function ProductsTab({ products, categories, warehouses, currentUserId, p
                             <div className="flex justify-between items-center">
                                 <div>
                                     <p className="text-[10px] uppercase font-black text-blue-400 tracking-wider">Текущая цена в каталоге</p>
-                                    <p className="text-2xl font-black text-blue-600">{editingProduct?.cost_price?.toLocaleString()} ₽</p>
+                                    <p className="text-2xl font-black text-blue-600">{editingProduct?.cost_price?.toLocaleString('ru-RU')} ₽</p>
                                 </div>
                                 <div className="text-right">
                                     <p className="text-[10px] uppercase font-black text-slate-400 tracking-wider">Средняя за 5 запок</p>

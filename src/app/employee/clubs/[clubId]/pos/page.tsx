@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { useParams } from "next/navigation"
 import { Loader2 } from "lucide-react"
+import { SSEProvider } from "@/hooks/usePOSWebSocket"
 import { EmployeeSalesWizard } from "../_components/EmployeeSalesWizard"
 
 export default function EmployeePosPage() {
@@ -46,17 +47,19 @@ export default function EmployeePosPage() {
     }
 
     return (
-        <EmployeeSalesWizard
-            clubId={clubId}
-            userId={userId}
-            activeShiftId={activeShiftId}
-            onExit={() => {
-                try {
-                    window.close()
-                } catch {}
-                window.location.href = `/employee/clubs/${clubId}`
-            }}
-        />
+        <SSEProvider clubId={clubId} userId={userId}>
+            <EmployeeSalesWizard
+                clubId={clubId}
+                userId={userId}
+                activeShiftId={activeShiftId}
+                onExit={() => {
+                    try {
+                        window.close()
+                    } catch {}
+                    window.location.href = `/employee/clubs/${clubId}`
+                }}
+            />
+        </SSEProvider>
     )
 }
 
