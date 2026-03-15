@@ -68,6 +68,9 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
     useEffect(() => {
         // Глобальный обработчик клавиатуры для USB сканера
         const handleGlobalKeydown = async (e: KeyboardEvent) => {
+            // Работаем только когда окно активно
+            if (document.hidden) return
+            
             // Игнорируем если фокус в input/textarea (кроме основного input)
             const target = e.target as HTMLElement
             const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA'
@@ -86,6 +89,7 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
             // Enter от сканера (после штрих-кода)
             if (e.key === 'Enter' && barcodeBuffer.length > 3) {
                 e.preventDefault()
+                e.stopPropagation()
                 const barcode = barcodeBuffer.trim()
                 setBarcodeBuffer("")
                 setIsScanning(false)
@@ -126,8 +130,21 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
             }
         }
 
+        // Обработчик потери фокуса - сбрасываем буфер
+        const handleVisibilityChange = () => {
+            if (document.hidden) {
+                setBarcodeBuffer("")
+                setIsScanning(false)
+            }
+        }
+
         window.addEventListener('keydown', handleGlobalKeydown)
-        return () => window.removeEventListener('keydown', handleGlobalKeydown)
+        document.addEventListener('visibilitychange', handleVisibilityChange)
+        
+        return () => {
+            window.removeEventListener('keydown', handleGlobalKeydown)
+            document.removeEventListener('visibilitychange', handleVisibilityChange)
+        }
     }, [clubId, isReturnDialogOpen, addToCart, showMessage])
 
     useEffect(() => {
