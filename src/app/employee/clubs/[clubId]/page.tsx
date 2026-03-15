@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
+import { SSEProvider } from "@/hooks/usePOSWebSocket"
 import { KpiOverview, ChecklistKpiCard, MaintenanceKpiCard } from "@/components/employee/kpi/KpiOverview"
 import { ShiftClosingWizard } from "./_components/ShiftClosingWizard"
 import { ShiftOpeningWizard } from "./_components/ShiftOpeningWizard"
@@ -991,18 +992,20 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
 
             {/* Report Modal */}
             {activeShift && club && (
-                <ShiftClosingWizard
-                    isOpen={isReportModalOpen}
-                    onClose={() => setIsReportModalOpen(false)}
-                    onComplete={(data) => submitEndShift(data)}
-                    clubId={clubId}
-                    userId={currentUserId}
-                    reportTemplate={reportTemplate}
-                    activeShiftId={activeShift.id}
-                    skipInventory={!club.inventory_required}
-                    checklistTemplates={checklistTemplates}
-                    inventorySettings={club.inventory_settings}
-                />
+                <SSEProvider clubId={clubId} userId={currentUserId}>
+                    <ShiftClosingWizard
+                        isOpen={isReportModalOpen}
+                        onClose={() => setIsReportModalOpen(false)}
+                        onComplete={(data) => submitEndShift(data)}
+                        clubId={clubId}
+                        userId={currentUserId}
+                        reportTemplate={reportTemplate}
+                        activeShiftId={activeShift.id}
+                        skipInventory={!club.inventory_required}
+                        checklistTemplates={checklistTemplates}
+                        inventorySettings={club.inventory_settings}
+                    />
+                </SSEProvider>
             )}
 
             {/* Supply Wizard */}
