@@ -395,6 +395,7 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
 
     // Оптимизация: мемоизация обработчиков
     const handleStartShift = useCallback(async () => {
+        console.log('[handleStartShift] clubId:', clubId, 'club:', club)
         const requiredHandover = checklistTemplates.find((t: any) => t.type === 'shift_handover' && t.settings?.block_shift_open)
 
         if (requiredHandover) {
@@ -404,7 +405,7 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
         }
 
         await executeStartShift()
-    }, [checklistTemplates])
+    }, [checklistTemplates, clubId, club])
 
     const executeStartShift = useCallback(async () => {
         setIsActionLoading(true)
@@ -567,7 +568,7 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
     }
 
     return (
-        <div className="w-full max-w-7xl mx-auto px-4 py-6 md:px-6 md:py-8 space-y-6">
+        <div className="w-full max-w-7xl mx-auto px-4 py-6 md:px-6 md:py-8 space-y-6 relative z-0">
             {/* Rework Alert Notification */}
                 {reworkTasksCount > 0 && (
                     <Link href={`/employee/clubs/${clubId}/tasks?verification_status=REJECTED`} className="block group">
@@ -599,9 +600,9 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
 
                     {/* Shift Control - Main Card */}
                     <div className="lg:col-span-2">
-                        <Card className="overflow-hidden border-0 shadow-2xl bg-gradient-to-br from-slate-900 via-purple-900 to-indigo-900 text-white">
-                            <div className="absolute inset-0 bg-[url('/grid.svg')] opacity-10" />
-                            <div className="relative">
+                        <Card className="overflow-hidden border-0 shadow-lg bg-gradient-to-br from-slate-900 via-purple-900 to-indigo-900 text-white relative">
+                            <div className="absolute inset-0 bg-[url('/grid.svg')] opacity-10 pointer-events-none" />
+                            <div className="relative z-10">
                                 <CardHeader className="pb-2">
                                     <div className="flex items-center justify-between">
                                         <CardTitle className="flex items-center gap-2 text-white/90">
@@ -648,7 +649,6 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                                                 variant="destructive"
                                                 className="w-full h-12 text-base shadow-lg bg-red-600 hover:bg-red-700"
                                                 onClick={handleEndShiftClick}
-                                                disabled={isActionLoading}
                                             >
                                                 {isActionLoading && !isReportModalOpen ? (
                                                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -662,7 +662,6 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                                                 variant="outline"
                                                 className="w-full h-auto py-3 text-sm border-white/20 bg-white/5 text-white"
                                                 onClick={() => setIsRequestWizardOpen(true)}
-                                                disabled={isActionLoading}
                                             >
                                                 <div className="relative">
                                                     <MessageSquare className="mr-2 h-4 w-4 shrink-0" />
@@ -729,7 +728,6 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                                             <Button
                                                 className="w-full h-12 text-base bg-gradient-to-r from-emerald-500 to-green-600 shadow-lg"
                                                 onClick={handleStartShift}
-                                                disabled={isActionLoading}
                                             >
                                                 {isActionLoading ? (
                                                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />

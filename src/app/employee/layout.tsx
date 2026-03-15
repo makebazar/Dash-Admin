@@ -74,7 +74,7 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
     return (
         <div className="flex min-h-[100dvh] bg-[#fafafa] relative flex-col">
             {/* Desktop & Mobile Header - фиксированный */}
-            <header className="fixed top-0 left-0 right-0 z-50 h-16 border-b border-black/5 bg-white/95 backdrop-blur-sm shadow-sm">
+            <header className="fixed top-0 left-0 right-0 z-50 h-16 border-b border-black/5 bg-white/95 backdrop-blur-sm shadow-sm pointer-events-auto">
                 <div className="container mx-auto flex h-16 items-center justify-between px-4 sm:px-8">
                     <div className="flex items-center gap-2">
                         <Link href="/employee/dashboard" className="flex items-center gap-2">
@@ -246,7 +246,7 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
 
                 {/* Main Content */}
                 <main className={cn(
-                    "w-full min-w-0 flex-1 pt-16",
+                    "w-full min-w-0 flex-1 pt-16 pointer-events-auto",
                     pathname.includes('/employee/clubs/') ? "md:ml-64" : "ml-0"
                 )}>
                     {children}
