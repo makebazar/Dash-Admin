@@ -65,13 +65,36 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
         document.body.style.position = 'fixed'
         document.body.style.width = '100%'
         document.body.style.height = '100%'
+        
+        // Создаем невидимый input который всегда в фокусе
+        const hiddenInput = document.createElement('input')
+        hiddenInput.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0;width:1px;height:1px;'
+        document.body.appendChild(hiddenInput)
+        
+        // Всегда держим фокус на этом input
+        const keepFocus = () => {
+            if (document.activeElement !== hiddenInput && !isReturnDialogOpen) {
+                hiddenInput.focus()
+            }
+        }
+        
+        // Фокус при клике в любом месте
+        document.addEventListener('click', keepFocus)
+        document.addEventListener('keydown', keepFocus)
+        
+        // Первоначальный фокус
+        hiddenInput.focus()
+        
         return () => {
             document.body.style.overflow = ''
             document.body.style.position = ''
             document.body.style.width = ''
             document.body.style.height = ''
+            document.body.removeChild(hiddenInput)
+            document.removeEventListener('click', keepFocus)
+            document.removeEventListener('keydown', keepFocus)
         }
-    }, [])
+    }, [isReturnDialogOpen])
 
     const refresh = useCallback(async () => {
         if (!activeShiftId) return
@@ -162,16 +185,11 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
 
     useEffect(() => {
         // Глобальный обработчик клавиатуры для USB сканера
+        // Работает даже когда фокус не на input
         const handleGlobalKeydown = async (e: KeyboardEvent) => {
-            // Игнорируем если фокус в input/textarea (кроме основного input)
+            // Игнорируем если фокус в textarea
             const target = e.target as HTMLElement
-            const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA'
-
-            // Если фокус в нашем основном input - даем работать обычному обработчику
-            if (inputRef.current && target === inputRef.current) return
-
-            // Если фокус в другом input или диалоге - игнорируем
-            if (isInput || isReturnDialogOpen) return
+            if (target.tagName === 'TEXTAREA') return
 
             // USB сканер вводит символы очень быстро (интервал < 30ms)
             const now = Date.now()
@@ -181,7 +199,7 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
             // Enter от сканера (после штрих-кода)
             if (e.key === 'Enter' && barcodeBuffer.length > 3) {
                 e.preventDefault()
-                // НЕ делаем stopPropagation - пусть событие идет дальше в другие программы (langame)
+                e.stopPropagation()
                 const barcode = barcodeBuffer.trim()
                 setBarcodeBuffer("")
                 setIsScanning(false)
@@ -222,10 +240,10 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
             }
         }
 
-        window.addEventListener('keydown', handleGlobalKeydown)
+        window.addEventListener('keydown', handleGlobalKeydown, true) // useCapture=true
 
         return () => {
-            window.removeEventListener('keydown', handleGlobalKeydown)
+            window.removeEventListener('keydown', handleGlobalKeydown, true)
         }
     }, [clubId, isReturnDialogOpen, addToCart, showMessage])
 
