@@ -412,7 +412,7 @@ export function ShiftOpeningWizard({
                     {currentStep >= 0 && (
                         <div className="h-1 w-full bg-slate-800 rounded-full overflow-hidden">
                             <div 
-                                className="h-full bg-purple-600 transition-all duration-300 ease-out"
+                                className="h-full bg-purple-600"
                                 style={{ width: `${progress}%` }}
                             />
                         </div>
@@ -422,7 +422,7 @@ export function ShiftOpeningWizard({
                 {/* Content Area */}
                 <div className="flex-1 overflow-y-auto p-4 sm:p-6 flex flex-col min-h-[300px]">
                     {currentStep === -1 ? (
-                        <div className="space-y-6 animate-in fade-in slide-in-from-left-4 duration-300">
+                        <div className="space-y-6">
                             <div className="space-y-2">
                                 <h2 className="text-xl sm:text-2xl font-bold leading-tight">Какую смену вы принимаете?</h2>
                                 <p className="text-sm text-slate-400">Выберите смену, чтобы привязать к ней результаты проверки.</p>
@@ -476,7 +476,7 @@ export function ShiftOpeningWizard({
                             )}
                         </div>
                     ) : currentItem && (
-                        <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300 key={currentStep}">
+                        <div className="space-y-6">
                             <div className="space-y-2">
                                 <h2 className="text-xl sm:text-2xl font-bold leading-tight">{currentItem.content}</h2>
                                 {currentItem.description && (
@@ -543,7 +543,7 @@ export function ShiftOpeningWizard({
 
                             {/* Options Selection (If "Issues" selected and options exist) */}
                             {checklistResponses[currentItem.id]?.is_issue_reported && currentItem.options && currentItem.options.length > 0 && (
-                                <div className="p-4 bg-slate-900/50 rounded-xl border border-slate-800 animate-in fade-in slide-in-from-top-2">
+                                <div className="p-4 bg-slate-900/50 rounded-xl border border-slate-800">
                                     <p className="text-xs text-slate-400 mb-3 font-medium uppercase tracking-wider">Уточните состояние:</p>
                                     <div className="grid gap-2">
                                         {currentItem.options
@@ -667,7 +667,7 @@ export function ShiftOpeningWizard({
 
                             {/* Comment Input */}
                             {(checklistResponses[currentItem.id]?.is_issue_reported || checklistResponses[currentItem.id]?.comment) && (
-                                <div className="animate-in fade-in slide-in-from-bottom-2">
+                                <div className="animate-in fade-in">
                                     <Label className="text-xs text-slate-400 mb-2 block">Комментарий</Label>
                                     <Input 
                                         placeholder={checklistResponses[currentItem.id]?.is_issue_reported ? "Опишите проблему..." : "Комментарий (опционально)..."}

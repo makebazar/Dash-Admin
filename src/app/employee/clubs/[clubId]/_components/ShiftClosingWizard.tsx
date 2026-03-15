@@ -1076,7 +1076,7 @@ export function ShiftClosingWizard({
     if (!isOpen) return null
 
     return (
-        <div className="fixed inset-0 h-[100dvh] bg-slate-950 text-white flex flex-col z-[9999] animate-in fade-in duration-300 overflow-hidden overscroll-none">
+        <div className="fixed inset-0 h-[100dvh] bg-slate-950 text-white flex flex-col z-[9999] overflow-hidden overscroll-none">
             {step === inventoryStep && (
                 <BarcodeScanner 
                     isOpen={isScannerOpen} 
@@ -1111,7 +1111,7 @@ export function ShiftClosingWizard({
                             {Array.from({ length: totalSteps }, (_, idx) => idx + 1).map((i) => (
                                 <div 
                                     key={i} 
-                                    className={`flex-1 rounded-full transition-all duration-500 ${
+                                    className={`flex-1 rounded-full ${
                                         i < (step as number) ? 'bg-green-500' : 
                                         i === step ? 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]' : 
                                         'bg-slate-800'
@@ -1280,7 +1280,7 @@ export function ShiftClosingWizard({
                                                 
                                                 <div className="space-y-3">
                                                     {(reportData[field.metric_key] || []).map((item: any, itemIdx: number) => (
-                                                        <div key={itemIdx} className="flex gap-2 items-start animate-in slide-in-from-right-2 duration-200">
+                                                        <div key={itemIdx} className="flex gap-2 items-start">
                                                             <div className="flex-1 space-y-2">
                                                                 <Input
                                                                     type="number"

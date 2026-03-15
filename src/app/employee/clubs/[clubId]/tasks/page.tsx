@@ -254,7 +254,7 @@ export default function EmployeeTasksPage() {
 
         return (
             <Card key={task.id} className={cn(
-                "transition-all duration-300 border-none shadow-sm overflow-hidden",
+                "border-none shadow-sm overflow-hidden",
                 isInProgress ? "ring-1 ring-indigo-500 bg-indigo-50/5" : "bg-white dark:bg-slate-800/80 hover:shadow-md",
                 (isFree || showAsCompleted) && "opacity-80 hover:opacity-100",
                 showAsCompleted && "bg-slate-50 dark:bg-slate-900/50",

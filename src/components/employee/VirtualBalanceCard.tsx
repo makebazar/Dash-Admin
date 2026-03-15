@@ -32,7 +32,7 @@ export function VirtualBalanceCard({
         )}>
             {/* Animated background pattern */}
             <div className="absolute inset-0 bg-[url('/grid.svg')] opacity-5" />
-            <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -mr-32 -mt-32 group-hover:bg-white/15 transition-all duration-700" />
+            <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -mr-32 -mt-32" />
             
             <CardContent className="p-6 relative z-10">
                 {/* Header */}

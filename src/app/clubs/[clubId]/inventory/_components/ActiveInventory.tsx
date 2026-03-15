@@ -420,7 +420,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
     const isClosed = inventory.status === 'CLOSED'
 
     return (
-        <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300 overscroll-none">
+        <div className="space-y-6 overscroll-none">
             <BarcodeScanner 
                 isOpen={isScannerOpen} 
                 onScan={handleBarcodeScan} 

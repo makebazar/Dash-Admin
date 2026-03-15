@@ -31,14 +31,14 @@ export function KpiLadder({ kpi, formatCurrency }: KpiLadderProps) {
                         <div
                             key={level.level}
                             className={cn(
-                                "relative flex items-start gap-4 lg:gap-6 pb-8 last:pb-0 transition-all duration-300",
+                                "relative flex items-start gap-4 lg:gap-6 pb-8 last:pb-0",
                                 !isCompleted && !isNext && "opacity-40 grayscale-[0.5]"
                             )}
                         >
                             {/* Node Indicator */}
                             <div className="relative z-10 flex flex-col items-center">
                                 <div className={cn(
-                                    "flex items-center justify-center w-8 h-8 lg:w-10 lg:h-10 rounded-full border-4 transition-all duration-500",
+                                    "flex items-center justify-center w-8 h-8 lg:w-10 lg:h-10 rounded-full border-4",
                                     isCompleted
                                         ? "bg-emerald-500 border-emerald-100 dark:border-emerald-900 shadow-[0_0_10px_rgba(16,185,129,0.3)]"
                                         : isNext
@@ -62,7 +62,7 @@ export function KpiLadder({ kpi, formatCurrency }: KpiLadderProps) {
 
                             {/* Content */}
                             <div className={cn(
-                                "flex-1 p-4 rounded-xl border transition-all duration-300",
+                                "flex-1 p-4 rounded-xl border",
                                 isCompleted
                                     ? "bg-emerald-50/50 dark:bg-emerald-900/10 border-emerald-200/50 dark:border-emerald-900/30"
                                     : isNext

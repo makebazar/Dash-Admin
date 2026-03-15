@@ -45,12 +45,12 @@ export function EarningsProjection({ kpi, formatCurrency }: EarningsProjectionPr
                         <div className="h-3 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden border border-slate-200/50 dark:border-slate-800/50 p-0.5 relative">
                             {/* Actual Progress */}
                             <div
-                                className="absolute left-0.5 top-0.5 bottom-0.5 bg-emerald-500 rounded-full z-10 transition-all duration-1000 shadow-[2px_0_5px_rgba(16,185,129,0.3)]"
+                                className="absolute left-0.5 top-0.5 bottom-0.5 bg-emerald-500 rounded-full z-10 shadow-[2px_0_5px_rgba(16,185,129,0.3)]"
                                 style={{ width: `${Math.min((currentBonus / Math.max(projectedBonus, 1)) * 100, 100)}%` }}
                             />
                             {/* Projected Progress (faint) */}
                             <div
-                                className="h-full bg-blue-400 rounded-full opacity-30 shadow-[0_0_10px_rgba(96,165,250,0.5)] transition-all duration-1000"
+                                className="h-full bg-blue-400 rounded-full opacity-30 shadow-[0_0_10px_rgba(96,165,250,0.5)]"
                                 style={{ width: `100%` }}
                             />
                         </div>

@@ -249,7 +249,7 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
 
             {/* Mass Actions Bar */}
             {selectedIds.length > 0 && (
-                <div className="bg-slate-900 text-white p-3 rounded-xl flex items-center justify-between shadow-lg sticky top-0 z-10 animate-in fade-in slide-in-from-top-4">
+                <div className="bg-slate-900 text-white p-3 rounded-xl flex items-center justify-between shadow-lg sticky top-0 z-10">
                     <div className="flex items-center gap-4">
                         <div className="bg-blue-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
                             {selectedIds.length} выбрано
@@ -759,7 +759,7 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
                                 </div>
 
                                 {revertMode === 'revert' && (
-                                    <div className="pl-8 pb-1 animate-in fade-in slide-in-from-top-2">
+                                    <div className="pl-8 pb-1">
                                         <Label className="text-[10px] uppercase font-bold text-slate-400 mb-1.5 block">Выберите склад для возврата</Label>
                                         <Select value={selectedRevertWarehouse} onValueChange={setSelectedRevertWarehouse}>
                                             <SelectTrigger className="h-8 text-xs bg-white">

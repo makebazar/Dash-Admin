@@ -183,7 +183,7 @@ export default function MyMaintenanceTasks() {
 
                             return (
                                 <Card key={task.id} className={cn(
-                                    "group transition-all duration-300 border-none shadow-sm overflow-hidden",
+                                    "group border-none shadow-sm overflow-hidden",
                                     isInProgress ? "ring-2 ring-indigo-500 bg-indigo-50/10" : "bg-white"
                                 )}>
                                     <CardContent className="p-0">

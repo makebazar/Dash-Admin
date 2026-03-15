@@ -96,7 +96,7 @@ export function TargetCoach({ kpi, formatCurrency }: TargetCoachProps) {
                     </div>
                     <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden p-0.5 border border-slate-700/50">
                         <div
-                            className="h-full bg-gradient-to-r from-purple-600 via-blue-500 to-cyan-400 rounded-full shadow-[0_0_15px_rgba(168,85,247,0.4)] transition-all duration-1000 ease-out animate-pulse"
+                            className="h-full bg-gradient-to-r from-purple-600 via-blue-500 to-cyan-400 rounded-full shadow-[0_0_15px_rgba(168,85,247,0.4)]"
                             style={{ width: `${Math.min((kpi.current_value / nextThreshold.monthly_threshold) * 100, 100)}%` }}
                         />
                     </div>

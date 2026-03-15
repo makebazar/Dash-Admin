@@ -409,7 +409,7 @@ export function KpiOverview({
                         <div className="relative h-3 w-full bg-white/10 rounded-full backdrop-blur border border-white/20">
                             <div
                                 className={cn(
-                                    "h-full rounded-full transition-all duration-1000 shadow-[0_0_20px_currentColor]",
+                                    "h-full rounded-full shadow-[0_0_20px_currentColor]",
                                     onTrack
                                         ? "bg-gradient-to-r from-emerald-500 to-green-400"
                                         : "bg-gradient-to-r from-orange-500 to-amber-400"
@@ -418,7 +418,7 @@ export function KpiOverview({
                             />
                             {/* Floating percentage label */}
                             <div 
-                                className="absolute -top-9 transition-all duration-1000 z-10"
+                                className="absolute -top-9 z-10"
                                 style={{ left: `${progressPercent}%`, transform: 'translateX(-50%)' }}
                             >
                                 <div className={cn(
