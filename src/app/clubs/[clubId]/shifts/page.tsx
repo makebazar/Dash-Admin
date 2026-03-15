@@ -609,7 +609,7 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
 
     const getStatusBadge = (shift: Shift) => {
         if (!shift.check_out) {
-            return <Badge className="bg-yellow-500/10 text-yellow-500 border-yellow-500/20 animate-pulse">Активна</Badge>
+            return <Badge className="bg-yellow-500/10 text-yellow-500 border-yellow-500/20">Активна</Badge>
         }
         if (shift.status === 'VERIFIED') {
             if (shift.has_owner_corrections) {
@@ -1455,7 +1455,7 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                     {isLoadingDetails ? (
                         <div className="flex-1 flex flex-col items-center justify-center space-y-4">
                             <Loader2 className="h-10 w-10 animate-spin text-primary/50" />
-                            <p className="text-muted-foreground animate-pulse">Загрузка данных смены...</p>
+                            <p className="text-muted-foreground">Загрузка данных смены...</p>
                         </div>
                     ) : (
                         <Tabs defaultValue="overview" className="flex-1 flex flex-col overflow-hidden min-h-0">
@@ -1508,7 +1508,7 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                             
                             <div className="flex-1 overflow-y-auto bg-muted/5 min-h-0 overscroll-contain touch-pan-y">
                                 <div className="p-4 md:p-6 max-w-5xl mx-auto space-y-6 pb-24">
-                                    <TabsContent value="overview" className="mt-0 space-y-6 animate-in fade-in-50 duration-300">
+                                    <TabsContent value="overview" className="mt-0 space-y-6">
                                         {/* Key Metrics Cards */}
                                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                             <Card>
@@ -1623,7 +1623,7 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                                         </div>
                                     </TabsContent>
 
-                                    <TabsContent value="checklists" className="mt-0 space-y-4 animate-in fade-in-50 duration-300">
+                                    <TabsContent value="checklists" className="mt-0 space-y-4">
                                         <Card>
                                             <CardHeader>
                                                 <CardTitle className="text-base">Выполненные чек-листы</CardTitle>
@@ -1672,7 +1672,7 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                                         </Card>
                                     </TabsContent>
 
-                                    <TabsContent value="products" className="mt-0 space-y-4 animate-in fade-in-50 duration-300">
+                                    <TabsContent value="products" className="mt-0 space-y-4">
                                         <Card>
                                             <CardHeader>
                                                 <CardTitle className="text-base">Проданные товары</CardTitle>
@@ -1722,7 +1722,7 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                                         </Card>
                                     </TabsContent>
                                     
-                                    <TabsContent value="inventory" className="mt-0 space-y-4 animate-in fade-in-50 duration-300">
+                                    <TabsContent value="inventory" className="mt-0 space-y-4">
                                         <Card>
                                             <CardHeader>
                                                 <CardTitle className="text-base">Инвентаризации</CardTitle>
@@ -1869,7 +1869,7 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                                         </Card>
                                     </TabsContent>
 
-                                    <TabsContent value="maintenance" className="mt-0 space-y-4 animate-in fade-in-50 duration-300">
+                                    <TabsContent value="maintenance" className="mt-0 space-y-4">
                                         <Card>
                                             <CardHeader>
                                                 <CardTitle className="text-base">Обслуживание оборудования</CardTitle>
