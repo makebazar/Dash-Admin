@@ -49,7 +49,7 @@ const DialogContent = React.forwardRef<
                 <span className="sr-only">Close</span>
             </DialogPrimitive.Close>
         </DialogPrimitive.Content>
-    </DialogPortal>
+    </DialogPrimitive.Portal>
 ))
 DialogContent.displayName = DialogPrimitive.Content.displayName
 
