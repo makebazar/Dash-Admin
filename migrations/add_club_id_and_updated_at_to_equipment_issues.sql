@@ -1,54 +1,44 @@
 -- Align equipment_issues schema with app expectations (idempotent, safe on mixed environments)
-DO $$
+-- Note: keep this migration "pg driver friendly" (avoid nested dollar-quoting inside EXECUTE).
+
+-- Helper trigger function used across the project (safe to create/replace).
+CREATE OR REPLACE FUNCTION public.update_updated_at_column()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    NEW.updated_at = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$;
+
+DO $do$
 BEGIN
     IF to_regclass('public.equipment_issues') IS NULL THEN
         RAISE NOTICE 'equipment_issues table not found, skipping';
         RETURN;
     END IF;
 
-    -- Ensure update_updated_at_column() exists (used by triggers)
-    IF NOT EXISTS (
-        SELECT 1
-        FROM pg_proc p
-        JOIN pg_namespace n ON n.oid = p.pronamespace
-        WHERE p.proname = 'update_updated_at_column' AND n.nspname = 'public'
-    ) THEN
-        EXECUTE $fn$
-            CREATE OR REPLACE FUNCTION update_updated_at_column()
-            RETURNS TRIGGER AS $$
-            BEGIN
-                NEW.updated_at = CURRENT_TIMESTAMP;
-                RETURN NEW;
-            END;
-            $$ language 'plpgsql'
-        $fn$;
+    EXECUTE 'ALTER TABLE public.equipment_issues ADD COLUMN IF NOT EXISTS club_id INTEGER';
+    EXECUTE 'ALTER TABLE public.equipment_issues ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP';
+
+    -- Backfill club_id from equipment for existing rows (if equipment exists).
+    IF to_regclass('public.equipment') IS NOT NULL THEN
+        EXECUTE '
+            UPDATE public.equipment_issues i
+            SET club_id = e.club_id
+            FROM public.equipment e
+            WHERE i.club_id IS NULL AND i.equipment_id = e.id
+        ';
     END IF;
 
-    EXECUTE 'ALTER TABLE equipment_issues ADD COLUMN IF NOT EXISTS club_id INTEGER';
-    EXECUTE 'ALTER TABLE equipment_issues ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP';
+    -- Backfill updated_at for existing rows if column existed before without default.
+    EXECUTE 'UPDATE public.equipment_issues SET updated_at = COALESCE(updated_at, CURRENT_TIMESTAMP)';
 
-    -- Backfill club_id from equipment for existing rows
-    EXECUTE $q$
-        UPDATE equipment_issues i
-        SET club_id = e.club_id
-        FROM equipment e
-        WHERE i.club_id IS NULL AND i.equipment_id = e.id
-    $q$;
+    EXECUTE 'CREATE INDEX IF NOT EXISTS idx_equipment_issues_club ON public.equipment_issues(club_id)';
 
-    EXECUTE 'CREATE INDEX IF NOT EXISTS idx_equipment_issues_club ON equipment_issues(club_id)';
-
-    -- Ensure updated_at is maintained on updates
-    IF NOT EXISTS (
-        SELECT 1
-        FROM pg_trigger t
-        JOIN pg_class c ON c.oid = t.tgrelid
-        JOIN pg_namespace n ON n.oid = c.relnamespace
-        WHERE n.nspname = ''public''
-          AND c.relname = ''equipment_issues''
-          AND t.tgname = ''update_equipment_issues_updated_at''
-          AND NOT t.tgisinternal
-    ) THEN
-        EXECUTE 'CREATE TRIGGER update_equipment_issues_updated_at BEFORE UPDATE ON equipment_issues FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()';
-    END IF;
-END $$;
-
+    -- Ensure updated_at is maintained on updates (recreate trigger idempotently).
+    EXECUTE 'DROP TRIGGER IF EXISTS update_equipment_issues_updated_at ON public.equipment_issues';
+    EXECUTE 'CREATE TRIGGER update_equipment_issues_updated_at BEFORE UPDATE ON public.equipment_issues FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column()';
+END;
+$do$;
