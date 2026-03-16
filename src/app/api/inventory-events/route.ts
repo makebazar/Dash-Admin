@@ -4,7 +4,10 @@
 import { NextRequest } from 'next/server'
 
 // Глобальное хранилище клиентов для отправки событий
-const clients = new Map<string, Set<ReadableStreamDefaultController>>()
+const clients = new Map<string, Set<{
+  controller: ReadableStreamDefaultController
+  pingInterval: NodeJS.Timeout
+}>>()
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
@@ -25,22 +28,28 @@ export async function GET(request: NextRequest) {
       if (!clients.has(clientId)) {
         clients.set(clientId, new Set())
       }
-      clients.get(clientId)!.add(controller)
-
+      
       // Отправляем начальное событие
       controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'CONNECTED', timestamp: Date.now() })}\n\n`))
 
       // Отправляем ping каждые 30 секунд
       const pingInterval = setInterval(() => {
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'PING', timestamp: Date.now() })}\n\n`))
+        try {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'PING', timestamp: Date.now() })}\n\n`))
+        } catch (e) {
+          // Контроллер закрыт - очищаем интервал
+          clearInterval(pingInterval)
+        }
       }, 30000)
+
+      clients.get(clientId)!.add({ controller, pingInterval })
 
       // Очистка при закрытии соединения
       request.signal.addEventListener('abort', () => {
         clearInterval(pingInterval)
         const clubClients = clients.get(clientId)
         if (clubClients) {
-          clubClients.delete(controller)
+          clubClients.delete({ controller, pingInterval })
           if (clubClients.size === 0) {
             clients.delete(clientId)
           }
@@ -48,10 +57,17 @@ export async function GET(request: NextRequest) {
       })
     },
     cancel() {
-      // Клиент отключился
+      // Клиент отключился - очищаем ресурсы
       const clubClients = clients.get(clientId)
       if (clubClients) {
-        clubClients.forEach(controller => controller.close())
+        clubClients.forEach(client => {
+          clearInterval(client.pingInterval)
+          try {
+            client.controller.close()
+          } catch (e) {
+            // Уже закрыт
+          }
+        })
         clients.delete(clientId)
       }
     }
@@ -70,17 +86,17 @@ export async function GET(request: NextRequest) {
 // Функция для отправки события всем клиентам клуба
 export function sendToClub(clubId: string, data: any) {
   const encoder = new TextEncoder()
-  
+
   // Отправляем всем клиентам клуба
   const clubClients = clients.get(clubId)
   if (clubClients) {
     const message = `data: ${JSON.stringify(data)}\n\n`
-    clubClients.forEach(controller => {
+    clubClients.forEach(client => {
       try {
-        controller.enqueue(encoder.encode(message))
+        client.controller.enqueue(encoder.encode(message))
       } catch (e) {
         // Клиент отключился, удаляем
-        clubClients.delete(controller)
+        clubClients.delete(client)
       }
     })
   }
