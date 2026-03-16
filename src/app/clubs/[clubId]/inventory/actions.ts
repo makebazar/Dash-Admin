@@ -3132,15 +3132,16 @@ export async function createInventory(clubId: string, userId: string, targetMetr
         
         if (targetWarehouseId) {
             // Specific Warehouse Snapshot
-            // Include ALL active products from this club, showing 0 if no stock in this warehouse
+            // Include ONLY products with stock > 0 in this warehouse
             query = `
-                SELECT p.id, 
-                       COALESCE(ws.quantity, 0) as current_stock, 
-                       p.cost_price, 
-                       p.selling_price 
+                SELECT p.id,
+                       COALESCE(ws.quantity, 0) as current_stock,
+                       p.cost_price,
+                       p.selling_price
                 FROM warehouse_products p
-                LEFT JOIN warehouse_stock ws ON p.id = ws.product_id AND ws.warehouse_id = $2
+                INNER JOIN warehouse_stock ws ON p.id = ws.product_id AND ws.warehouse_id = $2
                 WHERE p.club_id = $1 AND p.is_active = true
+                  AND ws.quantity > 0
             `
             params.push(targetWarehouseId)
             
@@ -3150,15 +3151,17 @@ export async function createInventory(clubId: string, userId: string, targetMetr
             }
         } else {
             // Aggregate Snapshot (Sum of all warehouses)
+            // Include ONLY products with total stock > 0
             query = `
-                SELECT p.id, 
-                       COALESCE((SELECT SUM(quantity) FROM warehouse_stock WHERE product_id = p.id), 0) as current_stock, 
-                       p.cost_price, 
-                       p.selling_price 
+                SELECT p.id,
+                       COALESCE((SELECT SUM(quantity) FROM warehouse_stock WHERE product_id = p.id), 0) as current_stock,
+                       p.cost_price,
+                       p.selling_price
                 FROM warehouse_products p
                 WHERE p.club_id = $1 AND p.is_active = true
+                  AND (SELECT SUM(quantity) FROM warehouse_stock WHERE product_id = p.id) > 0
             `
-            
+
             if (categoryId) {
                 query += ` AND p.category_id = $2`
                 params.push(categoryId)
