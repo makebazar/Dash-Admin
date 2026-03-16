@@ -8,16 +8,43 @@ export async function GET() {
     try {
         const userId = (await cookies()).get('session_user_id')?.value;
 
+        console.log('[Clubs API] Fetching clubs for userId:', userId);
+
         if (!userId) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        // Получить все клубы владельца
+        // Получить все клубы владельца и клубы, где пользователь является управляющим
         const hasPublicId = await hasColumn('clubs', 'public_id');
+        const publicIdColumn = hasPublicId ? 'c.public_id' : 'c.id::text as public_id';
+        
+        console.log('[Clubs API] Executing query for userId:', userId);
+        
         const result = await query(
-            `SELECT DISTINCT c.id, ${hasPublicId ? 'c.public_id' : 'c.id::text as public_id'}, c.name, c.address, c.created_at
+            `SELECT DISTINCT ON (c.id)
+                    c.id,
+                    ${publicIdColumn},
+                    c.name,
+                    c.address,
+                    c.created_at,
+                    CASE
+                        WHEN c.owner_id = $1 THEN TRUE
+                        WHEN ce_owner.user_id = $1 THEN TRUE
+                        ELSE FALSE
+                    END as is_owner
              FROM clubs c
              LEFT JOIN club_employees ce ON ce.club_id = c.id
+                AND ce.is_active = TRUE
+                AND ce.dismissed_at IS NULL
+             LEFT JOIN users u ON u.id = ce.user_id
+             LEFT JOIN roles r ON r.id = u.role_id
+             LEFT JOIN (
+                SELECT ce2.club_id, ce2.user_id
+                FROM club_employees ce2
+                WHERE ce2.role = 'Владелец'
+                  AND ce2.is_active = TRUE
+                  AND ce2.dismissed_at IS NULL
+             ) ce_owner ON ce_owner.club_id = c.id
              WHERE c.owner_id = $1
                 OR (
                     ce.user_id = $1
@@ -25,9 +52,18 @@ export async function GET() {
                     AND ce.is_active = TRUE
                     AND ce.dismissed_at IS NULL
                 )
-             ORDER BY c.created_at DESC`,
+                OR (
+                    ce.user_id = $1
+                    AND (ce.role = 'Управляющий' OR r.name = 'Управляющий')
+                    AND ce.is_active = TRUE
+                    AND ce.dismissed_at IS NULL
+                )
+             ORDER BY c.id, c.created_at DESC`,
             [userId]
         );
+
+        console.log('[Clubs API] Result rows:', result.rowCount);
+        console.log('[Clubs API] Result data:', result.rows);
 
         return NextResponse.json({ clubs: result.rows });
 
@@ -84,7 +120,7 @@ export async function POST(request: Request) {
         if (ownedClubs === 0) {
             planToApply = 'new_user';
             statusToApply = 'trialing';
-            endsAtToApply = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+            endsAtToApply = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
         }
 
         const subscriptionState = resolveSubscriptionState({

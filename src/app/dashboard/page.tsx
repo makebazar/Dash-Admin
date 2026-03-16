@@ -16,6 +16,7 @@ interface Club {
     name: string
     address: string | null
     created_at: string
+    is_owner?: boolean
 }
 
 interface UserData {
@@ -353,26 +354,33 @@ export default function DashboardPage() {
                                     <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-900 transition-colors group-hover:bg-black group-hover:text-white">
                                         <Building2 className="h-6 w-6" />
                                     </div>
-                                    <DropdownMenu>
-                                        <DropdownMenuTrigger asChild onClick={(e: React.MouseEvent) => e.stopPropagation()}>
-                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-slate-900">
-                                                <MoreVertical className="h-4 w-4" />
-                                            </Button>
-                                        </DropdownMenuTrigger>
-                                        <DropdownMenuContent align="end">
-                                            <DropdownMenuItem 
-                                                onClick={(e: React.MouseEvent) => confirmDeleteClub(e, club)}
-                                                className="text-red-600 focus:text-red-600"
-                                            >
-                                                <Trash2 className="mr-2 h-4 w-4" />
-                                                Удалить
-                                            </DropdownMenuItem>
-                                        </DropdownMenuContent>
-                                    </DropdownMenu>
+                                    {club.is_owner && (
+                                        <DropdownMenu>
+                                            <DropdownMenuTrigger asChild onClick={(e: React.MouseEvent) => e.stopPropagation()}>
+                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-slate-900">
+                                                    <MoreVertical className="h-4 w-4" />
+                                                </Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent align="end">
+                                                <DropdownMenuItem
+                                                    onClick={(e: React.MouseEvent) => confirmDeleteClub(e, club)}
+                                                    className="text-red-600 focus:text-red-600"
+                                                >
+                                                    <Trash2 className="mr-2 h-4 w-4" />
+                                                    Удалить
+                                                </DropdownMenuItem>
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
+                                    )}
                                 </div>
 
                                 <div className="mt-4">
                                     <h3 className="text-lg font-bold text-slate-900 group-hover:text-black">{club.name}</h3>
+                                    {!club.is_owner && (
+                                        <span className="mt-1 inline-block rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-blue-600">
+                                            Управляющий
+                                        </span>
+                                    )}
                                     {club.address && (
                                         <p className="mt-1 line-clamp-1 text-sm text-slate-500">
                                             {club.address}

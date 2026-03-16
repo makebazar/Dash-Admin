@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/db';
 import { cookies } from 'next/headers';
+import { hasColumn } from '@/lib/db-compat';
 
 // GET - List all issues for equipment in a club
 export async function GET(
@@ -157,12 +158,20 @@ export async function POST(
             return NextResponse.json({ error: 'Equipment not found' }, { status: 404 });
         }
 
-        const result = await query(
-            `INSERT INTO equipment_issues (equipment_id, reported_by, title, description, severity)
-             VALUES ($1, $2, $3, $4, $5)
-             RETURNING *`,
-            [equipment_id, userId, title, description || null, severity || 'MEDIUM']
-        );
+        const hasClubIdColumn = await hasColumn('equipment_issues', 'club_id');
+        const result = hasClubIdColumn
+            ? await query(
+                `INSERT INTO equipment_issues (club_id, equipment_id, reported_by, title, description, severity)
+                 VALUES ($1, $2, $3, $4, $5, $6)
+                 RETURNING *`,
+                [clubId, equipment_id, userId, title, description || null, severity || 'MEDIUM']
+            )
+            : await query(
+                `INSERT INTO equipment_issues (equipment_id, reported_by, title, description, severity)
+                 VALUES ($1, $2, $3, $4, $5)
+                 RETURNING *`,
+                [equipment_id, userId, title, description || null, severity || 'MEDIUM']
+            );
 
         return NextResponse.json(result.rows[0], { status: 201 });
     } catch (error) {

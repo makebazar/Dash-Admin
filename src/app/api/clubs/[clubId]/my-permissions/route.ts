@@ -64,19 +64,19 @@ export async function GET(
 
         const { role_id, role_name, club_role } = userRoleRes.rows[0];
 
-        // Owner and Admin always have full access
-        if (club_role === 'Владелец' || club_role === 'Админ' || role_name === 'Админ') {
-            return NextResponse.json({ isFullAccess: true, ...subscriptionMeta });
+        // Owner, Admin и Manager имеют полный доступ
+        if (club_role === 'Владелец' || club_role === 'Админ' || role_name === 'Админ' || club_role === 'Управляющий' || role_name === 'Управляющий') {
+            return NextResponse.json({ isFullAccess: true, user_role: club_role || role_name, ...subscriptionMeta });
         }
 
         if (!role_id) {
-            return NextResponse.json({ isFullAccess: false, permissions: {}, ...subscriptionMeta });
+            return NextResponse.json({ isFullAccess: false, permissions: {}, user_role: club_role || role_name, ...subscriptionMeta });
         }
 
         // Get permissions for this role
         const permissionsRes = await query(
-            `SELECT permission_key, is_allowed 
-             FROM role_permissions 
+            `SELECT permission_key, is_allowed
+             FROM role_permissions
              WHERE club_id = $1 AND role_id = $2`,
             [clubId, role_id]
         );
@@ -86,7 +86,7 @@ export async function GET(
             permissions[row.permission_key] = row.is_allowed;
         });
 
-        return NextResponse.json({ isFullAccess: false, permissions, ...subscriptionMeta });
+        return NextResponse.json({ isFullAccess: false, permissions, user_role: club_role || role_name, ...subscriptionMeta });
     } catch (error: any) {
         return NextResponse.json({ error: error.message }, { status: 500 });
     }

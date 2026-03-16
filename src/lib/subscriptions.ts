@@ -15,7 +15,7 @@ export type PlanDefinition = {
 const PLAN_DEFINITIONS: Record<string, PlanDefinition> = {
     new_user: {
         id: 'new_user',
-        label: 'Новый пользователь',
+        label: 'Бесплатно',
         priceMonthly: 0,
         maxClubs: 1,
         maxEmployeesPerClub: 3,

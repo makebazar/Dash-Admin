@@ -703,7 +703,7 @@ export default function EquipmentInventory() {
                             <SelectContent>
                                 <SelectItem value="all">Любой статус</SelectItem>
                                 <SelectItem value="active">Активно</SelectItem>
-                                <SelectItem value="inactive">Списано / Архив</SelectItem>
+                                <SelectItem value="written_off">Списано / Архив</SelectItem>
                             </SelectContent>
                         </Select>
 

@@ -50,11 +50,22 @@ async function ensurePlansTable() {
     await query(
         `INSERT INTO subscription_plans (code, name, tagline, description, features, badge_text, badge_tone, cta_text, card_theme, display_order, is_highlighted, price_amount, period_unit, period_value, is_active)
          VALUES
-            ('new_user', 'Новый пользователь', '7 дней доступа', 'Подходит для быстрого старта нового клуба', '["До 1 клуба","До 3 сотрудников в клубе","Базовый доступ"]'::jsonb, 'Старт', 'info', 'Начать бесплатно', 'light', 10, FALSE, 0, 'day', 7, TRUE),
+            ('new_user', 'Бесплатно', '14 дней доступа', 'Подходит для быстрого старта нового клуба', '["До 1 клуба","До 3 сотрудников в клубе","Базовый доступ"]'::jsonb, 'Старт', 'info', 'Начать бесплатно', 'light', 10, FALSE, 0, 'day', 14, TRUE),
             ('starter', 'Стартовый', 'Для небольшого клуба', 'Оптимальный тариф для стабильной работы', '["До 1 клуба","До 15 сотрудников в клубе","Базовая аналитика"]'::jsonb, NULL, 'default', 'Выбрать Стартовый', 'light', 20, FALSE, 2900, 'month', 1, TRUE),
             ('pro', 'Про', 'Для роста сети', 'Расширенные лимиты и аналитика', '["До 3 клубов","До 50 сотрудников в клубе","Продвинутая аналитика"]'::jsonb, 'Популярный', 'success', 'Перейти на Про', 'dark', 30, TRUE, 7900, 'month', 1, TRUE),
             ('enterprise', 'Энтерпрайз', 'Без ограничений', 'Максимальные возможности для сети клубов', '["Безлимит клубов","Безлимит сотрудников","Приоритетная поддержка"]'::jsonb, 'Максимум', 'warning', 'Связаться с нами', 'accent', 40, FALSE, 19900, 'month', 1, TRUE)
          ON CONFLICT (code) DO NOTHING`
+    );
+    await query(
+        `UPDATE subscription_plans
+         SET name = 'Бесплатно',
+             tagline = '14 дней доступа',
+             price_amount = 0,
+             period_unit = 'day',
+             period_value = 14,
+             is_active = TRUE,
+             updated_at = NOW()
+         WHERE code = 'new_user'`
     );
     await query(`UPDATE subscription_plans SET is_active = FALSE, updated_at = NOW() WHERE code = 'trial'`);
 }

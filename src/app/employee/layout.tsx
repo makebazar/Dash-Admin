@@ -12,6 +12,7 @@ interface Club {
     name: string
     subscription_status?: string
     subscription_is_active?: boolean
+    role?: string
 }
 
 export default function EmployeeLayout({ children }: { children: React.ReactNode }) {
@@ -21,6 +22,7 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
     const [clubs, setClubs] = useState<Club[]>([])
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
     const [hasOwnedClubs, setHasOwnedClubs] = useState(false)
+    const [hasManagerClubs, setHasManagerClubs] = useState(false)
     const [hasExpiredSubscription, setHasExpiredSubscription] = useState(false)
     const [expiredClubNames, setExpiredClubNames] = useState<string[]>([])
     const hideMobileHeader = pathname?.includes('/employee/clubs/') && pathname?.includes('/evaluations/')
@@ -46,6 +48,14 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
                 setClubs(data.employeeClubs)
                 if (data.ownedClubs && data.ownedClubs.length > 0) {
                     setHasOwnedClubs(true)
+                }
+                // Check if user has manager clubs
+                const managerClubs = (data.employeeClubs || []).filter(
+                    (club: Club & { role?: string }) => 
+                        club.role === 'Управляющий' || club.role === 'Manager'
+                )
+                if (managerClubs.length > 0) {
+                    setHasManagerClubs(true)
                 }
                 setHasExpiredSubscription(Boolean(data.has_expired_club_subscription))
                 const expiredNames = (data.employeeClubs || [])
@@ -89,11 +99,11 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
                     </div>
 
                     <div className="flex items-center gap-2">
-                        {hasOwnedClubs && (
+                        {(hasOwnedClubs || hasManagerClubs) && (
                             <Link href="/dashboard">
                                 <Button variant="ghost" className="text-amber-600 hover:text-amber-700 hover:bg-amber-50 flex items-center gap-2">
                                     <Crown className="h-4 w-4" />
-                                    <span className="hidden sm:inline">Кабинет владельца</span>
+                                    <span className="hidden sm:inline">{hasOwnedClubs ? "Кабинет владельца" : "Управ кабинет"}</span>
                                 </Button>
                             </Link>
                         )}
@@ -150,6 +160,16 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
                                         
                                         return (
                                             <div key={club.id} className="space-y-1 mt-2">
+                                                {/* Switch to Owner Cabinet Link for Managers */}
+                                                {(club.role === 'Управляющий' || club.role === 'Manager') && (
+                                                    <Link
+                                                        href={`/clubs/${club.id}`}
+                                                        className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-amber-600 hover:bg-amber-50 transition-colors"
+                                                    >
+                                                        <Crown className="h-4 w-4" />
+                                                        <span className="flex-1 font-medium">Управ кабинет</span>
+                                                    </Link>
+                                                )}
                                                 <Link
                                                     href={`/employee/clubs/${club.id}`}
                                                     className={cn(

@@ -50,6 +50,7 @@ export function ClubSidebarContent({ club, clubId, onLinkClick }: ClubSidebarCon
     const [subscriptionStatus, setSubscriptionStatus] = useState<string>("active")
     const [subscriptionIsActive, setSubscriptionIsActive] = useState(true)
     const [isLoading, setIsLoading] = useState(true)
+    const [userRole, setUserRole] = useState<string | null>(null)
 
     useEffect(() => {
         const fetchMyPermissions = async () => {
@@ -61,6 +62,7 @@ export function ClubSidebarContent({ club, clubId, onLinkClick }: ClubSidebarCon
                     setIsFullAccess(data.isFullAccess || false)
                     setSubscriptionStatus(data.subscription_status || "active")
                     setSubscriptionIsActive(data.subscription_is_active !== false)
+                    setUserRole(data.user_role || null)
                 }
             } catch (error) {
                 console.error('Error fetching permissions:', error)
@@ -126,6 +128,16 @@ export function ClubSidebarContent({ club, clubId, onLinkClick }: ClubSidebarCon
                         Подписка закончилась ({subscriptionStatus})
                     </p>
                 ) : null}
+                {/* Switch to Employee Cabinet Link for Managers */}
+                {userRole === 'Управляющий' && (
+                    <Link
+                        href={`/employee/clubs/${clubId}`}
+                        className="mt-2 flex items-center gap-2 rounded-md bg-purple-50 px-2 py-1.5 text-xs font-medium text-purple-600 hover:bg-purple-100 transition-colors"
+                    >
+                        <Briefcase className="h-3.5 w-3.5" />
+                        Рабочий кабинет
+                    </Link>
+                )}
             </div>
 
             {/* Navigation */}

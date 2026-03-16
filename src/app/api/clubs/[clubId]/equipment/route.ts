@@ -20,8 +20,10 @@ export async function GET(
         const includeInactive = searchParams.get('include_inactive') === 'true';
         
         // Pagination parameters
-        const limit = parseInt(searchParams.get('limit') || '50');
-        const offset = parseInt(searchParams.get('offset') || '0');
+        const rawLimit = Number.parseInt(searchParams.get('limit') || '50', 10);
+        const rawOffset = Number.parseInt(searchParams.get('offset') || '0', 10);
+        const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 5000) : 50;
+        const offset = Number.isFinite(rawOffset) && rawOffset >= 0 ? rawOffset : 0;
 
         if (!userId) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -46,7 +48,10 @@ export async function GET(
         const queryParams: any[] = [clubId];
         let paramIndex = 2;
 
-        if (!includeInactive) {
+        const normalizedStatus = status === 'inactive' ? 'written_off' : status;
+        const hasExplicitStatusFilter = normalizedStatus === 'active' || normalizedStatus === 'written_off';
+
+        if (!hasExplicitStatusFilter && !includeInactive) {
             whereConditions.push(`e.is_active = TRUE`);
         }
 
@@ -72,10 +77,10 @@ export async function GET(
             paramIndex++;
         }
 
-        if (status) {
-            if (status === 'active') {
+        if (hasExplicitStatusFilter) {
+            if (normalizedStatus === 'active') {
                 whereConditions.push(`e.is_active = TRUE`);
-            } else if (status === 'written_off') {
+            } else if (normalizedStatus === 'written_off') {
                 whereConditions.push(`e.is_active = FALSE`);
             }
         }

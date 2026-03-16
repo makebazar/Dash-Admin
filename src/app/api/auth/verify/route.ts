@@ -16,6 +16,7 @@ export async function POST(request: Request) {
 
         let userId;
         let isNewUser = false;
+        let requiresPasswordSetup = false;
 
         // Password login flow
         if (password) {
@@ -46,8 +47,8 @@ export async function POST(request: Request) {
         else if (code) {
             // 1. Verify Code
             const result = await query(
-                `SELECT * FROM verification_codes 
-         WHERE phone_number = $1 AND code = $2 AND expires_at > NOW() 
+                `SELECT * FROM verification_codes
+         WHERE phone_number = $1 AND code = $2 AND expires_at > NOW()
          ORDER BY created_at DESC LIMIT 1`,
                 [normalizedPhone, code]
             );
@@ -58,14 +59,14 @@ export async function POST(request: Request) {
 
             // 2. Check/Create User
             let userResult = await query(
-                `SELECT * FROM users WHERE phone_number = $1`,
+                `SELECT id, password_hash FROM users WHERE phone_number = $1`,
                 [normalizedPhone]
             );
 
             if (userResult.rowCount === 0) {
                 // Create new user
                 const newUser = await query(
-                    `INSERT INTO users (full_name, phone_number) 
+                    `INSERT INTO users (full_name, phone_number)
            VALUES ($1, $2) RETURNING id`,
                     ['New User', normalizedPhone]
                 );
@@ -74,6 +75,10 @@ export async function POST(request: Request) {
                 isNewUser = true;
             } else {
                 userId = userResult.rows[0].id;
+                // Check if password needs to be set
+                if (!userResult.rows[0].password_hash) {
+                    requiresPasswordSetup = true;
+                }
             }
 
             // Delete used code
@@ -81,21 +86,37 @@ export async function POST(request: Request) {
                 `DELETE FROM verification_codes WHERE phone_number = $1 AND code = $2`,
                 [normalizedPhone, code]
             );
+
+            // If password setup is required, create session and return flag
+            if (requiresPasswordSetup) {
+                const cookieStore = await cookies();
+                cookieStore.set('session_user_id', userId, {
+                    httpOnly: true,
+                    secure: false,
+                    sameSite: 'lax',
+                    maxAge: 60 * 60 * 24 * 30
+                });
+
+                return NextResponse.json({ 
+                    success: true, 
+                    isNewUser: false,
+                    requiresPasswordSetup: true
+                });
+            }
         } else {
             return NextResponse.json({ error: 'Either code or password is required' }, { status: 400 });
         }
 
-        // 3. Set Session Cookie
+        // 3. Set Session Cookie (only if not requiresPasswordSetup)
         const cookieStore = await cookies();
         cookieStore.set('session_user_id', userId, {
             httpOnly: true,
-            // TODO: Enable secure when HTTPS is configured
-            secure: false,  // Was: process.env.NODE_ENV === 'production'
+            secure: false,
             sameSite: 'lax',
-            maxAge: 60 * 60 * 24 * 30 // 30 days
+            maxAge: 60 * 60 * 24 * 30
         });
 
-        return NextResponse.json({ success: true, isNewUser });
+        return NextResponse.json({ success: true, isNewUser, requiresPasswordSetup: false });
 
     } catch (error) {
         console.error('Verify Error:', error);

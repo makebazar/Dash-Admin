@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -9,6 +9,11 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Zap, Loader2, ArrowRight } from "lucide-react"
 import { PhoneInput } from "@/components/ui/phone-input"
+
+type MeResponse = {
+    ownedClubs?: Array<any>
+    employeeClubs?: Array<any>
+}
 
 export default function LoginPage() {
     const router = useRouter()
@@ -24,6 +29,52 @@ export default function LoginPage() {
     const [userExists, setUserExists] = useState(false)
     const [requiresPassword, setRequiresPassword] = useState(false)
     const [isNewUser, setIsNewUser] = useState(false)
+    const [isCheckingSession, setIsCheckingSession] = useState(true)
+
+    const routeFromMe = useCallback((data: MeResponse) => {
+        const ownedClubs = Array.isArray(data.ownedClubs) ? data.ownedClubs : []
+        const employeeClubs = Array.isArray(data.employeeClubs) ? data.employeeClubs : []
+
+        const hasManagerClubs = employeeClubs.some(
+            (club: any) => club.role === 'Управляющий' || club.role === 'Manager'
+        )
+
+        if (ownedClubs.length > 0 || hasManagerClubs) {
+            router.push('/dashboard')
+            return
+        }
+
+        if (employeeClubs.length > 0) {
+            router.push('/employee/dashboard')
+            return
+        }
+
+        router.push('/dashboard')
+    }, [router])
+
+    useEffect(() => {
+        let cancelled = false
+
+        const checkExistingSession = async () => {
+            try {
+                const res = await fetch('/api/auth/me')
+                if (!res.ok) return
+                const data = (await res.json()) as MeResponse
+                if (cancelled) return
+                routeFromMe(data)
+            } catch {
+                // ignore
+            } finally {
+                if (!cancelled) setIsCheckingSession(false)
+            }
+        }
+
+        checkExistingSession()
+
+        return () => {
+            cancelled = true
+        }
+    }, [routeFromMe])
 
     const handleSendOtp = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -88,28 +139,10 @@ export default function LoginPage() {
     const redirectBasedOnRole = async () => {
         try {
             const res = await fetch('/api/auth/me')
-            const data = await res.json()
+            const data = (await res.json()) as MeResponse
 
-            if (res.ok) {
-                const { ownedClubs, employeeClubs } = data
-
-                // Если есть клубы владельца — идём в кабинет владельца
-                // Если есть клубы где пользователь управляющий — тоже идём в кабинет владельца
-                // Иначе — в кабинет сотрудника
-                const hasManagerClubs = (employeeClubs || []).some(
-                    (club: any) => club.role === 'Управляющий' || club.role === 'Manager'
-                )
-                
-                if (ownedClubs.length > 0 || hasManagerClubs) {
-                    router.push('/dashboard')
-                } else if (employeeClubs.length > 0) {
-                    router.push('/employee/dashboard')
-                } else {
-                    router.push('/dashboard')
-                }
-            } else {
-                router.push('/dashboard')
-            }
+            if (res.ok) routeFromMe(data)
+            else router.push('/dashboard')
         } catch (error) {
             console.error('Error checking role:', error)
             router.push('/dashboard')
@@ -246,7 +279,7 @@ export default function LoginPage() {
                             ? 'Введите номер телефона для входа'
                             : step === 'otp'
                                 ? `Мы отправили код на ${phone}`
-                                : step === 'password-setup'
+                            : step === 'password-setup'
                                     ? isNewUser
                                         ? 'Создайте пароль для быстрого входа в будущем'
                                         : 'Придумайте пароль для быстрого входа в будущем'
@@ -257,7 +290,13 @@ export default function LoginPage() {
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    {step === 'phone' ? (
+                    {isCheckingSession ? (
+                        <div className="flex items-center justify-center py-10 text-gray-400">
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Проверяем сессию…
+                        </div>
+                    ) : (
+                    step === 'phone' ? (
                         <form onSubmit={handleSendOtp} className="space-y-4">
                             <div className="space-y-2">
                                 <Label htmlFor="phone" className="text-gray-300">Номер телефона</Label>
@@ -389,6 +428,7 @@ export default function LoginPage() {
                                 Продолжить <ArrowRight className="ml-2 w-4 h-4" />
                             </Button>
                         </form>
+                    )
                     )}
                 </CardContent>
             </Card>

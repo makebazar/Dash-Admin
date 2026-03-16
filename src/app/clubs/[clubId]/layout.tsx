@@ -20,19 +20,32 @@ export default async function ClubLayout({
     }
 
     const hasSubscriptionStatus = await hasColumn('users', 'subscription_status')
-    const subscriptionResult = await query(
-        `SELECT 
-            subscription_plan,
-            ${hasSubscriptionStatus ? 'subscription_status' : "NULL::varchar as subscription_status"},
-            subscription_ends_at
-         FROM users
-         WHERE id = $1`,
-        [userId]
+    
+    // Check if user is owner or employee of the club
+    const accessCheck = await query(
+        `SELECT c.owner_id, u.subscription_plan, u.subscription_status, u.subscription_ends_at
+         FROM clubs c
+         JOIN users u ON u.id = c.owner_id
+         WHERE c.id = $1
+           AND (
+               c.owner_id = $2
+               OR EXISTS (
+                   SELECT 1 FROM club_employees ce
+                   WHERE ce.club_id = $1
+                     AND ce.user_id = $2
+                     AND ce.is_active = TRUE
+                     AND ce.dismissed_at IS NULL
+               )
+           )`,
+        [clubId, userId]
     )
-    if ((subscriptionResult.rowCount || 0) === 0) {
-        redirect('/login')
+    
+    if ((accessCheck.rowCount || 0) === 0) {
+        redirect('/dashboard')
     }
-    const subscriptionState = resolveSubscriptionState(subscriptionResult.rows[0])
+    
+    const clubOwner = accessCheck.rows[0]
+    const subscriptionState = resolveSubscriptionState(clubOwner)
     if (!subscriptionState.isActive) {
         redirect('/dashboard')
     }
