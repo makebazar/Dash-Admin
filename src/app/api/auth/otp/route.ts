@@ -12,6 +12,15 @@ export async function POST(request: Request) {
 
         const normalizedPhone = normalizePhone(phoneNumber);
 
+        // Check if user exists and if password is set
+        const userResult = await query(
+            `SELECT id, password_hash FROM users WHERE phone_number = $1`,
+            [normalizedPhone]
+        );
+
+        const userExists = (userResult.rowCount ?? 0) > 0;
+        const passwordSet = userExists && !!userResult.rows[0].password_hash;
+
         // Generate 4-digit code
         const code = Math.floor(1000 + Math.random() * 9000).toString();
 
@@ -25,7 +34,12 @@ export async function POST(request: Request) {
         // For dev, return the code.
         console.log(`[DEV] OTP for ${normalizedPhone}: ${code}`);
 
-        return NextResponse.json({ success: true, debugCode: code });
+        return NextResponse.json({ 
+            success: true, 
+            debugCode: code,
+            userExists,
+            requiresPassword: userExists && !passwordSet
+        });
 
     } catch (error) {
         console.error('OTP Error:', error);

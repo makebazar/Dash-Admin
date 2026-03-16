@@ -12,14 +12,18 @@ import { PhoneInput } from "@/components/ui/phone-input"
 
 export default function LoginPage() {
     const router = useRouter()
-    const [loginMethod, setLoginMethod] = useState<'otp' | 'password'>('otp')
-    const [step, setStep] = useState<'phone' | 'otp' | 'name'>('phone')
+    const [step, setStep] = useState<'phone' | 'otp' | 'password-setup' | 'password' | 'name'>('phone')
     const [phone, setPhone] = useState('')
     const [code, setCode] = useState('')
     const [password, setPassword] = useState('')
+    const [newPassword, setNewPassword] = useState('')
+    const [confirmPassword, setConfirmPassword] = useState('')
     const [fullName, setFullName] = useState('')
     const [isLoading, setIsLoading] = useState(false)
     const [debugCode, setDebugCode] = useState<string | null>(null)
+    const [userExists, setUserExists] = useState(false)
+    const [requiresPassword, setRequiresPassword] = useState(false)
+    const [isNewUser, setIsNewUser] = useState(false)
 
     const handleSendOtp = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -33,7 +37,18 @@ export default function LoginPage() {
             const data = await res.json()
 
             if (data.success) {
-                setStep('otp')
+                setUserExists(data.userExists || false)
+                setRequiresPassword(data.requiresPassword || false)
+                setIsNewUser(!data.userExists)
+                const hasPassword = data.userExists && !data.requiresPassword
+
+                if (hasPassword) {
+                    // У пользователя есть пароль — сразу показываем ввод пароля, OTP не нужно
+                    setStep('password')
+                } else {
+                    // Нет пароля (существующий или новый) — сначала OTP, потом установка пароля или ввод имени
+                    setStep('otp')
+                }
                 setDebugCode(data.debugCode)
             } else {
                 alert(data.error || 'Не удалось отправить код')
@@ -41,60 +56,6 @@ export default function LoginPage() {
         } catch (err) {
             console.error(err)
             alert('Ошибка отправки кода')
-        } finally {
-            setIsLoading(false)
-        }
-    }
-
-    const redirectBasedOnRole = async () => {
-        try {
-            const res = await fetch('/api/auth/me')
-            const data = await res.json()
-
-            if (res.ok) {
-                const { ownedClubs, employeeClubs } = data
-
-                if (ownedClubs.length > 0 && employeeClubs.length === 0) {
-                    router.push('/dashboard')
-                } else if (ownedClubs.length === 0 && employeeClubs.length > 0) {
-                    router.push('/employee/dashboard')
-                } else if (ownedClubs.length > 0 && employeeClubs.length > 0) {
-                    router.push('/dashboard')
-                } else {
-                    router.push('/dashboard')
-                }
-            } else {
-                router.push('/dashboard')
-            }
-        } catch (error) {
-            console.error('Error checking role:', error)
-            router.push('/dashboard')
-        }
-    }
-
-    const handleVerifyOtp = async (e: React.FormEvent) => {
-        e.preventDefault()
-        setIsLoading(true)
-        try {
-            const res = await fetch('/api/auth/verify', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ phoneNumber: phone, code }),
-            })
-            const data = await res.json()
-
-            if (data.success) {
-                if (data.isNewUser) {
-                    setStep('name')
-                } else {
-                    await redirectBasedOnRole()
-                }
-            } else {
-                alert(data.error || 'Неверный код')
-            }
-        } catch (err) {
-            console.error(err)
-            alert('Ошибка проверки кода')
         } finally {
             setIsLoading(false)
         }
@@ -124,6 +85,72 @@ export default function LoginPage() {
         }
     }
 
+    const redirectBasedOnRole = async () => {
+        try {
+            const res = await fetch('/api/auth/me')
+            const data = await res.json()
+
+            if (res.ok) {
+                const { ownedClubs, employeeClubs } = data
+
+                // Если есть клубы владельца — идём в кабинет владельца
+                // Если есть клубы где пользователь управляющий — тоже идём в кабинет владельца
+                // Иначе — в кабинет сотрудника
+                const hasManagerClubs = (employeeClubs || []).some(
+                    (club: any) => club.role === 'Управляющий' || club.role === 'Manager'
+                )
+                
+                if (ownedClubs.length > 0 || hasManagerClubs) {
+                    router.push('/dashboard')
+                } else if (employeeClubs.length > 0) {
+                    router.push('/employee/dashboard')
+                } else {
+                    router.push('/dashboard')
+                }
+            } else {
+                router.push('/dashboard')
+            }
+        } catch (error) {
+            console.error('Error checking role:', error)
+            router.push('/dashboard')
+        }
+    }
+
+    const handleVerifyOtp = async (e: React.FormEvent) => {
+        e.preventDefault()
+        setIsLoading(true)
+        try {
+            const res = await fetch('/api/auth/verify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ phoneNumber: phone, code }),
+            })
+            const data = await res.json()
+
+            if (data.success) {
+                if (data.requiresPasswordSetup) {
+                    // Существующий пользователь без пароля — после OTP просим установить пароль
+                    setIsNewUser(false)
+                    setStep('password-setup')
+                } else if (data.isNewUser) {
+                    // Новый пользователь — после OTP просим ввести имя
+                    setIsNewUser(true)
+                    setStep('name')
+                } else {
+                    // Существующий пользователь с паролем — уже вошёл, редирект
+                    await redirectBasedOnRole()
+                }
+            } else {
+                alert(data.error || 'Неверный код')
+            }
+        } catch (err) {
+            console.error(err)
+            alert('Ошибка проверки кода')
+        } finally {
+            setIsLoading(false)
+        }
+    }
+
     const handleSaveName = async (e: React.FormEvent) => {
         e.preventDefault()
         setIsLoading(true)
@@ -135,13 +162,55 @@ export default function LoginPage() {
             })
 
             if (res.ok) {
-                router.push('/dashboard')
+                // После ввода имени предлагаем установить пароль
+                setStep('password-setup')
             } else {
                 alert('Ошибка сохранения имени')
             }
         } catch (err) {
             console.error(err)
             alert('Ошибка сохранения')
+        } finally {
+            setIsLoading(false)
+        }
+    }
+
+    const handleSetPassword = async (e: React.FormEvent) => {
+        e.preventDefault()
+        setIsLoading(true)
+        try {
+            if (newPassword !== confirmPassword) {
+                alert('Пароли не совпадают')
+                setIsLoading(false)
+                return
+            }
+
+            if (newPassword.length < 6) {
+                alert('Пароль должен быть не менее 6 символов')
+                setIsLoading(false)
+                return
+            }
+
+            const res = await fetch('/api/auth/set-password', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    password: newPassword, 
+                    confirm_password: confirmPassword 
+                }),
+            })
+
+            const data = await res.json()
+
+            if (data.success) {
+                // После установки пароля — сразу редирект
+                await redirectBasedOnRole()
+            } else {
+                alert(data.error || 'Ошибка установки пароля')
+            }
+        } catch (err) {
+            console.error(err)
+            alert('Ошибка установки пароля')
         } finally {
             setIsLoading(false)
         }
@@ -159,90 +228,91 @@ export default function LoginPage() {
             <Card className="w-full max-w-md bg-gray-900/50 border-white/10 backdrop-blur-md">
                 <CardHeader>
                     <CardTitle className="text-2xl text-white">
-                        {step === 'phone' ? 'С возвращением' : step === 'otp' ? 'Введите код' : 'Как вас зовут?'}
+                        {step === 'phone'
+                            ? 'С возвращением'
+                            : step === 'otp'
+                                ? 'Введите код'
+                                : step === 'password-setup'
+                                    ? isNewUser
+                                        ? 'Придумайте пароль'
+                                        : 'Установите пароль'
+                                    : step === 'password'
+                                        ? 'Введите пароль'
+                                        : 'Как вас зовут?'
+                        }
                     </CardTitle>
                     <CardDescription className="text-gray-400">
                         {step === 'phone'
-                            ? 'Войдите по номеру телефона'
+                            ? 'Введите номер телефона для входа'
                             : step === 'otp'
                                 ? `Мы отправили код на ${phone}`
-                                : 'Расскажите нам, как к вам обращаться'
+                                : step === 'password-setup'
+                                    ? isNewUser
+                                        ? 'Создайте пароль для быстрого входа в будущем'
+                                        : 'Придумайте пароль для быстрого входа в будущем'
+                                    : step === 'password'
+                                        ? `Введите пароль для ${phone}`
+                                        : 'Расскажите нам, как к вам обращаться'
                         }
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
                     {step === 'phone' ? (
-                        <>
-                            {/* Tabs */}
-                            <div className="flex gap-2 mb-6 p-1 bg-black/50 rounded-lg">
-                                <button
-                                    type="button"
-                                    onClick={() => setLoginMethod('otp')}
-                                    className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${loginMethod === 'otp'
-                                        ? 'bg-white text-black'
-                                        : 'text-gray-400 hover:text-white'
-                                        }`}
-                                >
-                                    OTP
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setLoginMethod('password')}
-                                    className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${loginMethod === 'password'
-                                        ? 'bg-white text-black'
-                                        : 'text-gray-400 hover:text-white'
-                                        }`}
-                                >
-                                    Пароль
-                                </button>
+                        <form onSubmit={handleSendOtp} className="space-y-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="phone" className="text-gray-300">Номер телефона</Label>
+                                <PhoneInput
+                                    id="phone"
+                                    placeholder="+7 (999) 000-00-00"
+                                    value={phone}
+                                    onChange={setPhone}
+                                    required
+                                    className="bg-black/50 border-white/10 text-white placeholder:text-gray-600 focus-visible:ring-purple-500"
+                                />
                             </div>
 
-                            <form onSubmit={loginMethod === 'otp' ? handleSendOtp : handlePasswordLogin} className="space-y-4">
-                                <div className="space-y-2">
-                                    <Label htmlFor="phone" className="text-gray-300">Номер телефона</Label>
-                                    <PhoneInput
-                                        id="phone"
-                                        placeholder="+7 (999) 000-00-00"
-                                        value={phone}
-                                        onChange={setPhone}
-                                        required
-                                        className="bg-black/50 border-white/10 text-white placeholder:text-gray-600 focus-visible:ring-purple-500"
-                                    />
-                                </div>
-
-                                {loginMethod === 'password' && (
-                                    <div className="space-y-2">
-                                        <Label htmlFor="password" className="text-gray-300">Пароль</Label>
-                                        <Input
-                                            id="password"
-                                            type="password"
-                                            placeholder="Введите пароль"
-                                            value={password}
-                                            onChange={(e) => setPassword(e.target.value)}
-                                            className="bg-black/50 border-white/10 text-white placeholder:text-gray-600 focus-visible:ring-purple-500"
-                                            required
-                                        />
-                                        <button
-                                            type="button"
-                                            onClick={() => setLoginMethod('otp')}
-                                            className="text-xs text-gray-400 hover:text-purple-400 transition-colors"
-                                        >
-                                            Забыли пароль? Войти по OTP
-                                        </button>
-                                    </div>
-                                )}
-
-                                <Button type="submit" className="w-full bg-white text-black hover:bg-gray-200" disabled={isLoading}>
-                                    {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                                    {loginMethod === 'otp' ? 'Отправить код' : 'Войти'}
-                                </Button>
-                            </form>
-                        </>
+                            <Button type="submit" className="w-full bg-white text-black hover:bg-gray-200" disabled={isLoading}>
+                                {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                Продолжить <ArrowRight className="ml-2 w-4 h-4" />
+                            </Button>
+                        </form>
+                    ) : step === 'password' ? (
+                        <form onSubmit={handlePasswordLogin} className="space-y-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="password" className="text-gray-300">Пароль</Label>
+                                <Input
+                                    id="password"
+                                    type="password"
+                                    placeholder="Введите пароль"
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    className="bg-black/50 border-white/10 text-white placeholder:text-gray-600 focus-visible:ring-purple-500"
+                                    required
+                                />
+                            </div>
+                            <Button type="submit" className="w-full bg-white text-black hover:bg-gray-200" disabled={isLoading}>
+                                {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                Войти
+                            </Button>
+                            <Button
+                                variant="ghost"
+                                type="button"
+                                className="w-full text-gray-500 hover:text-white"
+                                onClick={() => setStep('phone')}
+                            >
+                                Изменить номер
+                            </Button>
+                        </form>
                     ) : step === 'otp' ? (
                         <form onSubmit={handleVerifyOtp} className="space-y-4">
                             {debugCode && (
                                 <div className="p-3 bg-purple-500/20 border border-purple-500/30 rounded text-purple-200 text-sm text-center">
                                     DEV CODE: <span className="font-bold tracking-widest">{debugCode}</span>
+                                </div>
+                            )}
+                            {requiresPassword && (
+                                <div className="p-3 bg-yellow-500/20 border border-yellow-500/30 rounded text-yellow-200 text-sm text-center">
+                                    После ввода кода вам нужно будет установить пароль
                                 </div>
                             )}
                             <div className="space-y-2">
@@ -268,6 +338,37 @@ export default function LoginPage() {
                                 onClick={() => setStep('phone')}
                             >
                                 Изменить номер
+                            </Button>
+                        </form>
+                    ) : step === 'password-setup' ? (
+                        <form onSubmit={handleSetPassword} className="space-y-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="newPassword" className="text-gray-300">Новый пароль</Label>
+                                <Input
+                                    id="newPassword"
+                                    type="password"
+                                    placeholder="Минимум 6 символов"
+                                    value={newPassword}
+                                    onChange={(e) => setNewPassword(e.target.value)}
+                                    className="bg-black/50 border-white/10 text-white placeholder:text-gray-600 focus-visible:ring-purple-500"
+                                    required
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="confirmPassword" className="text-gray-300">Подтверждение пароля</Label>
+                                <Input
+                                    id="confirmPassword"
+                                    type="password"
+                                    placeholder="Повторите пароль"
+                                    value={confirmPassword}
+                                    onChange={(e) => setConfirmPassword(e.target.value)}
+                                    className="bg-black/50 border-white/10 text-white placeholder:text-gray-600 focus-visible:ring-purple-500"
+                                    required
+                                />
+                            </div>
+                            <Button type="submit" className="w-full bg-white text-black hover:bg-gray-200" disabled={isLoading}>
+                                {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                Установить пароль <ArrowRight className="ml-2 w-4 h-4" />
                             </Button>
                         </form>
                     ) : (
