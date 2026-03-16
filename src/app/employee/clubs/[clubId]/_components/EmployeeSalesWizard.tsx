@@ -73,17 +73,21 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
         
         // Всегда держим фокус на этом input
         const keepFocus = () => {
-            if (document.activeElement !== hiddenInput && !isReturnDialogOpen) {
+            // Не перехватываем фокус если пользователь печатает в видимом input
+            const activeElement = document.activeElement as HTMLElement
+            if (activeElement && activeElement.tagName === 'INPUT' && activeElement !== hiddenInput) {
+                return // Пользователь печатает в видимом input - не мешаем
+            }
+            if (activeElement !== hiddenInput && !isReturnDialogOpen) {
                 hiddenInput.focus()
             }
         }
         
-        // Фокус при клике в любом месте
+        // Фокус при клике в любом месте (кроме input)
         document.addEventListener('click', keepFocus)
-        document.addEventListener('keydown', keepFocus)
         
         // Первоначальный фокус
-        hiddenInput.focus()
+        setTimeout(() => hiddenInput.focus(), 100)
         
         return () => {
             document.body.style.overflow = ''
@@ -92,7 +96,6 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
             document.body.style.height = ''
             document.body.removeChild(hiddenInput)
             document.removeEventListener('click', keepFocus)
-            document.removeEventListener('keydown', keepFocus)
         }
     }, [isReturnDialogOpen])
 
@@ -190,6 +193,9 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
             // Игнорируем если фокус в textarea
             const target = e.target as HTMLElement
             if (target.tagName === 'TEXTAREA') return
+            
+            // Если фокус в основном input поиска - даем работать обычному обработчику
+            if (inputRef.current && target === inputRef.current) return
 
             // USB сканер вводит символы очень быстро (интервал < 30ms)
             const now = Date.now()

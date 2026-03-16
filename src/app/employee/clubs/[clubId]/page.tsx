@@ -476,6 +476,11 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
     }
 
     const submitEndShift = async (data: any) => {
+        if (!activeShift?.id) {
+            alert('Ошибка: активная смена не найдена')
+            return
+        }
+        
         setIsActionLoading(true)
         try {
             const { checklistResponses, checklistId, ...cleanReportData } = data || {}
@@ -488,7 +493,7 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                         template_id: checklistId,
                         employee_id: currentUserId,
                         target_user_id: currentUserId,
-                        shift_id: activeShift?.id,
+                        shift_id: activeShift.id,
                         responses: Object.entries(checklistResponses).map(([k, v]: any) => ({
                             item_id: parseInt(k),
                             score: v.score,
@@ -505,7 +510,7 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                 }
             }
 
-            const res = await fetch(`/api/employee/shifts/${activeShift?.id}`, {
+            const res = await fetch(`/api/employee/shifts/${activeShift.id}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -519,11 +524,11 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                 await fetchData(clubId)
             } else {
                 const err = await res.json()
-                alert(err.error || 'Не удалось завершить смену')
+                alert(err.error || `Не удалось завершить смену: ${res.status}`)
             }
         } catch (error) {
             console.error('Error ending shift:', error)
-            alert('Ошибка завершения смены')
+            alert(`Ошибка завершения смены: ${error instanceof Error ? error.message : 'Неизвестная ошибка'}`)
         } finally {
             setIsActionLoading(false)
         }
