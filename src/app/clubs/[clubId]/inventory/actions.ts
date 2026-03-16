@@ -3544,8 +3544,17 @@ export async function closeInventory(
 
         // FIX #5: Throw error if items have NULL actual_stock
         if (hasNullStock) {
+            // Найдем товары которые не посчитаны
+            const nullStockItems = itemsRes.rows
+                .filter((r: any) => r.actual_stock === null)
+                .map((r: any) => `${r.product_name} (ID: ${r.product_id})`)
+            
             await client.query('ROLLBACK')
-            throw new Error("Не все товары посчитаны. Заполните фактический остаток для всех позиций перед закрытием.")
+            throw new Error(
+                `Не все товары посчитаны. Заполните фактический остаток для:\n\n` +
+                `${nullStockItems.slice(0, 10).join('\n')}` +
+                `${nullStockItems.length > 10 ? `\n... и еще ${nullStockItems.length - 10} товаров` : ''}`
+            )
         }
 
         // FIX #3: Softer validation for unaccounted sales - allow duplicates with warning logged
