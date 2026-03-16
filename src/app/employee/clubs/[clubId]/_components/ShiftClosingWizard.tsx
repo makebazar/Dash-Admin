@@ -195,9 +195,9 @@ export function ShiftClosingWizard({
 
     const totalSalesRevenue = salesPreview.reduce((acc, s) => acc + s.total, 0)
 
-    // Forgotten items (expected > 0 but actual is null)
+    // Forgotten items (all items with actual_stock === null)
     const forgottenItems = useMemo(() => {
-        return inventoryItems.filter(i => (i.expected_stock || 0) > 0 && i.actual_stock === null)
+        return inventoryItems.filter(i => i.actual_stock === null)
     }, [inventoryItems])
 
     const revenueKey = useMemo(() => {
@@ -1058,7 +1058,7 @@ export function ShiftClosingWizard({
     const markAllForgottenAsZero = () => {
         if (confirm(`Вы уверены, что хотите установить остаток 0 для всех ${forgottenItems.length} нераспределенных товаров? Это зафиксирует недостачу.`)) {
             const updatedItems = inventoryItems.map(item => {
-                if ((item.expected_stock || 0) > 0 && item.actual_stock === null) {
+                if (item.actual_stock === null) {
                     return { ...item, actual_stock: 0 }
                 }
                 return item
