@@ -3425,6 +3425,7 @@ export async function closeInventory(
         // 1. Fetch items and account for movements that happened DURING the inventory
         const itemsRes = await client.query(`
             SELECT ii.*,
+                   p.name as product_name,
                    COALESCE((
                        SELECT SUM(change_amount)
                        FROM warehouse_stock_movements
@@ -3435,6 +3436,7 @@ export async function closeInventory(
                        AND NOT (COALESCE(related_entity_type, '') = 'INVENTORY' AND COALESCE(related_entity_id, -1) = $1) -- Exclude this inventory's own potential movements
                    ), 0) as movements_during_inventory
             FROM warehouse_inventory_items ii
+            JOIN warehouse_products p ON ii.product_id = p.id
             WHERE ii.inventory_id = $1
         `, [inventoryId, warehouseId, inventoryStartTime, clubId])
 
