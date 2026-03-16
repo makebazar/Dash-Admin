@@ -272,7 +272,12 @@ export function ShiftClosingWizard({
                     setStep(data.step || 1)
                     setReportData(data.reportData || {})
                     setInventoryId(data.inventoryId || null)
-                    setInventoryItems(data.inventoryItems || [])
+                    // Auto-count items with expected_stock = 0 when restoring
+                    const restoredItems = (data.inventoryItems || []).map((i: any) => ({
+                        ...i,
+                        actual_stock: (i.expected_stock || 0) === 0 ? 0 : i.actual_stock
+                    }))
+                    setInventoryItems(restoredItems)
                     setChecklistResponses(data.checklistResponses || {})
                     setProblematicItems(data.problematicItems || {})
                     setCalculationResult(data.calculationResult || null)
@@ -571,10 +576,15 @@ export function ShiftClosingWizard({
                 
                 setInventoryId(newInvId)
                 const items = await getInventoryItems(newInvId)
-                
+
                 // If blind inventory is enabled, we start with an empty list for the UI
                 // but the items exist in state. We'll only show them once scanned/added.
-                setInventoryItems(items.map(i => ({ ...i, is_visible: false })))
+                // Auto-count items with expected_stock = 0 (no need to manually enter 0)
+                setInventoryItems(items.map(i => ({
+                    ...i,
+                    is_visible: false,
+                    actual_stock: (i.expected_stock || 0) === 0 ? 0 : i.actual_stock
+                })))
             } catch (e) {
                 console.error('Failed to start inventory:', e)
                 alert("Ошибка запуска инвентаризации")
