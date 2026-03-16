@@ -68,9 +68,14 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
         }
     }
 
-    const handleLogout = () => {
-        document.cookie = 'session_user_id=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;'
-        router.push('/login')
+    const handleLogout = async () => {
+        try {
+            await fetch('/api/auth/logout', { method: 'POST' })
+        } catch (error) {
+            console.error('Logout failed:', error)
+        } finally {
+            router.push('/login')
+        }
     }
 
     if (isPosRoute) {
