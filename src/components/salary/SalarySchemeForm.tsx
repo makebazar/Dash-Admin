@@ -93,6 +93,8 @@ export interface Bonus {
     calculation_mode?: 'PER_TASK' | 'MONTHLY'
     overdue_tolerance_days?: number
     late_penalty_multiplier?: number
+    overdue_penalty_mode?: 'NONE' | 'FIXED_PER_TASK' | 'FIXED_PER_DAY' | 'PERCENT_OF_REWARD'
+    overdue_penalty_amount?: number
     reward_type?: 'MULTIPLIER' | 'FIXED' | 'PERCENT'
     efficiency_thresholds?: { from_percent: number; multiplier?: number; amount?: number }[]
     payout_type?: 'REAL_MONEY' | 'VIRTUAL_BALANCE'
@@ -814,6 +816,49 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                                                                         </div>
                                                                     </div>
                                                                 )}
+
+                                                                <div className="mt-4 rounded-2xl border border-rose-100 bg-rose-50/50 p-4">
+                                                                    <div className="text-[10px] font-black uppercase tracking-widest text-rose-600 mb-3">Штраф за просрочку обслуживания</div>
+                                                                    <div className="grid gap-3 md:grid-cols-3">
+                                                                        <div className="relative">
+                                                                            <Input
+                                                                                type="number"
+                                                                                value={bonus.overdue_tolerance_days ?? 0}
+                                                                                onChange={e => updateBonus(index, 'overdue_tolerance_days', parseInt(e.target.value || '0', 10))}
+                                                                                className="h-10 rounded-xl"
+                                                                            />
+                                                                            <span className="absolute left-3 -top-2 bg-white px-1 text-[8px] font-black uppercase text-muted-foreground rounded">Льготные дни</span>
+                                                                        </div>
+
+                                                                        <div className="relative">
+                                                                            <Select
+                                                                                value={bonus.overdue_penalty_mode || 'NONE'}
+                                                                                onValueChange={value => updateBonus(index, 'overdue_penalty_mode', value)}
+                                                                            >
+                                                                                <SelectTrigger className="h-10 rounded-xl">
+                                                                                    <SelectValue />
+                                                                                </SelectTrigger>
+                                                                                <SelectContent>
+                                                                                    <SelectItem value="NONE">Без штрафа</SelectItem>
+                                                                                    <SelectItem value="FIXED_PER_TASK">Фикс за задачу</SelectItem>
+                                                                                    <SelectItem value="FIXED_PER_DAY">Фикс за день</SelectItem>
+                                                                                    <SelectItem value="PERCENT_OF_REWARD">% от награды</SelectItem>
+                                                                                </SelectContent>
+                                                                            </Select>
+                                                                            <span className="absolute left-3 -top-2 bg-white px-1 text-[8px] font-black uppercase text-muted-foreground rounded">Тип штрафа</span>
+                                                                        </div>
+
+                                                                        <div className="relative">
+                                                                            <Input
+                                                                                type="number"
+                                                                                value={bonus.overdue_penalty_amount ?? 0}
+                                                                                onChange={e => updateBonus(index, 'overdue_penalty_amount', parseFloat(e.target.value || '0'))}
+                                                                                className="h-10 rounded-xl"
+                                                                            />
+                                                                            <span className="absolute left-3 -top-2 bg-white px-1 text-[8px] font-black uppercase text-muted-foreground rounded">Размер штрафа</span>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
                                                             </div>
                                                         )}
                                                             

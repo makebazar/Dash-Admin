@@ -1070,8 +1070,14 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
 
                                                                             <div className="flex justify-between items-center p-3 bg-muted/20 rounded-xl border border-dashed">
                                                                                 <div>
-                                                                                    <p className="text-[10px] text-muted-foreground uppercase font-bold">Начислено за период</p>
+                                                                                    <p className="text-[10px] text-muted-foreground uppercase font-bold">К выплате за обслуживание</p>
                                                                                     <p className="text-lg font-black text-indigo-600">{formatCurrency(employee.maintenance_status.bonus_amount)}</p>
+                                                                                    {(employee.maintenance_status.base_bonus_amount || 0) > 0 && (
+                                                                                        <div className="mt-1 space-y-0.5">
+                                                                                            <p className="text-[10px] text-muted-foreground">По порогу: {formatCurrency(employee.maintenance_status.base_bonus_amount || 0)}</p>
+                                                                                            <p className="text-[10px] text-rose-500">Штраф применен: -{formatCurrency(employee.maintenance_status.penalty_amount || 0)}</p>
+                                                                                        </div>
+                                                                                    )}
                                                                                 </div>
                                                                                 <div className="text-right">
                                                                                     <span className={`text-[10px] font-bold px-2 py-1 rounded-full uppercase ${
@@ -1079,6 +1085,11 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                                                     }`}>
                                                                                         {employee.maintenance_status.is_met ? 'Активен' : 'Нет задач'}
                                                                                     </span>
+                                                                                    {(employee.maintenance_status.overdue_incidents || 0) > 0 && (
+                                                                                        <p className="text-[10px] text-muted-foreground mt-2">
+                                                                                            Просрочек: {employee.maintenance_status.overdue_incidents}
+                                                                                        </p>
+                                                                                    )}
                                                                                 </div>
                                                                             </div>
                                                                         </div>

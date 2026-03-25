@@ -86,7 +86,10 @@ export async function POST(
                     rejection_reason = $3,
                     completed_at = NULL, -- Reset completion time
                     bonus_earned = 0,    -- Reset bonus
-                    kpi_points = 0       -- Reset points
+                    kpi_points = 0,      -- Reset points
+                    overdue_days_at_completion = 0,
+                    was_overdue = FALSE,
+                    responsible_user_id_at_completion = NULL
                 WHERE id = $1
                 RETURNING id
             `;

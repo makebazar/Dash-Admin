@@ -91,10 +91,23 @@ export function MaintenanceKpiCard({ kpi, formatCurrency }: { kpi: any, formatCu
                             <div>
                                 <p className="text-xs text-white/50">Премия за задачи</p>
                                 <p className="text-xl font-bold text-emerald-400">+{formatCurrency(kpi.bonus_amount)}</p>
+                                {(kpi.base_bonus_amount || 0) > (kpi.bonus_amount || 0) && (
+                                    <p className="text-[10px] text-white/40 mt-1">
+                                        Было по порогу: {formatCurrency(kpi.base_bonus_amount || 0)}
+                                    </p>
+                                )}
+                                {(kpi.overdue_penalty_amount || 0) > 0 && (
+                                    <p className="text-xs text-rose-300 mt-1">Штраф: -{formatCurrency(kpi.overdue_penalty_amount || 0)}</p>
+                                )}
                             </div>
                             <div className="text-right">
                                 <p className="text-xs text-white/50">Просрочено сейчас</p>
                                 <p className="text-sm font-bold text-rose-300">{kpi.overdue_open_tasks || 0}</p>
+                                {(kpi.overdue_completed_tasks || 0) > 0 && (
+                                    <p className="text-[10px] text-white/40 mt-1">
+                                        Закрыто с просрочкой: {kpi.overdue_completed_tasks} · {kpi.overdue_completed_days || 0} дн.
+                                    </p>
+                                )}
                             </div>
                             {nextThreshold && (
                                 <div className="text-right">

@@ -369,6 +369,21 @@ export async function calculateSalary(
         breakdown.accrued_payout += amount;
     }
 
+    const maintenancePenalty = Number(
+        reportMetrics['maintenance_overdue_penalty_applied'] ??
+        reportMetrics['maintenance_overdue_penalty'] ??
+        0
+    );
+    if (maintenancePenalty > 0) {
+        const deduction = parseFloat(maintenancePenalty.toFixed(2));
+        breakdown.deductions.push({
+            name: 'Штраф за просрочку обслуживания',
+            amount: deduction
+        });
+        total -= deduction;
+        breakdown.accrued_payout -= deduction;
+    }
+
     // 5. Bar Deductions (from shift.bar_purchases)
     if (shift.bar_purchases && shift.bar_purchases > 0) {
         const deduction = parseFloat(shift.bar_purchases.toFixed(2));

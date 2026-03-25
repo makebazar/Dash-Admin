@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { query } from '@/db';
 import { cookies } from 'next/headers';
 import { calculateSalary } from '@/lib/salary-calculator';
+import { calculateMaintenanceOverduePenalty } from '@/lib/maintenance-penalties';
 
 export async function GET(
     request: Request,
@@ -321,7 +322,7 @@ export async function GET(
 
             // 2. Completed Tasks for Payment (Accrual) - for distributing to shifts
             const paymentTasksRes = await query(
-                `SELECT id, bonus_earned, completed_at
+                `SELECT id, bonus_earned, completed_at, overdue_days_at_completion, was_overdue
                  FROM equipment_maintenance_tasks
                  WHERE completed_by = $1 AND status = 'COMPLETED'
                    AND completed_at >= $2 AND completed_at <= $3`,
@@ -329,6 +330,16 @@ export async function GET(
             );
             const paymentTasks = paymentTasksRes.rows;
             const totalMaintenanceBonus = paymentTasks.reduce((sum: number, t: any) => sum + (parseFloat(t.bonus_earned) || 0), 0);
+
+            const overdueTasksRes = await query(
+                `SELECT overdue_days_at_completion, was_overdue, bonus_earned, completed_at
+                 FROM equipment_maintenance_tasks
+                 WHERE responsible_user_id_at_completion = $1
+                   AND status = 'COMPLETED'
+                   AND completed_at >= $2 AND completed_at <= $3`,
+                [emp.id, startOfMonth.toISOString(), endOfMonth.toISOString()]
+            );
+            const overdueTasks = overdueTasksRes.rows;
 
             const monthBonusRes = await query(
                 `SELECT COALESCE(SUM(bonus_amount), 0) as total_monthly_bonus
@@ -349,8 +360,17 @@ export async function GET(
 
             // Calculate Maintenance Bonus based on Scheme Mode
             let finalMaintenanceBonus = 0;
+            let maintenanceOverduePenaltyRaw = 0;
+            let maintenanceOverduePenaltyApplied = 0;
+            let maintenanceOverdueIncidents = 0;
+            let maintenanceOverdueDays = 0;
 
             if (maintenanceBonusConfig) {
+                const penaltyMeta = calculateMaintenanceOverduePenalty(maintenanceBonusConfig, overdueTasks);
+                maintenanceOverduePenaltyRaw = penaltyMeta.total;
+                maintenanceOverdueIncidents = penaltyMeta.incidents;
+                maintenanceOverdueDays = penaltyMeta.overdue_days;
+
                 if (maintenanceBonusConfig.calculation_mode === 'MONTHLY') {
                     // Mode: Monthly Tiers (ignore per-task accrued bonuses)
                     const efficiency = monthTotalTasks > 0 ? (monthCompletedTasks / monthTotalTasks) * 100 : 0;
@@ -373,7 +393,15 @@ export async function GET(
                 finalMaintenanceBonus = 0;
             }
 
-            monthlyMetrics['maintenance_bonus'] = finalMaintenanceBonus;
+            maintenanceOverduePenaltyApplied = Math.min(finalMaintenanceBonus, maintenanceOverduePenaltyRaw);
+            const maintenanceBonusFinal = Math.max(0, finalMaintenanceBonus - maintenanceOverduePenaltyApplied);
+
+            monthlyMetrics['maintenance_bonus_base'] = finalMaintenanceBonus;
+            monthlyMetrics['maintenance_bonus'] = maintenanceBonusFinal;
+            monthlyMetrics['maintenance_overdue_penalty_raw'] = maintenanceOverduePenaltyRaw;
+            monthlyMetrics['maintenance_overdue_penalty'] = maintenanceOverduePenaltyApplied;
+            monthlyMetrics['maintenance_overdue_incidents'] = maintenanceOverdueIncidents;
+            monthlyMetrics['maintenance_overdue_days'] = maintenanceOverdueDays;
             // Also pass efficiency metrics so period bonuses can use them if needed (though unlikely)
             monthlyMetrics['maintenance_tasks_completed'] = monthCompletedTasks;
             monthlyMetrics['maintenance_tasks_assigned'] = monthTotalTasks;
@@ -534,11 +562,15 @@ export async function GET(
                 });
                 
                 const shiftRawSum = shiftTasks.reduce((sum: number, t: any) => sum + (parseFloat(t.bonus_earned) || 0), 0);
-                
+                const shiftPenaltyTasks = overdueTasks.filter((t: any) => {
+                    const d = new Date(t.completed_at);
+                    return d >= shiftStart && (s.check_out ? d <= shiftEnd : true);
+                });
                 reportMetricsForShift['maintenance_raw_sum'] = shiftRawSum;
                 reportMetricsForShift['maintenance_tasks_completed'] = monthCompletedTasks;
                 reportMetricsForShift['maintenance_tasks_assigned'] = monthTotalTasks;
                 reportMetricsForShift['maintenance_month_base'] = monthlyMetrics['maintenance_bonus'] || 0;
+                reportMetricsForShift['maintenance_overdue_penalty'] = 0;
 
                 // Pass the scheme WITH calculated bonuses reward levels
                 // IMPORTANT: Use activeScheme (frozen if paid) instead of emp
@@ -679,6 +711,10 @@ export async function GET(
                 const completed = monthlyMetrics['maintenance_tasks_completed'] || 0;
                 const assigned = monthlyMetrics['maintenance_tasks_assigned'] || 0;
                 const bonusAmount = monthlyMetrics['maintenance_bonus'] || 0;
+                const penaltyAmount = monthlyMetrics['maintenance_overdue_penalty'] || 0;
+                const penaltyRawAmount = monthlyMetrics['maintenance_overdue_penalty_raw'] || 0;
+                const baseBonusAmount = monthlyMetrics['maintenance_bonus_base'] || 0;
+                const overdueIncidents = monthlyMetrics['maintenance_overdue_incidents'] || 0;
                 let efficiency = 100;
                 if (assigned > 0) efficiency = (completed / assigned) * 100;
 
@@ -704,6 +740,11 @@ export async function GET(
                     target_value: assigned,
                     efficiency,
                     bonus_amount: bonusAmount,
+                    base_bonus_amount: baseBonusAmount,
+                    final_bonus_amount: bonusAmount,
+                    penalty_raw_amount: penaltyRawAmount,
+                    penalty_amount: penaltyAmount,
+                    overdue_incidents: overdueIncidents,
                     thresholds: current_thresholds,
                     is_met: bonusAmount > 0
                 };
@@ -849,6 +890,11 @@ export async function GET(
                     revenue_by_metric,
                     // Explicitly pass maintenance metrics
                     maintenance_bonus: monthlyMetrics['maintenance_bonus'] || 0,
+                    maintenance_bonus_base: monthlyMetrics['maintenance_bonus_base'] || 0,
+                    maintenance_overdue_penalty: monthlyMetrics['maintenance_overdue_penalty'] || 0,
+                    maintenance_overdue_penalty_raw: monthlyMetrics['maintenance_overdue_penalty_raw'] || 0,
+                    maintenance_overdue_incidents: monthlyMetrics['maintenance_overdue_incidents'] || 0,
+                    maintenance_overdue_days: monthlyMetrics['maintenance_overdue_days'] || 0,
                     maintenance_tasks_completed: monthlyMetrics['maintenance_tasks_completed'] || 0,
                     maintenance_tasks_assigned: monthlyMetrics['maintenance_tasks_assigned'] || 0,
                     // Explicitly pass evaluation metrics

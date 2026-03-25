@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/db';
 import { cookies } from 'next/headers';
+import { calculateMaintenanceOverduePenalty } from '@/lib/maintenance-penalties';
 
 // PATCH - Update/complete maintenance task
 export async function PATCH(
@@ -84,6 +85,12 @@ export async function PATCH(
                     );
 
                     const config = kpiConfig.rows[0];
+                    const overdueDaysAtCompletion = Math.max(0, Math.floor(
+                        (new Date(new Date().toDateString()).getTime() - new Date(new Date(task.due_date).toDateString()).getTime()) / (1000 * 60 * 60 * 24)
+                    ));
+                    const wasOverdue = overdueDaysAtCompletion > 0;
+                    const responsibleUserIdAtCompletion = task.assigned_user_id || userId;
+
                     if (config?.enabled) {
                         // Penalties removed as per request
                         const multiplier = 1.0;
@@ -99,7 +106,28 @@ export async function PATCH(
                         updates.push(`bonus_earned = $${paramIndex}`);
                         values.push(bonus);
                         paramIndex++;
+
+                        const overduePenaltyPreview = calculateMaintenanceOverduePenalty(
+                            {
+                                overdue_tolerance_days: config.overdue_tolerance_days,
+                                late_penalty_multiplier: config.late_penalty_multiplier
+                            },
+                            [{ overdue_days_at_completion: overdueDaysAtCompletion, bonus_earned: bonus, was_overdue: wasOverdue }]
+                        );
+                        console.log(`[Maintenance] Overdue penalty preview for task ${taskId}: ${overduePenaltyPreview.total}`);
                     }
+
+                    updates.push(`overdue_days_at_completion = $${paramIndex}`);
+                    values.push(overdueDaysAtCompletion);
+                    paramIndex++;
+
+                    updates.push(`was_overdue = $${paramIndex}`);
+                    values.push(wasOverdue);
+                    paramIndex++;
+
+                    updates.push(`responsible_user_id_at_completion = $${paramIndex}`);
+                    values.push(responsibleUserIdAtCompletion);
+                    paramIndex++;
 
                     // AUTO-SCHEDULE NEXT TASK
                     // Find equipment and calculate next due date

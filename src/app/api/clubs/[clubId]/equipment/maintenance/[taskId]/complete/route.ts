@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/db';
 import { cookies } from 'next/headers';
+import { calculateMaintenanceOverduePenalty } from '@/lib/maintenance-penalties';
 
 export const dynamic = 'force-dynamic';
 
@@ -78,6 +79,21 @@ export async function POST(
             bonusEarned = baseValue * appliedMultiplier;
         }
 
+        const overdueDaysAtCompletion = Math.max(0, Math.floor(
+            (new Date(new Date().toDateString()).getTime() - new Date(new Date(task.due_date).toDateString()).getTime()) / (1000 * 60 * 60 * 24)
+        ));
+        const wasOverdue = overdueDaysAtCompletion > 0;
+        const responsibleUserIdAtCompletion = userId;
+        const overduePenaltyPreview = calculateMaintenanceOverduePenalty(
+            {
+                overdue_tolerance_days: kpiBonus?.overdue_tolerance_days,
+                overdue_penalty_mode: kpiBonus?.overdue_penalty_mode,
+                overdue_penalty_amount: kpiBonus?.overdue_penalty_amount,
+                late_penalty_multiplier: kpiBonus?.late_penalty_multiplier
+            },
+            [{ overdue_days_at_completion: overdueDaysAtCompletion, bonus_earned: bonusEarned, was_overdue: wasOverdue }]
+        );
+
         const completeTask = await query(
             `UPDATE equipment_maintenance_tasks
              SET status = 'COMPLETED',
@@ -88,10 +104,13 @@ export async function POST(
                  notes = $4,
                  bonus_earned = $5,
                  kpi_points = $6,
-                 applied_kpi_multiplier = $7
+                 applied_kpi_multiplier = $7,
+                 overdue_days_at_completion = $8,
+                 was_overdue = $9,
+                 responsible_user_id_at_completion = $10
              WHERE id = $1
              RETURNING equipment_id`,
-            [taskId, userId, photos, notes, bonusEarned, kpiPoints, appliedMultiplier]
+            [taskId, userId, photos, notes, bonusEarned, kpiPoints, appliedMultiplier, overdueDaysAtCompletion, wasOverdue, responsibleUserIdAtCompletion]
         );
 
         if ((completeTask.rowCount || 0) === 0) {
@@ -189,7 +208,14 @@ export async function POST(
              );
         }
 
-        return NextResponse.json({ success: true });
+        return NextResponse.json({
+            success: true,
+            overdue_record: {
+                was_overdue: wasOverdue,
+                overdue_days_at_completion: overdueDaysAtCompletion,
+                estimated_penalty: overduePenaltyPreview.total
+            }
+        });
     } catch (error) {
         console.error('Complete Task Error:', error);
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });

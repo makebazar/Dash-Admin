@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/db';
 import { cookies } from 'next/headers';
+import { calculateMaintenanceOverduePenalty } from '@/lib/maintenance-penalties';
 
 // GET: Get employee's KPI progress for current period
 export async function GET(
@@ -163,6 +164,8 @@ export async function GET(
                 COUNT(*) FILTER (WHERE due_date <= CURRENT_DATE) as due_by_now_tasks,
                 COUNT(*) FILTER (WHERE status = 'COMPLETED' AND due_date <= CURRENT_DATE AND completed_at >= $2 AND completed_at <= $3) as completed_due_by_now_tasks,
                 COUNT(*) FILTER (WHERE status IN ('PENDING', 'IN_PROGRESS') AND due_date < CURRENT_DATE) as overdue_open_tasks,
+                COUNT(*) FILTER (WHERE responsible_user_id_at_completion = $1 AND was_overdue = TRUE AND completed_at >= $2 AND completed_at <= $3) as overdue_completed_tasks,
+                COALESCE(SUM(overdue_days_at_completion) FILTER (WHERE responsible_user_id_at_completion = $1 AND was_overdue = TRUE AND completed_at >= $2 AND completed_at <= $3), 0) as overdue_completed_days,
                 COALESCE(SUM(bonus_earned) FILTER (WHERE status = 'COMPLETED' AND completed_at >= $2 AND completed_at <= $3), 0) as bonus
              FROM equipment_maintenance_tasks
              WHERE 
@@ -176,6 +179,15 @@ export async function GET(
                         (verification_status = 'REJECTED' AND verified_at >= $2 AND verified_at <= $3)
                     ))
                 )`,
+            [userId, startOfMonth, endOfMonth]
+        );
+
+        const overdueHistoryRes = await query(
+            `SELECT overdue_days_at_completion, was_overdue, bonus_earned
+             FROM equipment_maintenance_tasks
+             WHERE responsible_user_id_at_completion = $1
+               AND status = 'COMPLETED'
+               AND completed_at >= $2 AND completed_at <= $3`,
             [userId, startOfMonth, endOfMonth]
         );
 
@@ -505,6 +517,8 @@ export async function GET(
             const dueByNow = Number(maintRes.rows[0]?.due_by_now_tasks || 0);
             const completedDueByNow = Number(maintRes.rows[0]?.completed_due_by_now_tasks || 0);
             const overdueOpen = Number(maintRes.rows[0]?.overdue_open_tasks || 0);
+            const overdueCompletedTasks = Number(maintRes.rows[0]?.overdue_completed_tasks || 0);
+            const overdueCompletedDays = Number(maintRes.rows[0]?.overdue_completed_days || 0);
             const upcoming = Math.max(0, assigned - dueByNow);
             const efficiency = assigned > 0 ? (completed / assigned) * 100 : (completed > 0 ? 100 : 0);
             const liveEfficiency = dueByNow > 0 ? (completedDueByNow / dueByNow) * 100 : (completed > 0 ? 100 : 0);
@@ -518,6 +532,7 @@ export async function GET(
             let bonusAmount = 0;
             let projectedBonusAmount = 0;
             let projectedTierLabel: string | null = null;
+            const overduePenaltyMeta = calculateMaintenanceOverduePenalty(maintConfig, overdueHistoryRes.rows);
             if (maintConfig.calculation_mode === 'MONTHLY') {
                 const thresholds = maintConfig.efficiency_thresholds || [];
                 const sortedTiers = [...thresholds].sort((a: any, b: any) => (Number(b.from_percent) || 0) - (Number(a.from_percent) || 0));
@@ -534,6 +549,12 @@ export async function GET(
                 bonusAmount = Number(monthlyMetrics['maintenance_bonus']) || 0;
                 projectedBonusAmount = bonusAmount;
             }
+
+            const baseBonusAmount = bonusAmount;
+            const penaltyRawAmount = overduePenaltyMeta.total;
+            const penaltyAppliedAmount = Math.min(baseBonusAmount, penaltyRawAmount);
+            bonusAmount = Math.max(0, baseBonusAmount - penaltyAppliedAmount);
+            projectedBonusAmount = Math.max(0, projectedBonusAmount - penaltyAppliedAmount);
 
             let current_thresholds: any[] = [];
             if (maintConfig.efficiency_thresholds?.length) {
@@ -579,6 +600,11 @@ export async function GET(
                 projected_bonus_amount: projectedBonusAmount,
                 projected_tier_label: projectedTierLabel,
                 bonus_amount: bonusAmount,
+                base_bonus_amount: baseBonusAmount,
+                overdue_penalty_raw_amount: penaltyRawAmount,
+                overdue_penalty_amount: penaltyAppliedAmount,
+                overdue_completed_tasks: overdueCompletedTasks,
+                overdue_completed_days: overdueCompletedDays,
                 thresholds: current_thresholds,
                 is_met: bonusAmount > 0
             };
@@ -586,7 +612,7 @@ export async function GET(
 
         const total_kpi_bonus = kpi_progress.reduce((sum: number, kpi: any) => sum + kpi.bonus_amount, 0) + 
                                checklist_progress.reduce((sum: number, cp: any) => sum + cp.bonus_amount, 0) +
-                               (maintenance_progress?.bonus_amount || 0);
+                               ((maintenance_progress?.bonus_amount || 0) - (maintenance_progress?.overdue_penalty_amount || 0));
 
         const total_projected_bonus = kpi_progress.reduce((sum: number, kpi: any) => sum + kpi.projected_bonus, 0);
 
