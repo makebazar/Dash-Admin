@@ -120,7 +120,7 @@ export async function PATCH(
 
         // Get current equipment state for movement tracking
         const currentEquipment = await query(
-            `SELECT workstation_id FROM equipment WHERE id = $1 AND club_id = $2`,
+            `SELECT workstation_id, assignment_mode FROM equipment WHERE id = $1 AND club_id = $2`,
             [equipmentId, clubId]
         );
 
@@ -130,6 +130,20 @@ export async function PATCH(
 
         const currentWorkstationId = currentEquipment.rows[0].workstation_id;
         const newWorkstationId = body.workstation_id;
+
+        if (body.assignment_mode === 'INHERIT' || body.assignment_mode === 'FREE_POOL') {
+            body.assigned_user_id = null;
+            if (body.maintenance_enabled === undefined) {
+                body.maintenance_enabled = true;
+            }
+        } else if (body.assignment_mode === 'DIRECT' && body.assigned_user_id) {
+            body.maintenance_enabled = true;
+        } else if (body.assigned_user_id !== undefined && body.assignment_mode === undefined) {
+            body.assignment_mode = body.assigned_user_id ? 'DIRECT' : 'FREE_POOL';
+            if (body.maintenance_enabled === undefined) {
+                body.maintenance_enabled = true;
+            }
+        }
 
         if (newWorkstationId !== undefined && body.assigned_user_id === undefined && newWorkstationId) {
             const inheritedAssignee = await query(
@@ -160,15 +174,15 @@ export async function PATCH(
             'cleaning_interval_days', 'last_cleaned_at', 'is_active', 'notes',
             'thermal_paste_last_changed_at', 'thermal_paste_interval_days',
             'thermal_paste_type', 'thermal_paste_note', 'maintenance_enabled',
-            'assigned_user_id',
+            'assigned_user_id', 'assignment_mode',
             'cpu_thermal_paste_last_changed_at', 'cpu_thermal_paste_interval_days',
             'cpu_thermal_paste_type', 'cpu_thermal_paste_note',
             'gpu_thermal_paste_last_changed_at', 'gpu_thermal_paste_interval_days',
             'gpu_thermal_paste_type', 'gpu_thermal_paste_note'
         ];
 
-        // Logic: if assigned_user_id is set to a user or free pool, maintenance must be enabled
-        if (body.assigned_user_id && body.assigned_user_id !== '') {
+        // Logic: if assigned_user_id is set to a user or mode explicitly changes, maintenance must be enabled
+        if ((body.assigned_user_id && body.assigned_user_id !== '') || body.assignment_mode) {
             body.maintenance_enabled = true;
         }
 
@@ -196,14 +210,29 @@ export async function PATCH(
 
         const updatedEquipment = result.rows[0];
 
-        // SYNC & AUTO-GENERATE: If maintenance is enabled and assigned user is set, ensure task exists
-        if (updatedEquipment.maintenance_enabled && updatedEquipment.assigned_user_id) {
+        const effectiveAssigneeResult = await query(
+            `SELECT CASE
+                        WHEN e.assignment_mode = 'DIRECT' THEN e.assigned_user_id
+                        WHEN e.assignment_mode = 'FREE_POOL' THEN NULL
+                        ELSE COALESCE(w.assigned_user_id, z.assigned_user_id)
+                    END as effective_assigned_user_id
+             FROM equipment e
+             LEFT JOIN club_workstations w ON w.id = e.workstation_id
+             LEFT JOIN club_zones z ON z.club_id = e.club_id AND z.name = w.zone
+             WHERE e.id = $1 AND e.club_id = $2`,
+            [equipmentId, clubId]
+        );
+
+        const effectiveAssignedUserId = effectiveAssigneeResult.rows[0]?.effective_assigned_user_id || null;
+
+        // SYNC & AUTO-GENERATE: If maintenance is enabled and effective user is set, ensure task exists
+        if (updatedEquipment.maintenance_enabled && effectiveAssignedUserId) {
             // 1. First, update existing PENDING tasks
             await query(
                 `UPDATE equipment_maintenance_tasks 
                  SET assigned_user_id = $1
                  WHERE equipment_id = $2 AND status = 'PENDING'`,
-                [updatedEquipment.assigned_user_id, equipmentId]
+                [effectiveAssignedUserId, equipmentId]
             );
 
             // 2. Check if ANY active task exists (PENDING/IN_PROGRESS)
@@ -236,13 +265,13 @@ export async function PATCH(
                     console.error('Auto-generation failed:', e);
                 }
             }
-        } else if (body.assigned_user_id !== undefined) {
-            // Just sync if maintenance_enabled wasn't part of the trigger but assigned_user_id changed
+        } else if (body.assigned_user_id !== undefined || body.assignment_mode !== undefined) {
+            // Just sync if maintenance_enabled wasn't part of the trigger but assignment changed
             await query(
                 `UPDATE equipment_maintenance_tasks 
                  SET assigned_user_id = $1
                  WHERE equipment_id = $2 AND status = 'PENDING'`,
-                [body.assigned_user_id === '' ? null : body.assigned_user_id, equipmentId]
+                [effectiveAssignedUserId, equipmentId]
             );
         }
 

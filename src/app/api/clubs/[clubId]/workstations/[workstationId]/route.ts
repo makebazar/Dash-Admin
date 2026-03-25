@@ -72,7 +72,8 @@ export async function PATCH(
             // Update equipment
             await query(
                 `UPDATE equipment
-                 SET assigned_user_id = $1::uuid,
+                 SET assigned_user_id = NULL,
+                     assignment_mode = 'INHERIT',
                      maintenance_enabled = CASE WHEN $2::boolean THEN TRUE ELSE (CASE WHEN $1::uuid IS NULL THEN FALSE ELSE TRUE END) END
                  WHERE workstation_id = $3`,
                 [assignedUserId, freePool, workstationId]

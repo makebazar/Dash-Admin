@@ -45,6 +45,20 @@ export async function POST(
             return NextResponse.json({ error: 'Comment is required for rejection' }, { status: 400 });
         }
 
+        const taskResult = await query(
+            `SELECT mt.equipment_id, mt.task_type
+             FROM equipment_maintenance_tasks mt
+             JOIN equipment e ON mt.equipment_id = e.id
+             WHERE mt.id = $1 AND e.club_id = $2`,
+            [taskId, clubId]
+        );
+
+        if ((taskResult.rowCount || 0) === 0) {
+            return NextResponse.json({ error: 'Task not found' }, { status: 404 });
+        }
+
+        const task = taskResult.rows[0];
+
         let updateQuery = '';
         let queryParams: any[] = [];
 
@@ -83,6 +97,36 @@ export async function POST(
 
         if ((result.rowCount || 0) === 0) {
             return NextResponse.json({ error: 'Task not found' }, { status: 404 });
+        }
+
+        if (action === 'REJECT' && task.task_type === 'CLEANING') {
+            await query(
+                `DELETE FROM equipment_maintenance_tasks
+                 WHERE equipment_id = $1
+                   AND task_type = $2
+                   AND status = 'PENDING'
+                   AND id != $3`,
+                [task.equipment_id, task.task_type, taskId]
+            );
+
+            const previousCompletedTask = await query(
+                `SELECT completed_at
+                 FROM equipment_maintenance_tasks
+                 WHERE equipment_id = $1
+                   AND task_type = 'CLEANING'
+                   AND status = 'COMPLETED'
+                   AND id != $2
+                 ORDER BY completed_at DESC
+                 LIMIT 1`,
+                [task.equipment_id, taskId]
+            );
+
+            await query(
+                `UPDATE equipment
+                 SET last_cleaned_at = $1
+                 WHERE id = $2`,
+                [previousCompletedTask.rows[0]?.completed_at || null, task.equipment_id]
+            );
         }
 
         return NextResponse.json({ success: true });

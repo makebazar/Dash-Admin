@@ -5,19 +5,15 @@ import { useParams } from "next/navigation"
 import {
     Dialog,
     DialogContent,
-    DialogHeader,
     DialogTitle,
-    DialogDescription,
-    DialogFooter,
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { Loader2, AlertTriangle, CheckCircle2, ChevronRight, ChevronLeft, Image as ImageIcon, X } from "lucide-react"
+import { Loader2, AlertTriangle, CheckCircle2, Image as ImageIcon, X } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
-import { cn } from "@/lib/utils"
+import { cn, isLaundryEquipmentType } from "@/lib/utils"
 
 interface MaintenanceTask {
     id: string
@@ -99,7 +95,6 @@ export function MaintenanceSessionWizard({ isOpen, onClose, tasks, onComplete }:
         setIsSubmitting(true)
         setIsUploading(true)
         try {
-            // 0. Upload photos if any
             const photoUrls: string[] = []
             if (photos.length > 0) {
                 for (const file of photos) {
@@ -122,31 +117,58 @@ export function MaintenanceSessionWizard({ isOpen, onClose, tasks, onComplete }:
             }
             setIsUploading(false)
 
-            // 1. Complete the task
-            await fetch(`/api/clubs/${clubId}/equipment/maintenance/${currentTask.id}/complete`, {
+            const isLaundryEquipment = isLaundryEquipmentType(currentTask.equipment_type)
+            const completeRes = await fetch(`/api/clubs/${clubId}/equipment/maintenance/${currentTask.id}/complete`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ 
                     photos: photoUrls,
-                    notes: hasIssue ? `[ИНЦИДЕНТ] ${issueTitle}: ${issueDescription}` : generalNotes 
+                    notes: hasIssue
+                        ? `${isLaundryEquipment ? '[СТИРКА]' : '[ИНЦИДЕНТ]'} ${issueTitle}: ${issueDescription}`
+                        : generalNotes
                 })
             })
 
-            // 2. Report issue if any
-            if (hasIssue && issueTitle) {
-                await fetch(`/api/clubs/${clubId}/equipment/${currentTask.equipment_id}/issues`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        title: issueTitle,
-                        description: issueDescription,
-                        severity: "MEDIUM", // Default
-                        maintenance_task_id: currentTask.id
-                    })
-                })
+            if (!completeRes.ok) {
+                throw new Error("Failed to complete task")
             }
 
-            // Move to next or finish
+            if (hasIssue && issueTitle) {
+                if (isLaundryEquipment) {
+                    const laundryRes = await fetch(`/api/clubs/${clubId}/laundry`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            equipment_id: currentTask.equipment_id,
+                            maintenance_task_id: currentTask.id,
+                            title: issueTitle,
+                            description: issueDescription,
+                            photos: photoUrls,
+                            source: "EMPLOYEE_SERVICE"
+                        })
+                    })
+
+                    if (!laundryRes.ok) {
+                        throw new Error("Failed to create laundry request")
+                    }
+                } else {
+                    const issueRes = await fetch(`/api/clubs/${clubId}/equipment/${currentTask.equipment_id}/issues`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            title: issueTitle,
+                            description: issueDescription,
+                            severity: "MEDIUM",
+                            maintenance_task_id: currentTask.id
+                        })
+                    })
+
+                    if (!issueRes.ok) {
+                        throw new Error("Failed to create equipment issue")
+                    }
+                }
+            }
+
             if (isLastTask) {
                 onComplete()
                 onClose()
@@ -370,29 +392,5 @@ export function MaintenanceSessionWizard({ isOpen, onClose, tasks, onComplete }:
                 </div>
             </DialogContent>
         </Dialog>
-    )
-}
-
-function ClipboardListIcon(props: any) {
-    return (
-      <svg
-        {...props}
-        xmlns="http://www.w3.org/2000/svg"
-        width="24"
-        height="24"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <rect width="8" height="4" x="8" y="2" rx="1" ry="1" />
-        <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
-        <path d="M12 11h4" />
-        <path d="M12 16h4" />
-        <path d="M8 11h.01" />
-        <path d="M8 16h.01" />
-      </svg>
     )
 }

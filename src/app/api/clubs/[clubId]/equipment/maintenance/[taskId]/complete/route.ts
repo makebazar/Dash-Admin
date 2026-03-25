@@ -110,7 +110,18 @@ export async function POST(
 
         // 3. Get equipment details for next task scheduling
         const equipmentRes = await query(
-            `SELECT cleaning_interval_days, workstation_id, assigned_user_id, maintenance_enabled FROM equipment WHERE id = $1`,
+            `SELECT 
+                e.cleaning_interval_days,
+                e.maintenance_enabled,
+                CASE
+                    WHEN e.assignment_mode = 'DIRECT' THEN e.assigned_user_id
+                    WHEN e.assignment_mode = 'FREE_POOL' THEN NULL
+                    ELSE COALESCE(w.assigned_user_id, z.assigned_user_id)
+                END as effective_assigned_user_id
+             FROM equipment e
+             LEFT JOIN club_workstations w ON w.id = e.workstation_id
+             LEFT JOIN club_zones z ON z.club_id = e.club_id AND z.name = w.zone
+             WHERE e.id = $1`,
             [equipmentId]
         );
         
@@ -127,7 +138,7 @@ export async function POST(
              
              // Find shift for assigned user if any AND user is active
              let finalDate = nextDueDateStr;
-             const assignedUserId = equipment.assigned_user_id;
+             const assignedUserId = equipment.effective_assigned_user_id;
              
              if (assignedUserId) {
                  // Check if user is active first
@@ -158,7 +169,10 @@ export async function POST(
              // This removes "ghost" tasks that might have incorrect dates (like 31.01)
              await query(
                  `DELETE FROM equipment_maintenance_tasks 
-                  WHERE equipment_id = $1 AND status = 'PENDING' AND id != $2`,
+                  WHERE equipment_id = $1 
+                    AND task_type = 'CLEANING'
+                    AND status IN ('PENDING', 'IN_PROGRESS')
+                    AND id != $2`,
                  [equipmentId, taskId]
              );
 

@@ -46,12 +46,26 @@ export async function GET(
                 t.verification_note,
                 t.rejection_reason,
                 t.bonus_earned,
-                t.kpi_points
+                t.kpi_points,
+                lr.id as laundry_request_id,
+                lr.status as laundry_status
              FROM equipment_maintenance_tasks t
              JOIN equipment e ON t.equipment_id = e.id
              LEFT JOIN club_workstations cw ON e.workstation_id = cw.id
              LEFT JOIN users u ON t.completed_by = u.id
              LEFT JOIN users vu ON t.verified_by = vu.id
+             LEFT JOIN LATERAL (
+                SELECT id, status
+                FROM equipment_laundry_requests
+                WHERE equipment_id = e.id
+                  AND (
+                    maintenance_task_id = t.id
+                    OR maintenance_task_id IS NULL
+                  )
+                  AND status IN ('NEW', 'SENT_TO_LAUNDRY', 'READY_FOR_RETURN')
+                ORDER BY created_at DESC
+                LIMIT 1
+             ) lr ON TRUE
              WHERE e.club_id = $1 
                AND ${statusFilter}
              ORDER BY COALESCE(t.completed_at, t.verified_at) DESC`,

@@ -193,7 +193,7 @@ export default function WorkplacesPage() {
             if (wsRes.ok && eqRes.ok) {
                 const allEquipment = (eqData.equipment || []).map((e: any) => ({
                     ...e,
-                    maintenance_enabled: !!e.maintenance_enabled
+                    maintenance_enabled: e.maintenance_enabled !== false
                 }))
                 setEquipment(allEquipment)
                 

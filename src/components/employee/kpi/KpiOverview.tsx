@@ -20,7 +20,16 @@ interface KpiOverviewProps {
 export function MaintenanceKpiCard({ kpi, formatCurrency }: { kpi: any, formatCurrency: (amount: number) => string }) {
     const [showDetails, setShowDetails] = useState(false);
     const nextThreshold = kpi.thresholds?.find((t: any) => !t.is_met);
-    const progressPercent = kpi.target_value > 0 ? (kpi.current_value / kpi.target_value) * 100 : 100;
+    const liveCurrentValue = kpi.live_current_value ?? kpi.current_value ?? 0;
+    const liveTargetValue = kpi.live_target_value ?? kpi.target_value ?? 0;
+    const completedMonthValue = kpi.completed_month_value ?? liveCurrentValue;
+    const totalMonthTarget = kpi.total_month_target ?? liveTargetValue;
+    const liveEfficiency = kpi.live_efficiency ?? kpi.efficiency ?? 0;
+    const projectedCompletedValue = kpi.projected_completed_value ?? completedMonthValue;
+    const projectedEfficiency = kpi.projected_efficiency ?? kpi.efficiency ?? 0;
+    const projectedBonusAmount = kpi.projected_bonus_amount ?? kpi.bonus_amount ?? 0;
+    const projectedTierLabel = kpi.projected_tier_label ?? null;
+    const progressPercent = liveTargetValue > 0 ? Math.min((liveCurrentValue / liveTargetValue) * 100, 100) : 100;
 
     return (
         <div className="space-y-4">
@@ -33,17 +42,20 @@ export function MaintenanceKpiCard({ kpi, formatCurrency }: { kpi: any, formatCu
                             </div>
                             <div>
                                 <p className="text-xs text-white/50 uppercase tracking-wider font-bold">{kpi.name}</p>
-                                <p className="text-sm text-indigo-400 font-medium">Эффективность: {(kpi.efficiency || 0).toFixed(1)}%</p>
+                                <p className="text-sm text-indigo-400 font-medium">Темп сейчас: {liveEfficiency.toFixed(1)}%</p>
                             </div>
                         </div>
                     </div>
 
                     <div className="text-center mb-6">
-                        <p className="text-white/60 text-sm mb-1">Выполнено задач</p>
+                        <p className="text-white/60 text-sm mb-1">Выполнено к текущему моменту</p>
                         <div className="flex items-baseline justify-center gap-2">
-                            <span className="text-5xl font-black text-white">{kpi.current_value || 0}</span>
-                            <span className="text-2xl font-bold text-white/40">/ {kpi.target_value || 0}</span>
+                            <span className="text-5xl font-black text-white">{liveCurrentValue}</span>
+                            <span className="text-2xl font-bold text-white/40">/ {liveTargetValue}</span>
                         </div>
+                        <p className="text-xs text-white/50 mt-2">
+                            За месяц: {completedMonthValue} / {totalMonthTarget} · Финальная эффективность: {(kpi.efficiency || 0).toFixed(1)}%
+                        </p>
                     </div>
 
                     <div className="space-y-4">
@@ -53,11 +65,36 @@ export function MaintenanceKpiCard({ kpi, formatCurrency }: { kpi: any, formatCu
                                 style={{ width: `${progressPercent}%` }}
                             />
                         </div>
+
+                        <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                            <p className="text-[11px] font-bold uppercase tracking-widest text-white/50 mb-2">Прогноз до конца месяца</p>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                <div>
+                                    <p className="text-xs text-white/50">Если держать темп</p>
+                                    <p className="text-lg font-black text-white">{projectedCompletedValue.toFixed(1)} / {totalMonthTarget}</p>
+                                </div>
+                                <div>
+                                    <p className="text-xs text-white/50">Прогноз эффективности</p>
+                                    <p className="text-lg font-black text-indigo-300">{projectedEfficiency.toFixed(1)}%</p>
+                                </div>
+                                <div>
+                                    <p className="text-xs text-white/50">Прогноз бонуса</p>
+                                    <p className="text-lg font-black text-emerald-400">+{formatCurrency(projectedBonusAmount)}</p>
+                                    {projectedTierLabel && (
+                                        <p className="text-[10px] text-white/40 mt-1">{projectedTierLabel}</p>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
                         
                         <div className="flex justify-between items-center pt-2 border-t border-white/10">
                             <div>
                                 <p className="text-xs text-white/50">Премия за задачи</p>
                                 <p className="text-xl font-bold text-emerald-400">+{formatCurrency(kpi.bonus_amount)}</p>
+                            </div>
+                            <div className="text-right">
+                                <p className="text-xs text-white/50">Просрочено сейчас</p>
+                                <p className="text-sm font-bold text-rose-300">{kpi.overdue_open_tasks || 0}</p>
                             </div>
                             {nextThreshold && (
                                 <div className="text-right">

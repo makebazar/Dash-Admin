@@ -33,6 +33,13 @@ interface MaintenanceTask {
     bonus_potential?: number
 }
 
+const getLocalDateKey = (date: Date = new Date()) => {
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+}
+
 export default function MyMaintenanceTasks() {
     const { clubId } = useParams()
     const [tasks, setTasks] = useState<MaintenanceTask[]>([])
@@ -82,9 +89,10 @@ export default function MyMaintenanceTasks() {
     }
 
     const stats = useMemo(() => {
+        const todayKey = getLocalDateKey()
         const total = tasks.length
         const in_progress = tasks.filter(t => t.status === 'IN_PROGRESS').length
-        const overdue = tasks.filter(t => new Date(t.due_date) < new Date()).length
+        const overdue = tasks.filter(t => t.status === 'PENDING' && t.due_date < todayKey).length
         return { total, in_progress, overdue }
     }, [tasks])
 
@@ -178,7 +186,7 @@ export default function MyMaintenanceTasks() {
                 ) : (
                     <div className="flex flex-col gap-4">
                         {tasks.map(task => {
-                            const isOverdue = new Date(task.due_date) < new Date()
+                            const isOverdue = task.status === 'PENDING' && task.due_date < getLocalDateKey()
                             const isInProgress = task.status === 'IN_PROGRESS'
 
                             return (

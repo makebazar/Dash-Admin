@@ -16,7 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { format } from "date-fns"
 import { ru } from "date-fns/locale"
 import { ImageViewer } from "@/components/ui/image-viewer"
-import { cn } from "@/lib/utils"
+import { cn, isLaundryEquipmentType } from "@/lib/utils"
 import { PageShell, PageHeader, PageToolbar, ToolbarGroup } from "@/components/layout/PageShell"
 
 interface Evaluation {
@@ -73,6 +73,8 @@ interface VerificationTask {
     rejection_reason?: string | null
     bonus_earned: number
     kpi_points: number
+    laundry_request_id?: string | null
+    laundry_status?: string | null
 }
 
 const getTaskTypeLabel = (type: string) => {
@@ -82,6 +84,17 @@ const getTaskTypeLabel = (type: string) => {
         case 'REPAIR': return 'РЕМОНТ';
         case 'CHECK': return 'ПРОВЕРКА';
         default: return type;
+    }
+}
+
+const getLaundryStatusLabel = (status?: string | null) => {
+    switch (status) {
+        case 'NEW': return 'Ожидает стирки'
+        case 'SENT_TO_LAUNDRY': return 'В стирке'
+        case 'READY_FOR_RETURN': return 'Готов к возврату'
+        case 'RETURNED': return 'Возвращен'
+        case 'CANCELLED': return 'Отменен'
+        default: return 'Стирка'
     }
 }
 
@@ -378,6 +391,56 @@ export default function ChecklistsPage({ params, searchParams }: { params: Promi
             }
         } catch (error) {
             console.error("Error deleting task:", error)
+            alert("Произошла ошибка")
+        } finally {
+            setIsSubmittingTask(false)
+        }
+    }
+
+    const handleSendToLaundry = async (task: VerificationTask) => {
+        setIsSubmittingTask(true)
+        try {
+            const decisionComment = comment.trim() || "Направлено в стирку"
+            const laundryRes = await fetch(`/api/clubs/${clubId}/laundry`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    equipment_id: task.equipment_id,
+                    maintenance_task_id: task.id,
+                    title: comment.trim() || 'Требует стирки',
+                    description: decisionComment,
+                    photos: task.photos || [],
+                    source: 'INSPECTION_CENTER'
+                })
+            })
+
+            if (!laundryRes.ok) {
+                alert("Не удалось отправить коврик в стирку")
+                return
+            }
+
+            const verifyRes = await fetch(`/api/clubs/${clubId}/equipment/maintenance/${task.id}/verify`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'APPROVE',
+                    comment: decisionComment
+                })
+            })
+
+            if (!verifyRes.ok) {
+                alert("Стирка создана, но не удалось закрыть проверку")
+                fetchTasks(clubId, equipmentTab)
+                return
+            }
+
+            setTasks(prev => prev.filter(t => t.id !== task.id))
+            if (expandedTaskId === task.id) {
+                setExpandedTaskId(null)
+                setComment("")
+            }
+        } catch (error) {
+            console.error("Error sending to laundry:", error)
             alert("Произошла ошибка")
         } finally {
             setIsSubmittingTask(false)
@@ -711,6 +774,7 @@ export default function ChecklistsPage({ params, searchParams }: { params: Promi
                                             <div className="flex flex-col gap-0 sm:gap-3 -mx-4 sm:mx-0">
                                                 {zoneTasks.map((task) => {
                                                     const isExpanded = expandedTaskId === task.id
+                                                    const isLaundryItem = isLaundryEquipmentType(task.equipment_type)
                                                     return (
                                                         <div 
                                                             key={task.id} 
@@ -733,6 +797,16 @@ export default function ChecklistsPage({ params, searchParams }: { params: Promi
                                                                     <div className="min-w-0 flex-1">
                                                                         <div className="flex items-center gap-2 mb-1">
                                                                             <span className="font-semibold text-base truncate">{task.equipment_name}</span>
+                                                                            {isLaundryItem && (
+                                                                                <Badge variant="outline" className="border-violet-200 bg-violet-50 text-violet-700">
+                                                                                    Коврик
+                                                                                </Badge>
+                                                                            )}
+                                                                            {task.laundry_status && (
+                                                                                <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100 border-0">
+                                                                                    {getLaundryStatusLabel(task.laundry_status)}
+                                                                                </Badge>
+                                                                            )}
                                                                         </div>
                                                                         <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
                                                                             {task.workstation_name && (
@@ -879,6 +953,16 @@ export default function ChecklistsPage({ params, searchParams }: { params: Promi
 
                                                                             {equipmentTab === 'active' && (
                                                                                 <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                                                                                    {isLaundryItem && (
+                                                                                        <Button
+                                                                                            variant="outline"
+                                                                                            className="w-full sm:flex-1 border-violet-200 text-violet-700 hover:bg-violet-50 hover:text-violet-800 h-12 md:h-9 font-semibold"
+                                                                                            onClick={() => handleSendToLaundry(task)}
+                                                                                            disabled={isSubmittingTask || Boolean(task.laundry_request_id)}
+                                                                                        >
+                                                                                            {task.laundry_request_id ? getLaundryStatusLabel(task.laundry_status) : 'Отправить в стирку'}
+                                                                                        </Button>
+                                                                                    )}
                                                                                     <Button 
                                                                                         variant="outline" 
                                                                                         className="w-full sm:flex-1 border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 h-12 md:h-9 font-semibold"

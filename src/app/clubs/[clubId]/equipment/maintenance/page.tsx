@@ -7,23 +7,15 @@ import {
     Calendar,
     ChevronLeft,
     ChevronRight,
-    CheckCircle2,
-    Clock,
-    AlertCircle,
     UserPlus,
     Loader2,
-    ClipboardList,
-    Layers,
-    User,
-    ArrowRight,
-    CircleDashed,
-    Wrench,
-    Plus
+    Plus,
+    Shirt,
+    Search
 } from "lucide-react"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
 import {
     Select,
@@ -34,7 +26,6 @@ import {
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
-import { MaintenanceSessionWizard } from "./MaintenanceSessionWizard"
 
 interface MaintenanceTask {
     id: string
@@ -44,11 +35,21 @@ interface MaintenanceTask {
     equipment_type_name: string
     equipment_icon: string
     last_cleaned_at: string | null
+    workstation_id: string | null
     workstation_name: string | null
     workstation_zone: string | null
+    equipment_assignment_mode?: "DIRECT" | "INHERIT" | "FREE_POOL"
+    equipment_assigned_user_id?: string | null
+    workstation_assigned_user_id?: string | null
+    workstation_assigned_to_name?: string | null
     assigned_user_id: string | null
     assigned_to_name: string | null
     due_date: string
+    overdue_days?: number
+    rework_days?: number
+    verification_status?: "PENDING" | "APPROVED" | "REJECTED" | null
+    verified_at?: string | null
+    rejection_reason?: string | null
     status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'SKIPPED'
     completed_at: string | null
     completed_by_name: string | null
@@ -60,46 +61,96 @@ interface Employee {
     full_name: string
 }
 
+interface PlaceGroup {
+    key: string
+    workstationId: string | null
+    zone: string
+    name: string
+    assignedUserId: string | null
+    assignedToName: string | null
+    devices: DeviceGroup[]
+    overdue: number
+    today: number
+    inProgress: number
+    rework: number
+    future: number
+    completed: number
+}
+
+interface DeviceGroup {
+    key: string
+    equipmentId: string
+    equipmentName: string
+    equipmentTypeName: string
+    lastCleanedAt: string | null
+    assignmentMode: "DIRECT" | "INHERIT" | "FREE_POOL"
+    assignedUserId: string | null
+    assignedToName: string | null
+    effectiveAssignedUserId: string | null
+    effectiveAssignedToName: string | null
+    inheritedAssignedUserId: string | null
+    inheritedAssignedToName: string | null
+    activeTasks: MaintenanceTask[]
+    overdue: number
+    today: number
+    inProgress: number
+    rework: number
+    future: number
+    completed: number
+    nextDueDate: string | null
+}
+
+interface ZoneGroup {
+    key: string
+    name: string
+    overdue: number
+    today: number
+    inProgress: number
+    rework: number
+    future: number
+    responsibles: string[]
+    places: PlaceGroup[]
+}
+
+const getLocalDateKey = (date: Date = new Date()) => {
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, "0")
+    const day = String(date.getDate()).padStart(2, "0")
+    return `${year}-${month}-${day}`
+}
+
+const formatDay = (value?: string | null) => {
+    if (!value) return "—"
+
+    const normalizedValue = /^\d{4}-\d{2}-\d{2}$/.test(value)
+        ? `${value}T00:00:00`
+        : value
+
+    const parsed = new Date(normalizedValue)
+
+    if (Number.isNaN(parsed.getTime())) {
+        return "—"
+    }
+
+    return parsed.toLocaleDateString("ru-RU", { day: "numeric", month: "long" })
+}
+
 export default function MaintenanceSchedule() {
     const { clubId } = useParams()
     const [tasks, setTasks] = useState<MaintenanceTask[]>([])
     const [employees, setEmployees] = useState<Employee[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [isGenerating, setIsGenerating] = useState(false)
-
-    // View state
     const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1)
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear())
-
-    // Batch Session State
-    const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set())
-    const [isSessionOpen, setIsSessionOpen] = useState(false)
-    const [sessionTasks, setSessionTasks] = useState<MaintenanceTask[]>([])
+    const [searchQuery, setSearchQuery] = useState("")
+    const [expandedZones, setExpandedZones] = useState<Set<string>>(new Set())
+    const [expandedPlaces, setExpandedPlaces] = useState<Set<string>>(new Set())
 
     const monthNames = useMemo(() => [
-        'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
-        'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'
+        "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
+        "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"
     ], [])
-
-    const handleToggleTask = (taskId: string) => {
-        const newSet = new Set(selectedTaskIds)
-        if (newSet.has(taskId)) newSet.delete(taskId)
-        else newSet.add(taskId)
-        setSelectedTaskIds(newSet)
-    }
-
-    const handleStartSession = (taskIds?: string[]) => {
-        const ids = taskIds || Array.from(selectedTaskIds)
-        const selected = tasks.filter(t => ids.includes(t.id))
-        setSessionTasks(selected)
-        setIsSessionOpen(true)
-    }
-
-    const handleSessionComplete = () => {
-        setIsSessionOpen(false)
-        fetchData()
-        setSelectedTaskIds(new Set())
-    }
 
     const ensurePlan = useCallback(async (firstDay: string, lastDay: string) => {
         setIsGenerating(true)
@@ -110,7 +161,7 @@ export default function MaintenanceSchedule() {
                 body: JSON.stringify({
                     date_from: firstDay,
                     date_to: lastDay,
-                    task_type: 'CLEANING'
+                    task_type: "CLEANING"
                 })
             })
         } finally {
@@ -121,28 +172,27 @@ export default function MaintenanceSchedule() {
     const fetchData = useCallback(async () => {
         setIsLoading(true)
         try {
-            // Get first and last day of selected month
-            const firstDay = new Date(selectedYear, selectedMonth - 1, 1).toISOString().split('T')[0]
-            const lastDay = new Date(selectedYear, selectedMonth, 0).toISOString().split('T')[0]
+            const firstDay = new Date(selectedYear, selectedMonth - 1, 1).toISOString().split("T")[0]
+            const lastDay = new Date(selectedYear, selectedMonth, 0).toISOString().split("T")[0]
 
             await ensurePlan(firstDay, lastDay)
 
-            const [tasksRes, empRes] = await Promise.all([
+            const [tasksRes, employeesRes] = await Promise.all([
                 fetch(`/api/clubs/${clubId}/equipment/maintenance?date_from=${firstDay}&date_to=${lastDay}&include_overdue=true`),
                 fetch(`/api/clubs/${clubId}/employees`)
             ])
 
             const tasksData = await tasksRes.json()
-            const empData = await empRes.json()
+            const employeesData = await employeesRes.json()
 
             if (tasksRes.ok) setTasks(tasksData.tasks || [])
-            if (empRes.ok) setEmployees(empData.employees || [])
+            if (employeesRes.ok) setEmployees(employeesData.employees || [])
         } catch (error) {
             console.error("Error fetching maintenance data:", error)
         } finally {
             setIsLoading(false)
         }
-    }, [clubId, selectedMonth, selectedYear, ensurePlan])
+    }, [clubId, ensurePlan, selectedMonth, selectedYear])
 
     useEffect(() => {
         fetchData()
@@ -156,78 +206,442 @@ export default function MaintenanceSchedule() {
         }
     }
 
-    const handleAssign = async (taskId: string, userId: string) => {
-        // Optimistic update
-        setTasks(prev => prev.map(t => t.id === taskId ? { ...t, assigned_user_id: userId === 'none' ? null : userId } : t))
+    const handleAssignEquipment = async (equipmentId: string, value: string) => {
+        const assignmentMode =
+            value === "inherit" ? "INHERIT" :
+            value === "free_pool" ? "FREE_POOL" :
+            "DIRECT"
+
+        const assignedUserId = assignmentMode === "DIRECT" ? value : null
+        const assignedToName = assignedUserId
+            ? employees.find(employee => employee.id === assignedUserId)?.full_name || null
+            : null
+
+        setTasks(prev => prev.map(task => (
+            task.equipment_id === equipmentId
+                ? {
+                    ...task,
+                    equipment_assignment_mode: assignmentMode,
+                    equipment_assigned_user_id: assignedUserId,
+                    assigned_user_id: assignmentMode === "DIRECT" ? assignedUserId : (assignmentMode === "FREE_POOL" ? null : task.workstation_assigned_user_id || null),
+                    assigned_to_name: assignmentMode === "DIRECT" ? assignedToName : (assignmentMode === "FREE_POOL" ? null : task.workstation_assigned_to_name || null)
+                }
+                : task
+        )))
 
         try {
-            await fetch(`/api/clubs/${clubId}/equipment/maintenance/${taskId}`, {
+            await fetch(`/api/clubs/${clubId}/equipment/${equipmentId}`, {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ assigned_user_id: userId === 'none' ? null : userId })
+                body: JSON.stringify({
+                    assignment_mode: assignmentMode,
+                    assigned_user_id: assignedUserId,
+                    maintenance_enabled: true
+                })
             })
-            // Fetch again to be sure (especially names)
             fetchData()
         } catch (error) {
-            console.error("Error assigning task:", error)
-            fetchData() // Rollback
+            console.error("Error assigning equipment owner:", error)
+            fetchData()
         }
     }
 
     const stats = useMemo(() => {
-        const total = tasks.length
-        const completed = tasks.filter(t => t.status === 'COMPLETED').length
-        const pending = tasks.filter(t => t.status === 'PENDING').length
-        const overdue = tasks.filter(t => t.status === 'PENDING' && new Date(t.due_date) < new Date()).length
-        const progress = total > 0 ? (completed / total) * 100 : 0
-        return { total, completed, pending, overdue, progress }
+        const todayKey = getLocalDateKey()
+
+        return {
+            overdue: tasks.filter(task => task.status === "PENDING" && task.due_date < todayKey).length,
+            today: tasks.filter(task => task.status === "PENDING" && task.due_date === todayKey).length,
+            inProgress: tasks.filter(task => task.status === "IN_PROGRESS").length,
+            rework: tasks.filter(task => task.status === "IN_PROGRESS" && task.verification_status === "REJECTED").length,
+            unassigned: tasks.filter(task => task.status !== "COMPLETED" && !task.assigned_user_id).length,
+            future: tasks.filter(task => task.status === "PENDING" && task.due_date > todayKey).length
+        }
     }, [tasks])
 
-    const groupedTasks = useMemo(() => {
-        const map = new Map<string, { key: string; name: string; zone: string; tasks: MaintenanceTask[] }>()
-        tasks.forEach(task => {
-            const name = task.workstation_name || "Склад"
-            const zone = task.workstation_zone || "Без зоны"
-            const key = `${zone}::${name}`
-            if (!map.has(key)) {
-                map.set(key, { key, name, zone, tasks: [] })
+    const filteredTasks = useMemo(() => {
+        const term = searchQuery.trim().toLowerCase()
+
+        return tasks.filter(task => {
+            if (term.length === 0) return true
+
+            return [
+                task.equipment_name,
+                task.equipment_type_name,
+                task.workstation_name,
+                task.workstation_zone,
+                task.assigned_to_name,
+                task.completed_by_name
+            ].some(value => value?.toLowerCase().includes(term))
+        })
+    }, [tasks, searchQuery])
+
+    const zones = useMemo(() => {
+        const todayKey = getLocalDateKey()
+        const zoneMap = new Map<string, ZoneGroup>()
+
+        filteredTasks.forEach(task => {
+            const zoneName = task.workstation_zone || "Без зоны"
+            const placeName = task.workstation_name || "Склад"
+            const zoneKey = zoneName
+            const placeKey = `${zoneName}::${placeName}`
+
+            if (!zoneMap.has(zoneKey)) {
+                zoneMap.set(zoneKey, {
+                    key: zoneKey,
+                    name: zoneName,
+                    overdue: 0,
+                    today: 0,
+                    inProgress: 0,
+                    rework: 0,
+                    future: 0,
+                    responsibles: [],
+                    places: []
+                })
             }
-            map.get(key)?.tasks.push(task)
+
+            const zone = zoneMap.get(zoneKey)!
+            if (task.assigned_to_name && !zone.responsibles.includes(task.assigned_to_name)) {
+                zone.responsibles.push(task.assigned_to_name)
+            }
+            let place = zone.places.find(item => item.key === placeKey)
+
+            if (!place) {
+                place = {
+                    key: placeKey,
+                    workstationId: task.workstation_id,
+                    zone: zoneName,
+                    name: placeName,
+                    assignedUserId: task.workstation_assigned_user_id || null,
+                    assignedToName: task.workstation_assigned_to_name || null,
+                    devices: [],
+                    overdue: 0,
+                    today: 0,
+                    inProgress: 0,
+                    rework: 0,
+                    future: 0,
+                    completed: 0
+                }
+                zone.places.push(place)
+            } else if (task.workstation_assigned_user_id || task.workstation_assigned_to_name) {
+                place.assignedUserId = task.workstation_assigned_user_id || null
+                place.assignedToName = task.workstation_assigned_to_name || null
+            }
+
+            let device = place.devices.find(item => item.equipmentId === task.equipment_id)
+
+            if (!device) {
+                device = {
+                    key: `${placeKey}::${task.equipment_id}`,
+                    equipmentId: task.equipment_id,
+                    equipmentName: task.equipment_name,
+                    equipmentTypeName: task.equipment_type_name,
+                    lastCleanedAt: task.last_cleaned_at,
+                    assignmentMode: (task.equipment_assignment_mode || "DIRECT") as "DIRECT" | "INHERIT" | "FREE_POOL",
+                    assignedUserId: task.equipment_assigned_user_id || null,
+                    assignedToName: task.equipment_assignment_mode === "DIRECT" ? task.assigned_to_name : null,
+                    effectiveAssignedUserId: task.assigned_user_id,
+                    effectiveAssignedToName: task.assigned_to_name,
+                    inheritedAssignedUserId: task.workstation_assigned_user_id || null,
+                    inheritedAssignedToName: task.workstation_assigned_to_name || null,
+                    activeTasks: [],
+                    overdue: 0,
+                    today: 0,
+                    inProgress: 0,
+                    rework: 0,
+                    future: 0,
+                    completed: 0,
+                    nextDueDate: task.due_date
+                }
+                place.devices.push(device)
+            } else if (task.assigned_user_id || task.assigned_to_name || task.workstation_assigned_user_id || task.workstation_assigned_to_name) {
+                device.assignmentMode = (task.equipment_assignment_mode || device.assignmentMode) as "DIRECT" | "INHERIT" | "FREE_POOL"
+                device.assignedUserId = task.equipment_assigned_user_id || null
+                device.assignedToName = task.equipment_assignment_mode === "DIRECT" ? task.assigned_to_name : null
+                device.effectiveAssignedUserId = task.assigned_user_id
+                device.effectiveAssignedToName = task.assigned_to_name
+                device.inheritedAssignedUserId = task.workstation_assigned_user_id || null
+                device.inheritedAssignedToName = task.workstation_assigned_to_name || null
+            }
+
+            if (!device.nextDueDate || task.due_date < device.nextDueDate) {
+                device.nextDueDate = task.due_date
+            }
+
+            if (task.status === "IN_PROGRESS" && task.verification_status === "REJECTED") {
+                zone.rework++
+                place.rework++
+                device.rework++
+            }
+
+            if (task.status === "IN_PROGRESS") {
+                zone.inProgress++
+                place.inProgress++
+                device.inProgress++
+                device.activeTasks.push(task)
+                return
+            }
+
+            if (task.status === "COMPLETED") {
+                place.completed++
+                device.completed++
+                return
+            }
+
+            if (task.due_date < todayKey) {
+                zone.overdue++
+                place.overdue++
+                device.overdue++
+                device.activeTasks.push(task)
+                return
+            }
+
+            if (task.due_date === todayKey) {
+                zone.today++
+                place.today++
+                device.today++
+                device.activeTasks.push(task)
+                return
+            }
+
+            zone.future++
+            place.future++
+            device.future++
         })
-        return Array.from(map.values()).sort((a, b) => {
-            if (a.zone === b.zone) return a.name.localeCompare(b.name)
-            return a.zone.localeCompare(b.zone)
+
+        return Array.from(zoneMap.values())
+            .map(zone => ({
+                ...zone,
+                places: zone.places
+                    .map(place => ({
+                        ...place,
+                        devices: place.devices.sort((a, b) => {
+                            const activeDiff = (b.overdue + b.today + b.inProgress) - (a.overdue + a.today + a.inProgress)
+                            if (activeDiff !== 0) return activeDiff
+                            const futureDiff = b.future - a.future
+                            if (futureDiff !== 0) return futureDiff
+                            return a.equipmentName.localeCompare(b.equipmentName)
+                        })
+                    }))
+                    .sort((a, b) => {
+                        const activeDiff = (b.overdue + b.today + b.inProgress) - (a.overdue + a.today + a.inProgress)
+                        if (activeDiff !== 0) return activeDiff
+                        const futureDiff = b.future - a.future
+                        if (futureDiff !== 0) return futureDiff
+                        return a.name.localeCompare(b.name)
+                    })
+            }))
+            .sort((a, b) => {
+                const activeDiff = (b.overdue + b.today + b.inProgress) - (a.overdue + a.today + a.inProgress)
+                if (activeDiff !== 0) return activeDiff
+                const futureDiff = b.future - a.future
+                if (futureDiff !== 0) return futureDiff
+                return a.name.localeCompare(b.name)
+            })
+    }, [filteredTasks])
+
+    const toggleZone = (zoneKey: string) => {
+        setExpandedZones(prev => {
+            const next = new Set(prev)
+            if (next.has(zoneKey)) next.delete(zoneKey)
+            else next.add(zoneKey)
+            return next
         })
-    }, [tasks])
+    }
+
+    const togglePlace = (placeKey: string) => {
+        setExpandedPlaces(prev => {
+            const next = new Set(prev)
+            if (next.has(placeKey)) next.delete(placeKey)
+            else next.add(placeKey)
+            return next
+        })
+    }
+
+    const handleAssignPlace = async (workstationId: string | null, userId: string) => {
+        if (!workstationId) return
+
+        const assignedUserId = userId === "none" ? null : userId
+        const assignedToName = assignedUserId
+            ? employees.find(employee => employee.id === assignedUserId)?.full_name || null
+            : null
+
+        setTasks(prev => prev.map(task => (
+            task.workstation_id === workstationId
+                ? {
+                    ...task,
+                    workstation_assigned_user_id: assignedUserId,
+                    workstation_assigned_to_name: assignedToName,
+                    assigned_user_id: task.equipment_assignment_mode === "DIRECT"
+                        ? task.equipment_assigned_user_id || null
+                        : task.equipment_assignment_mode === "FREE_POOL"
+                            ? null
+                            : assignedUserId,
+                    assigned_to_name: task.equipment_assignment_mode === "DIRECT"
+                        ? task.assigned_to_name
+                        : task.equipment_assignment_mode === "FREE_POOL"
+                            ? null
+                            : assignedToName
+                }
+                : task
+        )))
+
+        try {
+            await fetch(`/api/clubs/${clubId}/workstations/${workstationId}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ assigned_user_id: assignedUserId, free_pool: assignedUserId === null })
+            })
+            fetchData()
+        } catch (error) {
+            console.error("Error assigning place owner:", error)
+            fetchData()
+        }
+    }
+
+    const getDeviceAssignmentMeta = (device: DeviceGroup, place: PlaceGroup) => {
+        if (device.assignmentMode === "FREE_POOL") {
+            return {
+                selectValue: "free_pool",
+                badgeLabel: "без ответственного",
+                badgeClass: "bg-slate-100 text-slate-700 border-slate-200",
+                ownerLabel: "Свободный пул"
+            }
+        }
+
+        if (device.assignmentMode === "INHERIT") {
+            return {
+                selectValue: "inherit",
+                badgeLabel: "как у места",
+                badgeClass: "bg-indigo-50 text-indigo-700 border-indigo-200",
+                ownerLabel: place.assignedToName || "Свободный пул"
+            }
+        }
+
+        if (place.assignedUserId && device.assignedUserId && place.assignedUserId !== device.assignedUserId) {
+            return {
+                selectValue: device.assignedUserId,
+                badgeLabel: "свой ответственный",
+                badgeClass: "bg-amber-50 text-amber-700 border-amber-200",
+                ownerLabel: device.assignedToName || "Свободный пул"
+            }
+        }
+
+        return {
+            selectValue: device.assignedUserId || "free_pool",
+            badgeLabel: "ответственный задан",
+            badgeClass: "bg-emerald-50 text-emerald-700 border-emerald-200",
+            ownerLabel: device.assignedToName || "Свободный пул"
+        }
+    }
+
+    const getDeviceStatusMeta = (device: DeviceGroup) => {
+        const primaryTask = [...device.activeTasks].sort((a, b) => {
+            if ((a.verification_status === "REJECTED") !== (b.verification_status === "REJECTED")) {
+                return a.verification_status === "REJECTED" ? -1 : 1
+            }
+            if (a.status !== b.status) {
+                return a.status === "IN_PROGRESS" ? -1 : 1
+            }
+            return a.due_date.localeCompare(b.due_date)
+        })[0]
+
+        if (primaryTask?.verification_status === "REJECTED") {
+            return {
+                label: `На доработке ${primaryTask.rework_days || 0} дн.`,
+                badgeClass: "bg-fuchsia-50 text-fuchsia-700 border-fuchsia-200",
+                detail: primaryTask.rejection_reason || "Центр проверок вернул задачу",
+                detailClass: "text-fuchsia-700"
+            }
+        }
+
+        if (primaryTask?.status === "IN_PROGRESS") {
+            return {
+                label: "В работе",
+                badgeClass: "bg-blue-50 text-blue-700 border-blue-200",
+                detail: `Срок: ${formatDay(primaryTask.due_date)}`,
+                detailClass: "text-slate-600"
+            }
+        }
+
+        if (primaryTask?.status === "PENDING" && (primaryTask.overdue_days || 0) > 0) {
+            return {
+                label: `Просрочено на ${primaryTask.overdue_days} дн.`,
+                badgeClass: "bg-rose-50 text-rose-700 border-rose-200",
+                detail: `Плановая дата: ${formatDay(primaryTask.due_date)}`,
+                detailClass: "text-rose-700"
+            }
+        }
+
+        if (primaryTask?.status === "PENDING") {
+            return {
+                label: "На сегодня",
+                badgeClass: "bg-amber-50 text-amber-700 border-amber-200",
+                detail: `Плановая дата: ${formatDay(primaryTask.due_date)}`,
+                detailClass: "text-slate-600"
+            }
+        }
+
+        if (device.nextDueDate) {
+            return {
+                label: "Все по плану",
+                badgeClass: "bg-emerald-50 text-emerald-700 border-emerald-200",
+                detail: `Следующая чистка: ${formatDay(device.nextDueDate)}`,
+                detailClass: "text-slate-600"
+            }
+        }
+
+        return {
+            label: "Без графика",
+            badgeClass: "bg-slate-100 text-slate-700 border-slate-200",
+            detail: "Нет плановой даты",
+            detailClass: "text-slate-600"
+        }
+    }
 
     return (
-        <div className="p-8 space-y-8 max-w-7xl mx-auto">
-            {/* Header */}
-            <div className="flex flex-col gap-4">
+        <div className="p-6 space-y-4 max-w-7xl mx-auto">
+            <div className="flex flex-col gap-3">
                 <Link href={`/clubs/${clubId}/equipment`} className="flex items-center text-sm text-muted-foreground hover:text-foreground">
                     <ChevronLeft className="h-4 w-4 mr-1" />
                     К обзору
                 </Link>
-                <div className="flex items-center justify-between">
-                    <div>
-                        <h1 className="text-3xl font-bold tracking-tight">🧹 График обслуживания</h1>
-                        <p className="text-muted-foreground mt-1">Планирование чистки и технического регламента</p>
-                    </div>
-                    <div className="flex items-center gap-4">
-                        {selectedTaskIds.size > 0 && (
-                            <Button 
-                                onClick={() => handleStartSession()} 
-                                className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-md animate-in fade-in slide-in-from-right-4"
-                            >
-                                <ClipboardList className="mr-2 h-4 w-4" />
-                                Начать сессию ({selectedTaskIds.size})
+
+                <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-3">
+                    <h1 className="text-2xl font-bold tracking-tight">🧹 График обслуживания</h1>
+
+                    <div className="flex flex-wrap items-center gap-3">
+                        <div className="relative">
+                            <Search className="h-4 w-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+                            <Input
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                placeholder="Поиск по месту, зоне, устройству"
+                                className="pl-9 rounded-xl h-9 w-[260px]"
+                            />
+                        </div>
+
+                        <Link href={`/clubs/${clubId}/laundry`}>
+                            <Button variant="outline" className="rounded-xl h-9">
+                                <Shirt className="mr-2 h-4 w-4" />
+                                Стирка
                             </Button>
-                        )}
-                        <div className="flex items-center bg-white border border-slate-200 rounded-xl px-2 py-1.5 shadow-sm">
+                        </Link>
+
+                        <Button
+                            onClick={handleGenerateTasks}
+                            disabled={isGenerating}
+                            className="rounded-xl bg-indigo-600 hover:bg-indigo-700 h-9"
+                        >
+                            {isGenerating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
+                            Пересчитать
+                        </Button>
+
+                        <div className="flex items-center bg-white border border-slate-200 rounded-xl px-2 py-1 shadow-sm">
                             <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-8 w-8 text-slate-500"
+                                className="h-7 w-7 text-slate-500"
                                 onClick={() => {
                                     if (selectedMonth === 1) {
                                         setSelectedMonth(12)
@@ -239,13 +653,13 @@ export default function MaintenanceSchedule() {
                             >
                                 <ChevronLeft className="h-4 w-4" />
                             </Button>
-                            <div className="px-4 text-sm font-bold min-w-[140px] text-center">
+                            <div className="px-3 text-sm font-bold min-w-[150px] text-center">
                                 {monthNames[selectedMonth - 1]} {selectedYear}
                             </div>
                             <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-8 w-8 text-slate-500"
+                                className="h-7 w-7 text-slate-500"
                                 onClick={() => {
                                     if (selectedMonth === 12) {
                                         setSelectedMonth(1)
@@ -262,281 +676,239 @@ export default function MaintenanceSchedule() {
                 </div>
             </div>
 
-            {/* Stats Hero Section */}
-            <Card className="border-none shadow-md bg-gradient-to-br from-indigo-500 to-blue-600 text-white overflow-hidden relative">
-                <div className="absolute top-0 right-0 p-8 opacity-10">
-                    <ClipboardList className="h-32 w-32" />
-                </div>
-                <CardContent className="pt-8">
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-8 relative z-10">
-                        <div className="space-y-6 flex-1">
-                            <div>
-                                <p className="text-xs font-black uppercase tracking-widest text-indigo-100 mb-2">Прогресс за {monthNames[selectedMonth - 1].toLowerCase()}</p>
-                                <div className="flex items-baseline gap-3">
-                                    <span className="text-6xl font-black tracking-tighter">{Math.round(stats.progress)}%</span>
-                                    <span className="text-indigo-100/80 font-medium">{stats.completed} из {stats.total} единиц обслужено</span>
-                                </div>
-                            </div>
-                            <div className="h-3 w-full bg-indigo-900/30 rounded-full overflow-hidden border border-white/20 shadow-inner">
-                                <div
-                                    className="h-full bg-white transition-all duration-700 ease-out"
-                                    style={{ width: `${stats.progress}%` }}
-                                />
-                            </div>
-                        </div>
-
-                        <div className="flex flex-wrap gap-4 min-w-[280px]">
-                            {tasks.length === 0 ? (
-                                <Button
-                                    onClick={handleGenerateTasks}
-                                    disabled={isGenerating}
-                                    size="lg"
-                                    className="h-20 w-full rounded-2xl bg-white text-indigo-600 hover:bg-slate-50 font-black shadow-xl hover:scale-[1.02] transition-all"
-                                >
-                                    {isGenerating ? <Loader2 className="mr-2 h-6 w-6 animate-spin" /> : <Plus className="mr-2 h-6 w-6" />}
-                                    Пересчитать план на {monthNames[selectedMonth - 1]}
-                                </Button>
-                            ) : (
-                                <>
-                                    <div className="bg-white/10 backdrop-blur-md p-5 rounded-2xl border border-white/20 text-center flex-1">
-                                        <p className="text-[10px] text-indigo-100 uppercase font-black tracking-widest mb-1">Просрочено</p>
-                                        <p className="text-3xl font-black text-rose-200">{stats.overdue}</p>
-                                    </div>
-                                    <div className="bg-white/10 backdrop-blur-md p-5 rounded-2xl border border-white/20 text-center flex-1">
-                                        <p className="text-[10px] text-indigo-100 uppercase font-black tracking-widest mb-1">Осталось</p>
-                                        <p className="text-3xl font-black">{stats.pending}</p>
-                                    </div>
-                                </>
-                            )}
-                        </div>
-                    </div>
-                </CardContent>
-            </Card>
-
-            {/* Tasks Table */}
-            <div className="space-y-4">
-                <div className="flex items-center justify-between px-2">
-                    <h2 className="text-xl font-bold tracking-tight flex items-center gap-2">
-                        <Layers className="h-5 w-5 text-indigo-500" />
-                        Группы по местам
-                    </h2>
-                    <div className="flex items-center gap-4 text-xs">
-                        <div className="flex items-center gap-1.5"><div className="h-2 w-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.4)]"></div> Готово</div>
-                        <div className="flex items-center gap-1.5"><div className="h-2 w-2 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.4)]"></div> В работе</div>
-                        <div className="flex items-center gap-1.5"><div className="h-2 w-2 rounded-full bg-slate-200"></div> Ожидает</div>
-                    </div>
-                </div>
-
-                {isLoading ? (
-                    <Card className="border-none shadow-sm overflow-hidden bg-white">
-                        <div className="h-48 flex items-center justify-center text-muted-foreground">
-                            <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2 opacity-50 text-indigo-500" />
-                            Синхронизация графика...
-                        </div>
+            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+                {[
+                    { label: "Просрочено", value: stats.overdue, tone: "text-rose-600 bg-rose-50 border-rose-100" },
+                    { label: "Сегодня", value: stats.today, tone: "text-amber-700 bg-amber-50 border-amber-100" },
+                    { label: "В работе", value: stats.inProgress, tone: "text-blue-700 bg-blue-50 border-blue-100" },
+                    { label: "На доработке", value: stats.rework, tone: "text-fuchsia-700 bg-fuchsia-50 border-fuchsia-100" },
+                    { label: "Свободный пул", value: stats.unassigned, tone: "text-slate-700 bg-slate-50 border-slate-100" },
+                    { label: "Будущие", value: stats.future, tone: "text-indigo-700 bg-indigo-50 border-indigo-100" }
+                ].map(item => (
+                    <Card key={item.label} className={cn("border shadow-none", item.tone)}>
+                        <CardContent className="p-3">
+                            <div className="text-[10px] uppercase tracking-widest font-bold opacity-70">{item.label}</div>
+                            <div className="mt-1 text-2xl font-bold">{item.value}</div>
+                        </CardContent>
                     </Card>
-                ) : tasks.length === 0 ? (
-                    <Card className="border-none shadow-sm overflow-hidden bg-white">
-                        <div className="p-20 text-center">
-                            <div className="flex flex-col items-center gap-4 max-w-sm mx-auto opacity-60">
-                                <div className="h-20 w-20 bg-slate-50 rounded-[40px] flex items-center justify-center border-4 border-white shadow-lg">
-                                    <Calendar className="h-10 w-10 text-slate-300" />
-                                </div>
-                                <div className="space-y-1">
-                                    <p className="text-lg font-bold">Нет задач на период</p>
-                                    <p className="text-sm text-muted-foreground leading-relaxed">Система не нашла устройств, требующих чистки в выбранном периоде.</p>
-                                </div>
-                                <Button onClick={handleGenerateTasks} variant="secondary" className="mt-2">
-                                    Пересчитать план
-                                </Button>
-                            </div>
-                        </div>
-                    </Card>
-                ) : (
-                    groupedTasks.map(group => (
-                        <Card key={group.key} className="border-none shadow-sm overflow-hidden bg-white">
-                            <div className="flex items-center justify-between px-6 py-4 border-b bg-slate-50/50">
-                                <div className="space-y-1">
-                                    <h3 className="font-bold text-base">{group.name}</h3>
-                                    <p className="text-[10px] uppercase text-muted-foreground tracking-widest">{group.zone}</p>
-                                </div>
-                                <Badge variant="secondary" className="text-xs">{group.tasks.length}</Badge>
-                            </div>
-                            <Table>
-                                <TableHeader className="bg-white">
-                                    <TableRow className="hover:bg-transparent">
-                                        <TableHead className="w-[40px] pl-4">
-                                            <input 
-                                                type="checkbox" 
-                                                className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 h-4 w-4"
-                                                onChange={(e) => {
-                                                    const ids = group.tasks.map(t => t.id)
-                                                    const newSet = new Set(selectedTaskIds)
-                                                    if (e.target.checked) {
-                                                        ids.forEach(id => newSet.add(id))
-                                                    } else {
-                                                        ids.forEach(id => newSet.delete(id))
-                                                    }
-                                                    setSelectedTaskIds(newSet)
-                                                }}
-                                                checked={group.tasks.length > 0 && group.tasks.every(t => selectedTaskIds.has(t.id))}
-                                            />
-                                        </TableHead>
-                                        <TableHead className="w-[260px]">Объект обслуживания</TableHead>
-                                        <TableHead>Место / Зона</TableHead>
-                                        <TableHead>Срок выполнения</TableHead>
-                                        <TableHead>Последняя чистка</TableHead>
-                                        <TableHead>Ответственный</TableHead>
-                                        <TableHead>Статус</TableHead>
-                                        <TableHead className="text-right">Завершено</TableHead>
-                                        <TableHead className="w-[100px]"></TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {group.tasks.map(task => {
-                                        const isOverdue = task.status === 'PENDING' && new Date(task.due_date) < new Date()
-                                        const isCompleted = task.status === 'COMPLETED'
-
-                                        return (
-                                            <TableRow key={task.id} className="group hover:bg-slate-50/30 transition-colors">
-                                                <TableCell className="pl-4">
-                                                    <input 
-                                                        type="checkbox"
-                                                        className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 h-4 w-4"
-                                                        checked={selectedTaskIds.has(task.id)}
-                                                        onChange={() => handleToggleTask(task.id)}
-                                                    />
-                                                </TableCell>
-                                                <TableCell>
-                                                    <div className="flex items-center gap-3">
-                                                        <div className={cn(
-                                                            "h-10 w-10 rounded-xl flex items-center justify-center transition-all border",
-                                                            isCompleted ? "bg-green-50 text-green-600 border-green-100" : "bg-slate-50 text-slate-500 border-slate-100 group-hover:border-slate-200 group-hover:bg-white"
-                                                        )}>
-                                                            <Monitor className="h-5 w-5" />
-                                                        </div>
-                                                        <div>
-                                                            <p className="font-bold text-sm">{task.equipment_name}</p>
-                                                            <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest">{task.equipment_type_name}</p>
-                                                        </div>
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <div className="flex flex-col">
-                                                        <span className="text-xs font-semibold">{task.workstation_name || "Склад"}</span>
-                                                        <span className="text-[10px] text-muted-foreground uppercase">{task.workstation_zone}</span>
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <div className="flex items-center gap-2">
-                                                        <Badge variant="outline" className={cn(
-                                                            "text-[10px] px-2 py-0 border-none shadow-none font-bold",
-                                                            isOverdue ? "text-rose-600 bg-rose-50" : "text-slate-500 bg-slate-100"
-                                                        )}>
-                                                            {new Date(task.due_date).toLocaleDateString("ru-RU", { day: 'numeric', month: 'short' })}
-                                                        </Badge>
-                                                        {isOverdue && <AlertCircle className="h-3 w-3 text-rose-500 animate-pulse" />}
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell>
-                                                    {task.last_cleaned_at ? (
-                                                        <span className="text-xs text-muted-foreground font-medium">
-                                                            {new Date(task.last_cleaned_at).toLocaleDateString("ru-RU")}
-                                                        </span>
-                                                    ) : (
-                                                        <span className="text-xs text-slate-300">—</span>
-                                                    )}
-                                                </TableCell>
-                                                <TableCell>
-                                                    {isCompleted ? (
-                                                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                                            <User className="h-3 w-3" />
-                                                            {task.assigned_user_id ? (task.completed_by_name || task.assigned_to_name) : "🤝 Свободный пул"}
-                                                        </div>
-                                                    ) : (
-                                                        <Select
-                                                            value={task.assigned_user_id || "unassigned"}
-                                                            onValueChange={(val) => handleAssign(task.id, val === "unassigned" ? "none" : val)}
-                                                        >
-                                                            <SelectTrigger className="h-8 text-xs bg-white border-dashed w-[160px]">
-                                                                <div className="flex items-center gap-2">
-                                                                    <UserPlus className="h-3 w-3 text-muted-foreground" />
-                                                                    <SelectValue placeholder="Назначить" />
-                                                                </div>
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                                <SelectItem value="unassigned">🤝 Свободный пул</SelectItem>
-                                                                {employees.map(emp => (
-                                                                    <SelectItem key={emp.id} value={emp.id}>{emp.full_name}</SelectItem>
-                                                                ))}
-                                                            </SelectContent>
-                                                        </Select>
-                                                    )}
-                                                </TableCell>
-                                                <TableCell>
-                                                    {task.status === 'COMPLETED' ? (
-                                                        <Badge className="bg-green-500/10 text-green-700 hover:bg-green-500/20 shadow-none border-none text-[10px] gap-1">
-                                                            <CheckCircle2 className="h-3 w-3" /> Выполнено
-                                                        </Badge>
-                                                    ) : task.status === 'IN_PROGRESS' ? (
-                                                        <Badge className="bg-blue-500/10 text-blue-700 hover:bg-blue-500/20 shadow-none border-none text-[10px] gap-1 animate-pulse">
-                                                            <CircleDashed className="h-3 w-3 animate-spin" /> В работе
-                                                        </Badge>
-                                                    ) : (
-                                                        <Badge variant="secondary" className="bg-slate-100 text-slate-500 shadow-none border-none text-[10px] gap-1">
-                                                            <Clock className="h-3 w-3" /> Ожидает
-                                                        </Badge>
-                                                    )}
-                                                </TableCell>
-                                                <TableCell className="text-right">
-                                                    {task.completed_at ? (
-                                                        <div className="flex flex-col items-end">
-                                                            <span className="text-[11px] font-bold">
-                                                                {new Date(task.completed_at).toLocaleDateString("ru-RU")}
-                                                            </span>
-                                                            <span className="text-[10px] text-muted-foreground italic">
-                                                                {new Date(task.completed_at).toLocaleTimeString("ru-RU", { hour: '2-digit', minute: '2-digit' })}
-                                                            </span>
-                                                        </div>
-                                                    ) : (
-                                                        <span className="text-slate-200">—</span>
-                                                    )}
-                                                </TableCell>
-                                                <TableCell>
-                                                    {task.status !== 'COMPLETED' && (
-                                                        <Button 
-                                                            size="sm" 
-                                                            variant="ghost" 
-                                                            className="h-8 px-2 text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50"
-                                                            onClick={() => handleStartSession([task.id])}
-                                                        >
-                                                            Начать
-                                                        </Button>
-                                                    )}
-                                                </TableCell>
-                                            </TableRow>
-                                        )
-                                    })}
-                                </TableBody>
-                            </Table>
-                        </Card>
-                    ))
-                )}
+                ))}
             </div>
-            <MaintenanceSessionWizard
-                isOpen={isSessionOpen}
-                onClose={() => setIsSessionOpen(false)}
-                tasks={sessionTasks.map(t => ({ 
-                    ...t, 
-                    workstation_name: t.workstation_name ?? undefined,
-                    workstation_zone: t.workstation_zone ?? undefined,
-                    last_cleaned_at: t.last_cleaned_at ?? undefined,
-                    assigned_user_id: t.assigned_user_id ?? undefined,
-                    assigned_to_name: t.assigned_to_name ?? undefined,
-                    completed_at: t.completed_at ?? undefined,
-                    completed_by_name: t.completed_by_name ?? undefined,
-                }))}
-                onComplete={handleSessionComplete}
-            />
+
+            {isLoading ? (
+                <Card className="shadow-none">
+                    <CardContent className="h-64 flex items-center justify-center text-muted-foreground">
+                        <Loader2 className="h-6 w-6 animate-spin" />
+                    </CardContent>
+                </Card>
+            ) : zones.length === 0 ? (
+                <Card className="shadow-none">
+                    <CardContent className="h-64 flex flex-col items-center justify-center gap-3 text-muted-foreground">
+                        <Calendar className="h-8 w-8 opacity-40" />
+                        <div>Ничего не найдено</div>
+                    </CardContent>
+                </Card>
+            ) : (
+                <div className="space-y-3">
+                    {zones.map(zone => {
+                        const isZoneOpen = expandedZones.has(zone.key)
+
+                        return (
+                            <Card key={zone.key} className="shadow-none overflow-hidden">
+                                <button
+                                    type="button"
+                                    onClick={() => toggleZone(zone.key)}
+                                    className="w-full px-4 py-3 border-b bg-slate-50/70 text-left"
+                                >
+                                    <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
+                                        <div className="flex flex-col gap-2 min-w-0">
+                                            <div className="flex items-center gap-2.5">
+                                                <ChevronRight className={cn("h-4 w-4 text-slate-500 transition-transform", isZoneOpen && "rotate-90")} />
+                                                <div>
+                                                    <div className="text-base font-semibold">{zone.name}</div>
+                                                    <div className="text-xs text-muted-foreground">{zone.places.length} мест</div>
+                                                </div>
+                                            </div>
+                                            {zone.responsibles.length > 0 && (
+                                                <div className="flex flex-wrap gap-1.5 pl-6">
+                                                    {zone.responsibles.slice(0, 5).map(name => (
+                                                        <Badge
+                                                            key={name}
+                                                            variant="outline"
+                                                            className="h-6 bg-white text-slate-700 border-slate-200 hover:bg-white"
+                                                        >
+                                                            {name}
+                                                        </Badge>
+                                                    ))}
+                                                    {zone.responsibles.length > 5 && (
+                                                        <Badge
+                                                            variant="outline"
+                                                            className="h-6 bg-white text-slate-500 border-slate-200 hover:bg-white"
+                                                        >
+                                                            +{zone.responsibles.length - 5}
+                                                        </Badge>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <div className="flex flex-wrap gap-1.5">
+                                            {zone.overdue > 0 && <Badge className="h-6 bg-rose-50 text-rose-700 hover:bg-rose-50">{zone.overdue} просрочено</Badge>}
+                                            {zone.today > 0 && <Badge className="h-6 bg-amber-50 text-amber-700 hover:bg-amber-50">{zone.today} сегодня</Badge>}
+                                            {zone.inProgress > 0 && <Badge className="h-6 bg-blue-50 text-blue-700 hover:bg-blue-50">{zone.inProgress} в работе</Badge>}
+                                            {zone.rework > 0 && <Badge className="h-6 bg-fuchsia-50 text-fuchsia-700 hover:bg-fuchsia-50">{zone.rework} на доработке</Badge>}
+                                            {zone.future > 0 && <Badge className="h-6 bg-slate-100 text-slate-700 hover:bg-slate-100">{zone.future} позже</Badge>}
+                                        </div>
+                                    </div>
+                                </button>
+
+                                {isZoneOpen && (
+                                    <CardContent className="p-3 space-y-2">
+                                        {zone.places.map(place => {
+                                            const isPlaceOpen = expandedPlaces.has(place.key)
+                                            const hasVisibleDevices = place.devices.length > 0
+
+                                            return (
+                                                <div key={place.key} className="rounded-xl border overflow-hidden">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => hasVisibleDevices && togglePlace(place.key)}
+                                                        className={cn(
+                                                            "w-full px-3 py-3 text-left",
+                                                            hasVisibleDevices ? "bg-white" : "bg-slate-50/50"
+                                                        )}
+                                                    >
+                                                        <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
+                                                            <div className="flex items-center gap-2.5">
+                                                                <ChevronRight className={cn(
+                                                                    "h-3.5 w-3.5 text-slate-500 transition-transform",
+                                                                    isPlaceOpen && hasVisibleDevices && "rotate-90",
+                                                                    !hasVisibleDevices && "opacity-30"
+                                                                )} />
+                                                                <div>
+                                                                    <div className="font-medium text-sm">{place.name}</div>
+                                                                    <div className="text-xs text-muted-foreground">{place.zone}</div>
+                                                                </div>
+                                                            </div>
+
+                                                            <div className="flex flex-wrap gap-1.5">
+                                                                {place.overdue > 0 && <Badge className="h-6 bg-rose-50 text-rose-700 hover:bg-rose-50">{place.overdue} просрочено</Badge>}
+                                                                {place.today > 0 && <Badge className="h-6 bg-amber-50 text-amber-700 hover:bg-amber-50">{place.today} сегодня</Badge>}
+                                                                {place.inProgress > 0 && <Badge className="h-6 bg-blue-50 text-blue-700 hover:bg-blue-50">{place.inProgress} в работе</Badge>}
+                                                                {place.rework > 0 && <Badge className="h-6 bg-fuchsia-50 text-fuchsia-700 hover:bg-fuchsia-50">{place.rework} на доработке</Badge>}
+                                                                {place.future > 0 && <Badge className="h-6 bg-slate-100 text-slate-700 hover:bg-slate-100">{place.future} позже</Badge>}
+                                                            </div>
+                                                        </div>
+                                                    </button>
+
+                                                    <div className="border-t px-3 py-2 bg-white/80">
+                                                        <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
+                                                            <div className="text-xs text-muted-foreground">
+                                                                Ответственный за место
+                                                            </div>
+                                                            <div className="w-full xl:w-[220px]">
+                                                                <Select
+                                                                    value={place.assignedUserId || "unassigned"}
+                                                                    onValueChange={(value) => handleAssignPlace(place.workstationId, value)}
+                                                                >
+                                                                    <SelectTrigger className="h-8 text-xs bg-white border-dashed">
+                                                                        <div className="flex items-center gap-2">
+                                                                            <UserPlus className="h-3 w-3 text-muted-foreground" />
+                                                                            <SelectValue placeholder="Назначить" />
+                                                                        </div>
+                                                                    </SelectTrigger>
+                                                                    <SelectContent>
+                                                                        <SelectItem value="unassigned">🤝 Свободный пул</SelectItem>
+                                                                        {employees.map(employee => (
+                                                                            <SelectItem key={employee.id} value={employee.id}>{employee.full_name}</SelectItem>
+                                                                        ))}
+                                                                    </SelectContent>
+                                                                </Select>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    {isPlaceOpen && hasVisibleDevices && (
+                                                        <div className="border-t bg-slate-50/30 p-2.5 space-y-2">
+                                                            {place.devices.map(device => {
+                                                                const assignmentMeta = getDeviceAssignmentMeta(device, place)
+                                                                const statusMeta = getDeviceStatusMeta(device)
+
+                                                                return (
+                                                                    <div key={device.key} className="rounded-xl border bg-white overflow-hidden">
+                                                                        <div className="px-3 py-2.5 text-left">
+                                                                            <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
+                                                                                <div className="flex items-center gap-2.5">
+                                                                                    <div className="h-8 w-8 rounded-xl border bg-slate-50 text-slate-500 flex items-center justify-center shrink-0">
+                                                                                        <Monitor className="h-4 w-4" />
+                                                                                    </div>
+                                                                                    <div>
+                                                                                        <div className="flex flex-wrap items-center gap-2">
+                                                                                            <div className="font-medium text-sm">{device.equipmentName}</div>
+                                                                                            <Badge variant="outline" className={cn("h-5 px-1.5 text-[10px]", assignmentMeta.badgeClass)}>
+                                                                                                {assignmentMeta.badgeLabel}
+                                                                                            </Badge>
+                                                                                            <Badge variant="outline" className={cn("h-5 px-1.5 text-[10px]", statusMeta.badgeClass)}>
+                                                                                                {statusMeta.label}
+                                                                                            </Badge>
+                                                                                        </div>
+                                                                                        <div className="text-xs text-muted-foreground">{device.equipmentTypeName}</div>
+                                                                                    </div>
+                                                                                </div>
+
+                                                                                <div className="flex flex-wrap gap-1.5">
+                                                                                    {device.future > 0 && <Badge className="h-6 bg-slate-100 text-slate-700 hover:bg-slate-100">{device.future} позже</Badge>}
+                                                                                </div>
+                                                                            </div>
+
+                                                                            <div className="mt-2 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+                                                                                <span>Последняя: {device.lastCleanedAt ? new Date(device.lastCleanedAt).toLocaleDateString("ru-RU") : "—"}</span>
+                                                                                <span>Ответственный: {assignmentMeta.ownerLabel}</span>
+                                                                                <span className={statusMeta.detailClass}>{statusMeta.detail}</span>
+                                                                            </div>
+                                                                        </div>
+
+                                                                        <div className="border-t px-3 py-2 bg-white/80">
+                                                                            <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
+                                                                                <div className="text-xs text-muted-foreground">
+                                                                                    Ответственный за оборудование
+                                                                                </div>
+                                                                                <div className="w-full xl:w-[220px]">
+                                                                                    <Select
+                                                                                        value={assignmentMeta.selectValue}
+                                                                                        onValueChange={(value) => handleAssignEquipment(device.equipmentId, value)}
+                                                                                    >
+                                                                                        <SelectTrigger className="h-8 text-xs bg-white border-dashed">
+                                                                                            <div className="flex items-center gap-2">
+                                                                                                <UserPlus className="h-3 w-3 text-muted-foreground" />
+                                                                                                <SelectValue placeholder="Назначить" />
+                                                                                            </div>
+                                                                                        </SelectTrigger>
+                                                                                        <SelectContent>
+                                                                                            <SelectItem value="inherit">↩️ От места</SelectItem>
+                                                                                            <SelectItem value="free_pool">🤝 Свободный пул</SelectItem>
+                                                                                            {employees.map(employee => (
+                                                                                                <SelectItem key={employee.id} value={employee.id}>{employee.full_name}</SelectItem>
+                                                                                            ))}
+                                                                                        </SelectContent>
+                                                                                    </Select>
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                )
+                                                            })}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )
+                                        })}
+                                    </CardContent>
+                                )}
+                            </Card>
+                        )
+                    })}
+                </div>
+            )}
         </div>
     )
 }

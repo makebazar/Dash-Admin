@@ -241,7 +241,7 @@ export default function EquipmentInventory() {
                 const enriched = (eqData.equipment || []).map((e: any) => ({
                     ...e,
                     status: e.is_active ? 'ACTIVE' : 'WRITTEN_OFF',
-                    maintenance_enabled: !!e.maintenance_enabled
+                    maintenance_enabled: e.maintenance_enabled !== false
                 }))
                 setEquipment(enriched)
             }

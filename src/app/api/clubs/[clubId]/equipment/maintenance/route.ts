@@ -21,7 +21,8 @@ export async function GET(
         const includeOverdue = searchParams.get('include_overdue') === 'true';
         const myTasks = searchParams.get('my_tasks') === 'true' || assignedTo === 'me';
         const sortBy = searchParams.get('sort_by');
-        const order = searchParams.get('order') || 'asc';
+        const order = (searchParams.get('order') || 'asc').toLowerCase() === 'desc' ? 'DESC' : 'ASC';
+        const hasDateRange = Boolean(dateFrom || dateTo);
 
         if (!userId) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -42,7 +43,22 @@ export async function GET(
         // Determine if we should use DISTINCT ON
         // We usually use it for the "Smart Horizon" view to show one task per equipment
         // But if we're filtering for REJECTED tasks specifically, we want all of them
-        const useDistinct = !verificationStatus && !status;
+        const useDistinct = !verificationStatus && !status && !hasDateRange && !sortBy;
+
+        const effectiveEquipmentAssigneeSql = `
+            CASE
+                WHEN e.assignment_mode = 'DIRECT' THEN e.assigned_user_id
+                WHEN e.assignment_mode = 'FREE_POOL' THEN NULL
+                ELSE COALESCE(w.assigned_user_id, z.assigned_user_id)
+            END
+        `;
+
+        const effectiveTaskAssigneeSql = `
+            COALESCE(
+                mt.assigned_user_id,
+                ${effectiveEquipmentAssigneeSql}
+            )
+        `;
 
         let sql = `
             SELECT ${useDistinct ? 'DISTINCT ON (mt.equipment_id)' : ''}
@@ -60,23 +76,37 @@ export async function GET(
                 mt.verification_status,
                 mt.verified_at,
                 mt.rejection_reason,
-                COALESCE(mt.assigned_user_id, e.assigned_user_id) as assigned_user_id,
+                GREATEST((CURRENT_DATE - mt.due_date), 0) as overdue_days,
+                CASE
+                    WHEN mt.verification_status = 'REJECTED'
+                    THEN GREATEST((CURRENT_DATE - COALESCE(mt.verified_at::date, mt.updated_at::date)), 0)
+                    ELSE 0
+                END as rework_days,
+                e.assignment_mode as equipment_assignment_mode,
+                e.assigned_user_id as equipment_assigned_user_id,
+                w.assigned_user_id as workstation_assigned_user_id,
+                wu.full_name as workstation_assigned_to_name,
+                ${effectiveTaskAssigneeSql} as assigned_user_id,
                 e.name as equipment_name,
                 e.type as equipment_type,
                 e.last_cleaned_at as last_cleaned_at,
                 et.name_ru as equipment_type_name,
                 et.icon as equipment_icon,
+                w.id as workstation_id,
                 w.name as workstation_name,
                 w.zone as workstation_zone,
-                COALESCE(u.full_name, eu.full_name) as assigned_to_name,
+                COALESCE(u.full_name, eu.full_name, wu.full_name, zu.full_name) as assigned_to_name,
                 cu.full_name as completed_by_name,
                 cu_v.full_name as verified_by_name
             FROM equipment_maintenance_tasks mt
             JOIN equipment e ON mt.equipment_id = e.id
             LEFT JOIN equipment_types et ON e.type = et.code
             LEFT JOIN club_workstations w ON e.workstation_id = w.id
+            LEFT JOIN club_zones z ON z.club_id = e.club_id AND z.name = w.zone
             LEFT JOIN users u ON mt.assigned_user_id = u.id
             LEFT JOIN users eu ON e.assigned_user_id = eu.id
+            LEFT JOIN users wu ON w.assigned_user_id = wu.id
+            LEFT JOIN users zu ON z.assigned_user_id = zu.id
             LEFT JOIN users cu ON mt.completed_by = cu.id
             LEFT JOIN users cu_v ON mt.verified_by = cu_v.id
             WHERE e.club_id = $1 
@@ -87,15 +117,14 @@ export async function GET(
 
         if (myTasks) {
             // Filter by assigned_user_id (explicitly assigned OR fallback to equipment assignee)
-            sql += ` AND COALESCE(mt.assigned_user_id, e.assigned_user_id) = $${paramIndex}`;
+            sql += ` AND ${effectiveTaskAssigneeSql} = $${paramIndex}`;
             queryParams.push(userId);
             paramIndex++;
         } else if (assignedTo) {
             if (assignedTo === 'unassigned') {
-                // Task is unassigned ONLY if neither task nor equipment has an assignee
-                sql += ` AND mt.assigned_user_id IS NULL AND e.assigned_user_id IS NULL`;
+                sql += ` AND ${effectiveTaskAssigneeSql} IS NULL`;
             } else {
-                sql += ` AND COALESCE(mt.assigned_user_id, e.assigned_user_id) = $${paramIndex}`;
+                sql += ` AND ${effectiveTaskAssigneeSql} = $${paramIndex}`;
                 queryParams.push(assignedTo);
                 paramIndex++;
             }
@@ -153,18 +182,59 @@ export async function GET(
                  CASE mt.status WHEN 'IN_PROGRESS' THEN 1 WHEN 'PENDING' THEN 2 ELSE 3 END,
                  mt.due_date ASC`;
 
+        let finalOrderBy = `
+            CASE status WHEN 'IN_PROGRESS' THEN 1 WHEN 'PENDING' THEN 2 ELSE 3 END,
+            due_date ${order}
+        `;
+
+        if (sortBy === 'completed_at') {
+            finalOrderBy = `completed_at ${order} NULLS LAST, due_date ASC`;
+        } else if (sortBy === 'created_at') {
+            finalOrderBy = `created_at ${order} NULLS LAST, due_date ASC`;
+        } else if (sortBy === 'verified_at') {
+            finalOrderBy = `verified_at ${order} NULLS LAST, due_date ASC`;
+        }
+
         // Wrap in subquery to apply final sort
         const finalSql = `
             SELECT * FROM (${sql}) as distinct_tasks
-            ORDER BY 
-                CASE status WHEN 'IN_PROGRESS' THEN 1 WHEN 'PENDING' THEN 2 ELSE 3 END,
-                due_date ASC
+            ORDER BY ${finalOrderBy}
         `;
 
         const result = await query(finalSql, queryParams);
 
         // Get stats
         const todayStr = new Date().toISOString().split('T')[0];
+        const statsConditions = [`e.club_id = $1`];
+        const statsParams: any[] = [clubId, todayStr];
+        let statsParamIndex = 3;
+
+        const statsAssignee = myTasks ? userId : (assignedTo && assignedTo !== 'unassigned' ? assignedTo : null);
+
+        if (assignedTo === 'unassigned') {
+            statsConditions.push(`${effectiveTaskAssigneeSql} IS NULL`);
+        } else if (statsAssignee) {
+            statsConditions.push(`${effectiveTaskAssigneeSql} = $${statsParamIndex}`);
+            statsParams.push(statsAssignee);
+            statsParamIndex++;
+        }
+
+        if (dateFrom) {
+            if (includeOverdue) {
+                statsConditions.push(`(mt.due_date >= $${statsParamIndex} OR (mt.status = 'PENDING' AND mt.due_date < $${statsParamIndex}))`);
+            } else {
+                statsConditions.push(`mt.due_date >= $${statsParamIndex}`);
+            }
+            statsParams.push(dateFrom);
+            statsParamIndex++;
+        }
+
+        if (dateTo) {
+            statsConditions.push(`mt.due_date <= $${statsParamIndex}`);
+            statsParams.push(dateTo);
+            statsParamIndex++;
+        }
+
         const statsResult = await query(
             `SELECT 
                 COUNT(*) FILTER (WHERE mt.status = 'PENDING' AND mt.due_date < $2) as overdue_count,
@@ -173,12 +243,10 @@ export async function GET(
                 COUNT(*) FILTER (WHERE mt.status = 'COMPLETED') as completed_count
             FROM equipment_maintenance_tasks mt
             JOIN equipment e ON mt.equipment_id = e.id
-            WHERE e.club_id = $1
-              AND (
-                ($3::uuid IS NULL) OR 
-                (COALESCE(mt.assigned_user_id, e.assigned_user_id) = $3)
-              )`,
-            [clubId, todayStr, myTasks ? userId : (assignedTo && assignedTo !== 'unassigned' ? assignedTo : null)]
+            LEFT JOIN club_workstations w ON e.workstation_id = w.id
+            LEFT JOIN club_zones z ON z.club_id = e.club_id AND z.name = w.zone
+            WHERE ${statsConditions.join(' AND ')}`,
+            statsParams
         );
 
         return NextResponse.json({
@@ -224,6 +292,14 @@ export async function POST(
             return NextResponse.json({ error: 'date_from and date_to are required' }, { status: 400 });
         }
 
+        const parseDate = (value: string) => new Date(`${value}T00:00:00`);
+        const formatDate = (value: Date) => {
+            const year = value.getFullYear();
+            const month = String(value.getMonth() + 1).padStart(2, '0');
+            const day = String(value.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        };
+
         let scheduleMap: Record<string, string[]> | null = null;
         try {
             const scheduleRes = await query(
@@ -244,17 +320,16 @@ export async function POST(
             scheduleMap = null;
         }
 
-        const findNextShiftDate = (userId: string, fromDate: string) => {
+        const findNextShiftDate = (userId: string, fromDate: string, excludedDates: Set<string>) => {
             if (!scheduleMap) return null;
             const dates = scheduleMap[userId];
             if (!dates || dates.length === 0) return null;
             for (const dStr of dates) {
-                if (dStr >= fromDate) return dStr;
+                if (dStr >= fromDate && !excludedDates.has(dStr)) return dStr;
             }
             return null;
         };
 
-        // Re-construct params correctly
         const baseParams = [clubId, task_type];
         let queryStr = `
             SELECT 
@@ -263,7 +338,11 @@ export async function POST(
                 e.cleaning_interval_days, 
                 e.last_cleaned_at, 
                 e.workstation_id, 
-                e.assigned_user_id,
+                CASE
+                    WHEN e.assignment_mode = 'DIRECT' THEN e.assigned_user_id
+                    WHEN e.assignment_mode = 'FREE_POOL' THEN NULL
+                    ELSE COALESCE(w.assigned_user_id, z.assigned_user_id)
+                END as assigned_user_id,
                 (
                     SELECT MAX(due_date) 
                     FROM equipment_maintenance_tasks 
@@ -271,6 +350,8 @@ export async function POST(
                       AND task_type = $2
                 ) as last_task_due_date
             FROM equipment e
+            LEFT JOIN club_workstations w ON w.id = e.workstation_id
+            LEFT JOIN club_zones z ON z.club_id = e.club_id AND z.name = w.zone
             WHERE e.club_id = $1
               AND e.is_active = TRUE
               AND (e.maintenance_enabled IS NULL OR e.maintenance_enabled = TRUE)
@@ -285,83 +366,120 @@ export async function POST(
         }
 
         const equipmentResult = await query(queryStr, baseParams);
+        const equipmentRows = equipmentResult.rows;
+        const equipmentIds = equipmentRows.map((row: any) => row.id);
+
+        if (equipmentIds.length === 0) {
+            return NextResponse.json({
+                success: true,
+                created_tasks: 0,
+                equipment_processed: 0
+            });
+        }
+
+        const [activeEmployeesResult, existingActiveTasksResult] = await Promise.all([
+            query(
+                `SELECT user_id
+                 FROM club_employees
+                 WHERE club_id = $1 AND is_active = TRUE`,
+                [clubId]
+            ),
+            query(
+                `SELECT id, equipment_id, due_date, assigned_user_id, status
+                 FROM equipment_maintenance_tasks
+                 WHERE equipment_id = ANY($1)
+                   AND task_type = $2
+                   AND status IN ('PENDING', 'IN_PROGRESS')
+                 ORDER BY
+                    equipment_id,
+                    CASE status WHEN 'IN_PROGRESS' THEN 0 ELSE 1 END,
+                    due_date ASC,
+                    created_at ASC`,
+                [equipmentIds, task_type]
+            )
+        ]);
+
+        const activeEmployeeIds = new Set(activeEmployeesResult.rows.map((row: any) => row.user_id));
+        const activeTaskByEquipment = new Map<string, any>();
+        const duplicateActiveTaskIds: string[] = [];
+
+        existingActiveTasksResult.rows.forEach((row: any) => {
+            if (!activeTaskByEquipment.has(row.equipment_id)) {
+                activeTaskByEquipment.set(row.equipment_id, row);
+            } else {
+                duplicateActiveTaskIds.push(row.id);
+            }
+        });
+
+        if (duplicateActiveTaskIds.length > 0) {
+            await query(
+                `DELETE FROM equipment_maintenance_tasks
+                 WHERE id = ANY($1)`,
+                [duplicateActiveTaskIds]
+            );
+        }
 
         let createdCount = 0;
 
-        for (const eq of equipmentResult.rows) {
-            // Check if ANY active task (PENDING or IN_PROGRESS) exists for this equipment
-            const pendingRes = await query(
-                `SELECT 1 FROM equipment_maintenance_tasks 
-                 WHERE equipment_id = $1 AND status IN ('PENDING', 'IN_PROGRESS')
-                 LIMIT 1`,
-                [eq.id]
-            );
+        const windowStart = parseDate(date_from);
 
-            if ((pendingRes.rowCount || 0) > 0) {
-                // Check if the pending task is very old (ghost task) - older than 60 days
-                // If so, delete it and allow creating a new one
-                const ghostCheck = await query(
-                    `DELETE FROM equipment_maintenance_tasks 
-                     WHERE equipment_id = $1 
-                       AND status = 'PENDING' 
-                       AND due_date < CURRENT_DATE - INTERVAL '60 days'
-                     RETURNING id`,
-                    [eq.id]
-                );
-                
-                if ((ghostCheck.rowCount || 0) === 0) {
-                     // Real active task exists, skip creation
-                     continue;
-                }
-            }
+        for (const eq of equipmentRows) {
+            const intervalDays = Math.max(1, Number(eq.cleaning_interval_days) || 30);
+            const activeTask = activeTaskByEquipment.get(eq.id);
 
-            const intervalDays = eq.cleaning_interval_days || 30;
-            const startDate = new Date(date_from);
-            
-            // Calculate next due date
-            let nextDue: Date;
+            let nextDue = eq.last_cleaned_at
+                ? new Date(eq.last_cleaned_at)
+                : new Date(windowStart);
+
             if (eq.last_cleaned_at) {
-                const lastCleaned = new Date(eq.last_cleaned_at);
-                nextDue = new Date(lastCleaned);
+                nextDue.setHours(0, 0, 0, 0);
                 nextDue.setDate(nextDue.getDate() + intervalDays);
             } else {
-                // If never cleaned, due date defaults to the start of the requested period (usually today)
-                nextDue = new Date(startDate);
+                nextDue = new Date(windowStart);
             }
 
-            const originalDue = nextDue.toISOString().split('T')[0];
-            let dueDateStr = originalDue;
-            
-            // Shift logic
-            // Use assigned_user_id from equipment for the shift calculation, but ensure we use it for the task too
-            let taskAssignedUserId = eq.assigned_user_id || null;
-            
-            if (taskAssignedUserId) {
-                // Check if user is active first to avoid assigning to fired employees
-                const userActiveRes = await query(
-                    `SELECT is_active FROM club_employees WHERE club_id = $1 AND user_id = $2`,
-                    [clubId, taskAssignedUserId]
-                );
-                
-                const isActive = userActiveRes.rows[0]?.is_active !== false;
-                
-                if (isActive) {
-                    const shiftDate = findNextShiftDate(taskAssignedUserId, originalDue);
-                    if (shiftDate) {
-                        dueDateStr = shiftDate;
-                    }
+            const nominalDueDate = formatDate(nextDue);
+            let finalDueDate = nominalDueDate;
+            let finalAssignedUserId = eq.assigned_user_id ?? null;
+
+            if (finalAssignedUserId && !activeEmployeeIds.has(finalAssignedUserId)) {
+                finalAssignedUserId = null;
+            }
+
+            if (finalAssignedUserId) {
+                const shiftDate = findNextShiftDate(finalAssignedUserId, nominalDueDate, new Set<string>());
+                if (shiftDate) {
+                    finalDueDate = shiftDate;
                 } else {
-                    // User is inactive, do not assign task to them
-                    taskAssignedUserId = null;
+                    finalAssignedUserId = null;
                 }
+            }
+
+            const shouldExistInWindow = finalDueDate <= date_to;
+
+            if (activeTask) {
+                if (activeTask.status === 'PENDING') {
+                    await query(
+                        `UPDATE equipment_maintenance_tasks
+                         SET due_date = $2,
+                             assigned_user_id = $3
+                         WHERE id = $1`,
+                        [activeTask.id, finalDueDate, finalAssignedUserId]
+                    );
+                }
+                continue;
+            }
+
+            if (!shouldExistInWindow) {
+                continue;
             }
 
             const insertResult = await query(
                 `INSERT INTO equipment_maintenance_tasks (equipment_id, task_type, due_date, assigned_user_id)
                  VALUES ($1, $2, $3, $4)
-                 ON CONFLICT (equipment_id, due_date, task_type) DO NOTHING
+                 ON CONFLICT DO NOTHING
                  RETURNING id`,
-                [eq.id, task_type, dueDateStr, taskAssignedUserId]
+                [eq.id, task_type, finalDueDate, finalAssignedUserId]
             );
 
             if (insertResult.rowCount && insertResult.rowCount > 0) {

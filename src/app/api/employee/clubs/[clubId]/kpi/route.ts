@@ -160,6 +160,9 @@ export async function GET(
             `SELECT 
                 COUNT(*) as total_tasks,
                 COUNT(*) FILTER (WHERE status = 'COMPLETED' AND completed_at >= $2 AND completed_at <= $3) as completed_tasks,
+                COUNT(*) FILTER (WHERE due_date <= CURRENT_DATE) as due_by_now_tasks,
+                COUNT(*) FILTER (WHERE status = 'COMPLETED' AND due_date <= CURRENT_DATE AND completed_at >= $2 AND completed_at <= $3) as completed_due_by_now_tasks,
+                COUNT(*) FILTER (WHERE status IN ('PENDING', 'IN_PROGRESS') AND due_date < CURRENT_DATE) as overdue_open_tasks,
                 COALESCE(SUM(bonus_earned) FILTER (WHERE status = 'COMPLETED' AND completed_at >= $2 AND completed_at <= $3), 0) as bonus
              FROM equipment_maintenance_tasks
              WHERE 
@@ -499,9 +502,22 @@ export async function GET(
         if (maintConfig) {
             const completed = Number(monthlyMetrics['maintenance_tasks_completed']) || 0;
             const assigned = Number(monthlyMetrics['maintenance_tasks_assigned']) || 0;
-            let efficiency = assigned > 0 ? (completed / assigned) * 100 : (completed > 0 ? 100 : 0);
+            const dueByNow = Number(maintRes.rows[0]?.due_by_now_tasks || 0);
+            const completedDueByNow = Number(maintRes.rows[0]?.completed_due_by_now_tasks || 0);
+            const overdueOpen = Number(maintRes.rows[0]?.overdue_open_tasks || 0);
+            const upcoming = Math.max(0, assigned - dueByNow);
+            const efficiency = assigned > 0 ? (completed / assigned) * 100 : (completed > 0 ? 100 : 0);
+            const liveEfficiency = dueByNow > 0 ? (completedDueByNow / dueByNow) * 100 : (completed > 0 ? 100 : 0);
+            const projectedCompleted = assigned > 0
+                ? Math.min(assigned, completed + (upcoming * (liveEfficiency / 100)))
+                : completed;
+            const projectedEfficiency = assigned > 0
+                ? (projectedCompleted / assigned) * 100
+                : (projectedCompleted > 0 ? 100 : 0);
 
             let bonusAmount = 0;
+            let projectedBonusAmount = 0;
+            let projectedTierLabel: string | null = null;
             if (maintConfig.calculation_mode === 'MONTHLY') {
                 const thresholds = maintConfig.efficiency_thresholds || [];
                 const sortedTiers = [...thresholds].sort((a: any, b: any) => (Number(b.from_percent) || 0) - (Number(a.from_percent) || 0));
@@ -509,8 +525,14 @@ export async function GET(
                 if (achievedTier) {
                     bonusAmount = Number(achievedTier.amount) || 0;
                 }
+                const projectedTier = sortedTiers.find((t: any) => projectedEfficiency >= (Number(t.from_percent) || 0));
+                if (projectedTier) {
+                    projectedBonusAmount = Number(projectedTier.amount) || 0;
+                    projectedTierLabel = projectedTier.label || null;
+                }
             } else {
                 bonusAmount = Number(monthlyMetrics['maintenance_bonus']) || 0;
+                projectedBonusAmount = bonusAmount;
             }
 
             let current_thresholds: any[] = [];
@@ -542,9 +564,20 @@ export async function GET(
                 id: 'maintenance',
                 type: 'maintenance',
                 name: maintConfig.name || 'Обслуживание',
-                current_value: completed,
-                target_value: assigned,
+                current_value: completedDueByNow,
+                target_value: dueByNow,
+                completed_month_value: completed,
+                total_month_target: assigned,
                 efficiency,
+                live_efficiency: liveEfficiency,
+                live_current_value: completedDueByNow,
+                live_target_value: dueByNow,
+                overdue_open_tasks: overdueOpen,
+                upcoming_tasks: upcoming,
+                projected_completed_value: projectedCompleted,
+                projected_efficiency: projectedEfficiency,
+                projected_bonus_amount: projectedBonusAmount,
+                projected_tier_label: projectedTierLabel,
                 bonus_amount: bonusAmount,
                 thresholds: current_thresholds,
                 is_met: bonusAmount > 0

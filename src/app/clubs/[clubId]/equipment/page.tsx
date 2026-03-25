@@ -15,7 +15,8 @@ import {
     ChevronRight,
     ArrowUpRight,
     Search,
-    CheckSquare
+    CheckSquare,
+    Shirt
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -116,6 +117,14 @@ export default function EquipmentDashboard() {
             icon: <CheckSquare className="h-6 w-6" />,
             color: "text-rose-500",
             bg: "bg-rose-50"
+        },
+        {
+            title: "Стирка",
+            description: "Очередь ковриков на стирку и возврат",
+            href: `/clubs/${clubId}/laundry`,
+            icon: <Shirt className="h-6 w-6" />,
+            color: "text-cyan-500",
+            bg: "bg-cyan-50"
         },
         {
             title: "История",

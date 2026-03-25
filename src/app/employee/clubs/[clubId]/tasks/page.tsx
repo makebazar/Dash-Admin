@@ -84,12 +84,15 @@ export default function EmployeeTasksPage() {
         setIsLoading(true)
         try {
             const today = new Date().toISOString().split('T')[0]
+            const now = new Date()
+            const monthStart = format(startOfMonth(now), 'yyyy-MM-dd')
+            const monthEnd = format(endOfMonth(now), 'yyyy-MM-dd')
             
             // Ensure next tasks are generated
             await ensurePlan(new Date())
             
             const [assignedRes, freeRes] = await Promise.all([
-                fetch(`/api/clubs/${clubId}/equipment/maintenance?assigned=me`), // Removed status filter to get all tasks (Smart Horizon)
+                fetch(`/api/clubs/${clubId}/equipment/maintenance?assigned=me&date_from=${monthStart}&date_to=${monthEnd}&include_overdue=true`),
                 fetch(`/api/clubs/${clubId}/equipment/maintenance?assigned=unassigned&status=PENDING&date_to=${today}`)
             ])
 
@@ -216,9 +219,10 @@ export default function EmployeeTasksPage() {
     }, [freeTasks])
 
     const stats = useMemo(() => {
+        const todayKey = format(new Date(), 'yyyy-MM-dd')
         const total = tasks.length
         const in_progress = tasks.filter(t => t.status === 'IN_PROGRESS').length
-        const overdue = tasks.filter(t => new Date(t.due_date) < new Date()).length
+        const overdue = tasks.filter(t => t.status === 'PENDING' && t.due_date < todayKey).length
         return { total, in_progress, overdue }
     }, [tasks])
 
