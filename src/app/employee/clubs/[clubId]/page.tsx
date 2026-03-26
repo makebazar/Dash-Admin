@@ -52,11 +52,45 @@ interface Stats {
     hourly_rate: number
     kpi_bonus: number
     last_week_hours?: number
+    leaderboard?: {
+        rank: number
+        score: number
+        total_participants: number
+        is_frozen?: boolean
+        finalized_at?: string | null
+        leader: {
+            rank: number
+            user_id: string
+            full_name: string
+            score: number
+        } | null
+        top: Array<{
+            rank: number
+            user_id: string
+            full_name: string
+            score: number
+        }>
+        breakdown: {
+            revenue: number
+            checklist: number
+            maintenance: number
+            schedule: number
+            discipline: number
+        }
+    } | null
     breakdown?: {
         base_salary: number
         shift_bonuses: number
         checklist_bonuses: number
         maintenance_bonuses: number
+        maintenance_penalty?: number
+        leaderboard_bonuses?: Array<{
+            name: string
+            amount: number
+            rank: number
+            score: number
+            is_virtual: boolean
+        }>
         revenue_kpi_bonuses: number
         bar_deductions?: number
         revenue_kpi_breakdown?: Array<{
@@ -68,6 +102,8 @@ interface Stats {
         virtual_bonuses?: {
             checklist: number
             maintenance: number
+            maintenance_penalty?: number
+            leaderboard?: number
             revenue: number
             total: number
         }
@@ -866,6 +902,20 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                                                     </div>
                                                 )}
 
+                                                {stats.breakdown.leaderboard_bonuses?.filter((bonus: any) => !bonus.is_virtual).map((bonus: any, idx: number) => (
+                                                    <div key={`leaderboard-real-${idx}`} className="flex justify-between text-[11px] text-white/60">
+                                                        <span>{bonus.name} (#{bonus.rank}):</span>
+                                                        <span className="font-bold text-emerald-300">+{formatCurrency(bonus.amount)}</span>
+                                                    </div>
+                                                ))}
+
+                                                {(stats.breakdown.maintenance_penalty || 0) > 0 && (
+                                                    <div className="flex justify-between text-[11px] text-white/70">
+                                                        <span>Штраф за просрочку:</span>
+                                                        <span className="font-bold text-rose-300">-{formatCurrency(stats.breakdown.maintenance_penalty || 0)}</span>
+                                                    </div>
+                                                )}
+
                                                 {(stats.breakdown.bar_deductions || 0) > 0 && (
                                                     <div className="flex justify-between text-[11px] text-white/70">
                                                         <span>Бар в счет ЗП:</span>
@@ -888,6 +938,18 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                                                                 <span className="font-bold text-amber-300">+{stats.breakdown.virtual_bonuses.maintenance} Б</span>
                                                             </div>
                                                         )}
+                                                        {(stats.breakdown.virtual_bonuses.leaderboard || 0) > 0 && (
+                                                            <div className="flex justify-between text-[11px] text-white/60">
+                                                                <span>Рейтинг:</span>
+                                                                <span className="font-bold text-amber-300">+{stats.breakdown.virtual_bonuses.leaderboard} Б</span>
+                                                            </div>
+                                                        )}
+                                                        {(stats.breakdown.virtual_bonuses.maintenance_penalty || 0) > 0 && (
+                                                            <div className="flex justify-between text-[11px] text-white/60">
+                                                                <span>Штраф обслуж.:</span>
+                                                                <span className="font-bold text-rose-300">-{stats.breakdown.virtual_bonuses.maintenance_penalty} Б</span>
+                                                            </div>
+                                                        )}
                                                         {stats.breakdown.revenue_kpi_breakdown?.filter(b => b.is_virtual).map((bonus, idx) => (
                                                             <div key={`virtual-${idx}`} className="flex justify-between text-[11px] text-white/60">
                                                                 <span>{bonus.name} ({bonus.metPercent}%):</span>
@@ -908,7 +970,65 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                     </div>
                 </div>
 
-                {/* KPI Trackers */}
+                {stats?.leaderboard && (
+                    <Card className="border-0 shadow-lg bg-gradient-to-br from-amber-500 to-orange-600 text-white overflow-hidden">
+                        <div className="absolute inset-0 bg-white/5" />
+                        <CardContent className="pt-6 relative z-10">
+                            <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+                                <div className="space-y-4 flex-1">
+                                    <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                                        <div>
+                                            <p className="text-sm font-medium text-white/70">Рейтинг месяца</p>
+                                            <div className="flex flex-wrap items-end gap-3 mt-1">
+                                                <p className="text-3xl font-bold">{stats.leaderboard.score.toFixed(1)} / 10</p>
+                                                <Badge className="bg-white/20 text-white border-white/10 hover:bg-white/20">
+                                                    #{stats.leaderboard.rank} из {stats.leaderboard.total_participants}
+                                                </Badge>
+                                            </div>
+                                            {stats.leaderboard.leader && (
+                                                <p className="text-xs text-white/80 mt-2">
+                                                    Лидер сейчас: {stats.leaderboard.leader.full_name} • {stats.leaderboard.leader.score.toFixed(1)} / 10
+                                                </p>
+                                            )}
+                                            {stats.leaderboard.is_frozen ? (
+                                                <p className="text-[11px] text-white/80 mt-2 font-bold">
+                                                    Рейтинг заморожен
+                                                </p>
+                                            ) : null}
+                                        </div>
+
+                                        <div className="p-3 rounded-xl bg-white/20 shrink-0 w-fit">
+                                            <Trophy className="h-6 w-6 text-white" />
+                                        </div>
+                                    </div>
+
+                                    <div className="grid gap-2 text-[11px] sm:grid-cols-2 lg:grid-cols-4">
+                                        <div className="rounded-xl bg-white/10 px-3 py-2">Выручка: <span className="font-black">{stats.leaderboard.breakdown.revenue.toFixed(1)}</span></div>
+                                        <div className="rounded-xl bg-white/10 px-3 py-2">Чек-листы: <span className="font-black">{stats.leaderboard.breakdown.checklist.toFixed(1)}</span></div>
+                                        <div className="rounded-xl bg-white/10 px-3 py-2">Обслуживание: <span className="font-black">{stats.leaderboard.breakdown.maintenance.toFixed(1)}</span></div>
+                                        <div className="rounded-xl bg-white/10 px-3 py-2">Дисциплина: <span className="font-black">{stats.leaderboard.breakdown.discipline.toFixed(1)}</span></div>
+                                    </div>
+
+                                    <div className="pt-4 border-t border-white/10 space-y-2">
+                                        <p className="text-[10px] uppercase tracking-widest text-white/50 font-black">Топ сотрудников</p>
+                                        <div className="grid gap-2 lg:grid-cols-2">
+                                            {stats.leaderboard.top.map(item => (
+                                                <div key={item.user_id} className={`flex items-center justify-between rounded-xl px-3 py-2 text-sm ${item.rank === stats.leaderboard?.rank ? 'bg-white/20' : 'bg-white/10'}`}>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="font-black w-6">#{item.rank}</span>
+                                                        <span className="font-medium">{item.full_name}</span>
+                                                    </div>
+                                                    <span className="font-black">{item.score.toFixed(1)}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+                )}
+
                 <div className="space-y-6">
                     {/* Revenue KPI (Progressive) */}
                     {kpiComponents}

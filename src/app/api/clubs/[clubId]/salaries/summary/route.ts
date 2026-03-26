@@ -3,6 +3,8 @@ import { query } from '@/db';
 import { cookies } from 'next/headers';
 import { calculateSalary } from '@/lib/salary-calculator';
 import { calculateMaintenanceOverduePenalty } from '@/lib/maintenance-penalties';
+import { calculateMaintenanceQualityMetrics } from '@/lib/maintenance-kpi-quality';
+import { getClubEmployeeLeaderboardState, getLeaderboardBonusAmount } from '@/lib/employee-leaderboard';
 
 export async function GET(
     request: Request,
@@ -297,28 +299,71 @@ export async function GET(
             }
 
             // Fetch maintenance bonuses for this month
-            // 1. Efficiency Stats (Month Plan + Completed Old Tasks)
-            // We count as "Assigned/Plan" for this month:
-            // - Tasks originally due this month (AND assigned to user OR completed by user)
-            // - Tasks from past months that were COMPLETED by user IN THIS MONTH (cleared backlog)
+            // KPI plan is only tasks due in the current month.
+            // Closed old debt is tracked separately and does not inflate the month plan.
             const efficiencyRes = await query(
-                `SELECT 
-                    COUNT(*) FILTER (WHERE status != 'CANCELLED' AND (assigned_user_id = $1 OR status = 'COMPLETED')) as total_tasks,
-                    COUNT(*) FILTER (WHERE status = 'COMPLETED' AND completed_at >= $2 AND completed_at <= $3) as completed_tasks
-                 FROM equipment_maintenance_tasks
-                 WHERE 
-                    (
-                        -- 1. Tasks due this month
-                        (due_date >= $2 AND due_date <= $3)
+                `WITH scoped_tasks AS (
+                    SELECT
+                        mt.*,
+                        COALESCE(
+                            mt.assigned_user_id,
+                            CASE
+                                WHEN e.assignment_mode = 'DIRECT' THEN e.assigned_user_id
+                                WHEN e.assignment_mode = 'FREE_POOL' THEN NULL
+                                ELSE COALESCE(w.assigned_user_id, z.assigned_user_id)
+                            END
+                        ) AS effective_assignee
+                    FROM equipment_maintenance_tasks mt
+                    JOIN equipment e ON mt.equipment_id = e.id
+                    LEFT JOIN club_workstations w ON e.workstation_id = w.id
+                    LEFT JOIN club_zones z ON z.club_id = e.club_id AND z.name = w.zone
+                    WHERE (
+                        (mt.due_date >= $2 AND mt.due_date <= $3)
                         OR
-                        -- 2. Backlog tasks completed this month by user
-                        (completed_by = $1 AND status = 'COMPLETED' AND completed_at >= $2 AND completed_at <= $3 AND due_date < $2)
+                        (mt.completed_by = $1 AND mt.status = 'COMPLETED' AND mt.completed_at >= $2 AND mt.completed_at <= $3 AND mt.due_date < $2)
                     )
-                    AND (assigned_user_id = $1 OR completed_by = $1)`,
+                    AND (
+                        COALESCE(
+                            mt.assigned_user_id,
+                            CASE
+                                WHEN e.assignment_mode = 'DIRECT' THEN e.assigned_user_id
+                                WHEN e.assignment_mode = 'FREE_POOL' THEN NULL
+                                ELSE COALESCE(w.assigned_user_id, z.assigned_user_id)
+                            END
+                        ) = $1
+                        OR mt.completed_by = $1
+                    )
+                )
+                SELECT 
+                    COUNT(*) FILTER (WHERE due_date >= $2 AND due_date <= $3 AND status != 'CANCELLED' AND (effective_assignee = $1 OR status = 'COMPLETED')) as total_tasks,
+                    COUNT(*) FILTER (WHERE due_date >= $2 AND due_date <= $3 AND status = 'COMPLETED' AND completed_at >= $2 AND completed_at <= $3) as completed_tasks,
+                    COUNT(*) FILTER (WHERE status = 'COMPLETED' AND completed_at >= $2 AND completed_at <= $3 AND due_date < $2) as old_debt_closed_tasks,
+                    COUNT(*) FILTER (WHERE status IN ('PENDING', 'IN_PROGRESS') AND due_date < CURRENT_DATE AND effective_assignee = $1) as overdue_open_tasks,
+                    COUNT(*) FILTER (WHERE status = 'IN_PROGRESS' AND verification_status = 'REJECTED' AND effective_assignee = $1) as rework_open_tasks,
+                    COUNT(*) FILTER (
+                        WHERE status = 'IN_PROGRESS'
+                          AND verification_status = 'REJECTED'
+                          AND effective_assignee = $1
+                          AND COALESCE(verified_at::date, CURRENT_DATE) <= CURRENT_DATE - 3
+                    ) as stale_rework_tasks
+                 FROM scoped_tasks`,
                 [emp.id, startOfMonth, endOfMonth]
             );
             const monthTotalTasks = parseInt(efficiencyRes.rows[0]?.total_tasks || '0');
             const monthCompletedTasks = parseInt(efficiencyRes.rows[0]?.completed_tasks || '0');
+            const oldDebtClosedTasks = parseInt(efficiencyRes.rows[0]?.old_debt_closed_tasks || '0');
+            const overdueOpenTasks = parseInt(efficiencyRes.rows[0]?.overdue_open_tasks || '0');
+            const reworkOpenTasks = parseInt(efficiencyRes.rows[0]?.rework_open_tasks || '0');
+            const staleReworkTasks = parseInt(efficiencyRes.rows[0]?.stale_rework_tasks || '0');
+            const qualityMetrics = calculateMaintenanceQualityMetrics({
+                assigned: monthTotalTasks,
+                completed: monthCompletedTasks,
+                dueByNow: monthTotalTasks,
+                completedDueByNow: monthCompletedTasks,
+                overdueOpenTasks,
+                reworkOpenTasks,
+                staleReworkTasks
+            });
 
             // 2. Completed Tasks for Payment (Accrual) - for distributing to shifts
             const paymentTasksRes = await query(
@@ -373,7 +418,7 @@ export async function GET(
 
                 if (maintenanceBonusConfig.calculation_mode === 'MONTHLY') {
                     // Mode: Monthly Tiers (ignore per-task accrued bonuses)
-                    const efficiency = monthTotalTasks > 0 ? (monthCompletedTasks / monthTotalTasks) * 100 : 0;
+                    const efficiency = qualityMetrics.efficiency;
                     const thresholds = maintenanceBonusConfig.efficiency_thresholds || [];
                     
                     // Sort by threshold desc
@@ -405,6 +450,13 @@ export async function GET(
             // Also pass efficiency metrics so period bonuses can use them if needed (though unlikely)
             monthlyMetrics['maintenance_tasks_completed'] = monthCompletedTasks;
             monthlyMetrics['maintenance_tasks_assigned'] = monthTotalTasks;
+            monthlyMetrics['maintenance_quality_penalty_units'] = qualityMetrics.penalty_units;
+            monthlyMetrics['maintenance_old_debt_closed_tasks'] = oldDebtClosedTasks;
+            monthlyMetrics['maintenance_rework_open_tasks'] = reworkOpenTasks;
+            monthlyMetrics['maintenance_stale_rework_tasks'] = staleReworkTasks;
+            monthlyMetrics['maintenance_overdue_open_tasks'] = overdueOpenTasks;
+            monthlyMetrics['maintenance_adjusted_completed'] = qualityMetrics.adjusted_completed;
+            monthlyMetrics['maintenance_adjusted_efficiency'] = qualityMetrics.efficiency;
 
             const shifts_count = finishedShifts.length;
             const planned_shifts = empPlannedShifts?.planned_shifts || 20;
@@ -598,6 +650,7 @@ export async function GET(
             // Update feature flags based on processed shifts
             const periodBonuses_local = activeScheme?.period_bonuses || [];
             const bonuses_local = activeScheme?.bonuses || [];
+            const leaderboardBonusConfigs = bonuses_local.filter((b: any) => b.type === 'leaderboard_rank');
             
             const has_kpi_feature = bonuses_status.length > 0 || // Use bonuses_status which covers both sources
                                    bonuses_local.some((b: any) => !b.payout_type || b.payout_type === 'REAL_MONEY');
@@ -710,13 +763,18 @@ export async function GET(
             if (maintConfigForPayout) {
                 const completed = monthlyMetrics['maintenance_tasks_completed'] || 0;
                 const assigned = monthlyMetrics['maintenance_tasks_assigned'] || 0;
+                const adjustedCompleted = monthlyMetrics['maintenance_adjusted_completed'] || 0;
                 const bonusAmount = monthlyMetrics['maintenance_bonus'] || 0;
                 const penaltyAmount = monthlyMetrics['maintenance_overdue_penalty'] || 0;
                 const penaltyRawAmount = monthlyMetrics['maintenance_overdue_penalty_raw'] || 0;
                 const baseBonusAmount = monthlyMetrics['maintenance_bonus_base'] || 0;
                 const overdueIncidents = monthlyMetrics['maintenance_overdue_incidents'] || 0;
-                let efficiency = 100;
-                if (assigned > 0) efficiency = (completed / assigned) * 100;
+                const qualityPenaltyUnits = monthlyMetrics['maintenance_quality_penalty_units'] || 0;
+                const oldDebtClosed = monthlyMetrics['maintenance_old_debt_closed_tasks'] || 0;
+                const reworkOpen = monthlyMetrics['maintenance_rework_open_tasks'] || 0;
+                const staleRework = monthlyMetrics['maintenance_stale_rework_tasks'] || 0;
+                const overdueOpen = monthlyMetrics['maintenance_overdue_open_tasks'] || 0;
+                let efficiency = monthlyMetrics['maintenance_adjusted_efficiency'] || 0;
 
                 let current_thresholds: any[] = [];
                 // Check for efficiency_thresholds (Maintenance KPI specific)
@@ -737,14 +795,21 @@ export async function GET(
                 maintenance_status = {
                     ...maintConfigForPayout,
                     current_value: completed,
+                    adjusted_current_value: adjustedCompleted,
+                    old_debt_closed_tasks: oldDebtClosed,
                     target_value: assigned,
                     efficiency,
+                    raw_efficiency: assigned > 0 ? (completed / assigned) * 100 : 0,
                     bonus_amount: bonusAmount,
                     base_bonus_amount: baseBonusAmount,
                     final_bonus_amount: bonusAmount,
                     penalty_raw_amount: penaltyRawAmount,
                     penalty_amount: penaltyAmount,
                     overdue_incidents: overdueIncidents,
+                    overdue_open_tasks: overdueOpen,
+                    rework_open_tasks: reworkOpen,
+                    stale_rework_tasks: staleRework,
+                    quality_penalty_units: qualityPenaltyUnits,
                     thresholds: current_thresholds,
                     is_met: bonusAmount > 0
                 };
@@ -946,18 +1011,130 @@ export async function GET(
                     })
                 ].sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime()),
                 metric_categories: metricCategories,
-                metric_metadata: metricMetadata
+                metric_metadata: metricMetadata,
+                _leaderboard_bonus_configs: leaderboardBonusConfigs
             };
         }));
 
+        const leaderboardState = await getClubEmployeeLeaderboardState(clubId, year, month);
+        const leaderboard = leaderboardState.leaderboard;
+        const leaderboardMap = new Map(leaderboard.map(item => [item.user_id, item]));
+        const leaderboardTop = leaderboard.slice(0, 5).map(item => ({
+            rank: item.rank,
+            user_id: item.user_id,
+            full_name: item.full_name,
+            score: item.score
+        }));
+        const leaderboardLeader = leaderboardTop[0] || null;
+
+        const summaryWithLeaderboard = summary.map((employee: any) => {
+            const board = leaderboardMap.get(employee.id);
+            const leaderboardBonusConfigs = employee._leaderboard_bonus_configs || [];
+            const leaderboardStatuses: any[] = [];
+            let leaderboardBonusReal = 0;
+            let leaderboardBonusVirtual = 0;
+
+            leaderboardBonusConfigs.forEach((bonus: any) => {
+                const amount = getLeaderboardBonusAmount(bonus, board?.rank);
+                if (amount <= 0 || !board) return;
+
+                const payoutType = bonus.payout_type || 'REAL_MONEY';
+                if (payoutType === 'VIRTUAL_BALANCE') {
+                    leaderboardBonusVirtual += amount;
+                } else {
+                    leaderboardBonusReal += amount;
+                }
+
+                leaderboardStatuses.push({
+                    ...bonus,
+                    metric_key: 'leaderboard_rank',
+                    current_value: board.rank,
+                    target_value: Number(bonus.rank_to ?? bonus.rank_from ?? 1) || 1,
+                    progress_percent: board.score * 10,
+                    is_met: true,
+                    current_reward_value: amount,
+                    current_reward_type: 'FIXED',
+                    bonus_amount: amount,
+                    rank: board.rank,
+                    score: board.score
+                });
+            });
+
+            const { _leaderboard_bonus_configs, ...cleanEmployee } = employee;
+
+            return {
+                ...cleanEmployee,
+                total_accrued: cleanEmployee.total_accrued + leaderboardBonusReal,
+                kpi_bonus_amount: cleanEmployee.kpi_bonus_amount + leaderboardBonusReal,
+                virtual_balance_accrued: cleanEmployee.virtual_balance_accrued + leaderboardBonusVirtual,
+                balance: cleanEmployee.balance + leaderboardBonusReal,
+                virtual_balance: cleanEmployee.virtual_balance + leaderboardBonusVirtual,
+                period_bonuses: [...cleanEmployee.period_bonuses, ...leaderboardStatuses],
+                has_kpi_feature: cleanEmployee.has_kpi_feature || leaderboardBonusConfigs.some((bonus: any) => (bonus.payout_type || 'REAL_MONEY') !== 'VIRTUAL_BALANCE'),
+                has_virtual_balance_feature: cleanEmployee.has_virtual_balance_feature || leaderboardBonusConfigs.some((bonus: any) => bonus.payout_type === 'VIRTUAL_BALANCE'),
+                breakdown: {
+                    ...cleanEmployee.breakdown,
+                    virtual_balance: cleanEmployee.breakdown.virtual_balance + leaderboardBonusVirtual,
+                    kpi_bonuses: cleanEmployee.breakdown.kpi_bonuses + leaderboardBonusReal,
+                    accrued_payout: cleanEmployee.breakdown.accrued_payout + leaderboardBonusReal,
+                    leaderboard_bonuses: leaderboardStatuses
+                },
+                metrics: {
+                    ...cleanEmployee.metrics,
+                    leaderboard_score: board?.score || 0,
+                    leaderboard_rank: board?.rank || null,
+                    leaderboard_revenue_score: board?.revenue_score || 0,
+                    leaderboard_checklist_score: board?.checklist_score || 0,
+                    leaderboard_maintenance_score: board?.maintenance_score || 0,
+                    leaderboard_schedule_score: board?.schedule_score || 0,
+                    leaderboard_discipline_score: board?.discipline_score || 0
+                },
+                leaderboard: board ? {
+                    rank: board.rank,
+                    score: board.score,
+                    total_participants: leaderboard.length,
+                    is_frozen: leaderboardState.meta.is_frozen,
+                    finalized_at: leaderboardState.meta.finalized_at,
+                    leader: leaderboardLeader,
+                    top: leaderboardTop,
+                    breakdown: {
+                        revenue: board.revenue_score,
+                        checklist: board.checklist_score,
+                        maintenance: board.maintenance_score,
+                        schedule: board.schedule_score,
+                        discipline: board.discipline_score
+                    },
+                    details: {
+                        revenue_per_shift: board.revenue_per_shift,
+                        completed_shifts: board.completed_shifts,
+                        planned_shifts: board.planned_shifts,
+                        evaluation_score: board.evaluation_score,
+                        maintenance_tasks_completed: board.maintenance_tasks_completed,
+                        maintenance_tasks_assigned: board.maintenance_tasks_assigned,
+                        maintenance_overdue_open_tasks: board.maintenance_overdue_open_tasks,
+                        maintenance_rework_open_tasks: board.maintenance_rework_open_tasks,
+                        maintenance_stale_rework_tasks: board.maintenance_stale_rework_tasks,
+                        maintenance_overdue_completed_tasks: board.maintenance_overdue_completed_tasks,
+                        maintenance_overdue_completed_days: board.maintenance_overdue_completed_days
+                    }
+                } : null
+            };
+        });
+
         // Filter out employees with 0 shifts, unless they have some financial activity (accruals or payments)
-        const filteredSummary = summary.filter(emp =>
+        const filteredSummary = summaryWithLeaderboard.filter(emp =>
             emp.shifts_count > 0 ||
             emp.total_accrued !== 0 ||
             emp.total_paid !== 0
         );
 
-        return NextResponse.json({ summary: filteredSummary });
+        return NextResponse.json({
+            summary: filteredSummary,
+            leaderboard: {
+                ...leaderboardState.meta,
+                top: leaderboardTop
+            }
+        });
 
     } catch (error: any) {
         console.error('Salary Summary Error:', error);

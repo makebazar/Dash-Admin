@@ -5,7 +5,7 @@ import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Loader2, Plus, Wallet, Edit, Trash2, Users, Coins, Calculator, TrendingUp, Info, ArrowRight, Clock, ShieldAlert, ClipboardCheck, Wrench } from "lucide-react"
+import { Loader2, Plus, Wallet, Edit, Trash2, Users, Coins, Calculator, TrendingUp, Info, ArrowRight, Clock, ShieldAlert, ClipboardCheck, Wrench, Trophy } from "lucide-react"
 import { SalaryScheme, Formula, PeriodBonus } from "@/components/salary/SalarySchemeForm"
 import { PageShell, PageHeader } from "@/components/layout/PageShell"
 
@@ -68,6 +68,10 @@ export default function SalarySettingsPage({ params }: { params: Promise<{ clubI
                 parts.push({ label: 'Чек-лист', value: `+${b.amount}₽ (> ${b.min_score}%)`, icon: ClipboardCheck })
             } else if (b.type === 'maintenance_kpi') {
                 parts.push({ label: 'Обслуживание', value: b.calculation_mode === 'PER_TASK' ? `${b.amount}₽/зад.` : 'Месячный', icon: Wrench })
+            } else if (b.type === 'leaderboard_rank') {
+                const rankFrom = b.rank_from || 1
+                const rankTo = b.rank_to || rankFrom
+                parts.push({ label: b.name || 'Рейтинг', value: `${rankFrom}-${rankTo} место`, icon: Trophy })
             }
         })
 
@@ -221,4 +225,3 @@ export default function SalarySettingsPage({ params }: { params: Promise<{ clubI
         </PageShell>
     )
 }
-

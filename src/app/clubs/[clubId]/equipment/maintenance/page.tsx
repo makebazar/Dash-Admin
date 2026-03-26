@@ -61,6 +61,24 @@ interface Employee {
     full_name: string
 }
 
+interface EquipmentListItem {
+    id: string
+    workstation_id: string | null
+    workstation_name: string | null
+    workstation_zone: string | null
+    workstation_assigned_user_id?: string | null
+    workstation_assigned_to_name?: string | null
+    type: string
+    name: string
+    type_name: string | null
+    last_cleaned_at: string | null
+    cleaning_interval_days: number | null
+    maintenance_enabled: boolean | null
+    assigned_user_id: string | null
+    assigned_to_name?: string | null
+    assignment_mode?: "DIRECT" | "INHERIT" | "FREE_POOL" | null
+}
+
 interface PlaceGroup {
     key: string
     workstationId: string | null
@@ -135,9 +153,34 @@ const formatDay = (value?: string | null) => {
     return parsed.toLocaleDateString("ru-RU", { day: "numeric", month: "long" })
 }
 
+const matchesSearchTerm = (term: string, values: Array<string | null | undefined>) => {
+    if (!term) return true
+    return values.some(value => value?.toLowerCase().includes(term))
+}
+
+const normalizeAssignmentMode = (mode?: "DIRECT" | "INHERIT" | "FREE_POOL" | null) => {
+    if (mode === "DIRECT" || mode === "FREE_POOL") return mode
+    return "INHERIT"
+}
+
+const calculateNextDueDate = (lastCleanedAt?: string | null, intervalDays?: number | null) => {
+    if (!intervalDays || intervalDays < 1) return null
+
+    if (!lastCleanedAt) return null
+
+    const parsed = new Date(lastCleanedAt)
+    if (Number.isNaN(parsed.getTime())) return null
+
+    parsed.setHours(0, 0, 0, 0)
+    parsed.setDate(parsed.getDate() + intervalDays)
+
+    return getLocalDateKey(parsed)
+}
+
 export default function MaintenanceSchedule() {
     const { clubId } = useParams()
     const [tasks, setTasks] = useState<MaintenanceTask[]>([])
+    const [equipment, setEquipment] = useState<EquipmentListItem[]>([])
     const [employees, setEmployees] = useState<Employee[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [isGenerating, setIsGenerating] = useState(false)
@@ -177,16 +220,19 @@ export default function MaintenanceSchedule() {
 
             await ensurePlan(firstDay, lastDay)
 
-            const [tasksRes, employeesRes] = await Promise.all([
+            const [tasksRes, employeesRes, equipmentRes] = await Promise.all([
                 fetch(`/api/clubs/${clubId}/equipment/maintenance?date_from=${firstDay}&date_to=${lastDay}&include_overdue=true`),
-                fetch(`/api/clubs/${clubId}/employees`)
+                fetch(`/api/clubs/${clubId}/employees`),
+                fetch(`/api/clubs/${clubId}/equipment?limit=5000`)
             ])
 
             const tasksData = await tasksRes.json()
             const employeesData = await employeesRes.json()
+            const equipmentData = await equipmentRes.json()
 
             if (tasksRes.ok) setTasks(tasksData.tasks || [])
             if (employeesRes.ok) setEmployees(employeesData.employees || [])
+            if (equipmentRes.ok) setEquipment(equipmentData.equipment || [])
         } catch (error) {
             console.error("Error fetching maintenance data:", error)
         } finally {
@@ -229,6 +275,17 @@ export default function MaintenanceSchedule() {
                 : task
         )))
 
+        setEquipment(prev => prev.map(item => (
+            item.id === equipmentId
+                ? {
+                    ...item,
+                    assignment_mode: assignmentMode,
+                    assigned_user_id: assignedUserId,
+                    assigned_to_name: assignedToName
+                }
+                : item
+        )))
+
         try {
             await fetch(`/api/clubs/${clubId}/equipment/${equipmentId}`, {
                 method: "PATCH",
@@ -250,6 +307,7 @@ export default function MaintenanceSchedule() {
         const todayKey = getLocalDateKey()
 
         return {
+            open: tasks.filter(task => task.status !== "COMPLETED" && task.status !== "SKIPPED").length,
             overdue: tasks.filter(task => task.status === "PENDING" && task.due_date < todayKey).length,
             today: tasks.filter(task => task.status === "PENDING" && task.due_date === todayKey).length,
             inProgress: tasks.filter(task => task.status === "IN_PROGRESS").length,
@@ -259,26 +317,226 @@ export default function MaintenanceSchedule() {
         }
     }, [tasks])
 
+    const summaryItems = useMemo(() => ([
+        { label: "Просрочено", value: stats.overdue, tone: "text-rose-600 bg-rose-50 border-rose-100" },
+        { label: "Сегодня", value: stats.today, tone: "text-amber-700 bg-amber-50 border-amber-100" },
+        { label: "В работе", value: stats.inProgress, tone: "text-blue-700 bg-blue-50 border-blue-100" },
+        { label: "На доработке", value: stats.rework, tone: "text-fuchsia-700 bg-fuchsia-50 border-fuchsia-100" },
+        { label: "Свободный пул", value: stats.unassigned, tone: "text-slate-700 bg-slate-50 border-slate-100" },
+        { label: "Будущие", value: stats.future, tone: "text-indigo-700 bg-indigo-50 border-indigo-100" }
+    ]), [stats])
+
+    const filteredEquipment = useMemo(() => {
+        const term = searchQuery.trim().toLowerCase()
+
+        return equipment.filter(item => {
+            if (item.maintenance_enabled === false) return false
+
+            return matchesSearchTerm(term, [
+                item.name,
+                item.type_name,
+                item.workstation_name,
+                item.workstation_zone,
+                item.assigned_to_name,
+                item.workstation_assigned_to_name
+            ])
+        })
+    }, [equipment, searchQuery])
+
+    const filteredEquipmentIds = useMemo(
+        () => new Set(filteredEquipment.map(item => item.id)),
+        [filteredEquipment]
+    )
+
     const filteredTasks = useMemo(() => {
         const term = searchQuery.trim().toLowerCase()
 
         return tasks.filter(task => {
-            if (term.length === 0) return true
+            if (filteredEquipmentIds.has(task.equipment_id)) return true
 
-            return [
+            return matchesSearchTerm(term, [
                 task.equipment_name,
                 task.equipment_type_name,
                 task.workstation_name,
                 task.workstation_zone,
                 task.assigned_to_name,
                 task.completed_by_name
-            ].some(value => value?.toLowerCase().includes(term))
+            ])
         })
-    }, [tasks, searchQuery])
+    }, [filteredEquipmentIds, searchQuery, tasks])
+
+    const employeeDistribution = useMemo(() => {
+        const workload = new Map<string, {
+            id: string
+            fullName: string
+            places: Set<string>
+            devices: Set<string>
+        }>()
+
+        filteredEquipment.forEach(item => {
+            const assignmentMode = normalizeAssignmentMode(item.assignment_mode)
+            const effectiveAssignedUserId =
+                assignmentMode === "DIRECT"
+                    ? item.assigned_user_id
+                    : assignmentMode === "FREE_POOL"
+                        ? null
+                        : item.workstation_assigned_user_id || null
+
+            if (!effectiveAssignedUserId) return
+
+            const fullName =
+                (assignmentMode === "DIRECT" ? item.assigned_to_name : item.workstation_assigned_to_name) ||
+                employees.find(employee => employee.id === effectiveAssignedUserId)?.full_name ||
+                "Без имени"
+
+            if (!workload.has(effectiveAssignedUserId)) {
+                workload.set(effectiveAssignedUserId, {
+                    id: effectiveAssignedUserId,
+                    fullName,
+                    places: new Set<string>(),
+                    devices: new Set<string>()
+                })
+            }
+
+            const employeeLoad = workload.get(effectiveAssignedUserId)!
+            employeeLoad.places.add(`${item.workstation_id || "storage"}::${item.workstation_zone || "Без зоны"}::${item.workstation_name || "Склад"}`)
+            employeeLoad.devices.add(item.id)
+        })
+
+        return Array.from(workload.values())
+            .map(employee => ({
+                id: employee.id,
+                fullName: employee.fullName,
+                placesCount: employee.places.size,
+                devicesCount: employee.devices.size
+            }))
+            .sort((a, b) => {
+                const devicesDiff = b.devicesCount - a.devicesCount
+                if (devicesDiff !== 0) return devicesDiff
+                const placesDiff = b.placesCount - a.placesCount
+                if (placesDiff !== 0) return placesDiff
+                return a.fullName.localeCompare(b.fullName)
+            })
+    }, [employees, filteredEquipment])
+
+    const freePoolDistribution = useMemo(() => {
+        const places = new Set<string>()
+        const devices = new Set<string>()
+
+        filteredEquipment.forEach(item => {
+            const assignmentMode = normalizeAssignmentMode(item.assignment_mode)
+            const effectiveAssignedUserId =
+                assignmentMode === "DIRECT"
+                    ? item.assigned_user_id
+                    : assignmentMode === "FREE_POOL"
+                        ? null
+                        : item.workstation_assigned_user_id || null
+
+            const placeKey = `${item.workstation_id || "storage"}::${item.workstation_zone || "Без зоны"}::${item.workstation_name || "Склад"}`
+
+            if (!item.workstation_assigned_user_id) {
+                places.add(placeKey)
+            }
+
+            if (!effectiveAssignedUserId) {
+                devices.add(item.id)
+            }
+        })
+
+        return {
+            placesCount: places.size,
+            devicesCount: devices.size
+        }
+    }, [filteredEquipment])
 
     const zones = useMemo(() => {
         const todayKey = getLocalDateKey()
         const zoneMap = new Map<string, ZoneGroup>()
+
+        filteredEquipment.forEach(item => {
+            const zoneName = item.workstation_zone || "Без зоны"
+            const placeName = item.workstation_name || "Склад"
+            const zoneKey = zoneName
+            const placeKey = `${zoneName}::${placeName}`
+
+            if (!zoneMap.has(zoneKey)) {
+                zoneMap.set(zoneKey, {
+                    key: zoneKey,
+                    name: zoneName,
+                    overdue: 0,
+                    today: 0,
+                    inProgress: 0,
+                    rework: 0,
+                    future: 0,
+                    responsibles: [],
+                    places: []
+                })
+            }
+
+            const zone = zoneMap.get(zoneKey)!
+
+            const assignmentMode = normalizeAssignmentMode(item.assignment_mode)
+            const effectiveAssignedUserId =
+                assignmentMode === "DIRECT"
+                    ? item.assigned_user_id
+                    : assignmentMode === "FREE_POOL"
+                        ? null
+                        : item.workstation_assigned_user_id || null
+            const effectiveAssignedToName =
+                assignmentMode === "DIRECT"
+                    ? item.assigned_to_name || null
+                    : assignmentMode === "FREE_POOL"
+                        ? null
+                        : item.workstation_assigned_to_name || null
+
+            if (effectiveAssignedToName && !zone.responsibles.includes(effectiveAssignedToName)) {
+                zone.responsibles.push(effectiveAssignedToName)
+            }
+
+            let place = zone.places.find(existingPlace => existingPlace.key === placeKey)
+
+            if (!place) {
+                place = {
+                    key: placeKey,
+                    workstationId: item.workstation_id,
+                    zone: zoneName,
+                    name: placeName,
+                    assignedUserId: item.workstation_assigned_user_id || null,
+                    assignedToName: item.workstation_assigned_to_name || null,
+                    devices: [],
+                    overdue: 0,
+                    today: 0,
+                    inProgress: 0,
+                    rework: 0,
+                    future: 0,
+                    completed: 0
+                }
+                zone.places.push(place)
+            }
+
+            place.devices.push({
+                key: `${placeKey}::${item.id}`,
+                equipmentId: item.id,
+                equipmentName: item.name,
+                equipmentTypeName: item.type_name || item.type,
+                lastCleanedAt: item.last_cleaned_at,
+                assignmentMode,
+                assignedUserId: item.assigned_user_id,
+                assignedToName: assignmentMode === "DIRECT" ? item.assigned_to_name || null : null,
+                effectiveAssignedUserId,
+                effectiveAssignedToName,
+                inheritedAssignedUserId: item.workstation_assigned_user_id || null,
+                inheritedAssignedToName: item.workstation_assigned_to_name || null,
+                activeTasks: [],
+                overdue: 0,
+                today: 0,
+                inProgress: 0,
+                rework: 0,
+                future: 0,
+                completed: 0,
+                nextDueDate: calculateNextDueDate(item.last_cleaned_at, item.cleaning_interval_days)
+            })
+        })
 
         filteredTasks.forEach(task => {
             const zoneName = task.workstation_zone || "Без зоны"
@@ -438,7 +696,7 @@ export default function MaintenanceSchedule() {
                 if (futureDiff !== 0) return futureDiff
                 return a.name.localeCompare(b.name)
             })
-    }, [filteredTasks])
+    }, [filteredEquipment, filteredTasks])
 
     const toggleZone = (zoneKey: string) => {
         setExpandedZones(prev => {
@@ -484,6 +742,16 @@ export default function MaintenanceSchedule() {
                             : assignedToName
                 }
                 : task
+        )))
+
+        setEquipment(prev => prev.map(item => (
+            item.workstation_id === workstationId
+                ? {
+                    ...item,
+                    workstation_assigned_user_id: assignedUserId,
+                    workstation_assigned_to_name: assignedToName
+                }
+                : item
         )))
 
         try {
@@ -584,7 +852,7 @@ export default function MaintenanceSchedule() {
 
         if (device.nextDueDate) {
             return {
-                label: "Все по плану",
+                label: "Обслужено",
                 badgeClass: "bg-emerald-50 text-emerald-700 border-emerald-200",
                 detail: `Следующая чистка: ${formatDay(device.nextDueDate)}`,
                 detailClass: "text-slate-600"
@@ -676,22 +944,93 @@ export default function MaintenanceSchedule() {
                 </div>
             </div>
 
-            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-5">
-                {[
-                    { label: "Просрочено", value: stats.overdue, tone: "text-rose-600 bg-rose-50 border-rose-100" },
-                    { label: "Сегодня", value: stats.today, tone: "text-amber-700 bg-amber-50 border-amber-100" },
-                    { label: "В работе", value: stats.inProgress, tone: "text-blue-700 bg-blue-50 border-blue-100" },
-                    { label: "На доработке", value: stats.rework, tone: "text-fuchsia-700 bg-fuchsia-50 border-fuchsia-100" },
-                    { label: "Свободный пул", value: stats.unassigned, tone: "text-slate-700 bg-slate-50 border-slate-100" },
-                    { label: "Будущие", value: stats.future, tone: "text-indigo-700 bg-indigo-50 border-indigo-100" }
-                ].map(item => (
-                    <Card key={item.label} className={cn("border shadow-none", item.tone)}>
-                        <CardContent className="p-3">
-                            <div className="text-[10px] uppercase tracking-widest font-bold opacity-70">{item.label}</div>
-                            <div className="mt-1 text-2xl font-bold">{item.value}</div>
-                        </CardContent>
-                    </Card>
-                ))}
+            <div className="grid gap-3 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.9fr)]">
+                <Card className="shadow-none">
+                    <CardContent className="p-4">
+                        <div className="flex items-start justify-between gap-4">
+                            <div>
+                                <div className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground">Сводка по чистке</div>
+                                <div className="mt-1 text-sm text-muted-foreground">Текущий месяц и просрочка одним блоком</div>
+                            </div>
+                            <div className="text-right">
+                                <div className="text-2xl font-bold">{stats.open}</div>
+                                <div className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground">Активно</div>
+                            </div>
+                        </div>
+
+                        <div className="mt-4 grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
+                            {summaryItems.map(item => (
+                                <div key={item.label} className={cn("rounded-xl border px-3 py-2", item.tone)}>
+                                    <div className="text-[10px] uppercase tracking-widest font-bold opacity-70">{item.label}</div>
+                                    <div className="mt-1 text-xl font-bold leading-none">{item.value}</div>
+                                </div>
+                            ))}
+                        </div>
+                    </CardContent>
+                </Card>
+
+                <Card className="shadow-none">
+                    <CardContent className="p-4">
+                        <div className="flex items-start justify-between gap-4">
+                            <div>
+                                <div className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground">Сотрудники</div>
+                                <div className="mt-1 text-sm text-muted-foreground">Распределение мест и оборудования по чистке</div>
+                            </div>
+                            <div className="text-right">
+                                <div className="text-2xl font-bold">{employeeDistribution.length}</div>
+                                <div className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground">Назначено</div>
+                            </div>
+                        </div>
+
+                        <div className="mt-4 space-y-2">
+                            {employeeDistribution.length > 0 ? (
+                                employeeDistribution.map(employee => (
+                                    <div key={employee.id} className="rounded-xl border bg-slate-50/70 px-3 py-2">
+                                        <div className="flex items-center justify-between gap-3">
+                                            <div className="min-w-0">
+                                                <div className="truncate text-sm font-semibold">{employee.fullName}</div>
+                                                <div className="text-xs text-muted-foreground">
+                                                    {employee.placesCount} мест · {employee.devicesCount} оборудований
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-1.5 shrink-0">
+                                                <Badge className="h-6 bg-indigo-50 text-indigo-700 hover:bg-indigo-50">
+                                                    {employee.placesCount} мест
+                                                </Badge>
+                                                <Badge className="h-6 bg-sky-50 text-sky-700 hover:bg-sky-50">
+                                                    {employee.devicesCount} оборуд.
+                                                </Badge>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))
+                            ) : (
+                                <div className="rounded-xl border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
+                                    Нет назначений по текущему фильтру
+                                </div>
+                            )}
+
+                            <div className="rounded-xl border border-dashed bg-slate-50/40 px-3 py-2">
+                                <div className="flex items-center justify-between gap-3">
+                                    <div className="min-w-0">
+                                        <div className="truncate text-sm font-semibold text-slate-700">Свободный пул</div>
+                                        <div className="text-xs text-muted-foreground">
+                                            {freePoolDistribution.placesCount} мест · {freePoolDistribution.devicesCount} оборудований
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-1.5 shrink-0">
+                                                <Badge className="h-6 bg-slate-100 text-slate-700 hover:bg-slate-100">
+                                                    {freePoolDistribution.placesCount} мест
+                                                </Badge>
+                                                <Badge className="h-6 bg-slate-200 text-slate-800 hover:bg-slate-200">
+                                                    {freePoolDistribution.devicesCount} оборуд.
+                                                </Badge>
+                                            </div>
+                                        </div>
+                                    </div>
+                        </div>
+                    </CardContent>
+                </Card>
             </div>
 
             {isLoading ? (

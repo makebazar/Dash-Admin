@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { query } from '@/db';
 import { cookies } from 'next/headers';
 import { calculateMaintenanceOverduePenalty } from '@/lib/maintenance-penalties';
+import { calculateMaintenanceQualityMetrics } from '@/lib/maintenance-kpi-quality';
 
 // GET: Get employee's KPI progress for current period
 export async function GET(
@@ -158,27 +159,62 @@ export async function GET(
         );
         
         const maintRes = await query(
-            `SELECT 
-                COUNT(*) as total_tasks,
-                COUNT(*) FILTER (WHERE status = 'COMPLETED' AND completed_at >= $2 AND completed_at <= $3) as completed_tasks,
-                COUNT(*) FILTER (WHERE due_date <= CURRENT_DATE) as due_by_now_tasks,
-                COUNT(*) FILTER (WHERE status = 'COMPLETED' AND due_date <= CURRENT_DATE AND completed_at >= $2 AND completed_at <= $3) as completed_due_by_now_tasks,
-                COUNT(*) FILTER (WHERE status IN ('PENDING', 'IN_PROGRESS') AND due_date < CURRENT_DATE) as overdue_open_tasks,
+            `WITH scoped_tasks AS (
+                SELECT
+                    mt.*,
+                    COALESCE(
+                        mt.assigned_user_id,
+                        CASE
+                            WHEN e.assignment_mode = 'DIRECT' THEN e.assigned_user_id
+                            WHEN e.assignment_mode = 'FREE_POOL' THEN NULL
+                            ELSE COALESCE(w.assigned_user_id, z.assigned_user_id)
+                        END
+                    ) AS effective_assignee
+                FROM equipment_maintenance_tasks mt
+                JOIN equipment e ON mt.equipment_id = e.id
+                LEFT JOIN club_workstations w ON e.workstation_id = w.id
+                LEFT JOIN club_zones z ON z.club_id = e.club_id AND z.name = w.zone
+                WHERE (
+                    (
+                        mt.due_date >= $2
+                        AND mt.due_date <= $3
+                    )
+                    OR
+                    (
+                        mt.completed_by = $1
+                        AND mt.status = 'COMPLETED'
+                        AND mt.completed_at >= $2
+                        AND mt.completed_at <= $3
+                        AND mt.due_date < $2
+                    )
+                )
+                AND (COALESCE(
+                        mt.assigned_user_id,
+                        CASE
+                            WHEN e.assignment_mode = 'DIRECT' THEN e.assigned_user_id
+                            WHEN e.assignment_mode = 'FREE_POOL' THEN NULL
+                            ELSE COALESCE(w.assigned_user_id, z.assigned_user_id)
+                        END
+                    ) = $1 OR mt.completed_by = $1)
+             )
+             SELECT 
+                COUNT(*) FILTER (WHERE due_date >= $2 AND due_date <= $3 AND status != 'CANCELLED' AND (effective_assignee = $1 OR status = 'COMPLETED')) as total_tasks,
+                COUNT(*) FILTER (WHERE due_date >= $2 AND due_date <= $3 AND status = 'COMPLETED' AND completed_at >= $2 AND completed_at <= $3) as completed_tasks,
+                COUNT(*) FILTER (WHERE status = 'COMPLETED' AND completed_at >= $2 AND completed_at <= $3 AND due_date < $2) as old_debt_closed_tasks,
+                COUNT(*) FILTER (WHERE due_date >= $2 AND due_date <= $3 AND due_date <= CURRENT_DATE AND status != 'CANCELLED' AND (effective_assignee = $1 OR status = 'COMPLETED')) as due_by_now_tasks,
+                COUNT(*) FILTER (WHERE due_date >= $2 AND due_date <= $3 AND status = 'COMPLETED' AND due_date <= CURRENT_DATE AND completed_at >= $2 AND completed_at <= $3) as completed_due_by_now_tasks,
+                COUNT(*) FILTER (WHERE status IN ('PENDING', 'IN_PROGRESS') AND due_date < CURRENT_DATE AND effective_assignee = $1) as overdue_open_tasks,
+                COUNT(*) FILTER (WHERE status = 'IN_PROGRESS' AND verification_status = 'REJECTED' AND effective_assignee = $1) as rework_open_tasks,
+                COUNT(*) FILTER (
+                    WHERE status = 'IN_PROGRESS'
+                      AND verification_status = 'REJECTED'
+                      AND effective_assignee = $1
+                      AND COALESCE(verified_at::date, CURRENT_DATE) <= CURRENT_DATE - 3
+                ) as stale_rework_tasks,
                 COUNT(*) FILTER (WHERE responsible_user_id_at_completion = $1 AND was_overdue = TRUE AND completed_at >= $2 AND completed_at <= $3) as overdue_completed_tasks,
                 COALESCE(SUM(overdue_days_at_completion) FILTER (WHERE responsible_user_id_at_completion = $1 AND was_overdue = TRUE AND completed_at >= $2 AND completed_at <= $3), 0) as overdue_completed_days,
                 COALESCE(SUM(bonus_earned) FILTER (WHERE status = 'COMPLETED' AND completed_at >= $2 AND completed_at <= $3), 0) as bonus
-             FROM equipment_maintenance_tasks
-             WHERE 
-                (
-                    -- 1. Tasks assigned or completed this month
-                    ((assigned_user_id = $1 OR completed_by = $1) AND due_date >= $2 AND due_date <= $3)
-                    OR
-                    -- 2. Tasks completed or REJECTED this month by user
-                    ((completed_by = $1 OR assigned_user_id = $1) AND (
-                        (status = 'COMPLETED' AND completed_at >= $2 AND completed_at <= $3) OR
-                        (verification_status = 'REJECTED' AND verified_at >= $2 AND verified_at <= $3)
-                    ))
-                )`,
+             FROM scoped_tasks`,
             [userId, startOfMonth, endOfMonth]
         );
 
@@ -516,15 +552,27 @@ export async function GET(
             const assigned = Number(monthlyMetrics['maintenance_tasks_assigned']) || 0;
             const dueByNow = Number(maintRes.rows[0]?.due_by_now_tasks || 0);
             const completedDueByNow = Number(maintRes.rows[0]?.completed_due_by_now_tasks || 0);
+            const oldDebtClosed = Number(maintRes.rows[0]?.old_debt_closed_tasks || 0);
             const overdueOpen = Number(maintRes.rows[0]?.overdue_open_tasks || 0);
+            const reworkOpen = Number(maintRes.rows[0]?.rework_open_tasks || 0);
+            const staleRework = Number(maintRes.rows[0]?.stale_rework_tasks || 0);
             const overdueCompletedTasks = Number(maintRes.rows[0]?.overdue_completed_tasks || 0);
             const overdueCompletedDays = Number(maintRes.rows[0]?.overdue_completed_days || 0);
             const upcoming = Math.max(0, assigned - dueByNow);
-            const efficiency = assigned > 0 ? (completed / assigned) * 100 : (completed > 0 ? 100 : 0);
-            const liveEfficiency = dueByNow > 0 ? (completedDueByNow / dueByNow) * 100 : (completed > 0 ? 100 : 0);
+            const qualityMetrics = calculateMaintenanceQualityMetrics({
+                assigned,
+                completed,
+                dueByNow,
+                completedDueByNow,
+                overdueOpenTasks: overdueOpen,
+                reworkOpenTasks: reworkOpen,
+                staleReworkTasks: staleRework
+            });
+            const efficiency = qualityMetrics.efficiency;
+            const liveEfficiency = qualityMetrics.live_efficiency;
             const projectedCompleted = assigned > 0
-                ? Math.min(assigned, completed + (upcoming * (liveEfficiency / 100)))
-                : completed;
+                ? Math.min(assigned, qualityMetrics.adjusted_completed + (upcoming * (liveEfficiency / 100)))
+                : qualityMetrics.adjusted_completed;
             const projectedEfficiency = assigned > 0
                 ? (projectedCompleted / assigned) * 100
                 : (projectedCompleted > 0 ? 100 : 0);
@@ -588,12 +636,18 @@ export async function GET(
                 current_value: completedDueByNow,
                 target_value: dueByNow,
                 completed_month_value: completed,
+                adjusted_completed_month_value: qualityMetrics.adjusted_completed,
+                old_debt_closed_tasks: oldDebtClosed,
                 total_month_target: assigned,
+                raw_efficiency: assigned > 0 ? (completed / assigned) * 100 : (completed > 0 ? 100 : 0),
                 efficiency,
                 live_efficiency: liveEfficiency,
-                live_current_value: completedDueByNow,
+                live_current_value: qualityMetrics.adjusted_completed_due_by_now,
                 live_target_value: dueByNow,
                 overdue_open_tasks: overdueOpen,
+                rework_open_tasks: reworkOpen,
+                stale_rework_tasks: staleRework,
+                quality_penalty_units: qualityMetrics.penalty_units,
                 upcoming_tasks: upcoming,
                 projected_completed_value: projectedCompleted,
                 projected_efficiency: projectedEfficiency,

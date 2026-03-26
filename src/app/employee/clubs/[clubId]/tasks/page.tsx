@@ -54,6 +54,16 @@ export default function EmployeeTasksPage() {
         due_today_count: number;
         upcoming_count: number;
         completed_count: number;
+        in_progress_count: number;
+        rework_count: number;
+        stale_rework_count: number;
+        month_plan_count: number;
+        month_completed_count: number;
+        old_debt_closed_count: number;
+        quality_penalty_units: number;
+        adjusted_month_completed_count: number;
+        raw_efficiency: number;
+        adjusted_efficiency: number;
     } | null>(null)
     const [filterMode, setFilterMode] = useState<'current' | 'all'>('current')
     
@@ -106,7 +116,17 @@ export default function EmployeeTasksPage() {
                         overdue_count: parseInt(assignedData.stats.overdue_count || '0'),
                         due_today_count: parseInt(assignedData.stats.due_today_count || '0'),
                         upcoming_count: parseInt(assignedData.stats.upcoming_count || '0'),
-                        completed_count: parseInt(assignedData.stats.completed_count || '0')
+                        completed_count: parseInt(assignedData.stats.completed_count || '0'),
+                        in_progress_count: parseInt(assignedData.stats.in_progress_count || '0'),
+                        rework_count: parseInt(assignedData.stats.rework_count || '0'),
+                        stale_rework_count: parseInt(assignedData.stats.stale_rework_count || '0'),
+                        month_plan_count: parseInt(assignedData.stats.month_plan_count || '0'),
+                        month_completed_count: parseInt(assignedData.stats.month_completed_count || '0'),
+                        old_debt_closed_count: parseInt(assignedData.stats.old_debt_closed_count || '0'),
+                        quality_penalty_units: parseInt(assignedData.stats.quality_penalty_units || '0'),
+                        adjusted_month_completed_count: parseInt(assignedData.stats.adjusted_month_completed_count || '0'),
+                        raw_efficiency: parseFloat(assignedData.stats.raw_efficiency || '0'),
+                        adjusted_efficiency: parseFloat(assignedData.stats.adjusted_efficiency || '0')
                     })
                 }
             }
@@ -384,24 +404,32 @@ export default function EmployeeTasksPage() {
                             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
                                 <div>
                                     <h3 className="text-sm font-black uppercase tracking-wider">План на месяц</h3>
-                                    <p className="text-xs text-muted-foreground mt-0.5">Общий прогресс по обслуживанию</p>
+                                    <p className="text-xs text-muted-foreground mt-0.5">Выполнено по плану текущего месяца</p>
+                                    <p className="text-[11px] text-indigo-600 mt-1 font-bold">
+                                        Выполнение плана: {apiStats.month_completed_count} из {apiStats.month_plan_count} · {apiStats.raw_efficiency.toFixed(1)}%
+                                    </p>
+                                    {(apiStats.old_debt_closed_count || 0) > 0 && (
+                                        <p className="text-[11px] text-slate-500 mt-1">
+                                            Закрыт старый долг: <span className="font-bold text-slate-700">{apiStats.old_debt_closed_count}</span>
+                                        </p>
+                                    )}
                                 </div>
                                 <div className="flex items-center gap-3">
                                     <div className="text-right">
                                         <span className="text-xl font-black text-emerald-600">
-                                            {apiStats.completed_count}
+                                            {apiStats.month_completed_count}
                                         </span>
                                         <span className="text-sm font-bold text-muted-foreground ml-1">
-                                            / {apiStats.completed_count + apiStats.overdue_count + apiStats.due_today_count + apiStats.upcoming_count}
+                                            / {apiStats.month_plan_count}
                                         </span>
                                     </div>
                                     <Badge variant="secondary" className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 font-bold">
-                                        {Math.round((apiStats.completed_count / (apiStats.completed_count + apiStats.overdue_count + apiStats.due_today_count + apiStats.upcoming_count || 1)) * 100)}%
+                                        {Math.round(apiStats.raw_efficiency || 0)}%
                                     </Badge>
                                 </div>
                             </div>
                             <Progress 
-                                value={(apiStats.completed_count / (apiStats.completed_count + apiStats.overdue_count + apiStats.due_today_count + apiStats.upcoming_count || 1)) * 100} 
+                                value={apiStats.raw_efficiency || 0} 
                                 className="h-2 bg-slate-100 dark:bg-slate-700"
                             />
                         </CardContent>
@@ -471,7 +499,7 @@ export default function EmployeeTasksPage() {
                     {/* In Progress */}
                     <Card className={cn(
                         "border-none shadow-sm transition-all",
-                        stats.in_progress > 0 
+                        (apiStats?.in_progress_count || 0) > 0 
                             ? "bg-indigo-50/80 dark:bg-indigo-900/10 ring-1 ring-indigo-200 dark:ring-indigo-900/30" 
                             : "bg-white dark:bg-slate-800/50"
                     )}>
@@ -480,16 +508,19 @@ export default function EmployeeTasksPage() {
                                 <div className="min-w-0">
                                     <p className={cn(
                                         "text-[9px] md:text-xs font-black uppercase tracking-widest mb-0.5",
-                                        stats.in_progress > 0 ? "text-indigo-600" : "text-muted-foreground"
+                                        (apiStats?.in_progress_count || 0) > 0 ? "text-indigo-600" : "text-muted-foreground"
                                     )}>В работе</p>
                                     <p className={cn(
                                         "text-xl md:text-3xl font-black",
-                                        stats.in_progress > 0 ? "text-indigo-700 dark:text-indigo-300" : "text-slate-900 dark:text-slate-100"
-                                    )}>{stats.in_progress}</p>
+                                        (apiStats?.in_progress_count || 0) > 0 ? "text-indigo-700 dark:text-indigo-300" : "text-slate-900 dark:text-slate-100"
+                                    )}>{apiStats?.in_progress_count || 0}</p>
+                                    {(apiStats?.rework_count || 0) > 0 && (
+                                        <p className="text-[10px] text-indigo-500 mt-1">На доработке: {apiStats?.rework_count || 0}</p>
+                                    )}
                                 </div>
                                 <div className={cn(
                                     "h-8 w-8 md:h-10 md:w-10 rounded-xl flex items-center justify-center shadow-sm",
-                                    stats.in_progress > 0 ? "bg-indigo-500 text-white" : "bg-slate-100 dark:bg-slate-700 text-slate-400"
+                                    (apiStats?.in_progress_count || 0) > 0 ? "bg-indigo-500 text-white" : "bg-slate-100 dark:bg-slate-700 text-slate-400"
                                 )}>
                                     <Play className="h-4 w-4 md:h-5 md:w-5" />
                                 </div>
@@ -502,8 +533,8 @@ export default function EmployeeTasksPage() {
                         <CardContent className="p-3 md:p-6">
                             <div className="flex items-center justify-between">
                                 <div className="min-w-0">
-                                    <p className="text-[9px] md:text-xs font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400 mb-0.5">Выполнено</p>
-                                    <p className="text-xl md:text-3xl font-black text-emerald-900 dark:text-emerald-100">{apiStats?.completed_count || 0}</p>
+                                    <p className="text-[9px] md:text-xs font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400 mb-0.5">Выполнено по плану</p>
+                                    <p className="text-xl md:text-3xl font-black text-emerald-900 dark:text-emerald-100">{apiStats?.month_completed_count || 0}</p>
                                 </div>
                                 <div className="h-8 w-8 md:h-10 md:w-10 bg-emerald-500 text-white rounded-xl flex items-center justify-center shadow-sm">
                                     <CheckCircle2 className="h-4 w-4 md:h-5 md:w-5" />

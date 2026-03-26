@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
-import { Loader2, Plus, Wallet, Sun, Moon, Percent, Clock, DollarSign, Edit, Trash2, Save, ArrowLeft, HelpCircle, Calculator, Calendar, Info, TrendingUp, Wrench, ClipboardCheck, Coins, ShieldAlert, ArrowRight } from "lucide-react"
+import { Loader2, Plus, Wallet, Sun, Moon, Percent, Clock, DollarSign, Edit, Trash2, Save, ArrowLeft, HelpCircle, Calculator, Calendar, Info, TrendingUp, Wrench, ClipboardCheck, Coins, ShieldAlert, ArrowRight, Trophy } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
@@ -58,6 +58,15 @@ const BONUS_TYPES = [
         activeClass: 'border-purple-500 ring-1 ring-purple-500 bg-purple-50/30',
         iconClass: 'bg-purple-100 text-purple-700',
         dotClass: 'bg-purple-500'
+    },
+    {
+        type: 'leaderboard_rank' as const,
+        label: 'Бонус за место',
+        description: 'Премия за место в рейтинге сотрудников клуба за месяц.',
+        icon: Trophy,
+        activeClass: 'border-amber-500 ring-1 ring-amber-500 bg-amber-50/30',
+        iconClass: 'bg-amber-100 text-amber-700',
+        dotClass: 'bg-amber-500'
     }
 ]
 
@@ -78,7 +87,7 @@ export interface Formula {
 }
 
 export interface Bonus {
-    type: 'percent_revenue' | 'fixed' | 'progressive_percent' | 'checklist' | 'maintenance_kpi'
+    type: 'percent_revenue' | 'fixed' | 'progressive_percent' | 'checklist' | 'maintenance_kpi' | 'leaderboard_rank'
     name?: string
     source?: 'cash' | 'card' | 'total'
     percent?: number
@@ -99,6 +108,8 @@ export interface Bonus {
     efficiency_thresholds?: { from_percent: number; multiplier?: number; amount?: number }[]
     payout_type?: 'REAL_MONEY' | 'VIRTUAL_BALANCE'
     payout_timing?: 'SHIFT' | 'MONTH'
+    rank_from?: number
+    rank_to?: number
 }
 
 export interface PeriodBonus {
@@ -271,6 +282,7 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
         
         else if (type === 'checklist') { newBonus.amount = 500; newBonus.min_score = 100; newBonus.mode = 'SHIFT' }
         else if (type === 'maintenance_kpi') { newBonus.amount = 50; newBonus.calculation_mode = 'PER_TASK'; newBonus.reward_type = 'FIXED' }
+        else if (type === 'leaderboard_rank') { newBonus.amount = 3000; newBonus.rank_from = 1; newBonus.rank_to = 1; newBonus.mode = 'MONTH'; newBonus.payout_timing = 'MONTH' }
         
         setFormula(prev => {
             const newBonuses = [...prev.bonuses, newBonus];
@@ -530,8 +542,8 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                                             <div id={`bonus-${index}`} key={index} className={`group relative rounded-[2rem] p-8 border shadow-sm transition-all duration-300 ${'bg-white hover:shadow-xl hover:border-purple-200'}`}>
                                                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
                                                     <div className="flex items-center gap-4 flex-1">
-                                                        <div className={`h-12 w-12 rounded-2xl flex items-center justify-center shadow-sm ${bonus.type === 'progressive_percent' ? 'bg-emerald-600 text-white' : 'bg-purple-600 text-white'}`}>{bonus.type === 'percent_revenue' && <Percent className="h-6 w-6" />}{bonus.type === 'fixed' && <Coins className="h-6 w-6" />}{bonus.type === 'progressive_percent' && <TrendingUp className="h-6 w-6" />}{bonus.type === 'checklist' && <ClipboardCheck className="h-6 w-6" />}{bonus.type === 'maintenance_kpi' && <Wrench className="h-6 w-6" />}</div>
-                                                        <div className="space-y-1"><Badge variant="secondary" className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-lg ${bonus.type === 'progressive_percent' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : ''}`}>{bonus.type === 'percent_revenue' && 'Процент от выручки'}{bonus.type === 'fixed' && 'Фиксированный бонус'}{bonus.type === 'progressive_percent' && 'Бонус за выполнение плана'}{bonus.type === 'checklist' && 'Бонус за чек-лист'}{bonus.type === 'maintenance_kpi' && 'Бонус за обслуживание'}</Badge><Input value={bonus.name || ''} onChange={(e) => updateBonus(index, 'name', e.target.value)} className="h-10 text-xl font-black bg-transparent border-none p-0 focus-visible:ring-0 focus-visible:outline-none placeholder:opacity-20" placeholder="Название бонуса..." /></div>
+                                                        <div className={`h-12 w-12 rounded-2xl flex items-center justify-center shadow-sm ${bonus.type === 'progressive_percent' ? 'bg-emerald-600 text-white' : bonus.type === 'leaderboard_rank' ? 'bg-amber-500 text-white' : 'bg-purple-600 text-white'}`}>{bonus.type === 'percent_revenue' && <Percent className="h-6 w-6" />}{bonus.type === 'fixed' && <Coins className="h-6 w-6" />}{bonus.type === 'progressive_percent' && <TrendingUp className="h-6 w-6" />}{bonus.type === 'checklist' && <ClipboardCheck className="h-6 w-6" />}{bonus.type === 'maintenance_kpi' && <Wrench className="h-6 w-6" />}{bonus.type === 'leaderboard_rank' && <Trophy className="h-6 w-6" />}</div>
+                                                        <div className="space-y-1"><Badge variant="secondary" className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-lg ${bonus.type === 'progressive_percent' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : bonus.type === 'leaderboard_rank' ? 'bg-amber-50 text-amber-700 border-amber-100' : ''}`}>{bonus.type === 'percent_revenue' && 'Процент от выручки'}{bonus.type === 'fixed' && 'Фиксированный бонус'}{bonus.type === 'progressive_percent' && 'Бонус за выполнение плана'}{bonus.type === 'checklist' && 'Бонус за чек-лист'}{bonus.type === 'maintenance_kpi' && 'Бонус за обслуживание'}{bonus.type === 'leaderboard_rank' && 'Бонус за место'}</Badge><Input value={bonus.name || ''} onChange={(e) => updateBonus(index, 'name', e.target.value)} className="h-10 text-xl font-black bg-transparent border-none p-0 focus-visible:ring-0 focus-visible:outline-none placeholder:opacity-20" placeholder="Название бонуса..." /></div>
                                                     </div>
                                                     <Button type="button" variant="ghost" size="icon" className="h-10 w-10 rounded-xl hover:bg-red-500 hover:text-white transition-all shrink-0" onClick={() => removeBonus(index)}><Trash2 className="h-5 w-5" /></Button>
                                                 </div>
@@ -549,6 +561,7 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                                                                     
                                                                     {bonus.type === 'checklist' && "Премия за дисциплину. Начисляется только если средний балл по чеклистам за смену (или месяц) выше порога."}
                                                                     {bonus.type === 'maintenance_kpi' && "Оплата за техническую работу. Можно платить за каждую выполненную задачу по обслуживанию ПК."}
+                                                                    {bonus.type === 'leaderboard_rank' && "Система сравнивает сотрудников клуба по общему рейтингу за месяц и выдает премию за выбранное место в таблице."}
                                                                 </p>
                                                             </div>
                                                         </div>
@@ -563,12 +576,22 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                                                             </div>
                                                         </div>
 
-                                                        {bonus.payout_type !== 'VIRTUAL_BALANCE' && (
+                                                        {bonus.payout_type !== 'VIRTUAL_BALANCE' && bonus.type !== 'leaderboard_rank' && (
                                                             <div className="flex flex-col gap-3">
                                                                 <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">Когда выплачивать?</Label>
                                                                 <div className="flex p-1.5 bg-emerald-50/50 rounded-2xl w-fit border border-emerald-100/50">
                                                                     <button type="button" className={`flex items-center gap-2 px-6 py-3 rounded-xl text-xs font-bold transition-all ${(!bonus.payout_timing || bonus.payout_timing === 'MONTH') ? 'bg-white shadow-md scale-[1.02] text-emerald-600' : 'text-emerald-700/50 hover:bg-white/50'}`} onClick={() => updateBonus(index, 'payout_timing', 'MONTH')}>В конце месяца</button>
                                                                     <button type="button" className={`flex items-center gap-2 px-6 py-3 rounded-xl text-xs font-bold transition-all ${bonus.payout_timing === 'SHIFT' ? 'bg-white shadow-md scale-[1.02] text-emerald-600' : 'text-emerald-700/50 hover:bg-white/50'}`} onClick={() => updateBonus(index, 'payout_timing', 'SHIFT')}>Выдавать в конце смены</button>
+                                                                </div>
+                                                            </div>
+                                                        )}
+
+                                                        {bonus.type === 'leaderboard_rank' && (
+                                                            <div className="flex flex-col gap-3">
+                                                                <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">Когда выплачивать?</Label>
+                                                                <div className="flex items-center gap-2 px-6 py-3 rounded-2xl text-xs font-bold bg-amber-50 text-amber-700 border border-amber-100 w-fit">
+                                                                    <Trophy className="h-4 w-4" />
+                                                                    Только в конце месяца
                                                                 </div>
                                                             </div>
                                                         )}
@@ -604,6 +627,44 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                                                                 </div>
                                                             )}
                                                             {bonus.type === 'fixed' && <div className="relative max-w-xs group"><Input type="number" value={bonus.amount} onChange={e => updateBonus(index, 'amount', parseFloat(e.target.value) || 0)} className="h-14 rounded-2xl border-muted-foreground/10 bg-muted/5 pl-6 pr-12 text-xl font-black text-slate-700" /><span className="absolute right-6 top-1/2 -translate-y-1/2 text-sm font-black text-muted-foreground">₽</span></div>}
+
+                                                            {bonus.type === 'leaderboard_rank' && (
+                                                                <div className="space-y-4">
+                                                                    <div className="grid grid-cols-3 gap-4">
+                                                                        <div className="relative">
+                                                                            <Input
+                                                                                type="number"
+                                                                                value={bonus.rank_from ?? 1}
+                                                                                onChange={e => updateBonus(index, 'rank_from', Math.max(1, parseInt(e.target.value || '1', 10)))}
+                                                                                className="h-12 rounded-xl text-center font-black border-amber-200 bg-amber-50"
+                                                                            />
+                                                                            <span className="absolute left-3 -top-2 bg-white px-1 text-[8px] font-black text-muted-foreground uppercase rounded">С места</span>
+                                                                        </div>
+                                                                        <div className="relative">
+                                                                            <Input
+                                                                                type="number"
+                                                                                value={bonus.rank_to ?? bonus.rank_from ?? 1}
+                                                                                onChange={e => updateBonus(index, 'rank_to', Math.max(1, parseInt(e.target.value || '1', 10)))}
+                                                                                className="h-12 rounded-xl text-center font-black border-amber-200 bg-amber-50"
+                                                                            />
+                                                                            <span className="absolute left-3 -top-2 bg-white px-1 text-[8px] font-black text-muted-foreground uppercase rounded">По место</span>
+                                                                        </div>
+                                                                        <div className="relative">
+                                                                            <Input
+                                                                                type="number"
+                                                                                value={bonus.amount ?? 0}
+                                                                                onChange={e => updateBonus(index, 'amount', parseFloat(e.target.value) || 0)}
+                                                                                className="h-12 rounded-xl text-center font-black border-amber-200 bg-white"
+                                                                            />
+                                                                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-amber-500">₽</span>
+                                                                            <span className="absolute left-3 -top-2 bg-white px-1 text-[8px] font-black text-muted-foreground uppercase rounded">Награда</span>
+                                                                        </div>
+                                                                    </div>
+                                                                    <div className="rounded-2xl border border-amber-100 bg-amber-50/50 p-4 text-[11px] font-medium text-amber-800">
+                                                                        Сотрудник получит бонус, если его место в рейтинге месяца попадет в выбранный диапазон.
+                                                                    </div>
+                                                                </div>
+                                                            )}
                                                             
 
 

@@ -267,7 +267,7 @@ export async function calculateSalary(
                 }
             }
 
-            if (bonus.type !== 'checklist' && bonus.type !== 'maintenance_kpi') {
+            if (bonus.type !== 'checklist' && bonus.type !== 'maintenance_kpi' && bonus.type !== 'leaderboard_rank' && bonusAmount > 0) {
                 const payoutType = bonus.payout_type || 'REAL_MONEY';
                 const isMonthly = bonus.mode === 'MONTH';
                 

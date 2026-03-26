@@ -20,7 +20,9 @@ import {
     Percent,
     TrendingUp,
     Wallet,
-    Wrench
+    Wrench,
+    Trophy,
+    Lock
 } from 'lucide-react';
 
 interface PayrollStats {
@@ -105,12 +107,61 @@ interface Employee {
     }>;
     metric_categories?: Record<string, 'INCOME' | 'EXPENSE' | 'OTHER'>;
     metric_metadata?: Record<string, { label: string; category: string; is_numeric?: boolean }>;
+    leaderboard?: {
+        rank: number;
+        score: number;
+        total_participants: number;
+        is_frozen?: boolean;
+        finalized_at?: string | null;
+        leader?: {
+            rank: number;
+            user_id: string;
+            full_name: string;
+            score: number;
+        } | null;
+        top?: Array<{
+            rank: number;
+            user_id: string;
+            full_name: string;
+            score: number;
+        }>;
+        breakdown?: {
+            revenue: number;
+            checklist: number;
+            maintenance: number;
+            schedule: number;
+            discipline: number;
+        };
+        details?: {
+            revenue_per_shift: number;
+            completed_shifts: number;
+            planned_shifts: number;
+            evaluation_score: number;
+            maintenance_tasks_completed: number;
+            maintenance_tasks_assigned: number;
+            maintenance_overdue_open_tasks: number;
+            maintenance_rework_open_tasks: number;
+            maintenance_stale_rework_tasks: number;
+            maintenance_overdue_completed_tasks: number;
+            maintenance_overdue_completed_days: number;
+        };
+    } | null;
 }
 
 interface PayrollData {
     period: { month: number; year: number };
     stats: PayrollStats;
     employees: Employee[];
+    leaderboard?: {
+        is_frozen: boolean;
+        finalized_at: string | null;
+        top: Array<{
+            rank: number;
+            user_id: string;
+            full_name: string;
+            score: number;
+        }>;
+    };
 }
 
 export default function PayrollDashboard({ clubId }: { clubId: string }) {
@@ -124,6 +175,7 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
     const [paymentModal, setPaymentModal] = useState<{ open: boolean; employee: Employee | null }>({ open: false, employee: null });
     const [paymentForm, setPaymentForm] = useState({ amount: '', method: 'CASH', notes: '', paymentType: 'salary' as 'salary' | 'advance' | 'bonus' });
     const [processingPayment, setProcessingPayment] = useState(false);
+    const [isFreezingLeaderboard, setIsFreezingLeaderboard] = useState(false);
 
     const toggleCard = (employeeId: number) => {
         setExpandedCards(prev => {
@@ -290,7 +342,8 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                             target: b.target_value || 0,
                             is_met: b.is_met || false
                         })) : []
-                    }))
+                    })),
+                    leaderboard: json.leaderboard
                 });
             } else {
                 setData(json);
@@ -309,6 +362,31 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
         else if (newMonth < 1) { newMonth = 12; newYear--; }
         setSelectedMonth(newMonth);
         setSelectedYear(newYear);
+    };
+
+    const freezeLeaderboard = async () => {
+        setIsFreezingLeaderboard(true);
+        try {
+            const res = await fetch(`/api/clubs/${clubId}/salaries/leaderboard`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ month: selectedMonth, year: selectedYear })
+            });
+            const json = await res.json();
+
+            if (!res.ok) {
+                alert(json.error || 'Не удалось заморозить рейтинг');
+                return;
+            }
+
+            await fetchData();
+            alert('Рейтинг заморожен');
+        } catch (error) {
+            console.error('Freeze leaderboard error:', error);
+            alert('Ошибка заморозки рейтинга');
+        } finally {
+            setIsFreezingLeaderboard(false);
+        }
     };
 
     const filteredEmployees = (data?.employees || []).filter(emp =>
@@ -335,6 +413,8 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
 
     const stats = data.stats || { total_employees: 0, total_accrued: 0, total_paid: 0, pending_payment: 0 };
     const monthNames = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
+    const now = new Date();
+    const isFuturePeriod = selectedYear > now.getFullYear() || (selectedYear === now.getFullYear() && selectedMonth > now.getMonth() + 1);
 
     return (
         <div className="space-y-8 p-8">
@@ -347,7 +427,23 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                         <Button variant="ghost" size="icon" onClick={() => navigateMonth(1)}><ChevronRight className="h-5 w-5" /></Button>
                     </div>
                 </div>
-                <Button variant="ghost" onClick={() => { setSelectedMonth(new Date().getMonth() + 1); setSelectedYear(new Date().getFullYear()); }}>Сегодня</Button>
+                <div className="flex items-center gap-2">
+                    {data.leaderboard?.is_frozen ? (
+                        <Badge variant="secondary" className="gap-1.5 px-3 py-2">
+                            <Lock className="h-3.5 w-3.5" />
+                            Рейтинг заморожен
+                        </Badge>
+                    ) : null}
+                    <Button
+                        variant="outline"
+                        onClick={freezeLeaderboard}
+                        disabled={isFuturePeriod || isFreezingLeaderboard || data.leaderboard?.is_frozen}
+                    >
+                        {isFreezingLeaderboard ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trophy className="h-4 w-4 mr-2" />}
+                        Заморозить рейтинг
+                    </Button>
+                    <Button variant="ghost" onClick={() => { setSelectedMonth(new Date().getMonth() + 1); setSelectedYear(new Date().getFullYear()); }}>Сегодня</Button>
+                </div>
             </div>
 
             <div className="grid gap-6 md:grid-cols-4">
@@ -365,6 +461,28 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                 <Button variant="outline"><Filter className="h-4 w-4 mr-2" />Фильтры</Button>
             </div>
 
+            {data.leaderboard?.top?.length ? (
+                <Card>
+                    <CardHeader className="pb-3">
+                        <CardTitle className="text-base flex items-center gap-2">
+                            <Trophy className="h-4 w-4 text-amber-500" />
+                            Рейтинг сотрудников
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-2">
+                        {data.leaderboard.top.slice(0, 5).map((item) => (
+                            <div key={item.user_id} className="flex items-center justify-between rounded-xl border px-4 py-3">
+                                <div className="flex items-center gap-3">
+                                    <Badge variant={item.rank === 1 ? 'default' : 'secondary'}>#{item.rank}</Badge>
+                                    <span className="font-medium">{item.full_name}</span>
+                                </div>
+                                <span className="font-bold">{item.score.toFixed(1)} / 10</span>
+                            </div>
+                        ))}
+                    </CardContent>
+                </Card>
+            ) : null}
+
             {filteredEmployees.length === 0 ? (
                 <div className="text-center py-12 text-muted-foreground">Сотрудники не найдены</div>
             ) : (
@@ -380,6 +498,12 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                 <p className="text-sm text-muted-foreground">{employee.role || 'Сотрудник'}</p>
                                             </div>
                                             {employee.has_active_kpi && <Badge variant="secondary" className="text-xs">KPI</Badge>}
+                                            {employee.leaderboard?.rank ? (
+                                                <Badge variant="outline" className="text-xs gap-1">
+                                                    <Trophy className="h-3 w-3 text-amber-500" />
+                                                    #{employee.leaderboard.rank} · {employee.leaderboard.score.toFixed(1)}
+                                                </Badge>
+                                            ) : null}
                                         </div>
                                         <div className="grid grid-cols-5 gap-4 text-sm">
                                             <div><p className="text-muted-foreground mb-1">Смены</p><p className="font-medium">{employee.shifts_count}</p></div>
@@ -548,6 +672,71 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                         </div>
                                                     );
                                                 })()}
+
+                                                {employee.leaderboard?.breakdown && (
+                                                    <div className="bg-amber-50/60 border border-amber-100 rounded-2xl p-4 space-y-4">
+                                                        <div className="flex items-start justify-between gap-4">
+                                                            <div>
+                                                                <h4 className="text-sm font-semibold flex items-center gap-2">
+                                                                    <Trophy className="h-4 w-4 text-amber-500" />
+                                                                    Почему такая оценка
+                                                                </h4>
+                                                                <p className="text-xs text-muted-foreground mt-1">
+                                                                    Итог: {employee.leaderboard.score.toFixed(1)} / 10, место #{employee.leaderboard.rank} из {employee.leaderboard.total_participants}
+                                                                </p>
+                                                            </div>
+                                                            {employee.leaderboard.is_frozen ? (
+                                                                <Badge variant="secondary" className="gap-1.5">
+                                                                    <Lock className="h-3 w-3" />
+                                                                    Заморожен
+                                                                </Badge>
+                                                            ) : (
+                                                                <Badge variant="outline">Живой рейтинг</Badge>
+                                                            )}
+                                                        </div>
+
+                                                        <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+                                                            {[
+                                                                { key: 'revenue', label: 'Выручка', weight: '35%', value: employee.leaderboard.breakdown.revenue, tone: 'emerald' },
+                                                                { key: 'checklist', label: 'Чек-листы', weight: '25%', value: employee.leaderboard.breakdown.checklist, tone: 'purple' },
+                                                                { key: 'maintenance', label: 'Обслуживание', weight: '20%', value: employee.leaderboard.breakdown.maintenance, tone: 'indigo' },
+                                                                { key: 'schedule', label: 'График', weight: '10%', value: employee.leaderboard.breakdown.schedule, tone: 'sky' },
+                                                                { key: 'discipline', label: 'Дисциплина', weight: '10%', value: employee.leaderboard.breakdown.discipline, tone: 'rose' }
+                                                            ].map((item) => (
+                                                                <div key={item.key} className="rounded-xl bg-white border p-3">
+                                                                    <div className="flex items-center justify-between gap-2">
+                                                                        <span className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">{item.label}</span>
+                                                                        <span className="text-[10px] font-black text-amber-600">{item.weight}</span>
+                                                                    </div>
+                                                                    <div className="mt-2 text-xl font-black">{item.value.toFixed(1)}</div>
+                                                                    <div className="mt-2 h-2 rounded-full bg-muted overflow-hidden">
+                                                                        <div className="h-full rounded-full bg-amber-500" style={{ width: `${Math.min(item.value * 10, 100)}%` }} />
+                                                                    </div>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+
+                                                        {employee.leaderboard.details && (
+                                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                                                                <div className="rounded-xl bg-white border p-4 space-y-2">
+                                                                    <p className="font-semibold">Исходные данные</p>
+                                                                    <div className="flex justify-between gap-4"><span className="text-muted-foreground">Выручка на смену</span><span className="font-bold">{formatCurrency(employee.leaderboard.details.revenue_per_shift)}</span></div>
+                                                                    <div className="flex justify-between gap-4"><span className="text-muted-foreground">Чек-лист средний</span><span className="font-bold">{employee.leaderboard.details.evaluation_score.toFixed(1)}%</span></div>
+                                                                    <div className="flex justify-between gap-4"><span className="text-muted-foreground">Смены</span><span className="font-bold">{employee.leaderboard.details.completed_shifts} / {employee.leaderboard.details.planned_shifts || employee.leaderboard.details.completed_shifts}</span></div>
+                                                                    <div className="flex justify-between gap-4"><span className="text-muted-foreground">Обслуживание</span><span className="font-bold">{employee.leaderboard.details.maintenance_tasks_completed} / {employee.leaderboard.details.maintenance_tasks_assigned}</span></div>
+                                                                </div>
+                                                                <div className="rounded-xl bg-white border p-4 space-y-2">
+                                                                    <p className="font-semibold">Что снижает оценку</p>
+                                                                    <div className="flex justify-between gap-4"><span className="text-muted-foreground">Просрочки открытые</span><span className="font-bold">{employee.leaderboard.details.maintenance_overdue_open_tasks}</span></div>
+                                                                    <div className="flex justify-between gap-4"><span className="text-muted-foreground">Возвраты в доработку</span><span className="font-bold">{employee.leaderboard.details.maintenance_rework_open_tasks}</span></div>
+                                                                    <div className="flex justify-between gap-4"><span className="text-muted-foreground">Старые rework</span><span className="font-bold">{employee.leaderboard.details.maintenance_stale_rework_tasks}</span></div>
+                                                                    <div className="flex justify-between gap-4"><span className="text-muted-foreground">Закрыто с просрочкой</span><span className="font-bold">{employee.leaderboard.details.maintenance_overdue_completed_tasks}</span></div>
+                                                                    <div className="flex justify-between gap-4"><span className="text-muted-foreground">Дней просрочки</span><span className="font-bold">{employee.leaderboard.details.maintenance_overdue_completed_days}</span></div>
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
 
                                                 {/* 2. Detailed KPI Cards (replacing progress bar) */}
                                                 {employee.has_active_kpi && employee.period_bonuses && (
@@ -1017,14 +1206,14 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                                                     <span className="text-xl">🔧</span>
                                                                                     <div>
                                                                                         <span className="font-bold text-sm">{employee.maintenance_status.name || 'KPI Обслуживание'}</span>
-                                                                                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Задачи за период</p>
+                                                                                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Единый стандарт месяца</p>
                                                                                     </div>
                                                                                 </div>
                                                                                 <div className="text-right">
                                                                                     <span className="font-bold text-lg text-indigo-600">
                                                                                         {employee.maintenance_status.current_value} / {employee.maintenance_status.target_value}
                                                                                     </span>
-                                                                                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">задач выполнено</p>
+                                                                                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">выполнено по плану</p>
                                                                                 </div>
                                                                             </div>
 
@@ -1034,7 +1223,7 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                                                 </div>
                                                                                 <div className="text-[11px] leading-relaxed text-indigo-800 dark:text-indigo-300">
                                                                                     <p className="font-bold mb-0.5 whitespace-nowrap">Эффективность обслуживания: {employee.maintenance_status.efficiency.toFixed(1)}%</p>
-                                                                                    <p>Расчет бонуса за выполнение определенного количества задач за месяц.</p>
+                                                                                    <p>По плану месяца выполнено: {employee.maintenance_status.current_value} из {employee.maintenance_status.target_value}. Просрочки и доработки штрафуются деньгами, а не уменьшают процент выполнения.</p>
                                                                                 </div>
                                                                             </div>
 
@@ -1085,9 +1274,19 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                                                     }`}>
                                                                                         {employee.maintenance_status.is_met ? 'Активен' : 'Нет задач'}
                                                                                     </span>
-                                                                                    {(employee.maintenance_status.overdue_incidents || 0) > 0 && (
+                                                                                    {(employee.maintenance_status.old_debt_closed_tasks || 0) > 0 && (
+                                                                                        <p className="text-[10px] text-muted-foreground mt-1">
+                                                                                            Закрыт старый долг: {employee.maintenance_status.old_debt_closed_tasks}
+                                                                                        </p>
+                                                                                    )}
+                                                                                    {(employee.maintenance_status.rework_open_tasks || 0) > 0 && (
+                                                                                        <p className="text-[10px] text-muted-foreground mt-1">
+                                                                                            Доработка: {employee.maintenance_status.rework_open_tasks}, старых: {employee.maintenance_status.stale_rework_tasks || 0}
+                                                                                        </p>
+                                                                                    )}
+                                                                                    {(employee.maintenance_status.overdue_open_tasks || 0) > 0 && (
                                                                                         <p className="text-[10px] text-muted-foreground mt-2">
-                                                                                            Просрочек: {employee.maintenance_status.overdue_incidents}
+                                                                                            Просрочено сейчас: {employee.maintenance_status.overdue_open_tasks || 0}
                                                                                         </p>
                                                                                     )}
                                                                                 </div>

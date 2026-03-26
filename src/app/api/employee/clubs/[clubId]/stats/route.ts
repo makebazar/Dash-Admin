@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/db';
 import { cookies } from 'next/headers';
+import { calculateMaintenanceOverduePenalty } from '@/lib/maintenance-penalties';
+import { calculateMaintenanceQualityMetrics } from '@/lib/maintenance-kpi-quality';
+import { getClubEmployeeLeaderboardState, getLeaderboardBonusAmount } from '@/lib/employee-leaderboard';
 
 export async function GET(
     request: Request,
@@ -90,6 +93,16 @@ export async function GET(
         
         const hourlyRate = parseFloat(scheme?.amount || '150');
         const standard_monthly_shifts = scheme?.standard_monthly_shifts || 15;
+        const leaderboardState = await getClubEmployeeLeaderboardState(clubId, year, month);
+        const leaderboard = leaderboardState.leaderboard;
+        const leaderboardEntry = leaderboard.find(entry => entry.user_id === userId) || null;
+        const leaderboardTop = leaderboard.slice(0, 5).map(entry => ({
+            rank: entry.rank,
+            user_id: entry.user_id,
+            full_name: entry.full_name,
+            score: entry.score
+        }));
+        const leaderboardLeader = leaderboardTop[0] || null;
 
         // 3. Get shifts data
         const shiftsRes = await query(
@@ -115,27 +128,84 @@ export async function GET(
 
         // Get maintenance stats (Sync with summary logic)
         const maintRes = await query(
-            `SELECT 
-                COUNT(*) as total_tasks,
-                COUNT(*) FILTER (WHERE status = 'COMPLETED' AND completed_at >= $2 AND completed_at <= $3) as completed_tasks,
-                COALESCE(SUM(bonus_earned) FILTER (WHERE status = 'COMPLETED' AND completed_at >= $2 AND completed_at <= $3), 0) as bonus
-             FROM equipment_maintenance_tasks
-             WHERE 
-                (
-                    -- 1. Tasks assigned or completed this month
-                    ((assigned_user_id = $1 OR completed_by = $1) AND due_date >= $2 AND due_date <= $3)
+            `WITH scoped_tasks AS (
+                SELECT
+                    mt.*,
+                    COALESCE(
+                        mt.assigned_user_id,
+                        CASE
+                            WHEN e.assignment_mode = 'DIRECT' THEN e.assigned_user_id
+                            WHEN e.assignment_mode = 'FREE_POOL' THEN NULL
+                            ELSE COALESCE(w.assigned_user_id, z.assigned_user_id)
+                        END
+                    ) AS effective_assignee
+                FROM equipment_maintenance_tasks mt
+                JOIN equipment e ON mt.equipment_id = e.id
+                LEFT JOIN club_workstations w ON e.workstation_id = w.id
+                LEFT JOIN club_zones z ON z.club_id = e.club_id AND z.name = w.zone
+                WHERE (
+                    (
+                        mt.due_date >= $2
+                        AND mt.due_date <= $3
+                    )
                     OR
-                    -- 2. Tasks completed or REJECTED this month by user
-                    ((completed_by = $1 OR assigned_user_id = $1) AND (
-                        (status = 'COMPLETED' AND completed_at >= $2 AND completed_at <= $3) OR
-                        (verification_status = 'REJECTED' AND verified_at >= $2 AND verified_at <= $3)
-                    ))
-                )`,
+                    (
+                        mt.completed_by = $1
+                        AND mt.status = 'COMPLETED'
+                        AND mt.completed_at >= $2
+                        AND mt.completed_at <= $3
+                        AND mt.due_date < $2
+                    )
+                )
+                AND (COALESCE(
+                        mt.assigned_user_id,
+                        CASE
+                            WHEN e.assignment_mode = 'DIRECT' THEN e.assigned_user_id
+                            WHEN e.assignment_mode = 'FREE_POOL' THEN NULL
+                            ELSE COALESCE(w.assigned_user_id, z.assigned_user_id)
+                        END
+                    ) = $1 OR mt.completed_by = $1)
+             )
+             SELECT 
+                COUNT(*) FILTER (WHERE due_date >= $2 AND due_date <= $3 AND status != 'CANCELLED' AND (effective_assignee = $1 OR status = 'COMPLETED')) as total_tasks,
+                COUNT(*) FILTER (WHERE due_date >= $2 AND due_date <= $3 AND status = 'COMPLETED' AND completed_at >= $2 AND completed_at <= $3) as completed_tasks,
+                COUNT(*) FILTER (WHERE status IN ('PENDING', 'IN_PROGRESS') AND due_date < CURRENT_DATE AND effective_assignee = $1) as overdue_open_tasks,
+                COUNT(*) FILTER (WHERE status = 'IN_PROGRESS' AND verification_status = 'REJECTED' AND effective_assignee = $1) as rework_open_tasks,
+                COUNT(*) FILTER (
+                    WHERE status = 'IN_PROGRESS'
+                      AND verification_status = 'REJECTED'
+                      AND effective_assignee = $1
+                      AND COALESCE(verified_at::date, CURRENT_DATE) <= CURRENT_DATE - 3
+                ) as stale_rework_tasks,
+                COALESCE(SUM(bonus_earned) FILTER (WHERE status = 'COMPLETED' AND completed_at >= $2 AND completed_at <= $3), 0) as bonus
+             FROM scoped_tasks`,
             [userId, startOfMonth, endOfMonth]
         );
         const maintTasksTotal = parseInt(maintRes.rows[0]?.total_tasks || '0');
         const maintTasksCompleted = parseInt(maintRes.rows[0]?.completed_tasks || '0');
-        const maintEfficiency = maintTasksTotal > 0 ? (maintTasksCompleted / maintTasksTotal) * 100 : (maintTasksCompleted > 0 ? 100 : 0);
+        const maintOverdueOpen = parseInt(maintRes.rows[0]?.overdue_open_tasks || '0');
+        const maintReworkOpen = parseInt(maintRes.rows[0]?.rework_open_tasks || '0');
+        const maintStaleRework = parseInt(maintRes.rows[0]?.stale_rework_tasks || '0');
+        const maintQualityMetrics = calculateMaintenanceQualityMetrics({
+            assigned: maintTasksTotal,
+            completed: maintTasksCompleted,
+            dueByNow: maintTasksTotal,
+            completedDueByNow: maintTasksCompleted,
+            overdueOpenTasks: maintOverdueOpen,
+            reworkOpenTasks: maintReworkOpen,
+            staleReworkTasks: maintStaleRework
+        });
+        const maintEfficiency = maintQualityMetrics.efficiency;
+
+        const overdueHistoryRes = await query(
+            `SELECT overdue_days_at_completion, was_overdue, bonus_earned
+             FROM equipment_maintenance_tasks
+             WHERE responsible_user_id_at_completion = $1
+               AND status = 'COMPLETED'
+               AND completed_at >= $2
+               AND completed_at <= $3`,
+            [userId, startOfMonth, endOfMonth]
+        );
 
         const monthlyBonusRes = await query(
             `SELECT COALESCE(SUM(bonus_amount), 0) as total_monthly_bonus
@@ -237,6 +307,17 @@ export async function GET(
         let checklistMonthlyBonusReal = 0;
         let maintenanceBonusVirtual = 0;
         let maintenanceBonusReal = 0;
+        let maintenancePenaltyVirtual = 0;
+        let maintenancePenaltyReal = 0;
+        let leaderboardBonusVirtual = 0;
+        let leaderboardBonusReal = 0;
+        const leaderboardBonusBreakdown: Array<{
+            name: string;
+            amount: number;
+            rank: number;
+            score: number;
+            is_virtual: boolean;
+        }> = [];
 
         // 4.1. Revenue KPI Bonuses (legacy + formula)
         const all_progressive_bonuses = [
@@ -340,20 +421,49 @@ export async function GET(
                 earned = parseFloat(maintRes.rows[0]?.bonus || '0') + totalManualMaintBonus;
             }
 
+            const penaltyMeta = calculateMaintenanceOverduePenalty(maintConfig, overdueHistoryRes.rows);
+            const appliedPenalty = Math.min(earned, penaltyMeta.total);
+            const finalEarned = Math.max(0, earned - appliedPenalty);
+
             if (earned > 0) {
                 if (maintConfig.payout_type === 'VIRTUAL_BALANCE') {
-                    maintenanceBonusVirtual += earned;
+                    maintenanceBonusVirtual += finalEarned;
+                    maintenancePenaltyVirtual += appliedPenalty;
                 } else {
-                    maintenanceBonusReal += earned;
+                    maintenanceBonusReal += finalEarned;
+                    maintenancePenaltyReal += appliedPenalty;
                 }
             }
         }
 
+        const leaderboardConfigs = (scheme.bonuses || []).filter((b: any) => b.type === 'leaderboard_rank');
+        leaderboardConfigs.forEach((bonus: any) => {
+            if (!leaderboardEntry) return;
+
+            const amount = getLeaderboardBonusAmount(bonus, leaderboardEntry.rank);
+            if (amount <= 0) return;
+
+            const isVirtual = bonus.payout_type === 'VIRTUAL_BALANCE';
+            if (isVirtual) {
+                leaderboardBonusVirtual += amount;
+            } else {
+                leaderboardBonusReal += amount;
+            }
+
+            leaderboardBonusBreakdown.push({
+                name: bonus.name || 'Бонус за место в рейтинге',
+                amount,
+                rank: leaderboardEntry.rank,
+                score: leaderboardEntry.score,
+                is_virtual: isVirtual
+            });
+        });
+
         const revenueKpiBonusReal = revenueKpiBreakdown.filter(b => !b.is_virtual).reduce((sum, b) => sum + b.amount, 0);
         const revenueKpiBonusVirtual = revenueKpiBreakdown.filter(b => b.is_virtual).reduce((sum, b) => sum + b.amount, 0);
         
-        const totalKpiBonusReal = revenueKpiBonusReal + checklistMonthlyBonusReal + maintenanceBonusReal;
-        const totalKpiBonusVirtual = revenueKpiBonusVirtual + checklistMonthlyBonusVirtual + maintenanceBonusVirtual;
+        const totalKpiBonusReal = revenueKpiBonusReal + checklistMonthlyBonusReal + maintenanceBonusReal + leaderboardBonusReal;
+        const totalKpiBonusVirtual = revenueKpiBonusVirtual + checklistMonthlyBonusVirtual + maintenanceBonusVirtual + leaderboardBonusVirtual;
         
         // Month earnings: Sum of calculated salary for closed shifts + ANY monthly bonuses reached so far
         const monthEarnings = totalCalculatedSalary + totalKpiBonusReal - totalBarDeductions;
@@ -364,6 +474,8 @@ export async function GET(
             shift_bonuses: totalShiftBonuses,
             checklist_bonuses: checklistMonthlyBonusReal,
             maintenance_bonuses: maintenanceBonusReal,
+            maintenance_penalty: maintenancePenaltyReal,
+            leaderboard_bonuses: leaderboardBonusBreakdown,
             revenue_kpi_bonuses: revenueKpiBonusReal,
             bar_deductions: totalBarDeductions,
             revenue_kpi_breakdown: revenueKpiBreakdown, 
@@ -371,6 +483,8 @@ export async function GET(
             virtual_bonuses: {
                 checklist: checklistMonthlyBonusVirtual,
                 maintenance: maintenanceBonusVirtual,
+                maintenance_penalty: maintenancePenaltyVirtual,
+                leaderboard: leaderboardBonusVirtual,
                 revenue: revenueKpiBonusVirtual,
                 total: totalKpiBonusVirtual
             }
@@ -383,7 +497,23 @@ export async function GET(
             month_earnings: monthEarnings,
             hourly_rate: hourlyRate,
             kpi_bonus: totalKpiBonusReal,
-            breakdown: breakdown
+            breakdown: breakdown,
+            leaderboard: leaderboardEntry ? {
+                rank: leaderboardEntry.rank,
+                score: leaderboardEntry.score,
+                total_participants: leaderboard.length,
+                is_frozen: leaderboardState.meta.is_frozen,
+                finalized_at: leaderboardState.meta.finalized_at,
+                leader: leaderboardLeader,
+                top: leaderboardTop,
+                breakdown: {
+                    revenue: leaderboardEntry.revenue_score,
+                    checklist: leaderboardEntry.checklist_score,
+                    maintenance: leaderboardEntry.maintenance_score,
+                    schedule: leaderboardEntry.schedule_score,
+                    discipline: leaderboardEntry.discipline_score
+                }
+            } : null
         });
 
     } catch (error) {

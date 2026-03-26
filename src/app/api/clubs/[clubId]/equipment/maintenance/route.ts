@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/db';
 import { cookies } from 'next/headers';
+import { calculateMaintenanceQualityMetrics } from '@/lib/maintenance-kpi-quality';
 
 // GET - List maintenance tasks
 export async function GET(
@@ -206,8 +207,8 @@ export async function GET(
         // Get stats
         const todayStr = new Date().toISOString().split('T')[0];
         const statsConditions = [`e.club_id = $1`];
-        const statsParams: any[] = [clubId, todayStr];
-        let statsParamIndex = 3;
+        const statsParams: any[] = [clubId, todayStr, dateFrom || null, dateTo || null];
+        let statsParamIndex = 5;
 
         const statsAssignee = myTasks ? userId : (assignedTo && assignedTo !== 'unassigned' ? assignedTo : null);
 
@@ -221,7 +222,15 @@ export async function GET(
 
         if (dateFrom) {
             if (includeOverdue) {
-                statsConditions.push(`(mt.due_date >= $${statsParamIndex} OR (mt.status = 'PENDING' AND mt.due_date < $${statsParamIndex}))`);
+                statsConditions.push(`(
+                    mt.due_date >= $${statsParamIndex}
+                    OR (mt.status IN ('PENDING', 'IN_PROGRESS') AND mt.due_date < $${statsParamIndex})
+                    OR (
+                        mt.status = 'COMPLETED'
+                        AND mt.completed_at >= $${statsParamIndex}::date
+                        AND mt.due_date < $${statsParamIndex}::date
+                    )
+                )`);
             } else {
                 statsConditions.push(`mt.due_date >= $${statsParamIndex}`);
             }
@@ -237,9 +246,37 @@ export async function GET(
 
         const statsResult = await query(
             `SELECT 
-                COUNT(*) FILTER (WHERE mt.status = 'PENDING' AND mt.due_date < $2) as overdue_count,
-                COUNT(*) FILTER (WHERE mt.status = 'PENDING' AND mt.due_date = $2) as due_today_count,
-                COUNT(*) FILTER (WHERE mt.status = 'PENDING' AND mt.due_date > $2) as upcoming_count,
+                COUNT(*) FILTER (WHERE mt.status IN ('PENDING', 'IN_PROGRESS') AND mt.due_date < $2) as overdue_count,
+                COUNT(*) FILTER (WHERE mt.status IN ('PENDING', 'IN_PROGRESS') AND mt.due_date = $2) as due_today_count,
+                COUNT(*) FILTER (WHERE mt.status IN ('PENDING', 'IN_PROGRESS') AND mt.due_date > $2) as upcoming_count,
+                COUNT(*) FILTER (WHERE mt.status = 'IN_PROGRESS') as in_progress_count,
+                COUNT(*) FILTER (WHERE mt.status = 'IN_PROGRESS' AND mt.verification_status = 'REJECTED') as rework_count,
+                COUNT(*) FILTER (
+                    WHERE mt.status = 'IN_PROGRESS'
+                      AND mt.verification_status = 'REJECTED'
+                      AND COALESCE(mt.verified_at::date, CURRENT_DATE) <= CURRENT_DATE - 3
+                ) as stale_rework_count,
+                COUNT(*) FILTER (
+                    WHERE mt.status != 'CANCELLED'
+                      AND ($3::date IS NOT NULL AND $4::date IS NOT NULL)
+                      AND mt.due_date >= $3::date
+                      AND mt.due_date <= $4::date
+                ) as month_plan_count,
+                COUNT(*) FILTER (
+                    WHERE mt.status = 'COMPLETED'
+                      AND ($3::date IS NOT NULL AND $4::date IS NOT NULL)
+                      AND mt.due_date >= $3::date
+                      AND mt.due_date <= $4::date
+                      AND mt.completed_at >= $3::date
+                      AND mt.completed_at < ($4::date + INTERVAL '1 day')
+                ) as month_completed_count,
+                COUNT(*) FILTER (
+                    WHERE mt.status = 'COMPLETED'
+                      AND ($3::date IS NOT NULL AND $4::date IS NOT NULL)
+                      AND mt.completed_at >= $3::date
+                      AND mt.completed_at < ($4::date + INTERVAL '1 day')
+                      AND mt.due_date < $3::date
+                ) as old_debt_closed_count,
                 COUNT(*) FILTER (WHERE mt.status = 'COMPLETED') as completed_count
             FROM equipment_maintenance_tasks mt
             JOIN equipment e ON mt.equipment_id = e.id
@@ -249,9 +286,31 @@ export async function GET(
             statsParams
         );
 
+        const statsRow = statsResult.rows[0] || {};
+        const monthPlanCount = Number(statsRow.month_plan_count || 0);
+        const monthCompletedCount = Number(statsRow.month_completed_count || 0);
+        const overdueCount = Number(statsRow.overdue_count || 0);
+        const reworkCount = Number(statsRow.rework_count || 0);
+        const staleReworkCount = Number(statsRow.stale_rework_count || 0);
+        const qualityMetrics = calculateMaintenanceQualityMetrics({
+            assigned: monthPlanCount,
+            completed: monthCompletedCount,
+            dueByNow: monthPlanCount,
+            completedDueByNow: monthCompletedCount,
+            overdueOpenTasks: overdueCount,
+            reworkOpenTasks: reworkCount,
+            staleReworkTasks: staleReworkCount
+        });
+
         return NextResponse.json({
             tasks: result.rows,
-            stats: statsResult.rows[0],
+            stats: {
+                ...statsRow,
+                quality_penalty_units: qualityMetrics.penalty_units,
+                adjusted_month_completed_count: qualityMetrics.adjusted_completed,
+                raw_efficiency: monthPlanCount > 0 ? (monthCompletedCount / monthPlanCount) * 100 : 0,
+                adjusted_efficiency: qualityMetrics.efficiency
+            },
             total: result.rowCount
         });
     } catch (error) {

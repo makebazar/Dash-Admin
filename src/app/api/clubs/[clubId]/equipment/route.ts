@@ -102,11 +102,14 @@ export async function GET(
                 e.thermal_paste_last_changed_at, e.thermal_paste_interval_days, e.thermal_paste_type, e.thermal_paste_note,
                 e.cpu_thermal_paste_last_changed_at, e.cpu_thermal_paste_interval_days, e.cpu_thermal_paste_type, e.cpu_thermal_paste_note,
                 e.gpu_thermal_paste_last_changed_at, e.gpu_thermal_paste_interval_days, e.gpu_thermal_paste_type, e.gpu_thermal_paste_note,
-                e.maintenance_enabled, e.assigned_user_id,
+                e.maintenance_enabled, e.assigned_user_id, e.assignment_mode,
                 w.name as workstation_name,
                 w.zone as workstation_zone,
+                w.assigned_user_id as workstation_assigned_user_id,
                 et.name_ru as type_name,
                 et.icon as type_icon,
+                eu.full_name as assigned_to_name,
+                wu.full_name as workstation_assigned_to_name,
                 COALESCE(ic.open_issues_count, 0)::integer as open_issues_count,
                 CASE 
                     WHEN e.warranty_expires IS NULL THEN NULL
@@ -118,6 +121,8 @@ export async function GET(
             LEFT JOIN club_workstations w ON e.workstation_id = w.id
             LEFT JOIN equipment_types et ON e.type = et.code
             LEFT JOIN issue_counts ic ON e.id = ic.equipment_id
+            LEFT JOIN users eu ON eu.id = e.assigned_user_id
+            LEFT JOIN users wu ON wu.id = w.assigned_user_id
             WHERE ${whereClause}
             ORDER BY w.name NULLS LAST, e.type, e.name
             LIMIT $${paramIndex} OFFSET $${paramIndex + 1}

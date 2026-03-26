@@ -23,13 +23,17 @@ export function MaintenanceKpiCard({ kpi, formatCurrency }: { kpi: any, formatCu
     const liveCurrentValue = kpi.live_current_value ?? kpi.current_value ?? 0;
     const liveTargetValue = kpi.live_target_value ?? kpi.target_value ?? 0;
     const completedMonthValue = kpi.completed_month_value ?? liveCurrentValue;
+    const adjustedCompletedMonthValue = kpi.adjusted_completed_month_value ?? completedMonthValue;
     const totalMonthTarget = kpi.total_month_target ?? liveTargetValue;
-    const liveEfficiency = kpi.live_efficiency ?? kpi.efficiency ?? 0;
-    const projectedCompletedValue = kpi.projected_completed_value ?? completedMonthValue;
+    const projectedCompletedValue = kpi.projected_completed_value ?? adjustedCompletedMonthValue;
     const projectedEfficiency = kpi.projected_efficiency ?? kpi.efficiency ?? 0;
     const projectedBonusAmount = kpi.projected_bonus_amount ?? kpi.bonus_amount ?? 0;
     const projectedTierLabel = kpi.projected_tier_label ?? null;
-    const progressPercent = liveTargetValue > 0 ? Math.min((liveCurrentValue / liveTargetValue) * 100, 100) : 100;
+    const progressPercent = totalMonthTarget > 0 ? Math.min((completedMonthValue / totalMonthTarget) * 100, 100) : 100;
+    const oldDebtClosed = kpi.old_debt_closed_tasks || 0;
+    const overdueCompletedAverageDays = (kpi.overdue_completed_tasks || 0) > 0
+        ? Math.round((kpi.overdue_completed_days || 0) / (kpi.overdue_completed_tasks || 1))
+        : 0;
 
     return (
         <div className="space-y-4">
@@ -42,20 +46,48 @@ export function MaintenanceKpiCard({ kpi, formatCurrency }: { kpi: any, formatCu
                             </div>
                             <div>
                                 <p className="text-xs text-white/50 uppercase tracking-wider font-bold">{kpi.name}</p>
-                                <p className="text-sm text-indigo-400 font-medium">Темп сейчас: {liveEfficiency.toFixed(1)}%</p>
+                                <p className="text-sm text-indigo-400 font-medium">
+                                    В премию сейчас идет: {adjustedCompletedMonthValue} из {totalMonthTarget} · {(kpi.efficiency || 0).toFixed(1)}%
+                                </p>
                             </div>
                         </div>
                     </div>
 
                     <div className="text-center mb-6">
-                        <p className="text-white/60 text-sm mb-1">Выполнено к текущему моменту</p>
+                        <p className="text-white/60 text-sm mb-1">Выполнено по плану месяца</p>
                         <div className="flex items-baseline justify-center gap-2">
-                            <span className="text-5xl font-black text-white">{liveCurrentValue}</span>
-                            <span className="text-2xl font-bold text-white/40">/ {liveTargetValue}</span>
+                            <span className="text-5xl font-black text-white">{completedMonthValue}</span>
+                            <span className="text-2xl font-bold text-white/40">/ {totalMonthTarget}</span>
                         </div>
                         <p className="text-xs text-white/50 mt-2">
-                            За месяц: {completedMonthValue} / {totalMonthTarget} · Финальная эффективность: {(kpi.efficiency || 0).toFixed(1)}%
+                            Выполнение плана месяца: {(kpi.efficiency || 0).toFixed(1)}%
                         </p>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
+                        <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                            <p className="text-[11px] font-bold uppercase tracking-widest text-white/50 mb-1">Запланировано на месяц</p>
+                            <p className="text-2xl font-black text-white">{totalMonthTarget}</p>
+                            <p className="text-[10px] text-white/40 mt-1">Все задачи, которые входят в план месяца</p>
+                        </div>
+                        <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                            <p className="text-[11px] font-bold uppercase tracking-widest text-white/50 mb-1">Закрыто за месяц</p>
+                            <p className="text-2xl font-black text-emerald-400">{completedMonthValue}</p>
+                            <p className="text-[10px] text-white/40 mt-1">Только задачи текущего плана</p>
+                        </div>
+                        <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                            <p className="text-[11px] font-bold uppercase tracking-widest text-white/50 mb-1">Еще в работе</p>
+                            <p className="text-2xl font-black text-amber-300">{Math.max(totalMonthTarget - completedMonthValue, 0)}</p>
+                            <p className="text-[10px] text-white/40 mt-1">Остаток до полного выполнения плана</p>
+                        </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2 mb-6">
+                        {oldDebtClosed > 0 && (
+                            <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] text-white/70">
+                                Закрыт старый долг: <span className="font-bold text-white">{oldDebtClosed}</span>
+                            </div>
+                        )}
                     </div>
 
                     <div className="space-y-4">
@@ -103,9 +135,14 @@ export function MaintenanceKpiCard({ kpi, formatCurrency }: { kpi: any, formatCu
                             <div className="text-right">
                                 <p className="text-xs text-white/50">Просрочено сейчас</p>
                                 <p className="text-sm font-bold text-rose-300">{kpi.overdue_open_tasks || 0}</p>
+                                {(kpi.rework_open_tasks || 0) > 0 && (
+                                    <p className="text-[10px] text-white/40 mt-1">
+                                        На доработке: {kpi.rework_open_tasks} · старых: {kpi.stale_rework_tasks || 0}
+                                    </p>
+                                )}
                                 {(kpi.overdue_completed_tasks || 0) > 0 && (
                                     <p className="text-[10px] text-white/40 mt-1">
-                                        Закрыто с просрочкой: {kpi.overdue_completed_tasks} · {kpi.overdue_completed_days || 0} дн.
+                                        Закрыто с просрочкой: {kpi.overdue_completed_tasks} · ср. {overdueCompletedAverageDays} дн.
                                     </p>
                                 )}
                             </div>
