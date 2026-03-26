@@ -74,9 +74,41 @@ export async function POST(
             `;
             queryParams = [taskId, userId, comment || null];
         } else if (action === 'REJECT') {
-            // Revert task status to IN_PROGRESS (or PENDING if it was never started, but usually completed tasks come from in_progress)
-            // Reset completion data so it appears back in the queue
-            // But keep track of the rejection reason
+            // 1. Cleanup: Delete any other PENDING/IN_PROGRESS tasks for this equipment/type 
+            // to avoid unique constraint violation when we revert this task to IN_PROGRESS.
+            // This is essential because the next task is usually auto-generated on completion.
+            await query(
+                `DELETE FROM equipment_maintenance_tasks
+                 WHERE equipment_id = $1
+                   AND task_type = $2
+                   AND status IN ('PENDING', 'IN_PROGRESS')
+                   AND id != $3`,
+                [task.equipment_id, task.task_type, taskId]
+            );
+
+            // 2. Revert equipment last_cleaned_at if it's a CLEANING task
+            if (task.task_type === 'CLEANING') {
+                const previousCompletedTask = await query(
+                    `SELECT completed_at
+                     FROM equipment_maintenance_tasks
+                     WHERE equipment_id = $1
+                       AND task_type = 'CLEANING'
+                       AND status = 'COMPLETED'
+                       AND id != $2
+                     ORDER BY completed_at DESC
+                     LIMIT 1`,
+                    [task.equipment_id, taskId]
+                );
+
+                await query(
+                    `UPDATE equipment
+                     SET last_cleaned_at = $1
+                     WHERE id = $2`,
+                    [previousCompletedTask.rows[0]?.completed_at || null, task.equipment_id]
+                );
+            }
+
+            // 3. Prepare the update query for rejection
             updateQuery = `
                 UPDATE equipment_maintenance_tasks
                 SET verification_status = 'REJECTED',
@@ -100,36 +132,6 @@ export async function POST(
 
         if ((result.rowCount || 0) === 0) {
             return NextResponse.json({ error: 'Task not found' }, { status: 404 });
-        }
-
-        if (action === 'REJECT' && task.task_type === 'CLEANING') {
-            await query(
-                `DELETE FROM equipment_maintenance_tasks
-                 WHERE equipment_id = $1
-                   AND task_type = $2
-                   AND status = 'PENDING'
-                   AND id != $3`,
-                [task.equipment_id, task.task_type, taskId]
-            );
-
-            const previousCompletedTask = await query(
-                `SELECT completed_at
-                 FROM equipment_maintenance_tasks
-                 WHERE equipment_id = $1
-                   AND task_type = 'CLEANING'
-                   AND status = 'COMPLETED'
-                   AND id != $2
-                 ORDER BY completed_at DESC
-                 LIMIT 1`,
-                [task.equipment_id, taskId]
-            );
-
-            await query(
-                `UPDATE equipment
-                 SET last_cleaned_at = $1
-                 WHERE id = $2`,
-                [previousCompletedTask.rows[0]?.completed_at || null, task.equipment_id]
-            );
         }
 
         return NextResponse.json({ success: true });
