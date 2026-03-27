@@ -148,26 +148,39 @@ export async function POST(
             const checkInDate = new Date(check_in);
 
             // Get the hour in the club's timezone, not server's timezone
-            const hourInClubTZ = new Intl.DateTimeFormat('en-US', {
+            const timeFormatter = new Intl.DateTimeFormat('en-US', {
                 timeZone: clubTimezone,
                 hour: 'numeric',
+                minute: 'numeric',
                 hourCycle: 'h23'
-            }).format(checkInDate);
-            const hour = parseInt(hourInClubTZ);
+            });
+            const timeParts = timeFormatter.formatToParts(checkInDate);
+            const hour = parseInt(timeParts.find(p => p.type === 'hour')?.value || '0');
+            const minute = parseInt(timeParts.find(p => p.type === 'minute')?.value || '0');
+            const hourFloat = hour + (minute / 60);
+
+            // Tolerance in hours (e.g. 1.5 hours). If day starts at 8:00, starting at 6:31 is still DAY.
+            const tolerance = 1.5;
 
             // Day shift if hour is between dayStartHour and nightStartHour
-            if (!isNaN(hour)) {
+            if (!isNaN(hourFloat)) {
                 // Check if the shift crosses midnight or if day/night config is wrapped
                 if (dayStartHour < nightStartHour) {
                     // Standard day: 08:00 to 20:00
-                    if (hour >= dayStartHour && hour < nightStartHour) {
+                    const dayStartWithTolerance = dayStartHour - tolerance;
+                    const nightStartWithTolerance = nightStartHour - tolerance;
+
+                    if (hourFloat >= dayStartWithTolerance && hourFloat < nightStartWithTolerance) {
                         shiftType = 'DAY';
                     } else {
                         shiftType = 'NIGHT';
                     }
                 } else {
                     // Wrapped day (unlikely but possible): e.g. Day starts 20:00, Night starts 08:00
-                    if (hour >= dayStartHour || hour < nightStartHour) {
+                    const dayStartWithTolerance = dayStartHour - tolerance;
+                    const nightStartWithTolerance = nightStartHour - tolerance;
+
+                    if (hourFloat >= dayStartWithTolerance || hourFloat < nightStartWithTolerance) {
                         shiftType = 'DAY';
                     } else {
                         shiftType = 'NIGHT';

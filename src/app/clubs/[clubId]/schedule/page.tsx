@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 import { useParams } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Loader2, Plus } from "lucide-react"
+import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react"
 import { WorkScheduleGrid } from "@/components/schedule/WorkScheduleGrid"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
@@ -60,7 +60,6 @@ export default function SchedulePage() {
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-3xl font-black tracking-tight flex items-center gap-3">
-                        <CalendarIcon className="h-8 w-8 text-purple-600" />
                         График работы
                     </h1>
                     <p className="text-muted-foreground mt-1">Планирование смен сотрудников</p>
@@ -78,25 +77,6 @@ export default function SchedulePage() {
                         <ChevronRight className="h-4 w-4" />
                     </Button>
                 </div>
-
-                <Button
-                    variant="outline"
-                    className="h-14 px-6 border-purple-200 hover:bg-purple-50 hover:text-purple-600 transition-all gap-2"
-                    onClick={async () => {
-                        if (confirm(`Скопировать график из ${month === 1 ? 'декабря' : monthNames[month - 2]}? Это перезапишет существующие смены на те же числа.`)) {
-                            setIsLoading(true);
-                            await fetch(`/api/clubs/${clubId}/work-schedule`, {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ month, year })
-                            });
-                            fetchData();
-                        }
-                    }}
-                >
-                    <Plus className="h-4 w-4" />
-                    Копировать из прошлого месяца
-                </Button>
             </div>
 
             {isLoading ? (

@@ -4,14 +4,11 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import {
     Users,
     DollarSign,
     CheckCircle,
     Clock,
-    Search,
-    Filter,
     ChevronLeft,
     ChevronRight,
     Loader2,
@@ -167,7 +164,7 @@ interface PayrollData {
 export default function PayrollDashboard({ clubId }: { clubId: string }) {
     const [data, setData] = useState<PayrollData | null>(null);
     const [loading, setLoading] = useState(true);
-    const [searchTerm, setSearchTerm] = useState('');
+    const [searchTerm] = useState('');
     const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
     const [activeTabs, setActiveTabs] = useState<Record<number, string>>({});
@@ -175,7 +172,6 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
     const [paymentModal, setPaymentModal] = useState<{ open: boolean; employee: Employee | null }>({ open: false, employee: null });
     const [paymentForm, setPaymentForm] = useState({ amount: '', method: 'CASH', notes: '', paymentType: 'salary' as 'salary' | 'advance' | 'bonus' });
     const [processingPayment, setProcessingPayment] = useState(false);
-    const [isFreezingLeaderboard, setIsFreezingLeaderboard] = useState(false);
 
     const toggleCard = (employeeId: number) => {
         setExpandedCards(prev => {
@@ -364,31 +360,6 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
         setSelectedYear(newYear);
     };
 
-    const freezeLeaderboard = async () => {
-        setIsFreezingLeaderboard(true);
-        try {
-            const res = await fetch(`/api/clubs/${clubId}/salaries/leaderboard`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ month: selectedMonth, year: selectedYear })
-            });
-            const json = await res.json();
-
-            if (!res.ok) {
-                alert(json.error || 'Не удалось заморозить рейтинг');
-                return;
-            }
-
-            await fetchData();
-            alert('Рейтинг заморожен');
-        } catch (error) {
-            console.error('Freeze leaderboard error:', error);
-            alert('Ошибка заморозки рейтинга');
-        } finally {
-            setIsFreezingLeaderboard(false);
-        }
-    };
-
     const filteredEmployees = (data?.employees || []).filter(emp =>
         emp.full_name.toLowerCase().includes(searchTerm.toLowerCase())
     );
@@ -399,14 +370,7 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
         }).format(amount) + ' ₽';
     };
 
-    const getStatusText = (status: string) => {
-        switch (status) {
-            case 'PAID': return 'Выплачено';
-            case 'PARTIAL': return 'Частично';
-            case 'PENDING': return 'К выплате';
-            default: return status;
-        }
-    };
+
 
     if (loading) return <div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>;
     if (!data) return <div className="flex items-center justify-center h-64 text-muted-foreground">Нет данных</div>;
@@ -417,49 +381,66 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
     const isFuturePeriod = selectedYear > now.getFullYear() || (selectedYear === now.getFullYear() && selectedMonth > now.getMonth() + 1);
 
     return (
-        <div className="space-y-8 p-8">
-            <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                    <h1 className="text-3xl font-bold tracking-tight">Зарплаты</h1>
-                    <div className="flex items-center gap-2">
-                        <Button variant="ghost" size="icon" onClick={() => navigateMonth(-1)}><ChevronLeft className="h-5 w-5" /></Button>
-                        <div className="text-lg font-medium min-w-[160px] text-center">{monthNames[selectedMonth - 1]} {selectedYear}</div>
-                        <Button variant="ghost" size="icon" onClick={() => navigateMonth(1)}><ChevronRight className="h-5 w-5" /></Button>
+        <div className="space-y-6 p-4 md:p-8">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                    <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Зарплаты</h1>
+                    <div className="flex items-center gap-2 bg-muted/50 p-1 rounded-lg self-start">
+                        <Button variant="ghost" size="icon" onClick={() => navigateMonth(-1)} className="h-8 w-8"><ChevronLeft className="h-4 w-4" /></Button>
+                        <div className="text-sm md:text-lg font-medium min-w-[120px] md:min-w-[160px] text-center">{monthNames[selectedMonth - 1]} {selectedYear}</div>
+                        <Button variant="ghost" size="icon" onClick={() => navigateMonth(1)} className="h-8 w-8"><ChevronRight className="h-4 w-4" /></Button>
                     </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                     {data.leaderboard?.is_frozen ? (
-                        <Badge variant="secondary" className="gap-1.5 px-3 py-2">
+                        <Badge variant="secondary" className="gap-1.5 px-3 py-2 text-xs md:text-sm">
                             <Lock className="h-3.5 w-3.5" />
                             Рейтинг заморожен
                         </Badge>
                     ) : null}
-                    <Button
-                        variant="outline"
-                        onClick={freezeLeaderboard}
-                        disabled={isFuturePeriod || isFreezingLeaderboard || data.leaderboard?.is_frozen}
-                    >
-                        {isFreezingLeaderboard ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trophy className="h-4 w-4 mr-2" />}
-                        Заморозить рейтинг
-                    </Button>
-                    <Button variant="ghost" onClick={() => { setSelectedMonth(new Date().getMonth() + 1); setSelectedYear(new Date().getFullYear()); }}>Сегодня</Button>
                 </div>
             </div>
 
-            <div className="grid gap-6 md:grid-cols-4">
-                <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Сотрудники</CardTitle><div className="rounded-lg bg-primary/10 p-2"><Users className="h-4 w-4 text-primary" /></div></CardHeader><CardContent><div className="text-2xl font-bold tracking-tight">{stats.total_employees}</div></CardContent></Card>
-                <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Начислено</CardTitle><div className="rounded-lg bg-primary/10 p-2"><DollarSign className="h-4 w-4 text-primary" /></div></CardHeader><CardContent><div className="text-2xl font-bold tracking-tight">{formatCurrency(stats.total_accrued)}</div></CardContent></Card>
-                <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Выплачено</CardTitle><div className="rounded-lg bg-primary/10 p-2"><CheckCircle className="h-4 w-4 text-primary" /></div></CardHeader><CardContent><div className="text-2xl font-bold tracking-tight">{formatCurrency(stats.total_paid)}</div></CardContent></Card>
-                <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">К выплате</CardTitle><div className="rounded-lg bg-primary/10 p-2"><Clock className="h-4 w-4 text-primary" /></div></CardHeader><CardContent><div className="text-2xl font-bold tracking-tight">{formatCurrency(stats.pending_payment)}</div></CardContent></Card>
+            <div className="grid gap-3 md:gap-6 grid-cols-2 lg:grid-cols-4">
+                <Card className="shadow-sm border-slate-100">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 md:pb-2 p-3 md:p-6">
+                        <CardTitle className="text-[10px] md:text-sm font-medium text-muted-foreground uppercase tracking-wider">Сотрудники</CardTitle>
+                        <div className="rounded-lg bg-primary/10 p-1.5 md:p-2"><Users className="h-3 w-3 md:h-4 md:w-4 text-primary" /></div>
+                    </CardHeader>
+                    <CardContent className="p-3 md:p-6 pt-0 md:pt-0">
+                        <div className="text-lg md:text-2xl font-bold tracking-tight">{stats.total_employees}</div>
+                    </CardContent>
+                </Card>
+                <Card className="shadow-sm border-slate-100">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 md:pb-2 p-3 md:p-6">
+                        <CardTitle className="text-[10px] md:text-sm font-medium text-muted-foreground uppercase tracking-wider">Начислено</CardTitle>
+                        <div className="rounded-lg bg-primary/10 p-1.5 md:p-2"><DollarSign className="h-3 w-3 md:h-4 md:w-4 text-primary" /></div>
+                    </CardHeader>
+                    <CardContent className="p-3 md:p-6 pt-0 md:pt-0">
+                        <div className="text-lg md:text-2xl font-bold tracking-tight">{formatCurrency(stats.total_accrued)}</div>
+                    </CardContent>
+                </Card>
+                <Card className="shadow-sm border-slate-100">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 md:pb-2 p-3 md:p-6">
+                        <CardTitle className="text-[10px] md:text-sm font-medium text-muted-foreground uppercase tracking-wider">Выплачено</CardTitle>
+                        <div className="rounded-lg bg-primary/10 p-1.5 md:p-2"><CheckCircle className="h-3 w-3 md:h-4 md:w-4 text-primary" /></div>
+                    </CardHeader>
+                    <CardContent className="p-3 md:p-6 pt-0 md:pt-0">
+                        <div className="text-lg md:text-2xl font-bold tracking-tight">{formatCurrency(stats.total_paid)}</div>
+                    </CardContent>
+                </Card>
+                <Card className="shadow-sm border-slate-100">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 md:pb-2 p-3 md:p-6">
+                        <CardTitle className="text-[10px] md:text-sm font-medium text-muted-foreground uppercase tracking-wider">К выплате</CardTitle>
+                        <div className="rounded-lg bg-primary/10 p-1.5 md:p-2"><Clock className="h-3 w-3 md:h-4 md:w-4 text-primary" /></div>
+                    </CardHeader>
+                    <CardContent className="p-3 md:p-6 pt-0 md:pt-0">
+                        <div className="text-lg md:text-2xl font-bold tracking-tight">{formatCurrency(stats.pending_payment)}</div>
+                    </CardContent>
+                </Card>
             </div>
 
-            <div className="flex items-center gap-4">
-                <div className="relative flex-1 max-w-md">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input placeholder="Поиск сотрудника..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-9" />
-                </div>
-                <Button variant="outline"><Filter className="h-4 w-4 mr-2" />Фильтры</Button>
-            </div>
+
 
             {data.leaderboard?.top?.length ? (
                 <Card>
@@ -486,50 +467,68 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
             {filteredEmployees.length === 0 ? (
                 <div className="text-center py-12 text-muted-foreground">Сотрудники не найдены</div>
             ) : (
-                <div className="space-y-3">
+                <div className="space-y-4">
                     {filteredEmployees.map((employee) => (
-                        <Card key={employee.id} className="transition-shadow hover:shadow-md">
-                            <CardContent className="p-6">
-                                <div className="flex items-center justify-between">
+                        <Card key={employee.id} className="transition-all hover:shadow-md border-slate-200/60 overflow-hidden">
+                            <CardContent className="p-4 md:p-6">
+                                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                                     <div className="flex-1">
-                                        <div className="flex items-center gap-3 mb-3">
+                                        <div className="flex flex-wrap items-center gap-2 mb-4">
                                             <div>
-                                                <h3 className="font-medium text-lg">{employee.full_name}</h3>
-                                                <p className="text-sm text-muted-foreground">{employee.role || 'Сотрудник'}</p>
+                                                <h3 className="font-bold text-base md:text-lg text-slate-900">{employee.full_name}</h3>
+                                                <p className="text-xs text-muted-foreground">{employee.role || 'Сотрудник'}</p>
                                             </div>
-                                            {employee.has_active_kpi && <Badge variant="secondary" className="text-xs">KPI</Badge>}
-                                            {employee.leaderboard?.rank ? (
-                                                <Badge variant="outline" className="text-xs gap-1">
-                                                    <Trophy className="h-3 w-3 text-amber-500" />
-                                                    #{employee.leaderboard.rank} · {employee.leaderboard.score.toFixed(1)}
-                                                </Badge>
-                                            ) : null}
+                                            <div className="flex flex-wrap gap-2 items-center">
+                                                {employee.has_active_kpi && <Badge variant="secondary" className="text-[10px] h-5">KPI</Badge>}
+                                                {employee.leaderboard?.rank ? (
+                                                    <Badge variant="outline" className="text-[10px] h-5 gap-1 bg-amber-50 text-amber-700 border-amber-100">
+                                                        <Trophy className="h-2.5 w-2.5" />
+                                                        #{employee.leaderboard.rank} · {employee.leaderboard.score.toFixed(1)}
+                                                    </Badge>
+                                                ) : null}
+                                            </div>
                                         </div>
-                                        <div className="grid grid-cols-5 gap-4 text-sm">
-                                            <div><p className="text-muted-foreground mb-1">Смены</p><p className="font-medium">{employee.shifts_count}</p></div>
-                                            <div><p className="text-muted-foreground mb-1">Начислено</p><p className="font-medium">{formatCurrency(employee.total_accrued)}</p></div>
-                                            <div><p className="text-muted-foreground mb-1">Выплачено</p>
+                                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 md:gap-4 text-xs">
+                                            <div className="bg-slate-50/50 p-2 rounded-lg border border-slate-100/50">
+                                                <p className="text-muted-foreground mb-1 uppercase text-[9px] font-bold tracking-wider">Смены</p>
+                                                <p className="font-bold text-slate-900">{employee.shifts_count}</p>
+                                            </div>
+                                            <div className="bg-slate-50/50 p-2 rounded-lg border border-slate-100/50">
+                                                <p className="text-muted-foreground mb-1 uppercase text-[9px] font-bold tracking-wider">Начислено</p>
+                                                <p className="font-bold text-slate-900">{formatCurrency(employee.total_accrued)}</p>
+                                            </div>
+                                            <div className="bg-slate-50/50 p-2 rounded-lg border border-slate-100/50">
+                                                <p className="text-muted-foreground mb-1 uppercase text-[9px] font-bold tracking-wider">Выплачено</p>
                                                 <div className="flex flex-col">
-                                                    <p className="font-medium">{formatCurrency(employee.total_paid)}</p>
+                                                    <p className="font-bold text-slate-900">{formatCurrency(employee.total_paid)}</p>
                                                     {employee.total_paid_bonus && employee.total_paid_bonus > 0 ? (
                                                         <p className="text-[9px] text-purple-600 font-bold">+{formatCurrency(employee.total_paid_bonus)} бон.</p>
                                                     ) : null}
                                                 </div>
                                             </div>
-                                            <div><p className="text-muted-foreground mb-1">Остаток</p><p className="font-medium">{formatCurrency(employee.balance)}</p></div>
+                                            <div className="bg-slate-50/50 p-2 rounded-lg border border-slate-100/50">
+                                                <p className="text-muted-foreground mb-1 uppercase text-[9px] font-bold tracking-wider">Остаток</p>
+                                                <p className="font-bold text-slate-900">{formatCurrency(employee.balance)}</p>
+                                            </div>
                                             {employee.total_bar_purchases && employee.total_bar_purchases > 0 ? (
-                                                <div><p className="text-muted-foreground mb-1">Покупки бара</p><p className="font-medium text-red-600">-{formatCurrency(employee.total_bar_purchases)}</p></div>
+                                                <div className="bg-rose-50/30 p-2 rounded-lg border border-rose-100/50">
+                                                    <p className="text-rose-600/70 mb-1 uppercase text-[9px] font-bold tracking-wider">Покупки бара</p>
+                                                    <p className="font-bold text-rose-600">-{formatCurrency(employee.total_bar_purchases)}</p>
+                                                </div>
                                             ) : null}
                                             {employee.has_kpi_feature && (
-                                                <div><p className="text-muted-foreground mb-1">KPI премия</p><p className={`font-medium ${employee.kpi_bonus_amount && employee.kpi_bonus_amount > 0 ? 'text-emerald-600' : ''}`}>{formatCurrency(employee.kpi_bonus_amount || 0)}</p></div>
+                                                <div className="bg-emerald-50/30 p-2 rounded-lg border border-emerald-100/50">
+                                                    <p className="text-emerald-600/70 mb-1 uppercase text-[9px] font-bold tracking-wider">KPI премия</p>
+                                                    <p className={`font-bold ${employee.kpi_bonus_amount && employee.kpi_bonus_amount > 0 ? 'text-emerald-600' : ''}`}>{formatCurrency(employee.kpi_bonus_amount || 0)}</p>
+                                                </div>
                                             )}
                                             {employee.has_virtual_balance_feature && (
-                                                <div><p className="text-muted-foreground mb-1">Бонусный баланс</p><p className={`font-medium ${employee.virtual_balance && employee.virtual_balance > 0 ? 'text-purple-600' : ''}`}>{formatCurrency(employee.virtual_balance || 0)}</p></div>
+                                                <div className="bg-purple-50/30 p-2 rounded-lg border border-purple-100/50">
+                                                    <p className="text-purple-600/70 mb-1 uppercase text-[9px] font-bold tracking-wider">Бонусный баланс</p>
+                                                    <p className={`font-bold ${employee.virtual_balance && employee.virtual_balance > 0 ? 'text-purple-600' : ''}`}>{formatCurrency(employee.virtual_balance || 0)}</p>
+                                                </div>
                                             )}
                                         </div>
-                                    </div>
-                                    <div className="flex flex-col items-end gap-3 ml-6">
-                                        <Badge variant={employee.payment_status === 'PAID' ? 'default' : employee.payment_status === 'PARTIAL' ? 'secondary' : 'outline'}>{getStatusText(employee.payment_status)}</Badge>
                                     </div>
                                 </div>
 
@@ -537,18 +536,18 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                     <div className="mt-6 pt-6 border-t animate-in fade-in duration-300">
                                         <div className="flex border-b mb-6 overflow-x-auto scrollbar-hide">
                                             {[
-                                                { id: 'overview', label: 'Обзор', icon: '📊' },
-                                                { id: 'kpi', label: 'KPI и Начисления', icon: '🎯' },
-                                                { id: 'shifts', label: 'Смены', icon: '📅' },
-                                                { id: 'bar', label: 'Бар', icon: '🍹' },
-                                                { id: 'payments', label: 'Выплаты', icon: '💰' }
+                                                { id: 'overview', label: 'Обзор' },
+                                                { id: 'kpi', label: 'KPI и Начисления' },
+                                                { id: 'shifts', label: 'Смены' },
+                                                { id: 'bar', label: 'Бар' },
+                                                { id: 'payments', label: 'Выплаты' }
                                             ].map((tab) => (
                                                 <button
                                                     key={tab.id}
                                                     onClick={() => setActiveTabs(prev => ({ ...prev, [employee.id]: tab.id }))}
                                                     className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 whitespace-nowrap ${activeTabs[employee.id] === tab.id ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
                                                 >
-                                                    <span className="mr-2">{tab.icon}</span>{tab.label}
+                                                    {tab.label}
                                                 </button>
                                             ))}
                                         </div>
@@ -557,145 +556,63 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                             <div className="space-y-6 animate-in slide-in-from-left-2 duration-300">
                                                 {/* 1. Metrics Grid (copied from Shifts tab) */}
                                                 {(() => {
-                                                    const totalHours = employee.metrics?.total_hours || 0;
                                                     const totalRevenue = employee.metrics?.total_revenue || 0;
-                                                    const totalKpiBonus = employee.kpi_bonus_amount || 0;
-
-                                                    // Calculate Up-sell / "Other" metrics share
-                                                    const metadata = employee.metric_metadata || {};
-                                                    const kpiKeys = (employee.period_bonuses || []).map((b: any) => b.metric_key);
-                                                    const otherMetrics = Object.keys(metadata).filter(key =>
-                                                        metadata[key].category === 'OTHER' &&
-                                                        (kpiKeys.includes(key) || metadata[key].is_numeric !== false) &&
-                                                        !key.includes('comment')
-                                                    );
-                                                    const otherMetricLabel = otherMetrics.length === 1 ? metadata[otherMetrics[0]].label : 'Доп. продажи';
-
-                                                    // sum of other metrics from revenue_by_metric if available, or 0
-                                                    let otherMetricTotal = 0;
-                                                    if (employee.metrics?.revenue_by_metric) {
-                                                        otherMetrics.forEach(key => {
-                                                            otherMetricTotal += employee.metrics?.revenue_by_metric[key]?.total || 0;
-                                                        });
-                                                    }
-
-                                                    const upsellEfficiency = totalHours > 0 ? otherMetricTotal / totalHours : 0;
-                                                    const upsellShare = totalRevenue > 0 ? (otherMetricTotal / totalRevenue) * 100 : 0;
 
                                                     return (
                                                         <div className="space-y-4">
                                                             {/* Total Revenue Card */}
-                                                            <div className="bg-background p-4 rounded-xl border shadow-sm">
-                                                                <div className="flex justify-between items-start mb-2">
+                                                            <div className="bg-background p-4 md:p-6 rounded-2xl border shadow-sm border-slate-100">
+                                                                <div className="flex justify-between items-start mb-3">
                                                                     <div>
-                                                                        <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider mb-1">Выручка за период</p>
-                                                                        <p className="text-2xl font-black tracking-tight">{formatCurrency(totalRevenue)}</p>
+                                                                        <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest mb-1">Выручка за период</p>
+                                                                        <p className="text-2xl md:text-3xl font-black tracking-tight text-slate-900">{formatCurrency(totalRevenue)}</p>
                                                                     </div>
-                                                                    <div className="bg-emerald-100 p-2 rounded-lg text-emerald-700">
-                                                                        <Wallet className="h-4 w-4" />
+                                                                    <div className="bg-emerald-100 p-2.5 rounded-xl text-emerald-700">
+                                                                        <Wallet className="h-5 w-5" />
                                                                     </div>
                                                                 </div>
-                                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-3 pt-3 border-t border-dashed">
+                                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4 pt-4 border-t border-dashed border-slate-100">
                                                                     {(Array.isArray(employee.period_bonuses) ? employee.period_bonuses : []).map((kpi: any) => (
                                                                         <div key={kpi.id} className="flex justify-between items-center text-xs">
-                                                                            <span className="text-muted-foreground">{kpi.name}</span>
-                                                                            <span className="font-bold">{formatCurrency(kpi.current_value)}</span>
+                                                                            <span className="text-muted-foreground font-medium">{kpi.name}</span>
+                                                                            <span className="font-bold text-slate-900">{formatCurrency(kpi.current_value)}</span>
                                                                         </div>
                                                                     ))}
-                                                                    <div className="flex justify-between items-center text-xs text-muted-foreground">
-                                                                        <span>В среднем:</span>
-                                                                        <span className="font-medium">{formatCurrency(employee.metrics?.avg_revenue_per_shift || 0)}/смена</span>
+                                                                    <div className="flex justify-between items-center text-xs">
+                                                                        <span className="text-muted-foreground font-medium">В среднем:</span>
+                                                                        <span className="font-bold text-slate-900">{formatCurrency(employee.metrics?.avg_revenue_per_shift || 0)}/смена</span>
                                                                     </div>
                                                                 </div>
-                                                            </div>
-
-                                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                                                                <div className="bg-muted/30 p-3 rounded-xl border flex flex-col items-center">
-                                                                    <span className="text-[10px] text-muted-foreground uppercase font-bold mb-1">Ср. эффективность</span>
-                                                                    <span className="font-bold text-sm flex items-center gap-1.5">
-                                                                        <TrendingUp className="h-3.5 w-3.5 text-emerald-500" />
-                                                                        {totalHours > 0 ? formatCurrency(totalRevenue / totalHours) + '/ч' : '0 ₽/ч'}
-                                                                    </span>
-                                                                </div>
-                                                                <div className="bg-muted/30 p-3 rounded-xl border flex flex-col items-center">
-                                                                    <span className="text-[10px] text-muted-foreground uppercase font-bold mb-1">Доля {otherMetricLabel}</span>
-                                                                    <span className="font-bold text-sm flex items-center gap-1.5"><Percent className="h-3.5 w-3.5 text-purple-500" /> {upsellShare.toFixed(1)}%</span>
-                                                                </div>
-                                                                <div className="bg-muted/30 p-3 rounded-xl border flex flex-col items-center">
-                                                                    <span className="text-[10px] text-muted-foreground uppercase font-bold mb-1">Эфф. {otherMetricLabel}</span>
-                                                                    <span className="font-bold text-sm flex items-center gap-1.5"><DollarSign className="h-3.5 w-3.5 text-emerald-500" /> {formatCurrency(upsellEfficiency)}/ч</span>
-                                                                </div>
-                                                                <div className="bg-muted/30 p-3 rounded-xl border flex flex-col items-center">
-                                                                    <span className="text-[10px] text-muted-foreground uppercase font-bold mb-1">Бонусы смен</span>
-                                                                    <span className="font-bold text-sm flex items-center gap-1.5"><Plus className="h-3.5 w-3.5 text-purple-500" /> {formatCurrency(totalKpiBonus)}</span>
-                                                                </div>
-                                                                <div className="bg-purple-50 p-3 rounded-xl border border-purple-100 flex flex-col items-center">
-                                                                <span className="text-[10px] text-purple-600 uppercase font-bold mb-1">Оценка чеклист</span>
-                                                                <span className="font-bold text-sm flex items-center gap-1.5 text-purple-700">
-                                                                    <CheckCircle className="h-3.5 w-3.5" />
-                                                                    {(() => {
-                                                                        const evalScore = (employee.metrics as any)?.evaluation_score;
-                                                                        const revScore = employee.metrics?.revenue_by_metric?.['evaluation_score']?.total;
-                                                                        
-                                                                        // Check both direct metric and revenue_by_metric
-                                                                        const score = evalScore !== undefined ? evalScore : revScore;
-                                                                        
-                                                                        return score !== undefined && score !== null ? `${Number(score).toFixed(1)}%` : '—';
-                                                                    })()}
-                                                                </span>
-                                                            </div>
-                                                            {/* Maintenance Efficiency Small Card */}
-                                                            {(() => {
-                                                                // Check if maintenance KPI is configured in bonuses
-                                                                const hasMaintenanceBonus = employee.bonuses?.some((b: any) => b.type === 'maintenance_kpi' || b.type === 'MAINTENANCE_KPI');
-                                                                
-                                                                if (!hasMaintenanceBonus) return null;
-
-                                                                const mCompleted = (employee.metrics as any)?.maintenance_tasks_completed || 0;
-                                                                const mAssigned = (employee.metrics as any)?.maintenance_tasks_assigned || 0;
-                                                                const mBonus = (employee.metrics as any)?.maintenance_bonus || 0;
-                                                                
-                                                                const eff = mAssigned > 0 ? (mCompleted / mAssigned) * 100 : (mCompleted > 0 ? 100 : 0);
-                                                                
-                                                                return (
-                                                                    <div className="bg-indigo-50 p-3 rounded-xl border border-indigo-100 flex flex-col items-center">
-                                                                        <span className="text-[10px] text-indigo-600 uppercase font-bold mb-1">Обслуживание</span>
-                                                                        <span className="font-bold text-sm flex items-center gap-1.5 text-indigo-700">
-                                                                            <Wrench className="h-3.5 w-3.5" />
-                                                                            {eff.toFixed(0)}%
-                                                                        </span>
-                                                                        {mBonus > 0 && <span className="text-[9px] text-indigo-500 font-medium">+{formatCurrency(mBonus)}</span>}
-                                                                    </div>
-                                                                );
-                                                            })()}
                                                             </div>
                                                         </div>
                                                     );
                                                 })()}
 
                                                 {employee.leaderboard?.breakdown && (
-                                                    <div className="bg-amber-50/60 border border-amber-100 rounded-2xl p-4 space-y-4">
-                                                        <div className="flex items-start justify-between gap-4">
+                                                    <div className="bg-amber-50/40 border border-amber-100/60 rounded-2xl p-4 md:p-6 space-y-4">
+                                                        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
                                                             <div>
-                                                                <h4 className="text-sm font-semibold flex items-center gap-2">
+                                                                <h4 className="text-sm font-bold flex items-center gap-2 text-amber-900">
                                                                     <Trophy className="h-4 w-4 text-amber-500" />
-                                                                    Почему такая оценка
+                                                                    Анализ оценки
                                                                 </h4>
-                                                                <p className="text-xs text-muted-foreground mt-1">
+                                                                <p className="text-[11px] text-amber-800/70 mt-1 font-medium">
                                                                     Итог: {employee.leaderboard.score.toFixed(1)} / 10, место #{employee.leaderboard.rank} из {employee.leaderboard.total_participants}
                                                                 </p>
                                                             </div>
-                                                            {employee.leaderboard.is_frozen ? (
-                                                                <Badge variant="secondary" className="gap-1.5">
-                                                                    <Lock className="h-3 w-3" />
-                                                                    Заморожен
-                                                                </Badge>
-                                                            ) : (
-                                                                <Badge variant="outline">Живой рейтинг</Badge>
-                                                            )}
+                                                            <div className="self-start">
+                                                                {employee.leaderboard.is_frozen ? (
+                                                                    <Badge variant="secondary" className="gap-1.5 bg-amber-100 text-amber-800 border-amber-200">
+                                                                        <Lock className="h-3 w-3" />
+                                                                        Заморожен
+                                                                    </Badge>
+                                                                ) : (
+                                                                    <Badge variant="outline" className="bg-white/50 border-amber-200 text-amber-700">Живой рейтинг</Badge>
+                                                                )}
+                                                            </div>
                                                         </div>
 
-                                                        <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+                                                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 md:gap-3">
                                                             {[
                                                                 { key: 'revenue', label: 'Выручка', weight: '35%', value: employee.leaderboard.breakdown.revenue, tone: 'emerald' },
                                                                 { key: 'checklist', label: 'Чек-листы', weight: '25%', value: employee.leaderboard.breakdown.checklist, tone: 'purple' },
@@ -703,13 +620,13 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                                 { key: 'schedule', label: 'График', weight: '10%', value: employee.leaderboard.breakdown.schedule, tone: 'sky' },
                                                                 { key: 'discipline', label: 'Дисциплина', weight: '10%', value: employee.leaderboard.breakdown.discipline, tone: 'rose' }
                                                             ].map((item) => (
-                                                                <div key={item.key} className="rounded-xl bg-white border p-3">
-                                                                    <div className="flex items-center justify-between gap-2">
-                                                                        <span className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">{item.label}</span>
-                                                                        <span className="text-[10px] font-black text-amber-600">{item.weight}</span>
+                                                                <div key={item.key} className="rounded-xl bg-white border border-amber-100/50 p-3 shadow-sm">
+                                                                    <div className="flex items-center justify-between gap-2 mb-2">
+                                                                        <span className="text-[9px] font-black uppercase tracking-wider text-muted-foreground">{item.label}</span>
+                                                                        <span className="text-[9px] font-black text-amber-600">{item.weight}</span>
                                                                     </div>
-                                                                    <div className="mt-2 text-xl font-black">{item.value.toFixed(1)}</div>
-                                                                    <div className="mt-2 h-2 rounded-full bg-muted overflow-hidden">
+                                                                    <div className="text-lg font-black text-slate-900">{item.value.toFixed(1)}</div>
+                                                                    <div className="mt-2 h-1.5 rounded-full bg-slate-100 overflow-hidden">
                                                                         <div className="h-full rounded-full bg-amber-500" style={{ width: `${Math.min(item.value * 10, 100)}%` }} />
                                                                     </div>
                                                                 </div>
@@ -717,149 +634,28 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                         </div>
 
                                                         {employee.leaderboard.details && (
-                                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-                                                                <div className="rounded-xl bg-white border p-4 space-y-2">
-                                                                    <p className="font-semibold">Исходные данные</p>
-                                                                    <div className="flex justify-between gap-4"><span className="text-muted-foreground">Выручка на смену</span><span className="font-bold">{formatCurrency(employee.leaderboard.details.revenue_per_shift)}</span></div>
-                                                                    <div className="flex justify-between gap-4"><span className="text-muted-foreground">Чек-лист средний</span><span className="font-bold">{employee.leaderboard.details.evaluation_score.toFixed(1)}%</span></div>
-                                                                    <div className="flex justify-between gap-4"><span className="text-muted-foreground">Смены</span><span className="font-bold">{employee.leaderboard.details.completed_shifts} / {employee.leaderboard.details.planned_shifts || employee.leaderboard.details.completed_shifts}</span></div>
-                                                                    <div className="flex justify-between gap-4"><span className="text-muted-foreground">Обслуживание</span><span className="font-bold">{employee.leaderboard.details.maintenance_tasks_completed} / {employee.leaderboard.details.maintenance_tasks_assigned}</span></div>
+                                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[11px]">
+                                                                <div className="rounded-xl bg-white/60 border border-amber-100/50 p-4 space-y-2 shadow-sm">
+                                                                    <p className="font-bold text-amber-900 mb-2 uppercase tracking-wider text-[10px]">Исходные данные</p>
+                                                                    <div className="flex justify-between gap-4"><span className="text-muted-foreground font-medium">Выручка на смену</span><span className="font-bold text-slate-900">{formatCurrency(employee.leaderboard.details.revenue_per_shift)}</span></div>
+                                                                    <div className="flex justify-between gap-4"><span className="text-muted-foreground font-medium">Чек-лист средний</span><span className="font-bold text-slate-900">{employee.leaderboard.details.evaluation_score.toFixed(1)}%</span></div>
+                                                                    <div className="flex justify-between gap-4"><span className="text-muted-foreground font-medium">Смены</span><span className="font-bold text-slate-900">{employee.leaderboard.details.completed_shifts} / {employee.leaderboard.details.planned_shifts || employee.leaderboard.details.completed_shifts}</span></div>
+                                                                    <div className="flex justify-between gap-4"><span className="text-muted-foreground font-medium">Обслуживание</span><span className="font-bold text-slate-900">{employee.leaderboard.details.maintenance_tasks_completed} / {employee.leaderboard.details.maintenance_tasks_assigned}</span></div>
                                                                 </div>
-                                                                <div className="rounded-xl bg-white border p-4 space-y-2">
-                                                                    <p className="font-semibold">Что снижает оценку</p>
-                                                                    <div className="flex justify-between gap-4"><span className="text-muted-foreground">Просрочки открытые</span><span className="font-bold">{employee.leaderboard.details.maintenance_overdue_open_tasks}</span></div>
-                                                                    <div className="flex justify-between gap-4"><span className="text-muted-foreground">Возвраты в доработку</span><span className="font-bold">{employee.leaderboard.details.maintenance_rework_open_tasks}</span></div>
-                                                                    <div className="flex justify-between gap-4"><span className="text-muted-foreground">Старые rework</span><span className="font-bold">{employee.leaderboard.details.maintenance_stale_rework_tasks}</span></div>
-                                                                    <div className="flex justify-between gap-4"><span className="text-muted-foreground">Закрыто с просрочкой</span><span className="font-bold">{employee.leaderboard.details.maintenance_overdue_completed_tasks}</span></div>
-                                                                    <div className="flex justify-between gap-4"><span className="text-muted-foreground">Дней просрочки</span><span className="font-bold">{employee.leaderboard.details.maintenance_overdue_completed_days}</span></div>
+                                                                <div className="rounded-xl bg-white/60 border border-amber-100/50 p-4 space-y-2 shadow-sm">
+                                                                    <p className="font-bold text-rose-900 mb-2 uppercase tracking-wider text-[10px]">Факторы снижения</p>
+                                                                    <div className="flex justify-between gap-4"><span className="text-muted-foreground font-medium">Просрочки открытые</span><span className="font-bold text-rose-600">{employee.leaderboard.details.maintenance_overdue_open_tasks}</span></div>
+                                                                    <div className="flex justify-between gap-4"><span className="text-muted-foreground font-medium">Возвраты в доработку</span><span className="font-bold text-rose-600">{employee.leaderboard.details.maintenance_rework_open_tasks}</span></div>
+                                                                    <div className="flex justify-between gap-4"><span className="text-muted-foreground font-medium">Старые rework</span><span className="font-bold text-rose-600">{employee.leaderboard.details.maintenance_stale_rework_tasks}</span></div>
+                                                                    <div className="flex justify-between gap-4"><span className="text-muted-foreground font-medium">Закрыто с просрочкой</span><span className="font-bold text-rose-600">{employee.leaderboard.details.maintenance_overdue_completed_tasks}</span></div>
+                                                                    <div className="flex justify-between gap-4"><span className="text-muted-foreground font-medium">Дней просрочки</span><span className="font-bold text-rose-600">{employee.leaderboard.details.maintenance_overdue_completed_days}</span></div>
                                                                 </div>
                                                             </div>
                                                         )}
                                                     </div>
                                                 )}
 
-                                                {/* 2. Detailed KPI Cards (replacing progress bar) */}
-                                                {employee.has_active_kpi && employee.period_bonuses && (
-                                                    <div className="space-y-3">
-                                                        <h4 className="text-sm font-semibold flex items-center gap-2">🎯 Статус по KPI</h4>
-                                                        <div className="space-y-4">
-                                                            {/* Maintenance KPI Card (New Detailed View) */}
-                                                            {(() => {
-                                                                const mCompleted = (employee.metrics as any)?.maintenance_tasks_completed || 0;
-                                                                const mAssigned = (employee.metrics as any)?.maintenance_tasks_assigned || 0;
-                                                                const mBonus = (employee.metrics as any)?.maintenance_bonus || 0;
-                                                                const hasM = employee.bonuses?.some((b: any) => b.type === 'maintenance_kpi' || b.type === 'MAINTENANCE_KPI');
-                                                                
-                                                                if (!hasM) return null;
 
-                                                                const efficiency = mAssigned > 0 ? (mCompleted / mAssigned) * 100 : (mCompleted > 0 ? 100 : 0);
-                                                                const isCompleted = efficiency >= 90;
-                                                                const isCurrentTarget = !isCompleted && efficiency >= 50;
-
-                                                                return (
-                                                                    <div className="bg-background border rounded-xl p-4 space-y-4">
-                                                                        <div className="flex justify-between items-center">
-                                                                            <div className="flex items-center gap-2">
-                                                                                <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg">
-                                                                                    <Wrench className="h-5 w-5" />
-                                                                                </div>
-                                                                                <div>
-                                                                                    <span className="font-bold text-sm">KPI Обслуживания</span>
-                                                                                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">ПРОГРЕСС</p>
-                                                                                </div>
-                                                                            </div>
-                                                                            <div className="text-right">
-                                                                                <span className="font-bold text-lg text-emerald-600">+{formatCurrency(mBonus)}</span>
-                                                                                <p className="text-[10px] text-muted-foreground">Бонус</p>
-                                                                            </div>
-                                                                        </div>
-
-                                                                        <div className={`relative p-3 rounded-xl border-2 transition-all duration-300 ${isCompleted ? 'bg-green-50/50 border-green-200 dark:bg-green-900/10 dark:border-green-900/30' : isCurrentTarget ? 'bg-blue-50 border-blue-400 shadow-sm shadow-blue-100 dark:bg-blue-900/20 dark:border-blue-500' : 'bg-muted/10 border-muted/30 opacity-60'}`}>
-                                                                            <div className="flex justify-between items-start mb-2">
-                                                                                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase ${isCompleted ? 'bg-green-100 text-green-700' : isCurrentTarget ? 'bg-blue-100 text-blue-700 animate-pulse' : 'bg-muted text-muted-foreground'}`}>
-                                                                                    {isCompleted ? '✓ ОТЛИЧНО' : isCurrentTarget ? '🛠 В ПРОЦЕССЕ' : '⚠️ ТРЕБУЕТ ВНИМАНИЯ'}
-                                                                                </span>
-                                                                                <span className="text-sm font-black text-primary">{efficiency.toFixed(0)}%</span>
-                                                                            </div>
-                                                                            <div className="space-y-2">
-                                                                                <div>
-                                                                                    <p className="text-[9px] text-muted-foreground uppercase leading-none mb-1">Задачи</p>
-                                                                                    <p className="text-xs font-bold leading-none mb-1">{mCompleted} / {mAssigned}</p>
-                                                                                    <p className="text-[9px] text-muted-foreground">
-                                                                                        (План месяца + Закрытые долги)
-                                                                                    </p>
-                                                                                </div>
-                                                                                <div className="space-y-1">
-                                                                                    <div className="flex justify-between items-center text-[9px] font-bold uppercase tracking-tighter">
-                                                                                        <span className={isCompleted ? 'text-green-600' : isCurrentTarget ? 'text-blue-600' : 'text-muted-foreground'}>Выполнение</span>
-                                                                                        <span>{efficiency.toFixed(0)}%</span>
-                                                                                    </div>
-                                                                                    <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
-                                                                                        <div className={`h-full transition-all duration-700 rounded-full ${isCompleted ? 'bg-green-500' : efficiency >= 50 ? 'bg-amber-500' : 'bg-red-500'}`} style={{ width: `${Math.min(100, efficiency)}%` }} />
-                                                                                    </div>
-                                                                                </div>
-                                                                                {!isCompleted && <p className="text-[10px] font-medium text-blue-600">Осталось задач: {mAssigned - mCompleted}</p>}
-                                                                            </div>
-                                                                        </div>
-                                                                    </div>
-                                                                );
-                                                            })()}
-
-                                                            {Array.isArray(employee.period_bonuses) && employee.period_bonuses.map((kpi: any) => (
-                                                                <div key={kpi.id} className="bg-background border rounded-xl p-4 space-y-4">
-                                                                    <div className="flex justify-between items-center">
-                                                                        <div className="flex items-center gap-2"><div className="font-bold text-sm">{kpi.name}</div><span className="text-[10px] text-muted-foreground uppercase tracking-widest">ПРОГРЕСС</span></div>
-                                                                        <div className="text-right"><span className="font-bold text-lg">{formatCurrency(kpi.current_value)}</span><p className="text-[10px] text-muted-foreground">из {formatCurrency(kpi.target_value)}</p></div>
-                                                                    </div>
-
-                                                                    {/* Threshold Cards Grid */}
-                                                                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                                                                        {(kpi.thresholds || []).map((threshold: any, idx: number) => {
-                                                                            const isCompleted = kpi.current_value >= threshold.from;
-                                                                            const prevThresholdValue = idx === 0 ? 0 : kpi.thresholds[idx - 1]?.from;
-                                                                            const isCurrentTarget = !isCompleted && kpi.current_value >= prevThresholdValue;
-                                                                            const segmentTotal = threshold.from - prevThresholdValue;
-                                                                            const segmentEarned = Math.max(0, kpi.current_value - prevThresholdValue);
-                                                                            const segmentPercent = segmentTotal > 0 ? Math.min(100, (segmentEarned / segmentTotal) * 100) : (isCompleted ? 100 : 0);
-                                                                            return (
-                                                                                <div key={idx} className={`relative p-3 rounded-xl border-2 transition-all duration-300 ${isCompleted ? 'bg-green-50/50 border-green-200 dark:bg-green-900/10 dark:border-green-900/30' : isCurrentTarget ? 'bg-blue-50 border-blue-400 shadow-sm shadow-blue-100 dark:bg-blue-900/20 dark:border-blue-500' : 'bg-muted/10 border-muted/30 opacity-60'}`}>
-                                                                                    <div className="flex justify-between items-start mb-2">
-                                                                                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase ${isCompleted ? 'bg-green-100 text-green-700' : isCurrentTarget ? 'bg-blue-100 text-blue-700 animate-pulse' : 'bg-muted text-muted-foreground'}`}>
-                                                                                            {threshold.label || (isCompleted ? '✓ OK' : isCurrentTarget ? '🎯 Цель' : '⏳ План')}
-                                                                                        </span>
-                                                                                        <span className="text-sm font-black text-primary">{threshold.percent}%</span>
-                                                                                    </div>
-                                                                                    <div className="space-y-2">
-                                                                                        <div>
-                                                                                            <p className="text-[9px] text-muted-foreground uppercase leading-none mb-1">Личная</p>
-                                                                                            <p className="text-xs font-bold leading-none mb-1">{formatCurrency(threshold.from)}</p>
-                                                                                            {threshold.original_from !== threshold.from && (
-                                                                                                <p className="text-[9px] text-muted-foreground">
-                                                                                                    Цель: {formatCurrency(threshold.original_from)}
-                                                                                                </p>
-                                                                                            )}
-                                                                                        </div>
-                                                                                        <div className="space-y-1">
-                                                                                            <div className="flex justify-between items-center text-[9px] font-bold uppercase tracking-tighter">
-                                                                                                <span className={isCompleted ? 'text-green-600' : isCurrentTarget ? 'text-blue-600' : 'text-muted-foreground'}>Выполнение</span>
-                                                                                                <span>{Math.round(segmentPercent)}%</span>
-                                                                                            </div>
-                                                                                            <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
-                                                                                                <div className={`h-full transition-all duration-700 rounded-full ${isCompleted ? 'bg-green-500' : 'bg-blue-400'}`} style={{ width: `${segmentPercent}%` }} />
-                                                                                            </div>
-                                                                                        </div>
-                                                                                        {isCurrentTarget && <p className="text-[10px] font-medium text-blue-600">Осталось: {formatCurrency(threshold.from - kpi.current_value)}</p>}
-                                                                                    </div>
-                                                                                </div>
-                                                                            );
-                                                                        })}
-                                                                    </div>
-                                                                    {(kpi.thresholds || []).length === 0 && <div className="p-4 bg-muted/20 border border-dashed rounded-xl text-center text-xs text-muted-foreground">Пороги для этого KPI не настроены</div>}
-                                                                </div>
-                                                            ))}
-                                                        </div>
-                                                    </div>
-                                                )}
                                             </div>
                                         )}
 
@@ -937,13 +733,7 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                 })()}
 
                                                 {(() => {
-                                                    const shiftsCompletedForCalc = employee.shifts_count || 0;
                                                     const standardShifts = employee.planned_shifts || employee.standard_monthly_shifts || 15;
-
-                                                    // Context Detection
-                                                    const now = new Date();
-                                                    const isCurrentMonth = selectedMonth === (now.getMonth() + 1) && selectedYear === now.getFullYear();
-                                                    const isPastMonth = selectedYear < now.getFullYear() || (selectedYear === now.getFullYear() && selectedMonth < (now.getMonth() + 1));
 
                                                     return (
                                                         <>
@@ -1061,7 +851,7 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                                 {Array.isArray(employee.period_bonuses) && employee.period_bonuses.map((kpi: any) => (
                                                                     <div key={kpi.id} className="bg-background border rounded-xl p-4 space-y-4">
                                                                         <div className="flex justify-between items-center">
-                                                                            <div className="flex items-center gap-2"><span className="text-xl">🎯</span><div><span className="font-bold text-sm">{kpi.name}</span><p className="text-[10px] text-muted-foreground uppercase tracking-wider">Текущая выручка</p></div></div>
+                                                                            <div className="flex items-center gap-2"><div><span className="font-bold text-sm">{kpi.name}</span><p className="text-[10px] text-muted-foreground uppercase tracking-wider">Текущая выручка</p></div></div>
                                                                             <div className="text-right"><span className="font-bold text-lg">{formatCurrency(kpi.current_value)}</span><p className="text-[10px] text-muted-foreground">из {formatCurrency(kpi.target_value)}</p></div>
                                                                         </div>
                                                                         <div className="bg-blue-50/50 border border-blue-100 rounded-xl p-3 flex items-start gap-3 dark:bg-blue-900/10 dark:border-blue-900/30">
@@ -1124,7 +914,6 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                                             <div key={bi} className="bg-background border rounded-xl p-4 space-y-4">
                                                                                 <div className="flex justify-between items-center">
                                                                                     <div className="flex items-center gap-2">
-                                                                                        <span className="text-xl">📋</span>
                                                                                         <div>
                                                                                             <span className="font-bold text-sm">{bonus.name || 'Чек-лист'}</span>
                                                                                             <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
@@ -1202,13 +991,12 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                                         <h4 className="text-sm font-bold">Статус обслуживания</h4>
                                                                         <div className="bg-background border rounded-xl p-4 space-y-4">
                                                                             <div className="flex justify-between items-center">
-                                                                                <div className="flex items-center gap-2">
-                                                                                    <span className="text-xl">🔧</span>
-                                                                                    <div>
-                                                                                        <span className="font-bold text-sm">{employee.maintenance_status.name || 'KPI Обслуживание'}</span>
-                                                                                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Единый стандарт месяца</p>
+                                                                                    <div className="flex items-center gap-2">
+                                                                                        <div>
+                                                                                            <span className="font-bold text-sm">{employee.maintenance_status.name || 'KPI Обслуживание'}</span>
+                                                                                            <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Единый стандарт месяца</p>
+                                                                                        </div>
                                                                                     </div>
-                                                                                </div>
                                                                                 <div className="text-right">
                                                                                     <span className="font-bold text-lg text-indigo-600">
                                                                                         {employee.maintenance_status.current_value} / {employee.maintenance_status.target_value}
@@ -1381,24 +1169,25 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                         (employee.shifts || []).some((s: any) => (s.virtual_balance_earned || 0) > 0);
 
                                                     return (
-                                                        <div className="rounded-xl border overflow-hidden">
-                                                            <table className="w-full text-xs">
-                                                                <thead className="bg-muted/50 border-b">
-                                                                    <tr className="text-muted-foreground text-left">
-                                                                        <th className="p-3 font-bold uppercase tracking-wider">Дата</th>
-                                                                        <th className="p-3 font-bold uppercase tracking-wider text-center">Часы</th>
-                                                                        <th className="p-3 font-bold uppercase tracking-wider text-right">Выручка</th>
-                                                                        <th className="p-3 font-bold uppercase tracking-wider text-right text-indigo-600">Эффект.</th>
-                                                                        <th className="p-3 font-bold uppercase tracking-wider text-right text-emerald-600">KPI</th>
-                                                                        {hasVirtualBonuses && (
-                                                                            <th className="p-3 font-bold uppercase tracking-wider text-right text-purple-600">Бонусные</th>
-                                                                        )}
-                                                                        <th className="p-3 font-bold uppercase tracking-wider text-right text-blue-600">З/П</th>
-                                                                        <th className="p-3 font-bold uppercase tracking-wider text-center">Статус</th>
-                                                                        <th className="p-3"></th>
-                                                                    </tr>
-                                                                </thead>
-                                                                <tbody className="divide-y">
+                                                        <div className="rounded-xl border border-slate-100 overflow-hidden bg-white shadow-sm">
+                                                            <div className="overflow-x-auto scrollbar-thin scrollbar-thumb-slate-200">
+                                                                <table className="w-full text-[11px] md:text-xs">
+                                                                    <thead className="bg-slate-50 border-b border-slate-100">
+                                                                        <tr className="text-muted-foreground text-left whitespace-nowrap">
+                                                                            <th className="p-3 font-bold uppercase tracking-wider">Дата</th>
+                                                                            <th className="p-3 font-bold uppercase tracking-wider text-center">Часы</th>
+                                                                            <th className="p-3 font-bold uppercase tracking-wider text-right">Выручка</th>
+                                                                            <th className="p-3 font-bold uppercase tracking-wider text-right text-indigo-600">Эффект.</th>
+                                                                            <th className="p-3 font-bold uppercase tracking-wider text-right text-emerald-600">KPI</th>
+                                                                            {hasVirtualBonuses && (
+                                                                                <th className="p-3 font-bold uppercase tracking-wider text-right text-purple-600">Бонусные</th>
+                                                                            )}
+                                                                            <th className="p-3 font-bold uppercase tracking-wider text-right text-blue-600">З/П</th>
+                                                                            <th className="p-3 font-bold uppercase tracking-wider text-center">Статус</th>
+                                                                            <th className="p-3"></th>
+                                                                        </tr>
+                                                                    </thead>
+                                                                    <tbody className="divide-y divide-slate-50">
                                                                     {(Array.isArray(employee.shifts) ? employee.shifts : [])
                                                                         .filter((s: any) => s.type !== 'PERIOD_BONUS')
                                                                         .map((shift: any) => {
@@ -1429,9 +1218,13 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                                                                     const val = shift.metrics?.[primaryKPI.metric_key];
                                                                                                     const numVal = typeof val === 'number' ? val : parseFloat(val || '0') || 0;
                                                                                                     const label = metadata[primaryKPI.metric_key]?.label || primaryKPI.name || primaryKPI.metric_key;
+                                                                                                    
+                                                                                                    // Check if it's maintenance or tasks
+                                                                                                    const isMaintenance = primaryKPI.metric_key?.toLowerCase().includes('maintenance') || label.toLowerCase().includes('обслуживани');
+                                                                                                    
                                                                                                     return (
                                                                                                         <span className="text-[9px] text-muted-foreground font-bold">
-                                                                                                            {label}: {formatCurrency(numVal)}
+                                                                                                            {label}: {isMaintenance ? `${numVal} шт.` : formatCurrency(numVal)}
                                                                                                         </span>
                                                                                                     );
                                                                                                 }
@@ -1476,9 +1269,16 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                                                                                 'revenue_kitchen': 'Кухня'
                                                                                                             };
                                                                                                             const label = sourceLabels[b.source_key] || b.name || 'Бонус';
+                                                                                                            
+                                                                                                            // Special handling for maintenance bonuses (show monthly plan status)
+                                                                                                            const isMaintenance = b.name?.toLowerCase().includes('обслуживани') || b.source_key?.toLowerCase().includes('maintenance');
+                                                                                                            const displaySource = isMaintenance && employee.maintenance_status 
+                                                                                                                ? `${employee.maintenance_status.efficiency.toFixed(0)}% плана` 
+                                                                                                                : b.source_value ? formatCurrency(b.source_value) : null;
+
                                                                                                             return (
                                                                                                                 <span key={bi} className="text-[8px] text-muted-foreground leading-tight whitespace-nowrap bg-muted/30 px-1 rounded flex items-center gap-1">
-                                                                                                                    {label} {b.source_value ? `(${formatCurrency(b.source_value)})` : ''}
+                                                                                                                    {label} {displaySource ? `(${displaySource})` : ''}
                                                                                                                     <span className="font-bold text-emerald-600">+{formatCurrency(b.amount)}</span>
                                                                                                                 </span>
                                                                                                             );
@@ -1534,7 +1334,8 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                                             );
                                                                         })}
                                                                 </tbody>
-                                                            </table>
+                                                                </table>
+                                                            </div>
                                                             {(employee.shifts || []).length === 0 && (
                                                                 <div className="p-12 text-center bg-muted/5">
                                                                     <Clock className="h-8 w-8 text-muted-foreground/20 mx-auto mb-2" />
@@ -1548,54 +1349,57 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                         )}
 
                                         {activeTabs[employee.id] === 'bar' && (
-                                            <div className="space-y-6 animate-in slide-in-from-left-2 duration-300">
-                                                <div className="bg-background border rounded-xl overflow-hidden">
-                                                    <div className="p-4 bg-muted/30 border-b flex justify-between items-center">
-                                                        <h4 className="font-bold text-sm">Покупки из бара в счет ЗП</h4>
+                                            <div className="space-y-4 animate-in slide-in-from-left-2 duration-300">
+                                                <div className="bg-white border border-slate-100 rounded-2xl overflow-hidden shadow-sm">
+                                                    <div className="p-4 bg-slate-50/50 border-b border-slate-100 flex justify-between items-center">
+                                                        <h4 className="font-bold text-sm text-slate-900">Покупки из бара</h4>
                                                         <div className="text-right">
-                                                            <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Итого удержано</p>
-                                                            <p className="text-lg font-black text-red-600">
+                                                            <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest">Итого удержано</p>
+                                                            <p className="text-lg font-black text-rose-600">
                                                                 -{formatCurrency(employee.total_bar_purchases || 0)}
                                                             </p>
                                                         </div>
                                                     </div>
-                                                    <div className="overflow-x-auto">
-                                                        <table className="w-full text-sm">
-                                                            <thead className="bg-muted/20 border-b">
-                                                                <tr>
-                                                                    <th className="px-4 py-2 text-left font-medium text-muted-foreground">Дата</th>
-                                                                    <th className="px-4 py-2 text-left font-medium text-muted-foreground">Товар</th>
-                                                                    <th className="px-4 py-2 text-left font-medium text-muted-foreground">Смена</th>
-                                                                    <th className="px-4 py-2 text-right font-medium text-muted-foreground">Сумма</th>
-                                                                    <th className="px-4 py-2 text-right font-medium text-muted-foreground w-[50px]"></th>
+                                                    <div className="overflow-x-auto scrollbar-thin scrollbar-thumb-slate-200">
+                                                        <table className="w-full text-[11px] md:text-xs">
+                                                            <thead className="bg-slate-50 border-b border-slate-100">
+                                                                <tr className="text-muted-foreground text-left whitespace-nowrap">
+                                                                    <th className="px-4 py-3 font-bold uppercase tracking-wider">Дата</th>
+                                                                    <th className="px-4 py-3 font-bold uppercase tracking-wider">Товар</th>
+                                                                    <th className="px-4 py-3 font-bold uppercase tracking-wider">Смена</th>
+                                                                    <th className="px-4 py-3 text-right font-bold uppercase tracking-wider">Сумма</th>
+                                                                    <th className="px-4 py-3 w-[50px]"></th>
                                                                 </tr>
                                                             </thead>
-                                                            <tbody className="divide-y">
+                                                            <tbody className="divide-y divide-slate-50">
                                                                 {(employee.bar_details || [])
                                                                     .map(item => (
-                                                                        <tr key={item.id} className="hover:bg-muted/10 transition-colors group">
-                                                                            <td className="px-4 py-3 whitespace-nowrap text-xs">{new Date(item.date).toLocaleDateString('ru-RU')}</td>
-                                                                            <td className="px-4 py-3 font-medium text-xs">{item.product_name} {item.quantity! > 1 && <span className="text-muted-foreground font-normal">× {item.quantity}</span>}</td>
-                                                                            <td className="px-4 py-3 text-[10px] text-muted-foreground font-mono">
+                                                                        <tr key={item.id} className="hover:bg-slate-50 transition-colors group">
+                                                                            <td className="px-4 py-3 whitespace-nowrap font-medium">{new Date(item.date).toLocaleDateString('ru-RU')}</td>
+                                                                            <td className="px-4 py-3">
+                                                                                <span className="font-bold text-slate-900">{item.product_name}</span>
+                                                                                {item.quantity! > 1 && <span className="ml-1 text-muted-foreground">× {item.quantity}</span>}
+                                                                            </td>
+                                                                            <td className="px-4 py-3 font-mono text-muted-foreground">
                                                                                 {item.shift_id ? `#${item.shift_id.slice(0, 8)}` : '—'}
                                                                             </td>
-                                                                            <td className="px-4 py-3 text-right font-bold text-red-600 text-xs">-{formatCurrency(item.amount)}</td>
+                                                                            <td className="px-4 py-3 text-right font-black text-rose-600">-{formatCurrency(item.amount)}</td>
                                                                             <td className="px-4 py-3 text-right">
                                                                                 <Button
                                                                                     variant="ghost"
                                                                                     size="icon"
-                                                                                    className="h-6 w-6 text-muted-foreground hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                                                    className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10 md:opacity-0 md:group-hover:opacity-100 transition-opacity"
                                                                                     onClick={(e) => { e.stopPropagation(); handleDeleteBarPurchase(item.id); }}
                                                                                 >
-                                                                                    <Trash2 className="h-3 w-3" />
+                                                                                    <Trash2 className="h-3.5 w-3.5" />
                                                                                 </Button>
                                                                             </td>
                                                                         </tr>
                                                                     ))}
                                                                 {(!employee.bar_details || employee.bar_details.length === 0) && (
                                                                     <tr>
-                                                                        <td colSpan={3} className="px-4 py-8 text-center text-muted-foreground italic">
-                                                                            В этом месяце покупок не было
+                                                                        <td colSpan={5} className="px-4 py-12 text-center text-muted-foreground italic bg-slate-50/20">
+                                                                            <p>В этом периоде покупок не было</p>
                                                                         </td>
                                                                     </tr>
                                                                 )}
@@ -1608,16 +1412,18 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
 
                                         {activeTabs[employee.id] === 'payments' && (
                                             <div className="space-y-4 animate-in slide-in-from-left-2 duration-300">
-                                                <div className="bg-muted/10 rounded-xl border p-4">
-                                                    <h5 className="text-sm font-bold mb-4">История всех транзакций</h5>
+                                                <div className="bg-slate-50/50 rounded-2xl border border-slate-100 p-4 md:p-6 shadow-sm">
+                                                    <h5 className="text-sm font-black text-slate-900 uppercase tracking-widest mb-6">История транзакций</h5>
                                                     <div className="space-y-3">
                                                         {(employee.payment_history || []).map((payment: any, idx: number) => (
-                                                            <div key={idx} className="flex items-center justify-between p-3 bg-background rounded-lg border">
-                                                                <div className="flex items-center gap-3">
-                                                                    <div className={`p-2 rounded-lg ${payment.payment_type === 'advance' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}><DollarSign className="h-4 w-4" /></div>
+                                                            <div key={idx} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-white rounded-xl border border-slate-100 shadow-sm gap-4">
+                                                                <div className="flex items-center gap-4">
+                                                                    <div className={`p-3 rounded-xl ${payment.payment_type === 'advance' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                                                                        <DollarSign className="h-5 w-5" />
+                                                                    </div>
                                                                     <div>
-                                                                        <p className="text-sm font-bold">{formatCurrency(payment.amount)}</p>
-                                                                        <p className="text-[10px] text-muted-foreground">
+                                                                        <p className="text-base font-black text-slate-900">{formatCurrency(payment.amount)}</p>
+                                                                        <p className="text-[11px] font-medium text-muted-foreground mt-0.5">
                                                                             {new Date(payment.date).toLocaleDateString('ru-RU', { day: '2-digit', month: 'long' })} • {
                                                                                 payment.method === 'VIRTUAL' ? 'Виртуально' :
                                                                                 payment.method === 'CASH' ? 'Наличные' : 'Безнал'
@@ -1625,13 +1431,28 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                                         </p>
                                                                     </div>
                                                                 </div>
-                                                                <div className="flex items-center gap-3">
-                                                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${payment.payment_type === 'advance' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>{payment.payment_type === 'advance' ? 'Аванс' : 'Зарплата'}</span>
-                                                                    {payment.id && <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => setConfirmingDeleteId(payment.id!)}><Trash2 className="h-3.5 w-3.5" /></Button>}
+                                                                <div className="flex items-center justify-between sm:justify-end gap-3 border-t sm:border-none pt-3 sm:pt-0">
+                                                                    <span className={`text-[10px] font-black px-2.5 py-1 rounded-lg uppercase tracking-wider ${payment.payment_type === 'advance' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                                                                        {payment.payment_type === 'advance' ? 'Аванс' : 'Зарплата'}
+                                                                    </span>
+                                                                    {payment.id && (
+                                                                        <Button 
+                                                                            variant="ghost" 
+                                                                            size="icon" 
+                                                                            className="h-9 w-9 text-muted-foreground hover:text-destructive hover:bg-destructive/5 rounded-xl transition-colors" 
+                                                                            onClick={() => setConfirmingDeleteId(payment.id!)}
+                                                                        >
+                                                                            <Trash2 className="h-4 w-4" />
+                                                                        </Button>
+                                                                    )}
                                                                 </div>
                                                             </div>
                                                         ))}
-                                                        {(employee.payment_history || []).length === 0 && <div className="py-4 text-center text-muted-foreground italic">Выплат еще не было</div>}
+                                                        {(employee.payment_history || []).length === 0 && (
+                                                            <div className="py-12 text-center text-muted-foreground italic bg-white rounded-xl border border-dashed border-slate-200">
+                                                                Выплат еще не было
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 </div>
                                             </div>

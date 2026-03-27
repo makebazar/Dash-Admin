@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/db';
 import { cookies } from 'next/headers';
+import { freezeClubEmployeeLeaderboard } from '@/lib/employee-leaderboard';
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ clubId: string }> }) {
     try {
@@ -113,11 +114,47 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             [JSON.stringify(snapshot), employee_id, clubId, startOfMonth, endOfMonth]
         );
 
+        // 6. Check if ALL employees for this club/period are paid
+        // If they are, auto-freeze the leaderboard
+        const unpaidCheckRes = await query(
+            `SELECT u.id, u.full_name
+             FROM club_employees ce
+             JOIN users u ON u.id = ce.user_id
+             WHERE ce.club_id = $1
+               AND NOT EXISTS (
+                   SELECT 1 FROM payments p 
+                   WHERE p.user_id = u.id 
+                     AND p.club_id = $1 
+                     AND p.month = $2 
+                     AND p.year = $3 
+                     AND p.payment_type = 'salary'
+               )`,
+            [clubId, month, year]
+        );
+
+        let leaderboardFrozen = false;
+        if (unpaidCheckRes.rowCount === 0) {
+            // Check if already frozen
+            const frozenCheck = await query(
+                `SELECT 1 FROM employee_leaderboard_snapshots 
+                 WHERE club_id = $1 AND month = $2 AND year = $3 LIMIT 1`,
+                [clubId, month, year]
+            );
+            
+            if (frozenCheck.rowCount === 0) {
+                await freezeClubEmployeeLeaderboard(clubId, year, month);
+                leaderboardFrozen = true;
+            }
+        }
+
         return NextResponse.json({
             payment_id: payment.id,
             payment_type: 'salary',
             snapshot_created: true,
-            message: 'Payment recorded and salary frozen'
+            leaderboard_frozen: leaderboardFrozen,
+            message: leaderboardFrozen 
+                ? 'Payment recorded, salary frozen and leaderboard auto-finalized (all employees paid)' 
+                : 'Payment recorded and salary frozen'
         });
 
     } catch (error) {

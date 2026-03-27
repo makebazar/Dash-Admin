@@ -93,12 +93,13 @@ export async function GET(
         }
 
         const startOfMonth = `${year}-${month.toString().padStart(2, '0')}-01`;
+        const startDate = new Date(year, month - 1, -2).toISOString().split('T')[0]; // 3 days before 1st of the month
         const endOfMonth = new Date(year, month, 0).toISOString().split('T')[0];
 
         // Get employees
         let employees = [];
         try {
-            console.log(`Fetching schedule employees for club ${clubId}, date >= ${startOfMonth}`);
+            console.log(`Fetching schedule employees for club ${clubId}, date >= ${startDate}`);
             const employeesRes = await query(
                 `SELECT u.id, u.full_name, r.name as role, ce.dismissed_at, ce.display_order, ce.is_active, ce.show_in_schedule
                  FROM club_employees ce
@@ -111,10 +112,10 @@ export async function GET(
                     (ce.dismissed_at IS NOT NULL AND ce.dismissed_at >= $2::date)
                  )
                  ORDER BY ce.dismissed_at ASC NULLS FIRST, ce.display_order ASC, u.full_name ASC`,
-                [clubId, startOfMonth]
+                [clubId, startDate]
             );
             employees = employeesRes.rows;
-            console.log(`Found ${employees.length} employees. Dismissed included if date >= ${startOfMonth}`);
+            console.log(`Found ${employees.length} employees. Dismissed included if date >= ${startDate}`);
         } catch (err: any) {
             console.error('Failed to fetch employees:', err);
             throw new Error(`Employee query failed: ${err.message}`);
@@ -126,7 +127,7 @@ export async function GET(
                 `SELECT user_id, TO_CHAR(date, 'YYYY-MM-DD') as date, shift_type 
                  FROM work_schedules 
                  WHERE club_id = $1 AND date >= $2 AND date <= $3`,
-                [clubId, startOfMonth, endOfMonth]
+                [clubId, startDate, endOfMonth]
             );
 
             const scheduleMap: Record<string, Record<string, string>> = {};

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef } from "react"
 import { cn } from "@/lib/utils"
-import { Sun, Moon, Plus, Loader2, GripVertical } from "lucide-react"
+import { Sun, Moon, Plus, Loader2, GripVertical, Calendar as CalendarIcon } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import {
     DndContext,
@@ -31,7 +31,7 @@ interface WorkScheduleGridProps {
     readOnly?: boolean
 }
 
-function SortableRow({ emp, days, month, year, localSchedule, isUpdating, toggleShift, readOnly }: any) {
+function SortableRow({ emp, days, month, year, localSchedule, isUpdating, toggleShift, readOnly, todayStr }: any) {
     const {
         attributes,
         listeners,
@@ -98,21 +98,23 @@ function SortableRow({ emp, days, month, year, localSchedule, isUpdating, toggle
                     </div>
                 </div>
             </td>
-            {days.map((d: number) => {
-                const dateStr = `${year}-${month.toString().padStart(2, '0')}-${d.toString().padStart(2, '0')}`
+            {days.map((d: any) => {
+                const dateStr = d.dateStr
                 const type = localSchedule[emp.id]?.[dateStr]
                 const cellId = `${emp.id}-${dateStr}`
                 const updating = isUpdating === cellId
+                const isToday = dateStr === todayStr
 
                 return (
                     <td
-                        key={d}
-                        onClick={() => !readOnly && toggleShift(emp.id, d)}
+                        key={dateStr}
+                        onClick={() => !readOnly && toggleShift(emp.id, dateStr)}
                         className={cn(
-                            "p-0 border-r border-slate-100 dark:border-slate-800 relative",
+                            "p-0 border-r border-slate-100 dark:border-slate-800 relative group/cell",
                             !readOnly && "cursor-pointer transition-all hover:ring-2 hover:ring-inset hover:ring-purple-400",
                             readOnly && "cursor-default",
-                            updating && "opacity-50 pointer-events-none"
+                            d.isOutside && "opacity-40 bg-slate-50/30 dark:bg-slate-900/30",
+                            isToday && "bg-purple-50/40 dark:bg-purple-900/10"
                         )}
                     >
                         <div className={cn(
@@ -120,12 +122,18 @@ function SortableRow({ emp, days, month, year, localSchedule, isUpdating, toggle
                             type === 'DAY' && "bg-emerald-500 text-white shadow-sm",
                             type === 'NIGHT' && "bg-indigo-500 text-white shadow-sm",
                             !type && "bg-transparent text-slate-200 dark:text-slate-800",
-                            !type && !readOnly && "hover:bg-slate-50 dark:hover:bg-slate-900"
+                            !type && !readOnly && "hover:bg-slate-50 dark:hover:bg-slate-900",
+                            updating && "opacity-40 scale-90"
                         )}>
                             {type === 'DAY' && <Sun className="h-5 w-5 animate-in zoom-in-50 duration-200 drop-shadow-sm" />}
                             {type === 'NIGHT' && <Moon className="h-5 w-5 animate-in zoom-in-50 duration-200 drop-shadow-sm" />}
-                            {!type && !readOnly && <Plus className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />}
+                            {!type && !readOnly && <Plus className="h-3 w-3 opacity-0 group-hover/cell:opacity-100 transition-opacity" />}
                         </div>
+                        {updating && (
+                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                <Loader2 className="h-4 w-4 animate-spin text-white/50" />
+                            </div>
+                        )}
                     </td>
                 )
             })}
@@ -141,6 +149,11 @@ export function WorkScheduleGrid({ clubId, month, year, initialData, refreshData
     const [localEmployees, setLocalEmployees] = useState(initialEmployees || [])
     const [isUpdating, setIsUpdating] = useState<string | null>(null)
     const scrollContainerRef = useRef<HTMLDivElement>(null)
+
+    const todayStr = useMemo(() => {
+        const d = new Date();
+        return `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}-${d.getDate().toString().padStart(2, '0')}`;
+    }, []);
 
     // Enable drag-to-scroll
     useEffect(() => {
@@ -212,7 +225,11 @@ export function WorkScheduleGrid({ clubId, month, year, initialData, refreshData
     }, [initialEmployees])
 
     const sensors = useSensors(
-        useSensor(PointerSensor),
+        useSensor(PointerSensor, {
+            activationConstraint: {
+                distance: 8,
+            },
+        }),
         useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
     );
 
@@ -238,29 +255,63 @@ export function WorkScheduleGrid({ clubId, month, year, initialData, refreshData
         }
     };
 
-    const daysInMonth = useMemo(() => new Date(year, month, 0).getDate(), [month, year])
-    const days = useMemo(() => Array.from({ length: daysInMonth }, (_, i) => i + 1), [daysInMonth])
+    const days = useMemo(() => {
+        const result = [];
+        // Last 3 days of prev month
+        for (let i = 2; i >= 0; i--) {
+            const date = new Date(year, month - 1, -i);
+            result.push({
+                day: date.getDate(),
+                month: date.getMonth() + 1,
+                year: date.getFullYear(),
+                dateStr: date.toISOString().split('T')[0],
+                isOutside: true
+            });
+        }
+        // Current month days
+        const daysInMonth = new Date(year, month, 0).getDate();
+        for (let d = 1; d <= daysInMonth; d++) {
+            const date = new Date(year, month - 1, d);
+            result.push({
+                day: d,
+                month: month,
+                year: year,
+                dateStr: date.toISOString().split('T')[0],
+                isOutside: false
+            });
+        }
+        return result;
+    }, [month, year])
 
-    const toggleShift = async (userId: string, day: number) => {
+    const toggleShift = async (userId: string, dateStr: string) => {
         if (readOnly) return;
-        const dateStr = `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`
-        const currentType = localSchedule[userId]?.[dateStr]
 
-        let nextType: string | null = null
-        if (!currentType) nextType = 'DAY'
-        else if (currentType === 'DAY') nextType = 'NIGHT'
-        else nextType = null
+        let nextType: string | null = null;
 
-        // Optimistic update
-        const newSchedule = { ...localSchedule }
-        if (!newSchedule[userId]) newSchedule[userId] = {}
+        // Use functional update to determine nextType based on most recent state
+        setLocalSchedule(prev => {
+            const currentType = prev[userId]?.[dateStr]
+            
+            if (!currentType) nextType = 'DAY'
+            else if (currentType === 'DAY') nextType = 'NIGHT'
+            else nextType = null
 
-        if (nextType) newSchedule[userId][dateStr] = nextType
-        else delete newSchedule[userId][dateStr]
+            const newSchedule = { ...prev }
+            if (!newSchedule[userId]) newSchedule[userId] = {}
+            
+            if (nextType) {
+                newSchedule[userId] = { ...newSchedule[userId], [dateStr]: nextType }
+            } else {
+                const updatedUserSchedule = { ...newSchedule[userId] }
+                delete updatedUserSchedule[dateStr]
+                newSchedule[userId] = updatedUserSchedule
+            }
+            return newSchedule
+        })
 
-        setLocalSchedule(newSchedule)
-
-        // API Update
+        // Wait a tiny bit to ensure nextType is set from the state update above
+        // (State updates are batchable, but the logic inside the setter runs synchronously)
+        
         const cellId = `${userId}-${dateStr}`
         setIsUpdating(cellId)
         try {
@@ -272,8 +323,7 @@ export function WorkScheduleGrid({ clubId, month, year, initialData, refreshData
             if (!res.ok) throw new Error('Failed to update')
         } catch (e) {
             console.error(e)
-            // Revert on error
-            setLocalSchedule(localSchedule)
+            refreshData()
         } finally {
             setIsUpdating(null)
         }
@@ -281,49 +331,61 @@ export function WorkScheduleGrid({ clubId, month, year, initialData, refreshData
 
     // Calculate coverage
     const coverage = useMemo(() => {
-        const dayCounts: Record<number, { DAY: number; NIGHT: number }> = {}
-        days.forEach(d => dayCounts[d] = { DAY: 0, NIGHT: 0 })
+        const counts: Record<string, { DAY: number; NIGHT: number }> = {}
+        days.forEach(d => counts[d.dateStr] = { DAY: 0, NIGHT: 0 })
 
         Object.entries(localSchedule).forEach(([userId, shifts]: [any, any]) => {
             Object.entries(shifts).forEach(([dateStr, type]: [any, any]) => {
-                const day = parseInt(dateStr.split('-')[2])
-                if (dayCounts[day]) {
-                    dayCounts[day][type as 'DAY' | 'NIGHT']++
+                if (counts[dateStr]) {
+                    counts[dateStr][type as 'DAY' | 'NIGHT']++
                 }
             })
         })
-        return dayCounts
+        return counts
     }, [localSchedule, days])
 
     // Mobile View Component
     const MobileScheduleList = () => (
         <div className="md:hidden divide-y divide-slate-100 dark:divide-slate-800">
             {days.map(d => {
-                const date = new Date(year, month - 1, d)
+                const date = new Date(d.year, d.month - 1, d.day)
                 const isWeekend = date.getDay() === 0 || date.getDay() === 6
-                const dateStr = `${year}-${month.toString().padStart(2, '0')}-${d.toString().padStart(2, '0')}`
+                const dateStr = d.dateStr
+                const isToday = dateStr === todayStr
                 
                 // Find workers for this day
                 const dayWorkers = localEmployees.filter((e: any) => localSchedule[e.id]?.[dateStr] === 'DAY')
                 const nightWorkers = localEmployees.filter((e: any) => localSchedule[e.id]?.[dateStr] === 'NIGHT')
                 
-                // Skip days with no shifts if needed, but showing all days is better for context
-                
                 return (
-                    <div key={d} className={cn(
-                        "p-4 flex flex-col gap-3",
-                        isWeekend && "bg-slate-50/50 dark:bg-slate-900/50"
+                    <div key={dateStr} className={cn(
+                        "p-4 flex flex-col gap-3 relative overflow-hidden",
+                        isWeekend && "bg-slate-50/50 dark:bg-slate-900/50",
+                        d.isOutside && "opacity-60 bg-slate-50/20",
+                        isToday && "bg-purple-50/30 dark:bg-purple-900/10 border-l-4 border-purple-500"
                     )}>
+                        {isToday && (
+                            <div className="absolute top-0 right-0 p-2 opacity-10">
+                                <CalendarIcon className="h-12 w-12 text-purple-500 rotate-12" />
+                            </div>
+                        )}
                         {/* Date Header */}
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 relative z-10">
                             <div className={cn(
                                 "text-lg font-bold w-8 text-center",
-                                isWeekend ? "text-red-500" : "text-slate-700 dark:text-slate-200"
+                                isWeekend ? "text-red-500" : "text-slate-700 dark:text-slate-200",
+                                isToday && "text-purple-600 dark:text-purple-400"
                             )}>
-                                {d}
+                                {d.day}
                             </div>
-                            <div className="text-sm font-medium text-slate-500 uppercase">
+                            <div className="text-sm font-medium text-slate-500 uppercase flex items-center gap-2">
                                 {new Intl.DateTimeFormat('ru-RU', { weekday: 'long', month: 'long' }).format(date)}
+                                {d.isOutside && <span className="text-[10px] lowercase text-slate-400">(прошлый месяц)</span>}
+                                {isToday && (
+                                    <span className="px-2 py-0.5 rounded-md bg-purple-500 text-white text-[10px] font-black tracking-wider uppercase">
+                                        Сегодня
+                                    </span>
+                                )}
                             </div>
                         </div>
 
@@ -382,21 +444,31 @@ export function WorkScheduleGrid({ clubId, month, year, initialData, refreshData
                         Сотрудник
                     </th>
                     {days.map(d => {
-                        const date = new Date(year, month - 1, d)
+                        const date = new Date(d.year, d.month - 1, d.day)
                         const isWeekend = date.getDay() === 0 || date.getDay() === 6
+                        const isToday = d.dateStr === todayStr
                         return (
-                            <th key={d} className={cn(
-                                "p-2 text-center border-r border-slate-100 dark:border-slate-800 min-w-[40px] transition-colors",
-                                isWeekend && "bg-slate-100/50 dark:bg-slate-800/30"
+                            <th key={d.dateStr} className={cn(
+                                "p-2 text-center border-r border-slate-100 dark:border-slate-800 min-w-[40px] transition-colors relative",
+                                isWeekend && "bg-slate-100/50 dark:bg-slate-800/30",
+                                d.isOutside && "opacity-40",
+                                isToday && "bg-purple-50/50 dark:bg-purple-900/10"
                             )}>
-                                <div className="text-[10px] font-bold text-slate-400 uppercase leading-none mb-1">
+                                {isToday && (
+                                    <div className="absolute top-0 inset-x-0 h-1 bg-purple-500/50 rounded-b-full mx-1" />
+                                )}
+                                <div className={cn(
+                                    "text-[10px] font-bold text-slate-400 uppercase leading-none mb-1",
+                                    isToday && "text-purple-600 dark:text-purple-400"
+                                )}>
                                     {new Intl.DateTimeFormat('ru-RU', { weekday: 'short' }).format(date)}
                                 </div>
                                 <div className={cn(
                                     "text-sm font-black text-slate-700 dark:text-slate-300",
-                                    isWeekend && "text-red-500"
+                                    isWeekend && "text-red-500",
+                                    isToday && "text-purple-700 dark:text-purple-300"
                                 )}>
-                                    {d}
+                                    {d.day}
                                 </div>
                             </th>
                         )
@@ -419,6 +491,7 @@ export function WorkScheduleGrid({ clubId, month, year, initialData, refreshData
                             isUpdating={isUpdating}
                             toggleShift={toggleShift}
                             readOnly={readOnly}
+                            todayStr={todayStr}
                         />
                     ))}
                 </SortableContext>
@@ -428,25 +501,33 @@ export function WorkScheduleGrid({ clubId, month, year, initialData, refreshData
                     <td className="sticky left-0 z-20 bg-slate-50 dark:bg-slate-950 p-4 text-xs uppercase tracking-widest text-slate-500 border-r border-slate-200 dark:border-slate-800">
                         Покрытие (Д / Н)
                     </td>
-                    {days.map(d => (
-                        <td key={d} className="p-2 border-r border-slate-100 dark:border-slate-800 text-center">
-                            <div className="flex flex-col gap-0.5">
-                                <span className={cn(
-                                    "text-xs",
-                                    coverage[d].DAY > 0 ? "text-emerald-600" : "text-slate-300"
-                                )}>{coverage[d].DAY}🌞</span>
-                                <span className={cn(
-                                    "text-xs",
-                                    coverage[d].NIGHT > 0 ? "text-indigo-600" : "text-slate-300"
-                                )}>{coverage[d].NIGHT}🌙</span>
-                            </div>
-                        </td>
-                    ))}
+                    {days.map(d => {
+                        const isToday = d.dateStr === todayStr
+                        return (
+                            <td key={d.dateStr} className={cn(
+                                "p-2 border-r border-slate-100 dark:border-slate-800 text-center",
+                                d.isOutside && "opacity-40",
+                                isToday && "bg-purple-50/50 dark:bg-purple-900/10"
+                            )}>
+                                <div className="flex flex-col gap-0.5">
+                                    <span className={cn(
+                                        "text-xs",
+                                        coverage[d.dateStr].DAY > 0 ? "text-emerald-600" : "text-slate-300"
+                                    )}>{coverage[d.dateStr].DAY}🌞</span>
+                                    <span className={cn(
+                                        "text-xs",
+                                        coverage[d.dateStr].NIGHT > 0 ? "text-indigo-600" : "text-slate-300"
+                                    )}>{coverage[d.dateStr].NIGHT}🌙</span>
+                                </div>
+                            </td>
+                        )
+                    })}
                 </tr>
             </tbody>
         </table>
         </div>
     )
+
 
     return (
         <Card className="border-0 shadow-lg bg-white dark:bg-slate-900 overflow-hidden">
@@ -483,10 +564,6 @@ export function WorkScheduleGrid({ clubId, month, year, initialData, refreshData
                         <span className="font-medium text-slate-400">Выходной (Кликните для выбора)</span>
                     </div>
                 )}
-
-                <div className="ml-auto text-[11px] text-muted-foreground bg-white dark:bg-slate-900 px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-800 shadow-sm animate-pulse">
-                    {readOnly ? '🔒 Режим просмотра' : '💡 Можно менять порядок сотрудников, перетаскивая их за иконку слева'}
-                </div>
             </div>
         </Card>
     )

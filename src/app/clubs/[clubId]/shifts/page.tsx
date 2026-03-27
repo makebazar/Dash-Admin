@@ -601,10 +601,10 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
     }, [clubTimezone])
 
     const formatMoney = (amount: number | string | null) => {
-        if (amount === null || amount === undefined) return '0 ₽'
+        if (amount === null || amount === undefined) return '0\u00A0₽'
         const num = typeof amount === 'string' ? parseFloat(amount) : amount
-        if (isNaN(num) || num === 0) return '0 ₽'
-        return num.toLocaleString('ru-RU', { maximumFractionDigits: 0 }) + ' ₽'
+        if (isNaN(num) || num === 0) return '0\u00A0₽'
+        return num.toLocaleString('ru-RU', { maximumFractionDigits: 0 }).replace(/\s/g, '\u00A0') + '\u00A0₽'
     }
 
     const getStatusBadge = (shift: Shift) => {
@@ -904,7 +904,7 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                         <TrendingUp className="h-4 w-4 text-green-600" />
                     </CardHeader>
                     <CardContent className="relative">
-                        <div className="text-3xl font-black text-green-600 mb-4">{formatMoney(totalRevenue)}</div>
+                        <div className="text-3xl font-black text-green-600 mb-4 whitespace-nowrap">{formatMoney(totalRevenue)}</div>
                         
                         <div className="space-y-1">
                             {/* Standard Fields */}
@@ -913,14 +913,14 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                                     <Wallet className="h-3 w-3" />
                                     Наличные
                                 </span>
-                                <span className="font-medium text-emerald-700">{formatMoney(totals.totalCash)}</span>
+                                <span className="font-medium text-emerald-700 whitespace-nowrap">{formatMoney(totals.totalCash)}</span>
                             </div>
                             <div className="flex items-center justify-between text-xs">
                                 <span className="text-muted-foreground flex items-center gap-1">
                                     <DollarSign className="h-3 w-3" />
                                     Безналичные
                                 </span>
-                                <span className="font-medium text-blue-700">{formatMoney(totals.totalCard)}</span>
+                                <span className="font-medium text-blue-700 whitespace-nowrap">{formatMoney(totals.totalCard)}</span>
                             </div>
 
                             {/* Dynamic Income Fields */}
@@ -930,7 +930,7 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                                         <TrendingUp className="h-3 w-3" />
                                         {field.custom_label}
                                     </span>
-                                    <span className="font-medium text-cyan-700">{formatMoney(field.total)}</span>
+                                    <span className="font-medium text-cyan-700 whitespace-nowrap">{formatMoney(field.total)}</span>
                                 </div>
                             ))}
                         </div>
@@ -943,7 +943,7 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                         <TrendingUp className="h-4 w-4 text-orange-500" />
                     </CardHeader>
                     <CardContent className="relative">
-                        <div className="text-3xl font-bold text-orange-500">{formatMoney(totalExpenses)}</div>
+                        <div className="text-3xl font-bold text-orange-500 whitespace-nowrap">{formatMoney(totalExpenses)}</div>
                     </CardContent>
                 </Card>
 
@@ -955,7 +955,7 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                             <TrendingUp className="h-4 w-4 text-red-500" />
                         </CardHeader>
                         <CardContent className="relative">
-                            <div className="text-3xl font-bold text-red-600">{formatMoney(field.total || 0)}</div>
+                            <div className="text-3xl font-bold text-red-600 whitespace-nowrap">{formatMoney(field.total || 0)}</div>
                         </CardContent>
                     </Card>
                 ))}
@@ -967,7 +967,7 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                         <Sun className="h-4 w-4 text-indigo-500" />
                     </CardHeader>
                     <CardContent className="relative">
-                        <div className="text-3xl font-bold text-indigo-600">
+                        <div className="text-3xl font-bold text-indigo-600 whitespace-nowrap">
                             {formatMoney(
                                 shifts.filter(s => s.shift_type !== 'NIGHT').length > 0 
                                 ? shifts.filter(s => s.shift_type !== 'NIGHT').reduce((acc, s) => acc + calculateShiftTotalIncome(s), 0) / shifts.filter(s => s.shift_type !== 'NIGHT').length
@@ -986,7 +986,7 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                         <Moon className="h-4 w-4 text-violet-500" />
                     </CardHeader>
                     <CardContent className="relative">
-                        <div className="text-3xl font-bold text-violet-600">
+                        <div className="text-3xl font-bold text-violet-600 whitespace-nowrap">
                             {formatMoney(
                                 shifts.filter(s => s.shift_type === 'NIGHT').length > 0 
                                 ? shifts.filter(s => s.shift_type === 'NIGHT').reduce((acc, s) => acc + calculateShiftTotalIncome(s), 0) / shifts.filter(s => s.shift_type === 'NIGHT').length
@@ -1007,7 +1007,7 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                             <TrendingUp className="h-4 w-4 text-teal-500" />
                         </CardHeader>
                         <CardContent className="relative">
-                            <div className="text-3xl font-bold text-teal-600">
+                            <div className="text-3xl font-bold text-teal-600 whitespace-nowrap">
                                 {(() => {
                                     // Calculate forecast logic
                                      const offset = parseInt(selectedMonth);
@@ -1048,7 +1048,7 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                         <TrendingUp className="h-4 w-4 text-slate-500" />
                     </CardHeader>
                     <CardContent className="relative">
-                        <div className="text-3xl font-bold text-slate-600">{formatMoney(field.total || 0)}</div>
+                        <div className="text-3xl font-bold text-slate-600 whitespace-nowrap">{formatMoney(field.total || 0)}</div>
                     </CardContent>
                 </Card>
             ))}
@@ -1413,9 +1413,9 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
 
             {/* View Report Modal - Redesigned V3 (Clean & Standard) */}
             <Dialog open={!!selectedShift} onOpenChange={() => setSelectedShift(null)}>
-                <DialogContent className="p-0 gap-0 overflow-hidden bg-background rounded-none left-0 top-0 translate-x-0 translate-y-0 w-screen h-[100dvh] max-w-none flex flex-col min-h-0 sm:rounded-xl sm:left-[50%] sm:top-[50%] sm:translate-x-[-50%] sm:translate-y-[-50%] sm:w-[95vw] sm:h-[85vh] sm:max-w-5xl">
+                <DialogContent className="p-0 gap-0 overflow-hidden bg-background rounded-none fixed inset-0 w-screen h-[100dvh] max-w-none flex flex-col !flex min-h-0 left-0 top-0 translate-x-0 translate-y-0 sm:rounded-xl sm:left-[50%] sm:top-[50%] sm:translate-x-[-50%] sm:translate-y-[-50%] sm:w-[95vw] sm:h-[85vh] sm:max-w-5xl">
                     {/* Header Section */}
-                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between px-4 md:px-6 py-4 pr-12 border-b bg-card shrink-0">
+                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between px-4 md:px-6 py-4 md:pr-16 border-b bg-card shrink-0">
                         <div className="flex items-start gap-4 min-w-0">
                             <div>
                                 <DialogTitle className="text-xl font-bold flex items-center gap-2">
@@ -1438,10 +1438,10 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                                 </div>
                             </div>
                         </div>
-                        <div className="flex flex-col items-start md:items-end gap-1">
+                        <div className="flex flex-col items-start md:items-end gap-1 pr-10 md:pr-0">
                             <div className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Итоговая выручка</div>
                             <div className="text-2xl font-bold text-primary tabular-nums">
-                                +{selectedShift ? formatMoney(calculateShiftTotalIncome(selectedShift)).replace(' ₽', '') : '0'} ₽
+                                +{selectedShift ? formatMoney(calculateShiftTotalIncome(selectedShift)).replace(/[\u00A0\s]?₽/, '') : '0'} ₽
                             </div>
                             {selectedShift?.status === 'VERIFIED' && (
                                 <Badge variant="outline" className="text-green-600 border-green-200 bg-green-50">
@@ -1506,8 +1506,8 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                                 </TabsList>
                             </div>
                             
-                            <div className="flex-1 overflow-y-auto bg-muted/5 min-h-0 overscroll-contain touch-pan-y">
-                                <div className="p-4 md:p-6 max-w-5xl mx-auto space-y-6 pb-24">
+                            <div className="flex-1 overflow-y-auto bg-muted/5 min-h-0">
+                                <div className="p-4 md:p-6 max-w-5xl mx-auto space-y-6 pb-[250px] md:pb-24">
                                     <TabsContent value="overview" className="mt-0 space-y-6">
                                         {/* Key Metrics Cards */}
                                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

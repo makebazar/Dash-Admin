@@ -180,61 +180,36 @@ export async function calculateSalary(
                 }
             } else if (bonus.type === 'maintenance_kpi') {
                 // Handle maintenance bonus
-                // 1. Get raw task counts and sums from reportMetrics
-                // reportMetrics['maintenance_tasks_completed'] should be passed by caller
-                // reportMetrics['maintenance_tasks_assigned'] should be passed by caller
-                // reportMetrics['maintenance_raw_sum'] should be passed by caller (sum of bonuses calculated at completion time)
-
-                const rawSum = reportMetrics['maintenance_raw_sum'] || 0;
+                // For MONTHLY/TIERED bonuses, we don't add them to individual shifts 
+                // because they are calculated and shown as a monthly total.
+                // We only process them here if it's a simple per-task bonus (no thresholds or per-task reward type).
                 
-                if (rawSum > 0) {
+                const rawSum = reportMetrics['maintenance_raw_sum'] || 0;
+                const isMonthlyTiers = bonus.reward_type === 'FIXED' || bonus.calculation_mode === 'MONTHLY' || bonus.calculation_mode === 'MONTHLY_TIERS';
+
+                if (rawSum > 0 && !isMonthlyTiers) {
                     let finalAmount = rawSum;
                     let efficiencyMultiplier = 1.0;
 
-                    // Calculate efficiency if thresholds exist
+                    // Calculate efficiency if thresholds exist (multiplier mode)
                     if (bonus.efficiency_thresholds && bonus.efficiency_thresholds.length > 0) {
                         const completed = reportMetrics['maintenance_tasks_completed'] || 0;
                         const assigned = reportMetrics['maintenance_tasks_assigned'] || 0;
                         
-                        // If assigned is 0 but we completed tasks (e.g. from free pool), efficiency is effectively 100%+
                         let efficiencyPercent = 100;
                         if (assigned > 0) {
                             efficiencyPercent = (completed / assigned) * 100;
                         }
 
-                        // Find matching threshold
-                        // Sort descending by percent
                         const sortedThresholds = [...bonus.efficiency_thresholds].sort((a, b) => b.from_percent - a.from_percent);
                         
-                        let matchedThreshold = null;
                         for (const t of sortedThresholds) {
                             if (efficiencyPercent >= t.from_percent) {
-                                matchedThreshold = t;
                                 efficiencyMultiplier = Number(t.multiplier);
                                 break;
                             }
                         }
-
-                        if (bonus.reward_type === 'FIXED' && matchedThreshold) {
-                            const fixedAmount = Number(matchedThreshold.amount) || 0;
-                            const monthBase = reportMetrics['maintenance_month_base'] || rawSum;
-                            
-                            // Distribute fixed amount proportional to this shift's raw contribution
-                            if (monthBase > 0) {
-                                finalAmount = fixedAmount * (rawSum / monthBase);
-                            } else {
-                                finalAmount = 0;
-                            }
-                            
-                            // For fixed rewards, we don't really use multiplier, but we can store it for debug
-                            efficiencyMultiplier = 0; 
-                        } else {
-                            // Default Multiplier Logic
-                            finalAmount = rawSum * efficiencyMultiplier;
-                        }
-                    } else {
-                         // No thresholds, just base (x1.0)
-                         finalAmount = rawSum * 1.0;
+                        finalAmount = rawSum * efficiencyMultiplier;
                     }
 
                     if (finalAmount > 0) {
@@ -246,12 +221,10 @@ export async function calculateSalary(
                             amount: parseFloat(finalAmount.toFixed(2)),
                             source_key: 'maintenance_tasks',
                             source_value: rawSum,
-                            multiplier: bonus.reward_type === 'FIXED' ? undefined : efficiencyMultiplier,
-                            reward_type: bonus.reward_type,
+                            multiplier: efficiencyMultiplier,
                             payout_type: payoutType
                         });
                         
-                        // Разделяем по типу выплаты
                         if (payoutType === 'VIRTUAL_BALANCE') {
                             virtualBalanceTotal += finalAmount;
                         } else {
