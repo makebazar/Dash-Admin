@@ -1623,6 +1623,7 @@ export type ShiftReceipt = {
     cash_amount: number
     card_amount: number
     total_amount: number
+    total_refund_amount?: number
     notes?: string | null
     created_at: string
     voided_at?: string | null
@@ -1951,6 +1952,7 @@ export async function getShiftReceipts(clubId: string, userId: string, shiftId: 
         cash_amount: Number(r.cash_amount || 0),
         card_amount: Number(r.card_amount || 0),
         total_amount: Number(r.total_amount || 0),
+        total_refund_amount: Number(r.total_refund_amount || 0),
         notes: r.notes,
         created_at: r.created_at,
         voided_at: r.voided_at,
@@ -2146,6 +2148,12 @@ export async function returnReceiptItem(
             VALUES ($1, $2, $3, $4, $5, $6)
             `,
             [receiptId, itemId, returnQuantity, refundAmount, reason, userId]
+        )
+
+        // 4.1 Update receipt total refund amount
+        await client.query(
+            `UPDATE shift_receipts SET total_refund_amount = COALESCE(total_refund_amount, 0) + $1 WHERE id = $2`,
+            [refundAmount, receiptId]
         )
 
         // 5. Update product cache

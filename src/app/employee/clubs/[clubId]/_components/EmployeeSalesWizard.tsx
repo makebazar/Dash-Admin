@@ -166,7 +166,7 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
     const receiptTotalForShift = useMemo(() => {
         return receipts
             .filter(r => !r.voided_at)
-            .reduce((acc, r) => acc + Number(r.total_amount || 0), 0)
+            .reduce((acc, r) => acc + (Number(r.total_amount || 0) - Number(r.total_refund_amount || 0)), 0)
     }, [receipts])
 
     const addToCart = useCallback((product: any, quantityToAdd: number) => {
@@ -901,6 +901,11 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
                                                                     <div className="text-[11px] font-bold truncate">Чек #{r.id}</div>
                                                                     <div className="text-[9px] text-slate-500 truncate">
                                                                         {new Date(r.created_at).toLocaleTimeString()} · {r.payment_type.toUpperCase()} · {r.total_amount} ₽
+                                                                        {(r.total_refund_amount || 0) > 0 && (
+                                                                             <span className="text-amber-400 ml-1">
+                                                                                 (возврат: {(r.total_refund_amount || 0)} ₽, итог: {r.total_amount - (r.total_refund_amount || 0)} ₽)
+                                                                             </span>
+                                                                         )}
                                                                     </div>
                                                                 </div>
                                                                 <div className="flex items-center gap-2">
