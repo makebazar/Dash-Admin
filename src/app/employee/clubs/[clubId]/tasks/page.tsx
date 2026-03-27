@@ -103,7 +103,7 @@ export default function EmployeeTasksPage() {
             
             const [assignedRes, freeRes] = await Promise.all([
                 fetch(`/api/clubs/${clubId}/equipment/maintenance?assigned=me&date_from=${monthStart}&date_to=${monthEnd}&include_overdue=true`),
-                fetch(`/api/clubs/${clubId}/equipment/maintenance?assigned=unassigned&status=PENDING&date_to=${today}`)
+                fetch(`/api/clubs/${clubId}/equipment/maintenance?assigned=unassigned&status=PENDING&date_to=${today}&include_overdue=true`)
             ])
 
             const assignedData = await assignedRes.json()
@@ -575,46 +575,50 @@ export default function EmployeeTasksPage() {
                     <div className="h-64 flex items-center justify-center">
                         <Loader2 className="h-8 w-8 animate-spin text-purple-500" />
                     </div>
-                ) : groupedTasks.length === 0 ? (
-                    <div className="text-center py-20 bg-white dark:bg-slate-800/50 rounded-[40px] border-2 border-dashed border-slate-200 dark:border-slate-700">
-                        <div className="h-20 w-20 bg-slate-50 dark:bg-slate-800 rounded-3xl flex items-center justify-center mx-auto mb-4 shadow-sm text-green-500">
-                            <CheckCircle2 className="h-10 w-10" />
-                        </div>
-                        <h3 className="text-lg font-bold">
-                            {filterMode === 'current' ? 'Нет актуальных задач' : 'Нет задач на месяц'}
-                        </h3>
-                        <p className="text-sm text-muted-foreground">
-                            {filterMode === 'current' ? 'Все текущие задачи выполнены. Можно отдохнуть или взять свободную задачу.' : 'На данный момент у вас нет назначенных задач.'}
-                        </p>
-                        {filterMode === 'current' && tasks.length > 0 && (
-                            <Button 
-                                variant="link" 
-                                className="mt-4 text-indigo-500 font-bold"
-                                onClick={() => setFilterMode('all')}
-                            >
-                                Посмотреть весь план ({tasks.length})
-                            </Button>
-                        )}
-                    </div>
                 ) : (
-                    <div className="grid gap-8">
-                        {groupedTasks.map(([location, groupTasks]) => (
-                            <div key={location} className="space-y-3">
-                                <div className="flex items-center gap-3 px-1 pt-2">
-                                    <div className="flex items-center gap-2.5 bg-slate-100 dark:bg-slate-800/50 px-3 py-1.5 rounded-lg border border-slate-200/50 dark:border-slate-700/50">
-                                        <MapPin className="h-3.5 w-3.5 text-indigo-500" />
-                                        <h3 className="text-[11px] font-black uppercase tracking-wider text-slate-900 dark:text-slate-100">
-                                            {location}
-                                            <span className="text-indigo-500/50 ml-2 font-bold">{groupTasks.length}</span>
-                                        </h3>
-                                    </div>
-                                    <div className="flex-1 h-px bg-slate-200 dark:bg-slate-800/50" />
+                    <div className="space-y-8">
+                        {groupedTasks.length === 0 ? (
+                            <div className="text-center py-20 bg-white dark:bg-slate-800/50 rounded-[40px] border-2 border-dashed border-slate-200 dark:border-slate-700">
+                                <div className="h-20 w-20 bg-slate-50 dark:bg-slate-800 rounded-3xl flex items-center justify-center mx-auto mb-4 shadow-sm text-green-500">
+                                    <CheckCircle2 className="h-10 w-10" />
                                 </div>
-                                <div className="grid gap-2">
-                                    {groupTasks.map(task => renderTaskCard(task, false, true))}
-                                </div>
+                                <h3 className="text-lg font-bold">
+                                    {filterMode === 'current' ? 'Нет актуальных задач' : 'Нет задач на месяц'}
+                                </h3>
+                                <p className="text-sm text-muted-foreground">
+                                    {filterMode === 'current' ? 'Все текущие задачи выполнены. Можно отдохнуть или взять свободную задачу.' : 'На данный момент у вас нет назначенных задач.'}
+                                </p>
+                                {filterMode === 'current' && tasks.length > 0 && (
+                                    <Button 
+                                        variant="link" 
+                                        className="mt-4 text-indigo-500 font-bold"
+                                        onClick={() => setFilterMode('all')}
+                                    >
+                                        Посмотреть весь план ({tasks.length})
+                                    </Button>
+                                )}
                             </div>
-                        ))}
+                        ) : (
+                            <div className="grid gap-8">
+                                {groupedTasks.map(([location, groupTasks]) => (
+                                    <div key={location} className="space-y-3">
+                                        <div className="flex items-center gap-3 px-1 pt-2">
+                                            <div className="flex items-center gap-2.5 bg-slate-100 dark:bg-slate-800/50 px-3 py-1.5 rounded-lg border border-slate-200/50 dark:border-slate-700/50">
+                                                <MapPin className="h-3.5 w-3.5 text-indigo-500" />
+                                                <h3 className="text-[11px] font-black uppercase tracking-wider text-slate-900 dark:text-slate-100">
+                                                    {location}
+                                                    <span className="text-indigo-500/50 ml-2 font-bold">{groupTasks.length}</span>
+                                                </h3>
+                                            </div>
+                                            <div className="flex-1 h-px bg-slate-200 dark:bg-slate-800/50" />
+                                        </div>
+                                        <div className="grid gap-2">
+                                            {groupTasks.map(task => renderTaskCard(task, false, true))}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 )}
             </div>

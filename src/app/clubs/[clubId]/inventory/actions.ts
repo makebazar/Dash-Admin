@@ -470,6 +470,33 @@ export async function createTransfer(clubId: string, userId: string, data: { sou
                 SET current_stock = (SELECT COALESCE(SUM(quantity), 0) FROM warehouse_stock WHERE product_id = $1)
                 WHERE id = $1 AND club_id = $2
             `, [product_id, clubId])
+
+            // 6. AUTO-CLOSE RESTOCK TASKS
+            // If we are moving TO a warehouse that is a Target in some RESTOCK rule,
+            // we check if that rule's requirements are now met.
+            await client.query(`
+                UPDATE club_tasks 
+                SET status = 'COMPLETED', 
+                    completed_by = $1, 
+                    completed_at = NOW(),
+                    description = description || ' (Закрыто автоматически: ручное перемещение)'
+                WHERE club_id = $2 
+                  AND type = 'RESTOCK' 
+                  AND status != 'COMPLETED'
+                  AND related_entity_type = 'PRODUCT' 
+                  AND related_entity_id = $3
+                  AND EXISTS (
+                      SELECT 1 FROM warehouse_replenishment_rules r
+                      JOIN warehouses tw ON r.target_warehouse_id = tw.id
+                      WHERE r.product_id = $3
+                        AND r.target_warehouse_id = $4
+                        AND r.is_active = true
+                        AND (
+                            -- Task is related to this warehouse
+                            club_tasks.description LIKE '%' || tw.name || '%'
+                        )
+                  )
+            `, [userId, clubId, product_id, target_warehouse_id])
         }
 
         await client.query('COMMIT')
@@ -621,7 +648,18 @@ async function checkReplenishmentNeeds(clubId: string) {
             if (current <= rule.min_stock_level && source > 0) {
                 // Need restock
                 const amountNeeded = rule.max_stock_level - current
-                if (amountNeeded <= 0) continue
+                if (amountNeeded <= 0) {
+                    // If current is enough but task exists, close it
+                    await client.query(`
+                        UPDATE club_tasks 
+                        SET status = 'COMPLETED', 
+                            completed_at = NOW(),
+                            description = description || ' (Закрыто автоматически: товара достаточно)'
+                        WHERE club_id = $1 AND type = 'RESTOCK' AND related_entity_id = $2 AND status != 'COMPLETED'
+                        AND description LIKE $3
+                    `, [clubId, rule.product_id, `%${rule.target_warehouse_name}%`])
+                    continue
+                }
                 
                 // Check if task exists
                 const existing = await client.query(`
@@ -637,10 +675,20 @@ async function checkReplenishmentNeeds(clubId: string) {
                     `, [
                         clubId, 
                         `Пополнить: ${rule.product_name}`, 
-                        `Склад: ${rule.target_warehouse_name}. Остаток: ${current}. Пополнить до ${rule.max_stock_level}.`, 
+                        `Из: ${rule.source_warehouse_name} → В: ${rule.target_warehouse_name}. Пополнить до ${rule.max_stock_level} шт. (Сейчас: ${current})`, 
                         rule.product_id
                     ])
                 }
+            } else if (current > rule.min_stock_level) {
+                // If stock is already above min level, any existing restock task for this product/target should be closed
+                await client.query(`
+                    UPDATE club_tasks 
+                    SET status = 'COMPLETED', 
+                        completed_at = NOW(),
+                        description = description || ' (Закрыто автоматически: товара достаточно)'
+                    WHERE club_id = $1 AND type = 'RESTOCK' AND related_entity_id = $2 AND status != 'COMPLETED'
+                    AND description LIKE $3
+                `, [clubId, rule.product_id, `%${rule.target_warehouse_name}%`])
             }
         }
         
@@ -1179,10 +1227,15 @@ async function applyWarehouseStockDelta(
 export async function getClubTasks(clubId: string) {
     await requireClubAccess(clubId)
     const res = await query(`
-        SELECT t.*, u.full_name as assignee_name, p.name as product_name
+        SELECT t.*, u.full_name as assignee_name, p.name as product_name,
+               sw.name as source_warehouse_name,
+               tw.name as target_warehouse_name
         FROM club_tasks t
         LEFT JOIN users u ON t.assigned_to = u.id
         LEFT JOIN warehouse_products p ON t.related_entity_type = 'PRODUCT' AND t.related_entity_id = p.id
+        LEFT JOIN warehouse_replenishment_rules r ON t.type = 'RESTOCK' AND t.related_entity_id = r.product_id AND r.is_active = true
+        LEFT JOIN warehouses sw ON r.source_warehouse_id = sw.id
+        LEFT JOIN warehouses tw ON r.target_warehouse_id = tw.id
         WHERE t.club_id = $1 AND t.status != 'COMPLETED'
         ORDER BY t.priority DESC, t.created_at ASC
     `, [clubId])
@@ -1843,6 +1896,9 @@ export async function createShiftReceipt(
 
         await client.query('COMMIT')
         
+        // Check if sales triggered new replenishment needs
+        await checkReplenishmentNeeds(clubId)
+        
         // FIX: Отправляем SSE уведомление всем клиентам клуба
         try {
             const { sendToClub } = await import('@/app/api/inventory-events/route')
@@ -2351,6 +2407,10 @@ export async function createWriteOff(clubId: string, userId: string, data: { ite
         }
 
         await client.query('COMMIT')
+        
+        // Check if write-off triggered new replenishment needs
+        await checkReplenishmentNeeds(clubId)
+
         revalidatePath(`/clubs/${clubId}/inventory`)
         revalidatePath(`/employee/clubs/${clubId}`)
     } catch (e) {
@@ -2815,6 +2875,11 @@ export async function createSupply(clubId: string, userId: string, data: { suppl
 
         await client.query('COMMIT')
         await logOperation(clubId, userId, 'CREATE_SUPPLY', 'SUPPLY', supplyId, { itemsCount: data.items.length, totalCost, warehouseId, status })
+        
+        // Update tasks
+        if (status === 'COMPLETED') {
+            await checkReplenishmentNeeds(clubId)
+        }
     } catch (e) {
         await client.query('ROLLBACK')
         throw e

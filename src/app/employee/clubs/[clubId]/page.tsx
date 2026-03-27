@@ -141,6 +141,8 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
     const [isActionLoading, setIsActionLoading] = useState(false)
     const [pendingTasksCount, setPendingTasksCount] = useState(0)
     const [reworkTasksCount, setReworkTasksCount] = useState(0)
+    const [clubTasks, setClubTasks] = useState<any[]>([])
+    const [isUpdatingTask, setIsUpdatingTask] = useState<string | null>(null)
 
     // Indicators Modal State
     const [isIndicatorsModalOpen, setIsIndicatorsModalOpen] = useState(false)
@@ -367,15 +369,7 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
     const fetchData = async (id: string) => {
         try {
             // Оптимизация: выполняем все запросы параллельно
-            const [
-                shiftData,
-                statsData,
-                kpiData,
-                reportJson,
-                tasksData,
-                reworkData,
-                ratingData
-            ] = await Promise.all([
+            const results = await Promise.all([
                 fetch(`/api/employee/clubs/${id}/active-shift`).then(r => r.json()),
                 fetch(`/api/employee/clubs/${id}/stats`).then(r => r.json()),
                 fetch(`/api/employee/clubs/${id}/kpi`).then(r => r.json()),
@@ -383,7 +377,19 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                 fetch(`/api/clubs/${id}/equipment/maintenance?assigned=me&status=PENDING,IN_PROGRESS`).then(r => r.json()),
                 fetch(`/api/clubs/${id}/equipment/maintenance?assigned=me&verification_status=REJECTED`).then(r => r.json()),
                 fetch(`/api/employee/clubs/${id}/equipment-rating`).then(r => r.json()),
+                fetch(`/api/clubs/${id}/tasks`).then(r => r.json()),
             ])
+
+            const [
+                shiftData,
+                statsData,
+                kpiData,
+                reportJson,
+                tasksData,
+                reworkData,
+                ratingData,
+                tasksJson
+            ] = results
 
             // Shift
             if (shiftData.shift) {
@@ -420,6 +426,11 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
             // Rating
             if (ratingData) {
                 setKpiData((prev: any) => ({ ...prev, equipment_rating: ratingData }))
+            }
+
+            // Club Tasks
+            if (tasksJson?.tasks) {
+                setClubTasks(tasksJson.tasks || [])
             }
 
         } catch (error) {
@@ -484,6 +495,29 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
             if (confirm('Завершить смену?')) {
                 submitEndShift({})
             }
+        }
+    }
+
+    const handleCompleteClubTask = async (taskId: string) => {
+        setIsUpdatingTask(taskId)
+        try {
+            const res = await fetch(`/api/clubs/${clubId}/tasks`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ taskId })
+            })
+
+            if (res.ok) {
+                setClubTasks(prev => prev.filter((t: any) => t.id !== taskId))
+            } else {
+                const data = await res.json()
+                alert(data.error || "Ошибка при выполнении задачи")
+            }
+        } catch (error) {
+            console.error("Error completing club task:", error)
+            alert("Ошибка сети")
+        } finally {
+            setIsUpdatingTask(null)
         }
     }
 
@@ -640,7 +674,7 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                 <div className="grid gap-4 lg:gap-6 lg:grid-cols-3">
 
                     {/* Shift Control - Main Card */}
-                    <div className="lg:col-span-2">
+                    <div className="lg:col-span-2 space-y-4">
                         <Card className="overflow-hidden border-0 shadow-lg bg-gradient-to-br from-slate-900 via-purple-900 to-indigo-900 text-white relative">
                             <div className="absolute inset-0 bg-[url('/grid.svg')] opacity-10 pointer-events-none" />
                             <div className="relative z-10">
@@ -800,6 +834,77 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                                 </CardContent>
                             </div>
                         </Card>
+
+                        {/* Warehouse/Restock Tasks Card */}
+                        {clubTasks.length > 0 && (
+                            <div className="space-y-4">
+                                <div className="flex items-center gap-3 px-1">
+                                    <div className="h-6 w-1 bg-blue-600 rounded-full" />
+                                    <h2 className="text-xl font-black text-slate-800 dark:text-white uppercase tracking-tight">Пополнение склада</h2>
+                                </div>
+                                <div className="grid gap-4">
+                                    {clubTasks.map((task: any) => (
+                                        <Card key={task.id} className="border-0 shadow-lg bg-white dark:bg-slate-800/50 overflow-hidden relative group">
+                                            <div className="absolute inset-0 bg-blue-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                            <CardContent className="p-5 relative z-10">
+                                                <div className="flex items-start justify-between gap-4">
+                                                    <div className="space-y-1 min-w-0">
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="p-1.5 rounded-lg bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
+                                                                <ShoppingCart className="h-4 w-4" />
+                                                            </div>
+                                                            <span className="text-[10px] font-black uppercase tracking-widest text-blue-600 dark:text-blue-400">Нужно выставить</span>
+                                                        </div>
+                                                        <h3 className="text-lg font-black text-slate-800 dark:text-white truncate mt-1">
+                                                            {task.title.replace('Пополнить: ', '')}
+                                                        </h3>
+                                                        <div className="flex flex-wrap gap-2 mt-1">
+                                                            {task.source_warehouse_name ? (
+                                                                <>
+                                                                    <div className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-[10px] font-bold text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 uppercase">
+                                                                        ОТКУДА: {task.source_warehouse_name}
+                                                                    </div>
+                                                                    <div className="px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-900/20 text-[10px] font-bold text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-blue-800/50 uppercase">
+                                                                        КУДА: {task.target_warehouse_name}
+                                                                    </div>
+                                                                </>
+                                                            ) : task.description.includes('Из:') ? (
+                                                                <>
+                                                                    <div className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-[10px] font-bold text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 uppercase">
+                                                                        ОТКУДА: {task.description.split('Из: ')[1]?.split(' →')[0]}
+                                                                    </div>
+                                                                    <div className="px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-900/20 text-[10px] font-bold text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-blue-800/50 uppercase">
+                                                                        КУДА: {task.description.split('→ В: ')[1]?.split('. ')[0]}
+                                                                    </div>
+                                                                </>
+                                                            ) : (
+                                                                <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                                                                    {task.description}
+                                                                </p>
+                                                            )}
+                                                        </div>
+                                                        {(task.source_warehouse_name || task.description.includes('Из:')) && (
+                                                            <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 leading-relaxed mt-1">
+                                                                {task.description.split('. ').slice(-1)[0]}
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                    
+                                                    <Button
+                                                        size="sm"
+                                                        className="h-10 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold shadow-lg shadow-blue-900/20 shrink-0"
+                                                        onClick={() => handleCompleteClubTask(task.id)}
+                                                        disabled={isUpdatingTask === task.id}
+                                                    >
+                                                        {isUpdatingTask === task.id ? <Loader2 className="h-4 w-4 animate-spin" /> : "Выполнено"}
+                                                    </Button>
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                     </div>
 
 
