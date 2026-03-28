@@ -155,14 +155,11 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
     const fetchAbortController = useRef<AbortController | null>(null)
 
     const calculateShiftTotalIncome = useCallback((shift: Shift) => {
-        const cash = parseFloat(String(shift.cash_income)) || 0
-        const card = parseFloat(String(shift.card_income)) || 0
+        const cash = getMetricValue(shift, 'cash_income')
+        const card = getMetricValue(shift, 'card_income')
         const customIncome = reportFields
             .filter(f => f.field_type === 'INCOME')
-            .reduce((sum, f) => {
-                const val = parseFloat(String(shift.report_data?.[f.metric_key])) || 0
-                return sum + val
-            }, 0)
+            .reduce((sum, f) => sum + getMetricValue(shift, f.metric_key), 0)
         return cash + card + customIncome
     }, [reportFields])
 
@@ -600,12 +597,54 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
         })
     }, [clubTimezone])
 
-    const formatMoney = (amount: number | string | null) => {
+    // Robust metric calculation for UI cards and table
+    const getMetricValue = useCallback((shift: Shift | null, field: string) => {
+        if (!shift) return 0;
+        
+        // If it's one of the main system fields
+        if (field === 'expenses' || field === 'cash_income' || field === 'card_income') {
+            // Mapping for report_data keys
+            const keyMap: Record<string, string> = {
+                'expenses': 'expenses_cash',
+                'cash_income': 'cash_income',
+                'card_income': 'card_income'
+            };
+            
+            const reportKey = keyMap[field];
+            const reportVal = shift.report_data?.[reportKey];
+            
+            if (reportVal !== undefined) {
+                if (Array.isArray(reportVal)) {
+                    return reportVal.reduce((sum, item: any) => sum + (Number(item.amount) || 0), 0);
+                }
+                return parseFloat(String(reportVal)) || 0;
+            }
+            
+            // Fallback to the main column value if not in report_data
+            return Number((shift as any)[field]) || 0;
+        }
+
+        // For custom report fields
+        const val = shift.report_data?.[field];
+        if (Array.isArray(val)) {
+            return val.reduce((sum, item: any) => sum + (Number(item.amount) || 0), 0);
+        }
+        return parseFloat(String(val)) || 0;
+    }, []);
+
+    const formatMoney = useCallback((amount: number | string | any[] | null) => {
         if (amount === null || amount === undefined) return '0\u00A0₽'
-        const num = typeof amount === 'string' ? parseFloat(amount) : amount
+        
+        let num: number;
+        if (Array.isArray(amount)) {
+            num = amount.reduce((sum, item: any) => sum + (Number(item.amount) || 0), 0);
+        } else {
+            num = typeof amount === 'string' ? parseFloat(amount) : Number(amount)
+        }
+        
         if (isNaN(num) || num === 0) return '0\u00A0₽'
         return num.toLocaleString('ru-RU', { maximumFractionDigits: 0 }).replace(/\s/g, '\u00A0') + '\u00A0₽'
-    }
+    }, []);
 
     const getStatusBadge = (shift: Shift) => {
         if (!shift.check_out) {
@@ -644,8 +683,11 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
             if (aVal === null || aVal === undefined) return 1
             if (bVal === null || bVal === undefined) return -1
 
-            // Convert to numbers for numeric columns
-            if (['cash_income', 'card_income', 'expenses', 'total_hours'].includes(sortBy)) {
+            // Use getMetricValue for consistent sorting of numeric columns
+            if (['cash_income', 'card_income', 'expenses'].includes(sortBy)) {
+                aVal = getMetricValue(a, sortBy);
+                bVal = getMetricValue(b, sortBy);
+            } else if (sortBy === 'total_hours') {
                 aVal = parseFloat(String(aVal)) || 0
                 bVal = parseFloat(String(bVal)) || 0
             }
@@ -676,29 +718,23 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
     // Calculate totals based on filtered shifts
     const totals = useMemo(() => {
         const currentDisplayShifts = filteredShifts
-        const totalCash = currentDisplayShifts.reduce((sum, s) => sum + (parseFloat(String(s.cash_income)) || 0), 0)
-        const totalCard = currentDisplayShifts.reduce((sum, s) => sum + (parseFloat(String(s.card_income)) || 0), 0)
-        const totalExpensesCore = currentDisplayShifts.reduce((sum, s) => sum + (parseFloat(String(s.expenses)) || 0), 0)
+        const totalCash = currentDisplayShifts.reduce((sum, s) => sum + getMetricValue(s, 'cash_income'), 0)
+        const totalCard = currentDisplayShifts.reduce((sum, s) => sum + getMetricValue(s, 'card_income'), 0)
+        const totalExpensesCore = currentDisplayShifts.reduce((sum, s) => sum + getMetricValue(s, 'expenses'), 0)
         
         return { totalCash, totalCard, totalExpensesCore }
-    }, [filteredShifts])
+    }, [filteredShifts, getMetricValue])
 
     // Calculate income and expenses from custom fields
     const customFieldTotals = useMemo(() => {
         return reportFields.map(field => {
             const total = filteredShifts.reduce((sum, s) => {
-                if (s.report_data && s.report_data[field.metric_key]) {
-                    const value = s.report_data[field.metric_key]
-                    if (field.field_type === 'EXPENSE_LIST' && Array.isArray(value)) {
-                        return sum + value.reduce((itemSum, item) => itemSum + (parseFloat(String(item.amount)) || 0), 0)
-                    }
-                    return sum + (parseFloat(String(value)) || 0)
-                }
-                return sum
+                // Use getMetricValue for consistent calculation
+                return sum + getMetricValue(s, field.metric_key)
             }, 0)
             return { ...field, total }
         })
-    }, [filteredShifts, reportFields])
+    }, [filteredShifts, reportFields, getMetricValue])
 
     const totalCustomIncome = useMemo(() => 
         customFieldTotals
@@ -1346,13 +1382,13 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                                             : '-'}
                                     </TableCell>
                                     <TableCell className="text-right font-bold text-green-600 whitespace-nowrap bg-green-500/5">{formatMoney(calculateShiftTotalIncome(shift))}</TableCell>
-                                    <TableCell className="text-right font-medium text-green-500 whitespace-nowrap">{formatMoney(shift.cash_income)}</TableCell>
-                                    <TableCell className="text-right font-medium text-blue-500 whitespace-nowrap">{formatMoney(shift.card_income)}</TableCell>
-                                    <TableCell className="text-right font-medium text-orange-500 whitespace-nowrap">{formatMoney(shift.expenses)}</TableCell>
+                                    <TableCell className="text-right font-medium text-green-500 whitespace-nowrap">{formatMoney(getMetricValue(shift, 'cash_income'))}</TableCell>
+                                    <TableCell className="text-right font-medium text-blue-500 whitespace-nowrap">{formatMoney(getMetricValue(shift, 'card_income'))}</TableCell>
+                                    <TableCell className="text-right font-medium text-orange-500 whitespace-nowrap">{formatMoney(getMetricValue(shift, 'expenses'))}</TableCell>
                                     {reportFields.map((field: any) => (
                                         <TableCell key={field.metric_key} className="text-right whitespace-nowrap">
                                             {shift.report_data && shift.report_data[field.metric_key] !== undefined
-                                                ? formatMoney(shift.report_data[field.metric_key])
+                                                ? formatMoney(getMetricValue(shift, field.metric_key))
                                                 : '-'}
                                         </TableCell>
                                     ))}
@@ -1518,7 +1554,7 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                                                 </CardHeader>
                                                 <CardContent>
                                                     <div className="text-2xl font-bold tabular-nums">
-                                                        {Number(selectedShift?.cash_income || 0).toLocaleString()} ₽
+                                                        {formatMoney(getMetricValue(selectedShift, 'cash_income'))}
                                                     </div>
                                                 </CardContent>
                                             </Card>
@@ -1529,7 +1565,7 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                                                 </CardHeader>
                                                 <CardContent>
                                                     <div className="text-2xl font-bold tabular-nums">
-                                                        {Number(selectedShift?.card_income || 0).toLocaleString()} ₽
+                                                        {formatMoney(getMetricValue(selectedShift, 'card_income'))}
                                                     </div>
                                                 </CardContent>
                                             </Card>
@@ -1540,7 +1576,7 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                                                 </CardHeader>
                                                 <CardContent>
                                                     <div className="text-2xl font-bold text-red-600 tabular-nums">
-                                                        -{Number(selectedShift?.expenses || 0).toLocaleString()} ₽
+                                                        -{formatMoney(getMetricValue(selectedShift, 'expenses'))}
                                                     </div>
                                                 </CardContent>
                                             </Card>
@@ -1571,10 +1607,33 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                                                                 // Skip internal fields if any
                                                                 if (key.startsWith('_')) return null;
                                                                 
+                                                                const renderValue = () => {
+                                                                    if (Array.isArray(value)) {
+                                                                        const total = value.reduce((sum, item: any) => sum + (Number(item.amount) || 0), 0);
+                                                                        if (total === 0 && value.length === 0) return '-';
+                                                                        return (
+                                                                            <div className="flex flex-col items-end gap-1">
+                                                                                <span className="font-bold">{total.toLocaleString()} ₽</span>
+                                                                                {value.map((item: any, i: number) => (
+                                                                                    <span key={i} className="text-[10px] text-muted-foreground leading-none">
+                                                                                        {item.amount}₽: {item.comment}
+                                                                                    </span>
+                                                                                ))}
+                                                                            </div>
+                                                                        );
+                                                                    }
+                                                                    if (typeof value === 'object' && value !== null) {
+                                                                        return JSON.stringify(value);
+                                                                    }
+                                                                    return String(value);
+                                                                };
+
                                                                 return (
                                                                     <TableRow key={key} className="hover:bg-muted/30">
-                                                                        <TableCell className="font-medium text-muted-foreground w-[60%]">{label}</TableCell>
-                                                                        <TableCell className="text-right font-mono font-medium">{String(value)}</TableCell>
+                                                                        <TableCell className="font-medium text-muted-foreground w-[40%]">{label}</TableCell>
+                                                                        <TableCell className="text-right font-mono font-medium">
+                                                                            {renderValue()}
+                                                                        </TableCell>
                                                                     </TableRow>
                                                                 );
                                                             })}

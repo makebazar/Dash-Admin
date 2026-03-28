@@ -15,6 +15,13 @@ import { ru } from "date-fns/locale"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useUiDialogs } from "./useUiDialogs"
 
+const procurementPriorityStyles: Record<string, string> = {
+    CRITICAL: "bg-rose-50 text-rose-700 border-rose-200",
+    HIGH: "bg-amber-50 text-amber-700 border-amber-200",
+    MEDIUM: "bg-blue-50 text-blue-700 border-blue-200",
+    MANUAL: "bg-slate-100 text-slate-600 border-slate-200",
+}
+
 interface ProcurementTabProps {
     lists: any[]
     products: any[]
@@ -29,6 +36,8 @@ export function ProcurementTab({ lists, products, currentUserId }: ProcurementTa
     const [activeList, setActiveList] = useState<any>(null)
     const [listItems, setListItems] = useState<any[]>([])
     const [isDetailsOpen, setIsDetailsOpen] = useState(false)
+    const [isGenerateDialogOpen, setIsGenerateDialogOpen] = useState(false)
+    const [procurementMode, setProcurementMode] = useState<"optimized" | "full">("optimized")
     const [selectedNewProductId, setSelectedNewProductId] = useState<string>("")
     const [budgetInput, setBudgetInput] = useState<string>("")
     const { confirmAction, showMessage, Dialogs } = useUiDialogs()
@@ -36,7 +45,8 @@ export function ProcurementTab({ lists, products, currentUserId }: ProcurementTa
     const handleGenerate = () => {
         startTransition(async () => {
             try {
-                await generateProcurementList(clubId, currentUserId)
+                await generateProcurementList(clubId, currentUserId, procurementMode)
+                setIsGenerateDialogOpen(false)
             } catch (e) {
                 console.error(e)
                 showMessage({ title: "Ошибка", description: "Ошибка при создании списка" })
@@ -88,9 +98,8 @@ export function ProcurementTab({ lists, products, currentUserId }: ProcurementTa
         // Optimistic update
         setListItems(prev => prev.map(i => {
             if (i.id === itemId) {
-                // Round to NEAREST box multiple
                 const currentQty = i.actual_quantity
-                const boxes = Math.round(currentQty / newBoxSize)
+                const boxes = Math.ceil(currentQty / newBoxSize)
                 const adjustedQty = Math.max(newBoxSize, boxes * newBoxSize) // At least 1 box
                 return { ...i, units_per_box: newBoxSize, actual_quantity: adjustedQty }
             }
@@ -100,7 +109,7 @@ export function ProcurementTab({ lists, products, currentUserId }: ProcurementTa
         startTransition(async () => {
             const item = listItems.find(i => i.id === itemId)
             if (item) {
-                const boxes = Math.round(item.actual_quantity / newBoxSize)
+                const boxes = Math.ceil(item.actual_quantity / newBoxSize)
                 const adjustedQty = Math.max(newBoxSize, boxes * newBoxSize)
                 await updateProcurementItem(itemId, { units_per_box: newBoxSize, quantity: adjustedQty }, clubId)
             }
@@ -149,8 +158,7 @@ export function ProcurementTab({ lists, products, currentUserId }: ProcurementTa
                 const currentAllocated = item.actual_quantity
                 const toAddRaw = Math.max(0, needed - currentAllocated)
                 
-                // Ensure we only add multiples of box size
-                const boxesToBuy = Math.round(toAddRaw / boxSize)
+                const boxesToBuy = Math.ceil(toAddRaw / boxSize)
                 const toAdd = boxesToBuy * boxSize
                 
                 if (toAdd > 0) {
@@ -217,10 +225,63 @@ export function ProcurementTab({ lists, products, currentUserId }: ProcurementTa
                     <h3 className="text-xl font-black text-slate-900">Списки закупок</h3>
                     <p className="text-sm text-slate-500 mt-1">Автоматическое планирование заказов на основе ABC-анализа и прогнозов остатка.</p>
                 </div>
-                <Button onClick={handleGenerate} disabled={isPending} className="bg-blue-600 hover:bg-blue-700 shadow-md transition-all active:scale-95">
-                    <Calculator className="mr-2 h-4 w-4" />
-                    Сформировать заказ
-                </Button>
+                <Dialog open={isGenerateDialogOpen} onOpenChange={setIsGenerateDialogOpen}>
+                    <DialogTrigger asChild>
+                        <Button disabled={isPending} className="bg-blue-600 hover:bg-blue-700 shadow-md transition-all active:scale-95">
+                            <Calculator className="mr-2 h-4 w-4" />
+                            Сформировать заказ
+                        </Button>
+                    </DialogTrigger>
+                    <DialogContent className="sm:max-w-[560px]">
+                        <DialogHeader>
+                            <DialogTitle>Режим автозакупки</DialogTitle>
+                            <DialogDescription>
+                                Выбери стратегию: экономный список только по ключевым позициям или расширенное пополнение всего ассортимента.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <div className="space-y-3 py-3">
+                            <button
+                                type="button"
+                                onClick={() => setProcurementMode("optimized")}
+                                className={cn(
+                                    "w-full rounded-2xl border p-4 text-left transition-all",
+                                    procurementMode === "optimized" ? "border-blue-500 bg-blue-50" : "border-slate-200 bg-white"
+                                )}
+                            >
+                                <div className="flex items-center justify-between gap-3">
+                                    <div>
+                                        <p className="font-bold text-slate-900">Жёстко оптимизированная</p>
+                                        <p className="mt-1 text-sm text-slate-600">Фокус на категориях A/B. Категория C вообще не попадает в автозакупку.</p>
+                                    </div>
+                                    <Badge className="bg-slate-900 text-white">Экономно</Badge>
+                                </div>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setProcurementMode("full")}
+                                className={cn(
+                                    "w-full rounded-2xl border p-4 text-left transition-all",
+                                    procurementMode === "full" ? "border-blue-500 bg-blue-50" : "border-slate-200 bg-white"
+                                )}
+                            >
+                                <div className="flex items-center justify-between gap-3">
+                                    <div>
+                                        <p className="font-bold text-slate-900">Полное пополнение</p>
+                                        <p className="mt-1 text-sm text-slate-600">Шире покрывает категории A/B/C и подходит, когда нужно восстановить ассортимент.</p>
+                                    </div>
+                                    <Badge variant="outline" className="border-blue-200 bg-white text-blue-700">Шире список</Badge>
+                                </div>
+                            </button>
+                        </div>
+                        <DialogFooter>
+                            <Button variant="outline" onClick={() => setIsGenerateDialogOpen(false)}>Отмена</Button>
+                            <Button onClick={handleGenerate} disabled={isPending}>
+                                <Calculator className="mr-2 h-4 w-4" />
+                                Создать список
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
             </div>
 
             {/* Desktop Table */}
@@ -438,8 +499,13 @@ export function ProcurementTab({ lists, products, currentUserId }: ProcurementTa
                                             <TableRow key={item.id} className="hover:bg-slate-50/50 group/row transition-colors">
                                                 <TableCell className="pl-6">
                                                     <p className="font-bold text-slate-700">{item.product_name}</p>
-                                                    <div className="flex items-center gap-2 mt-0.5">
+                                                    <div className="flex flex-wrap items-center gap-2 mt-0.5">
                                                         <p className="text-[10px] text-slate-400 font-medium whitespace-nowrap">Закуп: {item.cost_price} ₽</p>
+                                                        <Badge variant="outline" className={cn("h-5 border text-[10px] font-bold", procurementPriorityStyles[item.procurement_priority] || procurementPriorityStyles.MANUAL)}>
+                                                            {item.procurement_priority === "CRITICAL" ? "Критично" :
+                                                                item.procurement_priority === "HIGH" ? "Высокий" :
+                                                                item.procurement_priority === "MEDIUM" ? "Средний" : "Вручную"}
+                                                        </Badge>
                                                         <div className="flex items-center gap-1">
                                                             <span className="text-[9px] text-slate-400 font-bold uppercase">В кор:</span>
                                                             <Input 
@@ -451,6 +517,7 @@ export function ProcurementTab({ lists, products, currentUserId }: ProcurementTa
                                                             />
                                                         </div>
                                                     </div>
+                                                    <p className="mt-1 text-[11px] text-slate-500">{item.procurement_reason}</p>
                                                 </TableCell>
                                                 <TableCell className="text-center">
                                                     <Badge 
@@ -549,6 +616,11 @@ export function ProcurementTab({ lists, products, currentUserId }: ProcurementTa
                                                 <div className="flex flex-wrap gap-x-3 gap-y-1">
                                                     <span className="text-[10px] text-slate-400 font-medium">Закуп: {item.cost_price} ₽</span>
                                                     <span className="text-[10px] text-slate-400 font-medium">Остаток: {item.current_stock} шт</span>
+                                                    <span className={cn("inline-flex items-center rounded-full border px-2 py-0.5 text-[9px] font-bold", procurementPriorityStyles[item.procurement_priority] || procurementPriorityStyles.MANUAL)}>
+                                                        {item.procurement_priority === "CRITICAL" ? "Критично" :
+                                                            item.procurement_priority === "HIGH" ? "Высокий" :
+                                                            item.procurement_priority === "MEDIUM" ? "Средний" : "Вручную"}
+                                                    </span>
                                                     {item.days_left !== null && (
                                                         <span className={cn(
                                                             "text-[10px] font-bold",
@@ -558,6 +630,7 @@ export function ProcurementTab({ lists, products, currentUserId }: ProcurementTa
                                                         </span>
                                                     )}
                                                 </div>
+                                                <p className="mt-1 text-[10px] text-slate-500">{item.procurement_reason}</p>
                                             </div>
                                             <Button 
                                                 variant="ghost" 

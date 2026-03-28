@@ -31,6 +31,8 @@ interface WorkScheduleGridProps {
     readOnly?: boolean
 }
 
+type ScheduleMap = Record<string, Record<string, string>>
+
 function SortableRow({ emp, days, month, year, localSchedule, isUpdating, toggleShift, readOnly, todayStr }: any) {
     const {
         attributes,
@@ -145,7 +147,7 @@ export function WorkScheduleGrid({ clubId, month, year, initialData, refreshData
     if (!initialData) return null
 
     const { employees: initialEmployees, schedule, clubSettings } = initialData
-    const [localSchedule, setLocalSchedule] = useState(schedule || {})
+    const [localSchedule, setLocalSchedule] = useState<ScheduleMap>(schedule || {})
     const [localEmployees, setLocalEmployees] = useState(initialEmployees || [])
     const [isUpdating, setIsUpdating] = useState<string | null>(null)
     const scrollContainerRef = useRef<HTMLDivElement>(null)
@@ -289,7 +291,7 @@ export function WorkScheduleGrid({ clubId, month, year, initialData, refreshData
         let nextType: string | null = null;
 
         // Use functional update to determine nextType based on most recent state
-        setLocalSchedule(prev => {
+        setLocalSchedule((prev: ScheduleMap) => {
             const currentType = prev[userId]?.[dateStr]
             
             if (!currentType) nextType = 'DAY'

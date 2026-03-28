@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/db';
-import { cookies } from 'next/headers';
+import { requireClubApiAccess } from '@/lib/club-api-access';
 
 // GET /api/clubs/[clubId]/finance/analytics
 export async function GET(
@@ -8,12 +8,8 @@ export async function GET(
     { params }: { params: Promise<{ clubId: string }> }
 ) {
     try {
-        const userId = (await cookies()).get('session_user_id')?.value;
-        if (!userId) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
-
         const { clubId } = await params;
+        await requireClubApiAccess(clubId)
         const { searchParams } = new URL(request.url);
 
         const period = searchParams.get('period') || 'month'; // 'month', 'quarter', 'year'
@@ -212,6 +208,10 @@ export async function GET(
             upcoming_payments: []
         });
     } catch (error) {
+        const status = (error as { status?: number })?.status
+        if (status) {
+            return NextResponse.json({ error: status === 401 ? 'Unauthorized' : 'Forbidden' }, { status })
+        }
         console.error('Error fetching analytics:', error);
         return NextResponse.json({ error: 'Failed to fetch analytics' }, { status: 500 });
     }

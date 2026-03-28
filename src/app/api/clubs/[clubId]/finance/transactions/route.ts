@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/db';
-import { cookies } from 'next/headers';
+import { requireClubApiAccess } from '@/lib/club-api-access';
 
 // GET /api/clubs/[clubId]/finance/transactions
 export async function GET(
@@ -8,12 +8,8 @@ export async function GET(
     { params }: { params: Promise<{ clubId: string }> }
 ) {
     try {
-        const userId = (await cookies()).get('session_user_id')?.value;
-        if (!userId) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
-
         const { clubId } = await params;
+        await requireClubApiAccess(clubId)
         const { searchParams } = new URL(request.url);
 
         const type = searchParams.get('type'); // 'income' or 'expense'
@@ -98,6 +94,24 @@ export async function GET(
         const totalsValues: any[] = [clubId];
         let totalsParamCount = 1;
 
+        if (type) {
+            totalsParamCount++;
+            totalsQuery += ` AND type = $${totalsParamCount}`;
+            totalsValues.push(type);
+        }
+
+        if (categoryId) {
+            totalsParamCount++;
+            totalsQuery += ` AND category_id = $${totalsParamCount}`;
+            totalsValues.push(categoryId);
+        }
+
+        if (status) {
+            totalsParamCount++;
+            totalsQuery += ` AND status = $${totalsParamCount}`;
+            totalsValues.push(status);
+        }
+
         if (startDate) {
             totalsParamCount++;
             totalsQuery += ` AND transaction_date >= $${totalsParamCount}`;
@@ -108,6 +122,12 @@ export async function GET(
             totalsParamCount++;
             totalsQuery += ` AND transaction_date <= $${totalsParamCount}`;
             totalsValues.push(endDate);
+        }
+
+        if (search) {
+            totalsParamCount++;
+            totalsQuery += ` AND (description ILIKE $${totalsParamCount} OR notes ILIKE $${totalsParamCount})`;
+            totalsValues.push(`%${search}%`);
         }
 
         const totalsResult = await query(totalsQuery, totalsValues);
@@ -128,6 +148,10 @@ export async function GET(
             }
         });
     } catch (error) {
+        const status = (error as { status?: number })?.status
+        if (status) {
+            return NextResponse.json({ error: status === 401 ? 'Unauthorized' : 'Forbidden' }, { status })
+        }
         console.error('Error fetching transactions:', error);
         return NextResponse.json({ error: 'Failed to fetch transactions' }, { status: 500 });
     }
@@ -139,12 +163,8 @@ export async function POST(
     { params }: { params: Promise<{ clubId: string }> }
 ) {
     try {
-        const userId = (await cookies()).get('session_user_id')?.value;
-        if (!userId) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
-
         const { clubId } = await params;
+        const userId = await requireClubApiAccess(clubId)
         const body = await request.json();
 
         const {
@@ -225,6 +245,10 @@ export async function POST(
             transaction: fullTransaction.rows[0]
         }, { status: 201 });
     } catch (error) {
+        const status = (error as { status?: number })?.status
+        if (status) {
+            return NextResponse.json({ error: status === 401 ? 'Unauthorized' : 'Forbidden' }, { status })
+        }
         console.error('Error creating transaction:', error);
         return NextResponse.json({ error: 'Failed to create transaction' }, { status: 500 });
     }
@@ -236,12 +260,8 @@ export async function PUT(
     { params }: { params: Promise<{ clubId: string }> }
 ) {
     try {
-        const userId = (await cookies()).get('session_user_id')?.value;
-        if (!userId) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
-
         const { clubId } = await params;
+        await requireClubApiAccess(clubId)
         const body = await request.json();
 
         const {
@@ -307,6 +327,10 @@ export async function PUT(
             transaction: fullTransaction.rows[0]
         });
     } catch (error) {
+        const status = (error as { status?: number })?.status
+        if (status) {
+            return NextResponse.json({ error: status === 401 ? 'Unauthorized' : 'Forbidden' }, { status })
+        }
         console.error('Error updating transaction:', error);
         return NextResponse.json({ error: 'Failed to update transaction' }, { status: 500 });
     }
@@ -318,12 +342,8 @@ export async function DELETE(
     { params }: { params: Promise<{ clubId: string }> }
 ) {
     try {
-        const userId = (await cookies()).get('session_user_id')?.value;
-        if (!userId) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
-
         const { clubId } = await params;
+        await requireClubApiAccess(clubId)
         const { searchParams } = new URL(request.url);
         const transactionId = searchParams.get('id');
 
@@ -344,6 +364,10 @@ export async function DELETE(
 
         return NextResponse.json({ success: true });
     } catch (error) {
+        const status = (error as { status?: number })?.status
+        if (status) {
+            return NextResponse.json({ error: status === 401 ? 'Unauthorized' : 'Forbidden' }, { status })
+        }
         console.error('Error deleting transaction:', error);
         return NextResponse.json({ error: 'Failed to delete transaction' }, { status: 500 });
     }

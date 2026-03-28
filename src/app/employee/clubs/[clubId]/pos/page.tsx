@@ -11,6 +11,7 @@ export default function EmployeePosPage() {
     const [userId, setUserId] = useState<string>("")
     const [activeShiftId, setActiveShiftId] = useState<string | undefined>(undefined)
     const [isLoading, setIsLoading] = useState(true)
+    const [isPosEnabled, setIsPosEnabled] = useState(true)
 
     useEffect(() => {
         const load = async () => {
@@ -19,6 +20,14 @@ export default function EmployeePosPage() {
                 const me = await meRes.json()
                 const uid = me?.user?.id
                 if (uid) setUserId(uid)
+
+                 const currentClub = Array.isArray(me?.employee_clubs)
+                    ? me.employee_clubs.find((club: any) => String(club.id) === String(clubId))
+                    : null
+                if (currentClub?.inventory_settings?.sales_capture_mode && currentClub.inventory_settings.sales_capture_mode !== "SHIFT") {
+                    setIsPosEnabled(false)
+                    return
+                }
 
                 const shiftRes = await fetch(`/api/employee/clubs/${clubId}/active-shift`, { cache: "no-store" })
                 const shiftData = await shiftRes.json()
@@ -46,6 +55,14 @@ export default function EmployeePosPage() {
         )
     }
 
+    if (!isPosEnabled) {
+        return (
+            <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center p-6 text-center">
+                <div className="text-slate-300">Продажи через POS недоступны для этого клуба.</div>
+            </div>
+        )
+    }
+
     return (
         <SSEProvider clubId={clubId} userId={userId}>
             <EmployeeSalesWizard
@@ -62,4 +79,3 @@ export default function EmployeePosPage() {
         </SSEProvider>
     )
 }
-

@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache"
 import { logOperation } from "@/lib/logger"
 import { LogAction } from "@/lib/logger"
 import { cookies } from "next/headers"
+import { notifyInventoryClub } from "@/lib/inventory-events"
 
 // ... existing code ...
 
@@ -113,6 +114,103 @@ async function assertUserCanAccessClub(clubId: string, userId: string) {
     await assertSessionUserCanAccessClub(clubId, userId)
 }
 
+type InventoryAccessScope = {
+    isFullAccess: boolean
+    canManageInventory: boolean
+    allowedWarehouseIds: number[]
+}
+
+function normalizeAllowedWarehouseIds(raw: any): number[] {
+    if (!Array.isArray(raw)) return []
+    return Array.from(
+        new Set(
+            raw
+                .map((value) => Number(value))
+                .filter((value) => Number.isInteger(value) && value > 0)
+        )
+    )
+}
+
+async function getInventoryAccessScope(client: any, clubId: string, userId: string): Promise<InventoryAccessScope> {
+    const clubRes = await client.query(
+        `SELECT owner_id, inventory_settings
+         FROM clubs
+         WHERE id = $1
+         LIMIT 1`,
+        [clubId]
+    )
+    if (clubRes.rowCount === 0) throw new Error("Клуб не найден")
+
+    const roleRes = await client.query(
+        `SELECT ce.role as club_role, u.role_id, r.name as role_name
+         FROM club_employees ce
+         LEFT JOIN users u ON u.id = ce.user_id
+         LEFT JOIN roles r ON r.id = u.role_id
+         WHERE ce.club_id = $1
+           AND ce.user_id = $2
+           AND ce.is_active = true
+           AND ce.dismissed_at IS NULL
+         LIMIT 1`,
+        [clubId, userId]
+    )
+
+    const clubRole = roleRes.rows[0]?.club_role || null
+    const roleId = roleRes.rows[0]?.role_id || null
+    const roleName = roleRes.rows[0]?.role_name || null
+    const isFullAccess =
+        String(clubRes.rows[0]?.owner_id) === String(userId) ||
+        clubRole === "Владелец" ||
+        clubRole === "Админ" ||
+        clubRole === "Управляющий" ||
+        roleName === "Админ" ||
+        roleName === "Управляющий"
+
+    let canManageInventory = isFullAccess
+    if (!canManageInventory && roleId) {
+        const permissionRes = await client.query(
+            `SELECT is_allowed
+             FROM role_permissions
+             WHERE club_id = $1
+               AND role_id = $2
+               AND permission_key = 'manage_inventory'
+             LIMIT 1`,
+            [clubId, roleId]
+        )
+        canManageInventory = permissionRes.rows[0]?.is_allowed === true
+    }
+
+    return {
+        isFullAccess,
+        canManageInventory,
+        allowedWarehouseIds: normalizeAllowedWarehouseIds(clubRes.rows[0]?.inventory_settings?.employee_allowed_warehouse_ids),
+    }
+}
+
+async function assertUserCanUseWarehouses(client: any, clubId: string, userId: string, warehouseIds: Array<number | null | undefined>) {
+    const scope = await getInventoryAccessScope(client, clubId, userId)
+    if (scope.canManageInventory) return scope
+
+    const normalizedWarehouseIds = Array.from(
+        new Set(
+            warehouseIds
+                .map((warehouseId) => Number(warehouseId))
+                .filter((warehouseId) => Number.isInteger(warehouseId) && warehouseId > 0)
+        )
+    )
+
+    if (normalizedWarehouseIds.length === 0) return scope
+    if (scope.allowedWarehouseIds.length === 0) {
+        throw new Error("Для вашего профиля не настроены доступные склады")
+    }
+
+    const disallowedWarehouseId = normalizedWarehouseIds.find((warehouseId) => !scope.allowedWarehouseIds.includes(warehouseId))
+    if (disallowedWarehouseId) {
+        throw new Error(`У вас нет доступа к складу #${disallowedWarehouseId}`)
+    }
+
+    return scope
+}
+
 export type Supply = {
     id: number
     supplier_name: string
@@ -141,6 +239,7 @@ export type Inventory = {
     status: 'OPEN' | 'CLOSED'
     started_at: string
     closed_at: string | null
+    shift_id?: string | null
     target_metric_key: string | null
     warehouse_id: number | null
     warehouse_name?: string
@@ -241,15 +340,35 @@ export async function deleteCategory(id: number, clubId: string, userId: string)
 // --- WAREHOUSES ---
 
 export async function getWarehouses(clubId: string) {
-    await requireClubAccess(clubId)
-    const res = await query(`
-        SELECT w.*, u.full_name as responsible_name
-        FROM warehouses w
-        LEFT JOIN users u ON w.responsible_user_id = u.id
-        WHERE w.club_id = $1
-        ORDER BY w.name
-    `, [clubId])
-    return res.rows as Warehouse[]
+    const userId = await requireClubAccess(clubId)
+    const client = await import("@/db").then(m => m.getClient())
+    try {
+        const scope = await getInventoryAccessScope(client, clubId, userId)
+        if (!scope.canManageInventory && scope.allowedWarehouseIds.length === 0) {
+            return []
+        }
+
+        const params: any[] = [clubId]
+        let warehouseFilter = ""
+        if (!scope.canManageInventory) {
+            params.push(scope.allowedWarehouseIds)
+            warehouseFilter = " AND w.id = ANY($2)"
+        }
+
+        const res = await client.query(
+            `
+            SELECT w.*, u.full_name as responsible_name
+            FROM warehouses w
+            LEFT JOIN users u ON w.responsible_user_id = u.id
+            WHERE w.club_id = $1${warehouseFilter}
+            ORDER BY w.name
+            `,
+            params
+        )
+        return res.rows as Warehouse[]
+    } finally {
+        client.release()
+    }
 }
 
 export async function createWarehouse(clubId: string, userId: string, data: { name: string, address?: string, type: string, contact_info?: string, characteristics?: any }) {
@@ -340,6 +459,7 @@ export async function transferStock(clubId: string, userId: string, data: { sour
         await assertWarehouseBelongsToClub(client, clubId, source_warehouse_id)
         await assertWarehouseBelongsToClub(client, clubId, target_warehouse_id)
         await assertProductBelongsToClub(client, clubId, product_id)
+        await assertUserCanUseWarehouses(client, clubId, userId, [source_warehouse_id, target_warehouse_id])
 
         if (source_warehouse_id === target_warehouse_id) {
             throw new Error('Склады отправления и назначения должны быть разными')
@@ -414,6 +534,7 @@ export async function createTransfer(clubId: string, userId: string, data: { sou
         await assertWarehouseBelongsToClub(client, clubId, source_warehouse_id)
         await assertWarehouseBelongsToClub(client, clubId, target_warehouse_id)
         await assertProductsBelongToClub(client, clubId, items.map(i => i.product_id))
+        await assertUserCanUseWarehouses(client, clubId, userId, [source_warehouse_id, target_warehouse_id])
 
         if (source_warehouse_id === target_warehouse_id) {
             throw new Error('Склады отправления и назначения должны быть разными')
@@ -815,11 +936,7 @@ export async function calculateAnalytics(clubId: string) {
     const client = await import("@/db").then(m => m.getClient())
     try {
         await client.query('BEGIN')
-        
-        // 1. Calculate Velocity (Avg Daily Sales)
-        // Divisor is the minimum of 30 days OR days since the VERY FIRST SALE recorded in the system
-        // This makes it adaptive for when you actually started tracking sales
-        
+
         await client.query(`
             UPDATE warehouse_products p
             SET sales_velocity = COALESCE((
@@ -827,31 +944,54 @@ export async function calculateAnalytics(clubId: string) {
                     SELECT product_id, MIN(created_at) as first_sale_date
                     FROM warehouse_stock_movements
                     WHERE type = 'SALE'
+                      AND COALESCE(related_entity_type, '') != 'SHIFT_RECEIPT_VOID'
                     GROUP BY product_id
+                ),
+                NetSales AS (
+                    SELECT
+                        m.product_id,
+                        SUM(
+                            CASE
+                                WHEN m.type = 'SALE' AND COALESCE(m.related_entity_type, '') = 'SHIFT_RECEIPT_VOID' THEN -ABS(m.change_amount)
+                                WHEN m.type = 'RETURN' THEN -ABS(m.change_amount)
+                                WHEN m.type = 'SALE' THEN ABS(m.change_amount)
+                                ELSE 0
+                            END
+                        )::numeric as net_units
+                    FROM warehouse_stock_movements m
+                    WHERE m.created_at > NOW() - INTERVAL '30 days'
+                      AND m.type IN ('SALE', 'RETURN')
+                    GROUP BY m.product_id
                 )
                 SELECT 
-                    ABS(SUM(m.change_amount))::numeric / 
+                    GREATEST(0, ns.net_units) / 
                     GREATEST(1, LEAST(30, CEIL(EXTRACT(EPOCH FROM (NOW() - fs.first_sale_date)) / 86400.0)))
-                FROM warehouse_stock_movements m
-                JOIN FirstSale fs ON m.product_id = fs.product_id
-                WHERE m.product_id = p.id 
-                  AND m.type = 'SALE' 
-                  AND m.created_at > NOW() - INTERVAL '30 days'
-                GROUP BY fs.first_sale_date
+                FROM FirstSale fs
+                JOIN NetSales ns ON ns.product_id = fs.product_id
+                WHERE fs.product_id = p.id
+                GROUP BY fs.first_sale_date, ns.net_units
             ), 0)
             WHERE club_id = $1
         `, [clubId])
-        
-        // 2. ABC Analysis (By Revenue over last 30 days)
-        // Revenue = SUM(ABS(change_amount) * price_at_time)
+
         const revenueData = await client.query(`
             WITH ProductRevenue AS (
                 SELECT 
                     p.id as product_id,
-                    COALESCE(SUM(ABS(m.change_amount) * COALESCE(m.price_at_time, p.selling_price)), 0) as total_revenue
+                    COALESCE(SUM(
+                        CASE
+                            WHEN m.type = 'SALE' AND COALESCE(m.related_entity_type, '') = 'SHIFT_RECEIPT_VOID'
+                                THEN -ABS(m.change_amount) * COALESCE(m.price_at_time, p.selling_price)
+                            WHEN m.type = 'RETURN'
+                                THEN -ABS(m.change_amount) * COALESCE(m.price_at_time, p.selling_price)
+                            WHEN m.type = 'SALE'
+                                THEN ABS(m.change_amount) * COALESCE(m.price_at_time, p.selling_price)
+                            ELSE 0
+                        END
+                    ), 0) as total_revenue
                 FROM warehouse_products p
                 LEFT JOIN warehouse_stock_movements m ON p.id = m.product_id 
-                    AND m.type = 'SALE' 
+                    AND m.type IN ('SALE', 'RETURN')
                     AND m.created_at > NOW() - INTERVAL '30 days'
                 WHERE p.club_id = $1 AND p.is_active = true
                 GROUP BY p.id
@@ -896,7 +1036,7 @@ export async function calculateAnalytics(clubId: string) {
     }
 }
 
-export async function generateProcurementList(clubId: string, userId: string) {
+export async function generateProcurementList(clubId: string, userId: string, mode: ProcurementMode = "optimized") {
     await assertUserCanAccessClub(clubId, userId)
     const client = await import("@/db").then(m => m.getClient())
     try {
@@ -908,57 +1048,53 @@ export async function generateProcurementList(clubId: string, userId: string) {
         // 2. Create Draft List
         const listRes = await client.query(`
             INSERT INTO warehouse_procurement_lists (club_id, created_by, status, name)
-            VALUES ($1, $2, 'DRAFT', 'Закупка ' || TO_CHAR(NOW(), 'DD.MM.YYYY'))
+            VALUES (
+                $1,
+                $2,
+                'DRAFT',
+                CASE
+                    WHEN $3 = 'full' THEN 'Полное пополнение ' || TO_CHAR(NOW(), 'DD.MM.YYYY')
+                    ELSE 'Оптимизированная закупка ' || TO_CHAR(NOW(), 'DD.MM.YYYY')
+                END
+            )
             RETURNING id
-        `, [clubId, userId])
+        `, [clubId, userId, mode])
         const listId = listRes.rows[0].id
         
-        // 3. Find products to restock based on ABC priority and Days Left
-        // Logic:
-        // A: Restock if < 7 days left
-        // B: Restock if < 5 days left
-        // C: Restock if < 3 days left
-        // All: Restock if current_stock <= min_stock_level
         const products = await client.query(`
             SELECT 
-                id, name, current_stock, min_stock_level, sales_velocity, ideal_stock_days, abc_category, units_per_box,
-                CASE 
-                    WHEN sales_velocity > 0 THEN current_stock / sales_velocity 
-                    ELSE 999 
-                END as days_left
+                id, name, current_stock, min_stock_level, sales_velocity, ideal_stock_days, abc_category, units_per_box
             FROM warehouse_products
             WHERE club_id = $1 AND is_active = true
-            AND current_stock > 0 -- Don't auto-add products with 0 stock as requested
-            AND (
-                current_stock <= min_stock_level OR
-                (abc_category = 'A' AND (sales_velocity > 0 AND current_stock / sales_velocity < 7)) OR
-                (abc_category = 'B' AND (sales_velocity > 0 AND current_stock / sales_velocity < 5)) OR
-                (abc_category = 'C' AND (sales_velocity > 0 AND current_stock / sales_velocity < 3))
-            )
         `, [clubId])
-        
-        for (const p of products.rows) {
-            // Calculate suggested quantity
-            // Target = Velocity * Ideal Days (default 14)
-            let suggested = 0
-            const velocity = Number(p.sales_velocity)
-            const idealDays = p.ideal_stock_days || 14
-            const boxSize = p.units_per_box || 1
-            
-            if (velocity > 0) {
-                const target = velocity * idealDays
-                const needed = Math.ceil(target - p.current_stock)
-                // Round to NEAREST box size
-                const boxes = Math.round(needed / boxSize)
-                suggested = Math.max(boxSize, boxes * boxSize) // At least 1 box
-            } else {
-                // Fallback for no sales data: Top up to 2x Min Stock
-                const needed = Math.max(0, (p.min_stock_level || 5) * 2 - p.current_stock)
-                const boxes = Math.round(needed / boxSize)
-                suggested = Math.max(boxSize, boxes * boxSize)
-            }
-            
-            if (suggested <= 0) suggested = boxSize // Ensure at least one box if it's on the list
+
+        const procurementCandidates = products.rows
+            .map((product) => ({
+                product,
+                candidate: getProcurementCandidate(product, mode)
+            }))
+            .filter((entry): entry is { product: any, candidate: ProcurementCandidate } => Boolean(entry.candidate))
+            .sort((a, b) => {
+                const priorityOrder = { CRITICAL: 0, HIGH: 1, MEDIUM: 2 }
+                const priorityDiff = priorityOrder[a.candidate.priority] - priorityOrder[b.candidate.priority]
+                if (priorityDiff !== 0) return priorityDiff
+
+                const abcOrder = { A: 0, B: 1, C: 2 }
+                const abcDiff = (abcOrder[String(a.product.abc_category || "C") as keyof typeof abcOrder] ?? 2)
+                    - (abcOrder[String(b.product.abc_category || "C") as keyof typeof abcOrder] ?? 2)
+                if (abcDiff !== 0) return abcDiff
+
+                const aDays = a.candidate.days_left ?? Number.POSITIVE_INFINITY
+                const bDays = b.candidate.days_left ?? Number.POSITIVE_INFINITY
+                if (aDays !== bDays) return aDays - bDays
+
+                return String(a.product.name).localeCompare(String(b.product.name))
+            })
+
+        for (const { product: p } of procurementCandidates) {
+            const boxSize = normalizeProcurementBoxSize(p.units_per_box)
+            const suggested = calculateSuggestedProcurementQuantity(p, mode)
+            if (suggested <= 0) continue
             
             await client.query(`
                 INSERT INTO warehouse_procurement_items (list_id, product_id, current_stock, suggested_quantity, actual_quantity, units_per_box)
@@ -998,12 +1134,63 @@ export async function getProcurementListItems(clubId: string, listId: number) {
                CASE 
                    WHEN p.sales_velocity > 0 THEN p.current_stock / p.sales_velocity 
                    ELSE NULL 
-               END as days_left
+               END as days_left,
+               CASE
+                   WHEN l.name ILIKE 'Полное пополнение%' AND COALESCE(p.abc_category, 'C') = 'A' AND (p.current_stock < COALESCE(p.min_stock_level, 0) OR (COALESCE(p.sales_velocity, 0) > 0 AND p.current_stock / p.sales_velocity < 2))
+                       THEN 'CRITICAL'
+                   WHEN l.name ILIKE 'Полное пополнение%' AND COALESCE(p.abc_category, 'C') = 'A'
+                       THEN 'HIGH'
+                   WHEN l.name ILIKE 'Полное пополнение%' AND COALESCE(p.abc_category, 'C') IN ('B', 'C')
+                       THEN 'MEDIUM'
+                   WHEN COALESCE(p.abc_category, 'C') = 'C' AND p.current_stock <= 0 AND COALESCE(p.sales_velocity, 0) > 0
+                       THEN 'CRITICAL'
+                   WHEN COALESCE(p.abc_category, 'C') = 'A' AND (p.current_stock < COALESCE(p.min_stock_level, 0) OR (COALESCE(p.sales_velocity, 0) > 0 AND p.current_stock / p.sales_velocity < 2))
+                       THEN 'CRITICAL'
+                   WHEN COALESCE(p.abc_category, 'C') = 'A'
+                       THEN 'HIGH'
+                   WHEN COALESCE(p.abc_category, 'C') = 'B' AND (p.current_stock < COALESCE(p.min_stock_level, 0) OR (COALESCE(p.sales_velocity, 0) > 0 AND p.current_stock / p.sales_velocity < 2))
+                       THEN 'HIGH'
+                   WHEN COALESCE(p.abc_category, 'C') = 'B'
+                       THEN 'MEDIUM'
+                   ELSE 'MANUAL'
+               END as procurement_priority,
+               CASE
+                   WHEN l.name ILIKE 'Полное пополнение%' AND COALESCE(p.abc_category, 'C') = 'A' AND p.current_stock < COALESCE(p.min_stock_level, 0)
+                       THEN 'Полное пополнение: категория A ниже минимального остатка'
+                   WHEN l.name ILIKE 'Полное пополнение%' AND COALESCE(p.abc_category, 'C') = 'A'
+                       THEN 'Полное пополнение: категория A подходит к точке дозаказа'
+                   WHEN l.name ILIKE 'Полное пополнение%' AND COALESCE(p.abc_category, 'C') = 'B' AND p.current_stock < COALESCE(p.min_stock_level, 0)
+                       THEN 'Полное пополнение: категория B ниже минимального остатка'
+                   WHEN l.name ILIKE 'Полное пополнение%' AND COALESCE(p.abc_category, 'C') = 'B'
+                       THEN 'Полное пополнение: категория B подходит к точке дозаказа'
+                   WHEN l.name ILIKE 'Полное пополнение%' AND COALESCE(p.abc_category, 'C') = 'C'
+                       THEN 'Полное пополнение: категория C включена для широкого запаса'
+                   WHEN COALESCE(p.abc_category, 'C') = 'C' AND p.current_stock <= 0 AND COALESCE(p.sales_velocity, 0) > 0
+                       THEN 'Категория C, но остаток обнулился по продаваемому товару'
+                   WHEN COALESCE(p.abc_category, 'C') = 'A' AND p.current_stock < COALESCE(p.min_stock_level, 0)
+                       THEN 'Категория A ниже минимального остатка'
+                   WHEN COALESCE(p.abc_category, 'C') = 'A'
+                       THEN 'Категория A подходит к точке дозаказа'
+                   WHEN COALESCE(p.abc_category, 'C') = 'B' AND p.current_stock < COALESCE(p.min_stock_level, 0)
+                       THEN 'Категория B ниже минимального остатка'
+                   WHEN COALESCE(p.abc_category, 'C') = 'B'
+                       THEN 'Категория B подходит к точке дозаказа'
+                   ELSE 'Добавлено вручную'
+               END as procurement_reason
         FROM warehouse_procurement_items i
         JOIN warehouse_procurement_lists l ON i.list_id = l.id
         JOIN warehouse_products p ON i.product_id = p.id
         WHERE l.club_id = $1 AND i.list_id = $2
-        ORDER BY CASE WHEN p.abc_category = 'A' THEN 1 WHEN p.abc_category = 'B' THEN 2 ELSE 3 END, p.name
+        ORDER BY 
+            CASE
+                WHEN COALESCE(p.abc_category, 'C') = 'C' AND p.current_stock <= 0 AND COALESCE(p.sales_velocity, 0) > 0 THEN 0
+                WHEN COALESCE(p.abc_category, 'C') = 'A' AND (p.current_stock < COALESCE(p.min_stock_level, 0) OR (COALESCE(p.sales_velocity, 0) > 0 AND p.current_stock / p.sales_velocity < 2)) THEN 1
+                WHEN COALESCE(p.abc_category, 'C') = 'A' THEN 2
+                WHEN COALESCE(p.abc_category, 'C') = 'B' AND (p.current_stock < COALESCE(p.min_stock_level, 0) OR (COALESCE(p.sales_velocity, 0) > 0 AND p.current_stock / p.sales_velocity < 2)) THEN 3
+                WHEN COALESCE(p.abc_category, 'C') = 'B' THEN 4
+                ELSE 5
+            END,
+            p.name
     `, [clubId, listId])
     return res.rows
 }
@@ -1103,20 +1290,8 @@ export async function addProductToProcurementList(listId: number, productId: num
         if (!p) throw new Error("Товар не найден")
 
         let suggested = 0
-        const velocity = Number(p.sales_velocity)
-        const idealDays = p.ideal_stock_days || 14
-        const boxSize = p.units_per_box || 1
-        
-        if (velocity > 0) {
-            const target = velocity * idealDays
-            const needed = Math.ceil(target - p.current_stock)
-            const boxes = Math.round(needed / boxSize)
-            suggested = Math.max(boxSize, boxes * boxSize)
-        } else {
-            const needed = Math.max(0, (p.min_stock_level || 5) * 2 - p.current_stock)
-            const boxes = Math.round(needed / boxSize)
-            suggested = Math.max(boxSize, boxes * boxSize)
-        }
+        const boxSize = normalizeProcurementBoxSize(p.units_per_box)
+        suggested = calculateSuggestedProcurementQuantity(p)
         if (suggested <= 0) suggested = boxSize
 
         await client.query(`
@@ -1223,6 +1398,48 @@ async function applyWarehouseStockDelta(
     return { previousStock, newStock }
 }
 
+function normalizeInventoryActualStock(actualStock: number | null) {
+    if (actualStock === null) return null
+    if (!Number.isFinite(actualStock)) throw new Error("Фактический остаток должен быть числом")
+    if (!Number.isInteger(actualStock)) throw new Error("Фактический остаток должен быть целым числом")
+    if (actualStock < 0) throw new Error("Фактический остаток не может быть отрицательным")
+    return actualStock
+}
+
+function calculateInventoryDelta(expectedStock: number, movementDuringInventory: number, actualStock: number) {
+    const adjustedExpected = Math.max(0, Number(expectedStock) + Number(movementDuringInventory || 0))
+    const difference = actualStock - adjustedExpected
+    return { adjustedExpected, difference }
+}
+
+async function getInventoryMovementDuringCount(
+    client: any,
+    inventoryId: number,
+    productId: number,
+    warehouseId: number,
+    clubId: string,
+    startedAt: string,
+    closedAt?: string | null
+) {
+    const movementRes = await client.query(
+        `
+        SELECT COALESCE(SUM(change_amount), 0) as total
+        FROM warehouse_stock_movements
+        WHERE product_id = $1
+          AND warehouse_id = $2
+          AND club_id = $3
+          AND created_at > $4
+          AND ($5::timestamp IS NULL OR created_at <= $5::timestamp)
+          AND NOT (
+              COALESCE(related_entity_type, '') = 'INVENTORY'
+              AND COALESCE(related_entity_id, -1) = $6
+          )
+        `,
+        [productId, warehouseId, clubId, startedAt, closedAt || null, inventoryId]
+    )
+    return Number(movementRes.rows[0]?.total || 0)
+}
+
 // --- TASKS ---
 export async function getClubTasks(clubId: string) {
     await requireClubAccess(clubId)
@@ -1257,6 +1474,126 @@ export async function manualTriggerReplenishment(clubId: string) {
         console.error('Manual trigger failed:', e)
         throw e
     }
+}
+
+function normalizeProcurementBoxSize(unitsPerBox: number | null | undefined) {
+    const normalized = Number(unitsPerBox || 1)
+    return Number.isFinite(normalized) && normalized > 0 ? Math.max(1, Math.round(normalized)) : 1
+}
+
+type ProcurementMode = "optimized" | "full"
+
+type ProcurementCandidate = {
+    priority: "CRITICAL" | "HIGH" | "MEDIUM"
+    reason: string
+    reorder_point: number
+    days_left: number | null
+}
+
+function calculateSuggestedProcurementQuantity(product: {
+    current_stock: number | string | null
+    sales_velocity: number | string | null
+    ideal_stock_days?: number | string | null
+    min_stock_level?: number | string | null
+    units_per_box?: number | string | null
+    abc_category?: string | null
+}, mode: ProcurementMode = "optimized") {
+    const currentStock = Number(product.current_stock || 0)
+    const salesVelocity = Number(product.sales_velocity || 0)
+    const idealStockDays = Math.max(1, Number(product.ideal_stock_days || 14))
+    const minStockLevel = Math.max(0, Number(product.min_stock_level || 0))
+    const boxSize = normalizeProcurementBoxSize(Number(product.units_per_box || 1))
+    const abcCategory = String(product.abc_category || "C").toUpperCase()
+
+    const targetDays = mode === "optimized"
+        ? abcCategory === "A"
+            ? Math.min(idealStockDays, 7)
+            : abcCategory === "B"
+                ? Math.min(idealStockDays, 4)
+                : 0
+        : abcCategory === "A"
+            ? idealStockDays
+            : abcCategory === "B"
+                ? Math.max(5, Math.min(idealStockDays, 10))
+                : Math.max(2, Math.min(idealStockDays, 5))
+
+    const targetStock = targetDays > 0 && salesVelocity > 0
+        ? Math.max(Math.ceil(salesVelocity * targetDays), minStockLevel)
+        : mode === "full"
+            ? Math.max(minStockLevel, boxSize)
+            : 0
+    const needed = Math.max(0, targetStock - currentStock)
+    if (needed <= 0) return 0
+
+    return Math.ceil(needed / boxSize) * boxSize
+}
+
+function getProcurementCoverDays(abcCategory: string, mode: ProcurementMode) {
+    if (mode === "optimized") {
+        if (abcCategory === "A") return 7
+        if (abcCategory === "B") return 4
+        return 0
+    }
+
+    if (abcCategory === "A") return 10
+    if (abcCategory === "B") return 6
+    return 3
+}
+
+function getProcurementPriority(abcCategory: string, daysLeft: number | null, belowMin: boolean, mode: ProcurementMode) {
+    if (mode === "optimized") {
+        if (abcCategory === "A") return belowMin || (daysLeft !== null && daysLeft < 2) ? "CRITICAL" : "HIGH"
+        if (abcCategory === "B") return belowMin || (daysLeft !== null && daysLeft < 2) ? "HIGH" : "MEDIUM"
+        return null
+    }
+
+    if (abcCategory === "A") return belowMin || (daysLeft !== null && daysLeft < 2) ? "CRITICAL" : "HIGH"
+    if (abcCategory === "B") return belowMin || (daysLeft !== null && daysLeft < 2) ? "HIGH" : "MEDIUM"
+    return "MEDIUM"
+}
+
+function getProcurementReason(abcCategory: string, belowMin: boolean, mode: ProcurementMode) {
+    if (mode === "optimized") {
+        return belowMin
+            ? `Оптимизированная закупка: категория ${abcCategory} ниже минимального остатка`
+            : `Оптимизированная закупка: категория ${abcCategory} подходит к точке дозаказа`
+    }
+
+    return belowMin
+        ? `Полное пополнение: категория ${abcCategory} ниже минимального остатка`
+        : `Полное пополнение: категория ${abcCategory} подходит к точке дозаказа`
+}
+
+function getProcurementCandidate(product: {
+    current_stock: number | string | null
+    sales_velocity: number | string | null
+    min_stock_level?: number | string | null
+    abc_category?: string | null
+}, mode: ProcurementMode = "optimized") {
+    const currentStock = Number(product.current_stock || 0)
+    const salesVelocity = Math.max(0, Number(product.sales_velocity || 0))
+    const minStockLevel = Math.max(0, Number(product.min_stock_level || 0))
+    const abcCategory = String(product.abc_category || "C").toUpperCase()
+    const daysLeft = salesVelocity > 0 ? currentStock / salesVelocity : null
+    const coverDays = getProcurementCoverDays(abcCategory, mode)
+    const adaptiveReorderPoint = coverDays > 0 && salesVelocity > 0
+        ? Math.max(minStockLevel, Math.ceil(salesVelocity * coverDays))
+        : minStockLevel
+
+    if (mode === "optimized" && abcCategory === "C") return null
+
+    const belowMin = currentStock < minStockLevel
+    const belowCover = coverDays > 0 && salesVelocity > 0 && currentStock < adaptiveReorderPoint
+    if (!belowMin && !belowCover) return null
+
+    const priority = getProcurementPriority(abcCategory, daysLeft, belowMin, mode)
+    if (!priority) return null
+    return {
+        priority,
+        reason: getProcurementReason(abcCategory, belowMin, mode),
+        reorder_point: adaptiveReorderPoint,
+        days_left: daysLeft,
+    } satisfies ProcurementCandidate
 }
 
 export async function getSalesAnalytics(clubId: string, limit: number = 500) {
@@ -1311,6 +1648,7 @@ export async function getSalesAnalytics(clubId: string, limit: number = 500) {
         LEFT JOIN shift_receipts sr ON sm.related_entity_type = 'SHIFT_RECEIPT' AND sm.related_entity_id = sr.id AND sr.voided_at IS NOT NULL
         WHERE sm.club_id = $1 
           AND sm.type IN ('SALE', 'RETURN')  -- Include both sales and returns
+          AND COALESCE(sm.related_entity_type, '') != 'SHIFT_RECEIPT_VOID'
           AND sr.id IS NULL  -- Exclude voided receipts
         ORDER BY sm.created_at DESC
         LIMIT $2
@@ -1349,17 +1687,36 @@ export async function correctInventoryItem(inventoryId: number, productId: numbe
         if (itemRes.rows.length === 0) throw new Error("Позиция не найдена")
         const item = itemRes.rows[0]
 
+        const normalizedActualStock = normalizeInventoryActualStock(newActualStock)
+        if (normalizedActualStock === null) throw new Error("Фактический остаток обязателен")
+
         const oldActualStock = item.actual_stock !== null ? Number(item.actual_stock) : null
         const expectedStock = Number(item.expected_stock)
         const price = Number(item.selling_price_snapshot)
+        let warehouseId = inventory.warehouse_id
+        if (!warehouseId) {
+            const whRes = await client.query('SELECT id FROM warehouses WHERE club_id = $1 ORDER BY is_default DESC LIMIT 1', [clubId])
+            warehouseId = whRes.rows[0]?.id
+        }
+        if (!warehouseId) throw new Error("Не найден склад для корректировки остатков")
+
+        const movementDuringInventory = await getInventoryMovementDuringCount(
+            client,
+            inventoryId,
+            productId,
+            Number(warehouseId),
+            clubId,
+            inventory.started_at,
+            inventory.closed_at || null
+        )
+        const { adjustedExpected, difference: newDifference } = calculateInventoryDelta(expectedStock, movementDuringInventory, normalizedActualStock)
 
         // 2. Calculate New Stats for the Item
-        const newDifference = newActualStock - expectedStock
-        const newCalculatedRevenue = newActualStock < expectedStock ? (expectedStock - newActualStock) * price : 0
+        const newCalculatedRevenue = normalizedActualStock < adjustedExpected ? (adjustedExpected - normalizedActualStock) * price : 0
 
         // 3. Calculate Deltas for the Header
-        const oldCalculatedRevenue = (oldActualStock !== null && oldActualStock < expectedStock) 
-            ? (expectedStock - oldActualStock) * price 
+        const oldCalculatedRevenue = (oldActualStock !== null && oldActualStock < adjustedExpected) 
+            ? (adjustedExpected - oldActualStock) * price 
             : 0
         
         const revenueChange = newCalculatedRevenue - oldCalculatedRevenue
@@ -1371,7 +1728,7 @@ export async function correctInventoryItem(inventoryId: number, productId: numbe
                 difference = $2::integer, 
                 calculated_revenue = $3::numeric
             WHERE inventory_id = $4 AND product_id = $5
-        `, [newActualStock, newDifference, newCalculatedRevenue, inventoryId, productId])
+        `, [normalizedActualStock, newDifference, newCalculatedRevenue, inventoryId, productId])
 
         // 5. Update inventory header totals
         await client.query(`
@@ -1386,20 +1743,12 @@ export async function correctInventoryItem(inventoryId: number, productId: numbe
             // Calculate delta to apply to current warehouse stock
             // If item wasn't counted (null), the previous adjustment was 0 (relative to expected)
             // If item was counted, the previous adjustment was (actual - expected)
-            const oldAdjustment = oldActualStock !== null ? (oldActualStock - expectedStock) : 0
-            const newAdjustment = newActualStock - expectedStock
+            const oldAdjustment = oldActualStock !== null ? (oldActualStock - adjustedExpected) : 0
+            const newAdjustment = normalizedActualStock - adjustedExpected
             const stockDelta = newAdjustment - oldAdjustment
 
             if (stockDelta !== 0) {
-                let warehouseId = inventory.warehouse_id
-                if (!warehouseId) {
-                    const whRes = await client.query('SELECT id FROM warehouses WHERE club_id = $1 ORDER BY is_default DESC LIMIT 1', [clubId])
-                    warehouseId = whRes.rows[0]?.id
-                }
-
-                if (!warehouseId) throw new Error("Не найден склад для корректировки остатков")
-
-                const { previousStock, newStock } = await applyWarehouseStockDelta(client, warehouseId, productId, stockDelta)
+                const { previousStock, newStock } = await applyWarehouseStockDelta(client, Number(warehouseId), productId, stockDelta)
 
                 // Update product cache (sum of all warehouses)
                 await client.query(`
@@ -1422,7 +1771,7 @@ export async function correctInventoryItem(inventoryId: number, productId: numbe
                     'INVENTORY', 
                     inventoryId, 
                     null, 
-                    warehouseId
+                        Number(warehouseId)
                 )
             }
         }
@@ -1602,6 +1951,7 @@ export async function createManualSale(clubId: string, userId: string, data: { p
         }
         await assertWarehouseBelongsToClub(client, clubId, warehouse_id)
         await assertProductBelongsToClub(client, clubId, product_id)
+        await assertUserCanUseWarehouses(client, clubId, userId, [warehouse_id])
 
         // 1. Update stock
         const { previousStock: prevStock, newStock } = await applyWarehouseStockDelta(client, warehouse_id, product_id, -quantity)
@@ -1690,26 +2040,50 @@ async function resolveEmployeeDefaultWarehouseId(
     userId: string,
     preferredWarehouseId?: number | null
 ) {
-    if (preferredWarehouseId) return preferredWarehouseId
+    const scope = await getInventoryAccessScope(client, clubId, userId)
+    if (scope.canManageInventory) {
+        if (preferredWarehouseId) {
+            await assertWarehouseBelongsToClub(client, clubId, preferredWarehouseId)
+            return Number(preferredWarehouseId)
+        }
 
-    const settingsRes = await client.query('SELECT inventory_settings FROM clubs WHERE id = $1', [clubId])
-    const settings = settingsRes.rows[0]?.inventory_settings || {}
-    const allowed = settings.employee_allowed_warehouse_ids
-    if (Array.isArray(allowed) && allowed.length > 0) {
-        const candidate = allowed[0]
         const whRes = await client.query(
-            `SELECT id FROM warehouses WHERE id = $1 AND club_id = $2 AND is_active = true LIMIT 1`,
-            [candidate, clubId]
+            `SELECT id FROM warehouses WHERE club_id = $1 AND is_active = true ORDER BY is_default DESC, created_at ASC LIMIT 1`,
+            [clubId]
         )
-        if (whRes.rowCount && whRes.rows[0]?.id) return Number(whRes.rows[0].id)
+        const id = whRes.rows[0]?.id
+        if (!id) throw new Error("В клубе не создано ни одного склада")
+        return Number(id)
+    }
+
+    if (scope.allowedWarehouseIds.length === 0) {
+        throw new Error("Для вашего профиля не настроены доступные склады")
+    }
+
+    if (preferredWarehouseId) {
+        await assertUserCanUseWarehouses(client, clubId, userId, [preferredWarehouseId])
+        const preferredWarehouseRes = await client.query(
+            `SELECT id FROM warehouses WHERE id = $1 AND club_id = $2 AND is_active = true LIMIT 1`,
+            [preferredWarehouseId, clubId]
+        )
+        if (preferredWarehouseRes.rowCount === 0) {
+            throw new Error(`Склад #${preferredWarehouseId} недоступен или неактивен`)
+        }
+        return Number(preferredWarehouseId)
     }
 
     const whRes = await client.query(
-        `SELECT id FROM warehouses WHERE club_id = $1 AND is_active = true ORDER BY is_default DESC, created_at ASC LIMIT 1`,
-        [clubId]
+        `SELECT id
+         FROM warehouses
+         WHERE club_id = $1
+           AND is_active = true
+           AND id = ANY($2)
+         ORDER BY is_default DESC, created_at ASC
+         LIMIT 1`,
+        [clubId, scope.allowedWarehouseIds]
     )
     const id = whRes.rows[0]?.id
-    if (!id) throw new Error("В клубе не создано ни одного склада")
+    if (!id) throw new Error("Для вашего профиля не найден доступный активный склад")
     return Number(id)
 }
 
@@ -1732,6 +2106,11 @@ export async function createShiftReceipt(
     const client = await import("@/db").then(m => m.getClient())
     try {
         await client.query('BEGIN')
+        const clubSettingsRes = await client.query('SELECT inventory_settings FROM clubs WHERE id = $1', [clubId])
+        const salesCaptureMode = clubSettingsRes.rows[0]?.inventory_settings?.sales_capture_mode
+        if (salesCaptureMode && salesCaptureMode !== 'SHIFT') {
+            throw new Error("Продажи через POS отключены для этого клуба")
+        }
 
         const normalizedItems = data.items
             .map(i => ({ product_id: Number(i.product_id), quantity: Number(i.quantity) }))
@@ -1901,8 +2280,7 @@ export async function createShiftReceipt(
         
         // FIX: Отправляем SSE уведомление всем клиентам клуба
         try {
-            const { sendToClub } = await import('@/app/api/inventory-events/route')
-            sendToClub(clubId, {
+            notifyInventoryClub(clubId, {
                 type: 'RECEIPT_CREATED',
                 receipt: { id: receiptId, total_amount: itemsTotal, created_at: new Date().toISOString() },
                 timestamp: Date.now()
@@ -1921,30 +2299,9 @@ export async function createShiftReceipt(
     }
 }
 
-export async function getShiftReceipts(clubId: string, userId: string, shiftId: string, options?: { includeVoided?: boolean }) {
-    await assertUserCanAccessClub(clubId, userId)
-    const includeVoided = options?.includeVoided ?? false
-
-    const res = await query(
-        `
-        SELECT
-            r.*,
-            w.name as warehouse_name
-        FROM shift_receipts r
-        JOIN warehouses w ON r.warehouse_id = w.id
-        WHERE r.club_id = $1
-          AND r.shift_id = $2
-          AND r.created_by = $3
-          AND ($4::boolean = true OR r.voided_at IS NULL)
-        ORDER BY r.created_at DESC
-        LIMIT 100
-        `,
-        [clubId, shiftId, userId, includeVoided]
-    )
-
-    const receiptIds = res.rows.map(r => Number(r.id))
+async function buildShiftReceiptsFromRows(receiptRows: any[]) {
+    const receiptIds = receiptRows.map(r => Number(r.id))
     
-    // Get returns for all receipts
     const returnsRes = receiptIds.length > 0 ? await query(
         `
         SELECT receipt_id, item_id, SUM(quantity) as returned_qty
@@ -1997,7 +2354,7 @@ export async function getShiftReceipts(clubId: string, userId: string, shiftId: 
         itemsByReceipt.set(rid, arr)
     }
 
-    return res.rows.map((r: any) => ({
+    return receiptRows.map((r: any) => ({
         id: Number(r.id),
         club_id: Number(r.club_id),
         shift_id: String(r.shift_id),
@@ -2015,6 +2372,69 @@ export async function getShiftReceipts(clubId: string, userId: string, shiftId: 
         committed_at: r.committed_at,
         items: itemsByReceipt.get(Number(r.id)) || []
     })) as ShiftReceipt[]
+}
+
+export async function getShiftReceipts(clubId: string, userId: string, shiftId: string, options?: { includeVoided?: boolean }) {
+    await assertUserCanAccessClub(clubId, userId)
+    const includeVoided = options?.includeVoided ?? false
+
+    const res = await query(
+        `
+        SELECT
+            r.*,
+            w.name as warehouse_name
+        FROM shift_receipts r
+        JOIN warehouses w ON r.warehouse_id = w.id
+        WHERE r.club_id = $1
+          AND r.shift_id = $2
+          AND r.created_by = $3
+          AND ($4::boolean = true OR r.voided_at IS NULL)
+        ORDER BY r.created_at DESC
+        LIMIT 100
+        `,
+        [clubId, shiftId, userId, includeVoided]
+    )
+
+    return buildShiftReceiptsFromRows(res.rows)
+}
+
+export async function getInventoryShiftReceipts(clubId: string, inventoryId: number, options?: { includeVoided?: boolean }) {
+    await requireClubAccess(clubId)
+    const includeVoided = options?.includeVoided ?? false
+
+    const inventoryRes = await query(
+        `
+        SELECT shift_id, created_by
+        FROM warehouse_inventories
+        WHERE id = $1 AND club_id = $2
+        LIMIT 1
+        `,
+        [inventoryId, clubId]
+    )
+
+    const inventory = inventoryRes.rows[0]
+    if (!inventory?.shift_id || !inventory?.created_by) {
+        return [] as ShiftReceipt[]
+    }
+
+    const receiptsRes = await query(
+        `
+        SELECT
+            r.*,
+            w.name as warehouse_name
+        FROM shift_receipts r
+        JOIN warehouses w ON r.warehouse_id = w.id
+        WHERE r.club_id = $1
+          AND r.shift_id = $2
+          AND r.created_by = $3
+          AND ($4::boolean = true OR r.voided_at IS NULL)
+        ORDER BY r.created_at DESC
+        LIMIT 100
+        `,
+        [clubId, inventory.shift_id, inventory.created_by, includeVoided]
+    )
+
+    return buildShiftReceiptsFromRows(receiptsRes.rows)
 }
 
 export async function voidShiftReceipt(clubId: string, userId: string, receiptId: number) {
@@ -2094,8 +2514,7 @@ export async function voidShiftReceipt(clubId: string, userId: string, receiptId
         
         // FIX: Отправляем SSE уведомление всем клиентам клуба
         try {
-            const { sendToClub } = await import('@/app/api/inventory-events/route')
-            sendToClub(clubId, {
+            notifyInventoryClub(clubId, {
                 type: 'RECEIPT_VOIDED',
                 receiptId,
                 timestamp: Date.now()
@@ -2226,8 +2645,7 @@ export async function returnReceiptItem(
         
         // Send SSE notification
         try {
-            const { sendToClub } = await import('@/app/api/inventory-events/route')
-            sendToClub(clubId, {
+            notifyInventoryClub(clubId, {
                 type: 'RECEIPT_ITEM_RETURNED',
                 receiptId,
                 itemId,
@@ -2317,12 +2735,13 @@ export async function createWriteOff(clubId: string, userId: string, data: { ite
         
         if (!warehouseId) throw new Error("В клубе не создано ни одного склада")
         await assertWarehouseBelongsToClub(client, clubId, warehouseId)
+        await assertUserCanUseWarehouses(client, clubId, userId, [warehouseId])
 
         // 0. Check for existing inventory OR create one if it's a salary deduction
         let inventoryId: number | null = null
         if (data.shift_id) {
             const activeInv = await client.query(`
-                SELECT id FROM warehouse_inventories 
+                SELECT id, warehouse_id FROM warehouse_inventories 
                 WHERE shift_id = $1 AND warehouse_id = $2 AND status = 'OPEN' 
                 LIMIT 1
             `, [data.shift_id, warehouseId])
@@ -2330,6 +2749,17 @@ export async function createWriteOff(clubId: string, userId: string, data: { ite
             if (activeInv.rowCount && activeInv.rowCount > 0) {
                 inventoryId = activeInv.rows[0].id
             } else if (data.items.some(i => i.type === 'SALARY_DEDUCTION')) {
+                const anyShiftInventory = await client.query(`
+                    SELECT id, warehouse_id
+                    FROM warehouse_inventories
+                    WHERE shift_id = $1 AND club_id = $2 AND status = 'OPEN'
+                    ORDER BY started_at ASC
+                    LIMIT 1
+                `, [data.shift_id, clubId])
+                if (anyShiftInventory.rowCount && anyShiftInventory.rowCount > 0) {
+                    throw new Error(`Для этой смены уже открыта инвентаризация по складу #${anyShiftInventory.rows[0].warehouse_id}. Закройте её или используйте тот же склад.`)
+                }
+
                 // Auto-create inventory if salary deduction is being made and no inventory exists
                 // 1. Get default metric key
                 const settingsRes = await client.query('SELECT inventory_settings FROM clubs WHERE id = $1', [clubId])
@@ -2422,12 +2852,22 @@ export async function createWriteOff(clubId: string, userId: string, data: { ite
 }
 
 export async function getProducts(clubId: string) {
-    await requireClubAccess(clubId)
     const client = await import("@/db").then(m => m.getClient())
     try {
+        const userId = await requireClubAccess(clubId)
+        const scope = await getInventoryAccessScope(client, clubId, userId)
+        const stockFilter = !scope.canManageInventory && scope.allowedWarehouseIds.length > 0 ? " AND ws.warehouse_id = ANY($2)" : ""
+        const stockParams: any[] = [clubId]
+        if (!scope.canManageInventory && scope.allowedWarehouseIds.length === 0) {
+            return []
+        }
+        if (!scope.canManageInventory) {
+            stockParams.push(scope.allowedWarehouseIds)
+        }
+
         const res = await client.query(`
             SELECT p.*, c.name as category_name,
-            (SELECT SUM(quantity) FROM warehouse_stock WHERE product_id = p.id) as total_stock,
+            (SELECT SUM(quantity) FROM warehouse_stock ws WHERE product_id = p.id${stockFilter}) as total_stock,
             (
                 SELECT json_agg(json_build_object(
                     'warehouse_id', ws.warehouse_id,
@@ -2437,7 +2877,7 @@ export async function getProducts(clubId: string) {
                 ))
                 FROM warehouse_stock ws
                 JOIN warehouses w ON ws.warehouse_id = w.id
-                WHERE ws.product_id = p.id
+                WHERE ws.product_id = p.id${stockFilter}
             ) as stocks,
             (
                 SELECT json_agg(json_build_object(
@@ -2459,7 +2899,7 @@ export async function getProducts(clubId: string) {
             LEFT JOIN warehouse_categories c ON p.category_id = c.id 
             WHERE p.club_id = $1 
             ORDER BY CASE WHEN p.abc_category IS NULL THEN 4 WHEN p.abc_category = 'A' THEN 1 WHEN p.abc_category = 'B' THEN 2 ELSE 3 END, p.name
-        `, [clubId])
+        `, stockParams)
         
         return res.rows.map(row => ({
             ...row,
@@ -2573,6 +3013,7 @@ export async function adjustWarehouseStock(clubId: string, userId: string, produ
         }
         await assertWarehouseBelongsToClub(client, clubId, warehouseId)
         await assertProductBelongsToClub(client, clubId, productId)
+        await assertUserCanUseWarehouses(client, clubId, userId, [warehouseId])
         
         // Get old stock
         const stockRes = await client.query('SELECT quantity FROM warehouse_stock WHERE warehouse_id = $1 AND product_id = $2 FOR UPDATE', [warehouseId, productId])
@@ -2616,17 +3057,30 @@ export async function writeOffProduct(clubId: string, userId: string, productId:
             throw new Error("Количество для списания должно быть целым положительным числом")
         }
         await assertProductBelongsToClub(client, clubId, productId)
+        const accessScope = await getInventoryAccessScope(client, clubId, userId)
         
         // Find warehouse with enough stock
         // Strategy: First Default, then others
+        const stocksParams: any[] = [productId, clubId]
+        const warehouseRestriction = !accessScope.canManageInventory
+            ? ` AND ws.warehouse_id = ANY($3)`
+            : ''
+        if (!accessScope.canManageInventory && accessScope.allowedWarehouseIds.length === 0) {
+            throw new Error("Для вашего профиля не настроены доступные склады")
+        }
+        if (!accessScope.canManageInventory) {
+            stocksParams.push(accessScope.allowedWarehouseIds)
+        }
+
         const stocks = await client.query(`
             SELECT ws.warehouse_id, ws.quantity 
             FROM warehouse_stock ws
             JOIN warehouses w ON ws.warehouse_id = w.id
             WHERE ws.product_id = $1
               AND w.club_id = $2
+              ${warehouseRestriction}
             ORDER BY w.is_default DESC, ws.quantity DESC
-        `, [productId, clubId])
+        `, stocksParams)
         
         let remaining = amount
         const writeOffs: { warehouseId: number, amount: number }[] = []
@@ -2830,6 +3284,7 @@ export async function createSupply(clubId: string, userId: string, data: { suppl
         }
         if (!warehouseId) throw new Error("В клубе не создано ни одного склада")
         await assertWarehouseBelongsToClub(client, clubId, warehouseId)
+        await assertUserCanUseWarehouses(client, clubId, userId, [warehouseId])
 
         const supplyRes = await client.query(`
             INSERT INTO warehouse_supplies (club_id, supplier_name, supplier_id, notes, total_cost, created_by, status, warehouse_id)
@@ -2975,19 +3430,39 @@ export async function getProductPriceHistory(productId: number, clubId: string) 
 // --- INVENTORIES ---
 
 export async function getInventories(clubId: string) {
-    await requireClubAccess(clubId)
-    const res = await query(`
-        SELECT i.*, u.full_name as created_by_name, w.name as warehouse_name
-        FROM warehouse_inventories i
-        LEFT JOIN users u ON i.created_by = u.id
-        LEFT JOIN warehouses w ON i.warehouse_id = w.id
-        WHERE i.club_id = $1
-        ORDER BY i.started_at DESC
-    `, [clubId])
-    return res.rows.map(row => ({
-        ...row,
-        created_by: row.created_by?.toString() // Ensure string
-    })) as Inventory[]
+    const userId = await requireClubAccess(clubId)
+    const client = await import("@/db").then(m => m.getClient())
+    try {
+        const scope = await getInventoryAccessScope(client, clubId, userId)
+        if (!scope.canManageInventory && scope.allowedWarehouseIds.length === 0) {
+            return []
+        }
+
+        const params: any[] = [clubId]
+        let warehouseFilter = ""
+        if (!scope.canManageInventory) {
+            params.push(scope.allowedWarehouseIds)
+            warehouseFilter = " AND i.warehouse_id = ANY($2)"
+        }
+
+        const res = await client.query(
+            `
+            SELECT i.*, u.full_name as created_by_name, w.name as warehouse_name
+            FROM warehouse_inventories i
+            LEFT JOIN users u ON i.created_by = u.id
+            LEFT JOIN warehouses w ON i.warehouse_id = w.id
+            WHERE i.club_id = $1${warehouseFilter}
+            ORDER BY i.started_at DESC
+            `,
+            params
+        )
+        return res.rows.map(row => ({
+            ...row,
+            created_by: row.created_by?.toString()
+        })) as Inventory[]
+    } finally {
+        client.release()
+    }
 }
 
 export async function getInventory(id: number) {
@@ -2996,14 +3471,22 @@ export async function getInventory(id: number) {
     if ((invClubRes.rowCount || 0) === 0) throw new Error("Инвентаризация не найдена")
     const clubId = String(invClubRes.rows[0].club_id)
     await assertSessionUserCanAccessClub(clubId, sessionUserId)
-
-    const res = await query(`
-        SELECT i.*, u.full_name as created_by_name
-        FROM warehouse_inventories i
-        LEFT JOIN users u ON i.created_by = u.id
-        WHERE i.id = $1 AND i.club_id = $2
-    `, [id, clubId])
-    return res.rows[0] as Inventory
+    const client = await import("@/db").then(m => m.getClient())
+    try {
+        const inventoryRes = await client.query(
+            `SELECT i.*, u.full_name as created_by_name
+             FROM warehouse_inventories i
+             LEFT JOIN users u ON i.created_by = u.id
+             WHERE i.id = $1 AND i.club_id = $2`,
+            [id, clubId]
+        )
+        const inventory = inventoryRes.rows[0]
+        if (!inventory) throw new Error("Инвентаризация не найдена")
+        await assertUserCanUseWarehouses(client, clubId, sessionUserId, [inventory.warehouse_id])
+        return inventory as Inventory
+    } finally {
+        client.release()
+    }
 }
 
 export async function getInventoryItems(inventoryId: number) {
@@ -3014,6 +3497,7 @@ export async function getInventoryItems(inventoryId: number) {
         const inv = invHeader.rows[0]
         if (!inv) throw new Error("Инвентаризация не найдена")
         await assertSessionUserCanAccessClub(String(inv.club_id), sessionUserId)
+        await assertUserCanUseWarehouses(client, String(inv.club_id), sessionUserId, [inv.warehouse_id])
 
         // Optimized query with movements JOIN (fixes N+1 problem)
         const res = await client.query(`
@@ -3041,7 +3525,7 @@ export async function getInventoryItems(inventoryId: number) {
             ORDER BY c.name NULLS LAST, p.name
         `, [inventoryId, inv.warehouse_id, inv.started_at, inv.club_id])
 
-        const items = res.rows as InventoryItem[]
+        const items = res.rows as (InventoryItem & { movement_during_inventory?: number | string })[]
 
         // Apply movement adjustments to expected_stock for display
         for (const item of items) {
@@ -3077,17 +3561,33 @@ export async function getClubSettings(clubId: string) {
         owner_id: string, 
         inventory_required: boolean,
         inventory_settings: { 
-        employee_allowed_warehouse_ids?: number[], 
-        employee_default_metric_key?: string,
-        blind_inventory_enabled?: boolean,
-        sales_capture_mode?: 'INVENTORY' | 'SHIFT',
-        allow_salary_deduction?: boolean,
-        employee_discount_percent?: number,
-        allow_cost_price_sale?: boolean,
-        price_tag_template?: PriceTagTemplate,
-        price_tag_settings?: PriceTagSettings
-    } 
+            employee_allowed_warehouse_ids?: number[], 
+            employee_default_metric_key?: string,
+            blind_inventory_enabled?: boolean,
+            sales_capture_mode?: 'INVENTORY' | 'SHIFT',
+            allow_salary_deduction?: boolean,
+            employee_discount_percent?: number,
+            allow_cost_price_sale?: boolean,
+            price_tag_template?: PriceTagTemplate,
+            price_tag_settings?: PriceTagSettings
+        } 
+    }
 }
+
+export async function getInventoryPageAccess(clubId: string) {
+    const userId = await requireClubAccess(clubId)
+    const client = await import("@/db").then(m => m.getClient())
+    try {
+        const scope = await getInventoryAccessScope(client, clubId, userId)
+        return {
+            userId,
+            canManageInventory: scope.canManageInventory,
+            isFullAccess: scope.isFullAccess,
+            allowedWarehouseIds: scope.allowedWarehouseIds,
+        }
+    } finally {
+        client.release()
+    }
 }
 
 export type PriceTagTemplate = {
@@ -3169,25 +3669,59 @@ export async function createInventory(clubId: string, userId: string, targetMetr
     const client = await import("@/db").then(m => m.getClient())
     try {
         await client.query('BEGIN')
+        const accessScope = await getInventoryAccessScope(client, clubId, userId)
 
         // 1. Resolve warehouse if not provided
         let targetWarehouseId = warehouseId
         if (!targetWarehouseId) {
-            const whRes = await client.query('SELECT id FROM warehouses WHERE club_id = $1 ORDER BY is_default DESC LIMIT 1', [clubId])
+            const whRes = accessScope.canManageInventory
+                ? await client.query('SELECT id FROM warehouses WHERE club_id = $1 ORDER BY is_default DESC LIMIT 1', [clubId])
+                : await client.query(
+                    `SELECT id
+                     FROM warehouses
+                     WHERE club_id = $1
+                       AND is_active = true
+                       AND id = ANY($2)
+                     ORDER BY is_default DESC, created_at ASC
+                     LIMIT 1`,
+                    [clubId, accessScope.allowedWarehouseIds]
+                )
             targetWarehouseId = whRes.rows[0]?.id
         }
+        await assertUserCanUseWarehouses(client, clubId, userId, [targetWarehouseId])
 
-        // 2. Check if an OPEN inventory for this shift already exists
+        // 2. Check if an OPEN inventory already exists
         if (shiftId) {
             const existingInv = await client.query(`
-                SELECT id FROM warehouse_inventories 
+                SELECT id, warehouse_id FROM warehouse_inventories 
                 WHERE club_id = $1 AND shift_id = $2 AND status = 'OPEN'
+                ORDER BY CASE WHEN warehouse_id = $3 THEN 0 ELSE 1 END, started_at ASC
                 LIMIT 1
-            `, [clubId, shiftId])
+            `, [clubId, shiftId, targetWarehouseId || null])
             
             if (existingInv.rowCount && existingInv.rowCount > 0) {
+                const existingWarehouseId = existingInv.rows[0].warehouse_id
+                if (targetWarehouseId && existingWarehouseId && Number(existingWarehouseId) !== Number(targetWarehouseId)) {
+                    throw new Error(`Для этой смены уже открыта инвентаризация по складу #${existingWarehouseId}. Закройте её или используйте тот же склад.`)
+                }
                 await client.query('ROLLBACK')
                 return existingInv.rows[0].id
+            }
+        } else {
+            const existingOpen = await client.query(`
+                SELECT id, warehouse_id
+                FROM warehouse_inventories
+                WHERE club_id = $1 AND status = 'OPEN'
+                ORDER BY started_at ASC
+                LIMIT 1
+            `, [clubId])
+            if (existingOpen.rowCount && existingOpen.rowCount > 0) {
+                const existingWarehouseId = existingOpen.rows[0].warehouse_id
+                throw new Error(
+                    existingWarehouseId
+                        ? `В клубе уже есть открытая инвентаризация по складу #${existingWarehouseId}. Сначала завершите её.`
+                        : "В клубе уже есть открытая инвентаризация. Сначала завершите её."
+                )
             }
         }
 
@@ -3329,20 +3863,53 @@ export async function getAbcAnalysisData(clubId: string) {
     const client = await getClient()
     try {
         const res = await client.query(`
-            WITH ProductRevenue AS (
+            WITH ReceiptCosts AS (
+                SELECT receipt_id, product_id, MAX(cost_price_snapshot) as cost_price_snapshot
+                FROM shift_receipt_items
+                GROUP BY receipt_id, product_id
+            ),
+            ProductRevenue AS (
                 SELECT 
                     p.id as product_id,
                     p.name,
                     p.abc_category,
                     p.current_stock,
                     p.sales_velocity,
-                    COALESCE(SUM(ABS(m.change_amount) * COALESCE(m.price_at_time, p.selling_price)), 0) as total_revenue,
-                    COALESCE(SUM(ABS(m.change_amount)), 0) as total_sold,
-                    COALESCE(SUM(ABS(m.change_amount) * (COALESCE(m.price_at_time, p.selling_price) - p.cost_price)), 0) as total_profit
+                    COALESCE(SUM(
+                        CASE
+                            WHEN m.type = 'SALE' AND COALESCE(m.related_entity_type, '') = 'SHIFT_RECEIPT_VOID'
+                                THEN -ABS(m.change_amount) * COALESCE(m.price_at_time, p.selling_price)
+                            WHEN m.type = 'RETURN'
+                                THEN -ABS(m.change_amount) * COALESCE(m.price_at_time, p.selling_price)
+                            WHEN m.type = 'SALE'
+                                THEN ABS(m.change_amount) * COALESCE(m.price_at_time, p.selling_price)
+                            ELSE 0
+                        END
+                    ), 0) as total_revenue,
+                    COALESCE(SUM(
+                        CASE
+                            WHEN m.type = 'SALE' AND COALESCE(m.related_entity_type, '') = 'SHIFT_RECEIPT_VOID' THEN -ABS(m.change_amount)
+                            WHEN m.type = 'RETURN' THEN -ABS(m.change_amount)
+                            WHEN m.type = 'SALE' THEN ABS(m.change_amount)
+                            ELSE 0
+                        END
+                    ), 0) as total_sold,
+                    COALESCE(SUM(
+                        CASE
+                            WHEN m.type = 'SALE' AND COALESCE(m.related_entity_type, '') = 'SHIFT_RECEIPT_VOID'
+                                THEN -ABS(m.change_amount) * (COALESCE(m.price_at_time, p.selling_price) - COALESCE(rc.cost_price_snapshot, p.cost_price))
+                            WHEN m.type = 'RETURN'
+                                THEN -ABS(m.change_amount) * (COALESCE(m.price_at_time, p.selling_price) - COALESCE(rc.cost_price_snapshot, p.cost_price))
+                            WHEN m.type = 'SALE'
+                                THEN ABS(m.change_amount) * (COALESCE(m.price_at_time, p.selling_price) - COALESCE(rc.cost_price_snapshot, p.cost_price))
+                            ELSE 0
+                        END
+                    ), 0) as total_profit
                 FROM warehouse_products p
                 LEFT JOIN warehouse_stock_movements m ON p.id = m.product_id 
-                    AND m.type = 'SALE' 
+                    AND m.type IN ('SALE', 'RETURN')
                     AND m.created_at > NOW() - INTERVAL '30 days'
+                LEFT JOIN ReceiptCosts rc ON rc.receipt_id = m.related_entity_id AND rc.product_id = p.id
                 WHERE p.club_id = $1 AND p.is_active = true
                 GROUP BY p.id, p.name, p.abc_category, p.current_stock, p.sales_velocity
             ),
@@ -3414,35 +3981,55 @@ export async function getAbcAnalysisData(clubId: string) {
 }
 
 export async function getProductByBarcode(clubId: string, barcode: string) {
-    await requireClubAccess(clubId)
-    const res = await query(`
-        SELECT p.*,
-        (
-            SELECT json_agg(json_build_object(
-                'warehouse_id', ws.warehouse_id,
-                'warehouse_name', w.name,
-                'quantity', ws.quantity,
-                'is_default', w.is_default
-            ))
-            FROM warehouse_stock ws
-            JOIN warehouses w ON ws.warehouse_id = w.id
-            WHERE ws.product_id = p.id
-        ) as stocks
-        FROM warehouse_products p
-        WHERE p.club_id = $1 AND ($2 = ANY(p.barcodes) OR p.barcode = $2) AND p.is_active = true
-    `, [clubId, barcode])
-    return res.rows[0] as Product | null
+    const userId = await requireClubAccess(clubId)
+    const client = await import("@/db").then(m => m.getClient())
+    try {
+        const scope = await getInventoryAccessScope(client, clubId, userId)
+        if (!scope.canManageInventory && scope.allowedWarehouseIds.length === 0) {
+            return null
+        }
+
+        const stockFilter = !scope.canManageInventory ? " AND ws.warehouse_id = ANY($3)" : ""
+        const params: any[] = [clubId, barcode]
+        if (!scope.canManageInventory) {
+            params.push(scope.allowedWarehouseIds)
+        }
+
+        const res = await client.query(
+            `
+            SELECT p.*,
+            (
+                SELECT json_agg(json_build_object(
+                    'warehouse_id', ws.warehouse_id,
+                    'warehouse_name', w.name,
+                    'quantity', ws.quantity,
+                    'is_default', w.is_default
+                ))
+                FROM warehouse_stock ws
+                JOIN warehouses w ON ws.warehouse_id = w.id
+                WHERE ws.product_id = p.id${stockFilter}
+            ) as stocks
+            FROM warehouse_products p
+            WHERE p.club_id = $1 AND ($2 = ANY(p.barcodes) OR p.barcode = $2) AND p.is_active = true
+            `,
+            params
+        )
+        return res.rows[0] as Product | null
+    } finally {
+        client.release()
+    }
 }
 
 export async function updateInventoryItem(itemId: number, actualStock: number | null, clubId: string) {
     // Just update the actual count
     await requireClubAccess(clubId)
+    const normalizedActualStock = normalizeInventoryActualStock(actualStock)
     await query(`
         UPDATE warehouse_inventory_items ii
         SET actual_stock = $1
         FROM warehouse_inventories i
         WHERE ii.id = $2 AND ii.inventory_id = i.id AND i.club_id = $3
-    `, [actualStock, itemId, clubId])
+    `, [normalizedActualStock, itemId, clubId])
 
     revalidatePath(`/clubs/${clubId}/inventory`)
 }
@@ -3453,12 +4040,13 @@ export async function bulkUpdateInventoryItems(items: { id: number, actual_stock
     try {
         await client.query('BEGIN')
         for (const item of items) {
+            const normalizedActualStock = normalizeInventoryActualStock(item.actual_stock)
             await client.query(`
                 UPDATE warehouse_inventory_items ii
                 SET actual_stock = $1
                 FROM warehouse_inventories i
                 WHERE ii.id = $2 AND ii.inventory_id = i.id AND i.club_id = $3
-            `, [item.actual_stock, item.id, clubId])
+            `, [normalizedActualStock, item.id, clubId])
         }
         await client.query('COMMIT')
     } catch (e) {
@@ -3477,19 +4065,19 @@ export async function closeInventory(
     unaccountedSales: { product_id: number, quantity: number, selling_price: number, cost_price: number }[] = [],
     options?: { salesRecognition?: 'INVENTORY' | 'NONE' }
 ) {
-    await requireClubAccess(clubId)
+    const actorUserId = await requireClubAccess(clubId)
     const client = await import("@/db").then(m => m.getClient())
     try {
         await client.query('BEGIN')
 
         // 0. Get inventory metadata
-        const invHeader = await client.query('SELECT warehouse_id, shift_id, created_by, started_at FROM warehouse_inventories WHERE id = $1 AND club_id = $2', [inventoryId, clubId])
+        const invHeader = await client.query('SELECT warehouse_id, shift_id, created_by, started_at, status FROM warehouse_inventories WHERE id = $1 AND club_id = $2 FOR UPDATE', [inventoryId, clubId])
         const inv = invHeader.rows[0]
         if (!inv) throw new Error("Инвентаризация не найдена")
+        if (inv.status === 'CLOSED') throw new Error("Инвентаризация уже закрыта")
 
         let warehouseId = inv.warehouse_id
         const shiftId = inv.shift_id
-        const userId = inv.created_by
         const inventoryStartTime = inv.started_at
 
         if (!warehouseId) {
@@ -3497,6 +4085,7 @@ export async function closeInventory(
              warehouseId = whRes.rows[0]?.id
         }
         if (!warehouseId) throw new Error("Не найден склад для корректировки остатков")
+        await assertUserCanUseWarehouses(client, clubId, actorUserId, [warehouseId])
 
         // 1. Fetch items and account for movements that happened DURING the inventory
         const itemsRes = await client.query(`
@@ -3604,7 +4193,7 @@ export async function closeInventory(
                 await logStockMovement(
                     client,
                     clubId,
-                    userId,
+                    actorUserId,
                     item.product_id,
                     diffAmount,
                     previousStock,
@@ -3636,11 +4225,11 @@ export async function closeInventory(
         }
 
         // FIX #3: Softer validation for unaccounted sales - allow duplicates with warning logged
-        const effectiveUnaccountedSales = recognizeAsSales ? unaccountedSales : []
+        const effectiveUnaccountedSalesRaw = recognizeAsSales ? unaccountedSales : []
         const invProductIds = new Set<number>(itemsRes.rows.map((r: any) => Number(r.product_id)))
-        const seen = new Set<number>()
+        const unaccountedSalesMap = new Map<number, { product_id: number, quantity: number, selling_price: number, cost_price: number }>()
         
-        for (const s of effectiveUnaccountedSales) {
+        for (const s of effectiveUnaccountedSalesRaw) {
             if (!Number.isFinite(s.quantity) || !Number.isInteger(s.quantity) || s.quantity <= 0) {
                 throw new Error("Неучтенные продажи: количество должно быть целым положительным числом")
             }
@@ -3650,15 +4239,26 @@ export async function closeInventory(
             if (!Number.isFinite(s.cost_price) || s.cost_price < 0) {
                 throw new Error("Неучтенные продажи: себестоимость должна быть неотрицательным числом")
             }
-            // FIX #3: Changed from error to warning log
             if (invProductIds.has(Number(s.product_id))) {
-                console.warn(`Unaccounted sale includes product ${s.product_id} already in inventory. This may cause double-counting.`)
+                throw new Error("Неучтенные продажи содержат товар, который уже есть в инвентаризации. Укажите остаток по нему в основном списке.")
             }
-            if (seen.has(Number(s.product_id))) {
-                throw new Error("Неучтенные продажи содержат повторяющиеся товары")
+            const productId = Number(s.product_id)
+            const existing = unaccountedSalesMap.get(productId)
+            if (existing) {
+                if (existing.selling_price !== s.selling_price || existing.cost_price !== s.cost_price) {
+                    throw new Error("Неучтенные продажи содержат один и тот же товар с разной ценой")
+                }
+                existing.quantity += Number(s.quantity)
+                continue
             }
-            seen.add(Number(s.product_id))
+            unaccountedSalesMap.set(productId, {
+                product_id: productId,
+                quantity: Number(s.quantity),
+                selling_price: Number(s.selling_price),
+                cost_price: Number(s.cost_price)
+            })
         }
+        const effectiveUnaccountedSales = Array.from(unaccountedSalesMap.values())
         
         // FIX #7: Verify warehouse has the products for unaccounted sales
         if (effectiveUnaccountedSales.length > 0) {
@@ -3684,12 +4284,18 @@ export async function closeInventory(
         if (!isRevision && salesRecognition === 'NONE') {
             const revRes = await client.query(
                 `
-                SELECT COALESCE(SUM(ABS(sm.change_amount) * COALESCE(sm.price_at_time, p.selling_price)), 0)::numeric as revenue
+                SELECT COALESCE(SUM(
+                    CASE
+                        WHEN sm.related_entity_type = 'SHIFT_RECEIPT_VOID' THEN -ABS(sm.change_amount) * COALESCE(sm.price_at_time, p.selling_price)
+                        WHEN sm.type = 'RETURN' THEN -ABS(sm.change_amount) * COALESCE(sm.price_at_time, p.selling_price)
+                        ELSE ABS(sm.change_amount) * COALESCE(sm.price_at_time, p.selling_price)
+                    END
+                ), 0)::numeric as revenue
                 FROM warehouse_stock_movements sm
                 JOIN warehouse_products p ON sm.product_id = p.id
                 WHERE sm.club_id = $1
                   AND sm.shift_id = $2
-                  AND sm.type = 'SALE'
+                  AND sm.type IN ('SALE', 'RETURN')
                   AND (sm.reason IS NULL OR LOWER(sm.reason) NOT LIKE '%в счет зп%')
                 `,
                 [clubId, shiftId]
@@ -3721,9 +4327,9 @@ export async function closeInventory(
             const totalAutoCost = itemsForAutoSupply.reduce((acc, item) => acc + (item.quantity * item.cost_price), 0)
             const supplyRes = await client.query(`
                 INSERT INTO warehouse_supplies (club_id, supplier_name, notes, total_cost, created_by, status, warehouse_id)
-                VALUES ($1, 'Авто-поступление (Инвентаризация)', $2, $3, $4, 'DRAFT', $5)
+                VALUES ($1, 'Авто-поступление (Инвентаризация)', $2, $3, $4, 'COMPLETED', $5)
                 RETURNING id
-            `, [clubId, `Автоматически создано при закрытии инвентаризации #${inventoryId}. Включает излишки и неучтенные продажи.`, totalAutoCost, userId, warehouseId])
+            `, [clubId, `Автоматически создано при закрытии инвентаризации #${inventoryId}. Включает излишки и неучтенные продажи.`, totalAutoCost, actorUserId, warehouseId])
             const supplyId = supplyRes.rows[0].id
 
             for (const item of itemsForAutoSupply) {
@@ -3742,7 +4348,7 @@ export async function closeInventory(
                 await logStockMovement(
                     client,
                     clubId,
-                    userId,
+                    actorUserId,
                     item.product_id,
                     item.quantity,
                     previousStock,

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/db';
-import { cookies } from 'next/headers';
+import { requireClubApiAccess } from '@/lib/club-api-access';
 
 // GET /api/clubs/[clubId]/finance/accounts/balance
 // Returns summary of all account balances and total
@@ -9,12 +9,8 @@ export async function GET(
     { params }: { params: Promise<{ clubId: string }> }
 ) {
     try {
-        const userId = (await cookies()).get('session_user_id')?.value;
-        if (!userId) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
-
         const { clubId } = await params;
+        await requireClubApiAccess(clubId)
 
         // Get balances grouped by account type
         const result = await query(
@@ -62,6 +58,10 @@ export async function GET(
             total: grandTotal
         });
     } catch (error) {
+        const status = (error as { status?: number })?.status
+        if (status) {
+            return NextResponse.json({ error: status === 401 ? 'Unauthorized' : 'Forbidden' }, { status })
+        }
         console.error('Error fetching account balances:', error);
         return NextResponse.json({ error: 'Failed to fetch balances' }, { status: 500 });
     }

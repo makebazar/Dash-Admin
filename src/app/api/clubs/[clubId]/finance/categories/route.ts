@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/db';
-import { cookies } from 'next/headers';
+import { requireClubApiAccess } from '@/lib/club-api-access';
 
 // GET /api/clubs/[clubId]/finance/categories
 export async function GET(
@@ -8,12 +8,8 @@ export async function GET(
     { params }: { params: Promise<{ clubId: string }> }
 ) {
     try {
-        const userId = (await cookies()).get('session_user_id')?.value;
-        if (!userId) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
-
         const { clubId } = await params;
+        await requireClubApiAccess(clubId)
         const { searchParams } = new URL(request.url);
         const type = searchParams.get('type'); // 'income' or 'expense'
 
@@ -55,6 +51,10 @@ export async function GET(
             categories: result.rows
         });
     } catch (error) {
+        const status = (error as { status?: number })?.status
+        if (status) {
+            return NextResponse.json({ error: status === 401 ? 'Unauthorized' : 'Forbidden' }, { status })
+        }
         console.error('Error fetching categories:', error);
         return NextResponse.json({ error: 'Failed to fetch categories' }, { status: 500 });
     }
@@ -66,12 +66,8 @@ export async function POST(
     { params }: { params: Promise<{ clubId: string }> }
 ) {
     try {
-        const userId = (await cookies()).get('session_user_id')?.value;
-        if (!userId) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
-
         const { clubId } = await params;
+        await requireClubApiAccess(clubId)
         const body = await request.json();
         const { name, type, icon = '💰', color = '#3b82f6', activity_type = 'operating' } = body;
 
@@ -127,12 +123,8 @@ export async function PUT(
     { params }: { params: Promise<{ clubId: string }> }
 ) {
     try {
-        const userId = (await cookies()).get('session_user_id')?.value;
-        if (!userId) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
-
         const { clubId } = await params;
+        await requireClubApiAccess(clubId)
         const body = await request.json();
         const { id, name, icon, color, is_active, activity_type } = body;
 
@@ -177,6 +169,10 @@ export async function PUT(
             category: result.rows[0]
         });
     } catch (error) {
+        const status = (error as { status?: number })?.status
+        if (status) {
+            return NextResponse.json({ error: status === 401 ? 'Unauthorized' : 'Forbidden' }, { status })
+        }
         console.error('Error updating category:', error);
         return NextResponse.json({ error: 'Failed to update category' }, { status: 500 });
     }
@@ -188,12 +184,8 @@ export async function DELETE(
     { params }: { params: Promise<{ clubId: string }> }
 ) {
     try {
-        const userId = (await cookies()).get('session_user_id')?.value;
-        if (!userId) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
-
         const { clubId } = await params;
+        await requireClubApiAccess(clubId)
         const { searchParams } = new URL(request.url);
         const categoryId = searchParams.get('id');
 
@@ -229,6 +221,10 @@ export async function DELETE(
 
         return NextResponse.json({ success: true });
     } catch (error) {
+        const status = (error as { status?: number })?.status
+        if (status) {
+            return NextResponse.json({ error: status === 401 ? 'Unauthorized' : 'Forbidden' }, { status })
+        }
         console.error('Error deleting category:', error);
         return NextResponse.json({ error: 'Failed to delete category' }, { status: 500 });
     }

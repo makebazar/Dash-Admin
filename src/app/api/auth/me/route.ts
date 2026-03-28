@@ -47,7 +47,7 @@ export async function GET() {
 
         // Get owned clubs
         const ownedClubsResult = await query(
-            `SELECT DISTINCT c.id, c.name, c.created_at
+            `SELECT DISTINCT c.id, c.name, c.created_at, c.inventory_required, c.inventory_settings
              FROM clubs c
              LEFT JOIN club_employees ce ON ce.club_id = c.id
              WHERE c.owner_id = $1
@@ -64,7 +64,9 @@ export async function GET() {
 
         const ownedClubs = ownedClubsResult.rows.map(row => ({
             id: row.id,
-            name: row.name
+            name: row.name,
+            inventory_required: row.inventory_required,
+            inventory_settings: row.inventory_settings
         }));
 
         // Get employee clubs with role
@@ -109,6 +111,8 @@ export async function GET() {
                 employeeClubsMap.set(row.id, {
                     id: row.id,
                     name: row.name,
+                    inventory_required: row.inventory_required,
+                    inventory_settings: row.inventory_settings,
                     role: 'Владелец',
                     is_owner: true
                 });

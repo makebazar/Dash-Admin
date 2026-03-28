@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState, useTransition, useEffect, useMemo, useCallback } from "react"
-import { ArrowLeft, CheckCircle2, AlertTriangle, Loader2, Save, X, Search, Camera, Barcode, RefreshCcw } from "lucide-react"
+import { ArrowLeft, CheckCircle2, AlertTriangle, Loader2, Save, X, Search, Camera, Barcode, RefreshCcw, Package, ReceiptText, CircleAlert, Boxes, Warehouse as WarehouseIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
-import { getInventory, getInventoryItems, updateInventoryItem, closeInventory, Inventory, InventoryItem, addProductToInventory, getProducts, getProductByBarcode, correctInventoryItem } from "../actions"
+import { getInventory, getInventoryItems, updateInventoryItem, closeInventory, Inventory, InventoryItem, addProductToInventory, getProducts, getProductByBarcode, correctInventoryItem, getInventoryShiftReceipts, ShiftReceipt } from "../actions"
 import { useParams } from "next/navigation"
 import { Plus, Pencil } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -24,15 +24,19 @@ interface ActiveInventoryProps {
     currentUserId: string
 }
 
+type InventoryQuickFilter = "all" | "uncounted" | "counted" | "difference" | "shortage" | "excess" | "sold"
+
 export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }: ActiveInventoryProps) {
     const params = useParams()
     const clubId = params.clubId as string
     
     const [inventory, setInventory] = useState<Inventory | null>(null)
     const [items, setItems] = useState<InventoryItem[]>([])
+    const [shiftReceipts, setShiftReceipts] = useState<ShiftReceipt[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [isSaving, setIsSaving] = useState(false)
     const [isPending, startTransition] = useTransition()
+    const [quickFilter, setQuickFilter] = useState<InventoryQuickFilter>("all")
     
     // Close Dialog State
     const [isCloseDialogOpen, setIsCloseDialogOpen] = useState(false)
@@ -98,6 +102,12 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                 ])
                 setInventory(inv)
                 setItems(invItems)
+                if (inv.shift_id && inv.created_by) {
+                    const receipts = await getInventoryShiftReceipts(clubId, inventoryId, { includeVoided: true })
+                    setShiftReceipts(receipts)
+                } else {
+                    setShiftReceipts([])
+                }
             } catch (e) {
                 console.error(e)
             } finally {
@@ -111,6 +121,15 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
         const numVal = val === "" ? null : parseInt(val)
         setItems(prev => prev.map(i => i.id === itemId ? { ...i, actual_stock: numVal, last_modified: numVal !== null ? Date.now() : i.last_modified } : i))
     }
+
+    const persistCountedItems = useCallback(async () => {
+        const itemsToUpdate = items
+            .filter(item => item.actual_stock !== null)
+            .map(item => ({ id: item.id, actual_stock: item.actual_stock }))
+
+        if (itemsToUpdate.length === 0) return
+        await Promise.all(itemsToUpdate.map(item => updateInventoryItem(item.id, item.actual_stock, clubId)))
+    }, [items, clubId])
 
     // Saves to server only when user leaves the field
     const handleBlur = async (itemId: number, val: number | null) => {
@@ -128,6 +147,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
 
     const uncountedCount = uncountedItems.length
     const totalCount = items.length
+    const isClosed = inventory?.status === 'CLOSED'
 
     // Calculate Sales Summary for Preview
     // Note: This shows sales (expected > actual means sold), so we use (expected - actual)
@@ -157,6 +177,100 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
 
     const totalSalesRevenue = salesPreview.reduce((acc, s) => acc + s.total, 0)
 
+    const inventorySummary = useMemo(() => {
+        let counted = 0
+        let shortageItems = 0
+        let excessItems = 0
+        let shortageValue = 0
+
+        for (const item of items) {
+            if (item.actual_stock === null) continue
+            counted += 1
+            const difference = Number(item.actual_stock) - Number(item.expected_stock || 0)
+            if (difference < 0) {
+                shortageItems += 1
+                shortageValue += Math.abs(difference) * Number(item.selling_price_snapshot || 0)
+            } else if (difference > 0) {
+                excessItems += 1
+            }
+        }
+
+        return {
+            counted,
+            progress: totalCount > 0 ? Math.round((counted / totalCount) * 100) : 0,
+            shortageItems,
+            excessItems,
+            shortageValue
+        }
+    }, [items, totalCount])
+
+    const summaryCards = [
+        {
+            label: "Посчитано",
+            value: `${inventorySummary.counted}/${totalCount}`,
+            hint: isClosed ? "Позиции инвентаризации" : `${inventorySummary.progress}% заполнено`,
+            icon: Package,
+            tone: "text-slate-700 bg-slate-50 border-slate-200"
+        },
+        {
+            label: "Осталось проверить",
+            value: `${uncountedCount}`,
+            hint: uncountedCount === 0 ? "Все позиции заполнены" : "Пустые фактические остатки",
+            icon: CircleAlert,
+            tone: uncountedCount === 0 ? "text-green-700 bg-green-50 border-green-200" : "text-amber-700 bg-amber-50 border-amber-200"
+        },
+        {
+            label: "Недостачи",
+            value: `${inventorySummary.shortageItems}`,
+            hint: inventorySummary.shortageValue > 0 ? `${inventorySummary.shortageValue.toLocaleString("ru-RU")} ₽ по продаже` : "Пока не обнаружены",
+            icon: ReceiptText,
+            tone: inventorySummary.shortageItems > 0 ? "text-red-700 bg-red-50 border-red-200" : "text-slate-700 bg-slate-50 border-slate-200"
+        },
+        {
+            label: "Излишки",
+            value: `${inventorySummary.excessItems}`,
+            hint: inventorySummary.excessItems > 0 ? "Есть найденные позиции сверх ожидания" : "Пока не обнаружены",
+            icon: Boxes,
+            tone: inventorySummary.excessItems > 0 ? "text-green-700 bg-green-50 border-green-200" : "text-slate-700 bg-slate-50 border-slate-200"
+        }
+    ]
+
+    const posSoldMap = useMemo(() => {
+        const soldMap = new Map<number, number>()
+        for (const receipt of shiftReceipts) {
+            if (receipt.voided_at) continue
+            for (const item of receipt.items || []) {
+                const netQty = Math.max(0, Number(item.quantity) - Number(item.returned_qty || 0))
+                if (netQty > 0) {
+                    const productId = Number(item.product_id)
+                    soldMap.set(productId, (soldMap.get(productId) || 0) + netQty)
+                }
+            }
+        }
+        return soldMap
+    }, [shiftReceipts])
+
+    const soldProductIds = useMemo(() => {
+        return new Set<number>(Array.from(posSoldMap.keys()))
+    }, [posSoldMap])
+
+    const quickFilterOptions = useMemo(() => {
+        const countedItems = items.filter(item => item.actual_stock !== null)
+        const shortageItems = items.filter(item => item.actual_stock !== null && Number(item.actual_stock) < Number(item.expected_stock || 0))
+        const excessItems = items.filter(item => item.actual_stock !== null && Number(item.actual_stock) > Number(item.expected_stock || 0))
+        const discrepancyItems = items.filter(item => item.actual_stock !== null && Number(item.actual_stock) !== Number(item.expected_stock || 0))
+
+        return [
+            { key: "all" as const, label: "Все", count: items.length },
+            { key: "uncounted" as const, label: "Не посчитано", count: uncountedItems.length },
+            { key: "counted" as const, label: "Посчитано", count: countedItems.length },
+            { key: "sold" as const, label: "В POS-чеке", count: items.filter(item => soldProductIds.has(Number(item.product_id))).length },
+            { key: "difference" as const, label: "С расхождением", count: discrepancyItems.length },
+            { key: "shortage" as const, label: "Недостача", count: shortageItems.length },
+            { key: "excess" as const, label: "Излишек", count: excessItems.length }
+        ]
+    }, [items, soldProductIds, uncountedItems.length])
+
     const handleCloseInventory = async () => {
         // FIX #8: Block closing if items are uncounted
         if (uncountedCount > 0) {
@@ -173,6 +287,8 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
 
         startTransition(async () => {
             try {
+                setIsSaving(true)
+                await persistCountedItems()
                 await closeInventory(
                     inventoryId,
                     clubId,
@@ -186,9 +302,11 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                 )
                 setIsCloseDialogOpen(false)
                 onClose() // Go back to list
-            } catch (e) {
+            } catch (e: any) {
                 console.error(e)
-                showMessage({ title: "Ошибка", description: "Ошибка при закрытии инвентаризации" })
+                showMessage({ title: "Ошибка", description: e?.message || "Ошибка при закрытии инвентаризации" })
+            } finally {
+                setIsSaving(false)
             }
         })
     }
@@ -197,16 +315,39 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
         const product = allProducts.find(p => p.id === Number(selectedUnaccountedProduct))
         if (!product || !unaccountedQty) return
 
-        setUnaccountedSales(prev => [
-            ...prev,
-            {
-                product_id: product.id,
-                name: product.name,
-                quantity: Number(unaccountedQty),
-                selling_price: product.selling_price || 0,
-                cost_price: product.cost_price || 0
+        const quantity = Number(unaccountedQty)
+        if (!Number.isInteger(quantity) || quantity <= 0) {
+            showMessage({ title: "Проверьте количество", description: "Количество должно быть целым положительным числом" })
+            return
+        }
+
+        const inInventory = items.some(i => i.product_id === product.id)
+        if (inInventory) {
+            showMessage({ title: "Товар уже в инвентаризации", description: "Укажите остаток по этому товару в основном списке, а не как неучтенную продажу." })
+            setIsUnaccountedDialogOpen(false)
+            return
+        }
+
+        setUnaccountedSales(prev => {
+            const existing = prev.find(sale => sale.product_id === product.id)
+            if (existing) {
+                return prev.map(sale =>
+                    sale.product_id === product.id
+                        ? { ...sale, quantity: sale.quantity + quantity }
+                        : sale
+                )
             }
-        ])
+            return [
+                ...prev,
+                {
+                    product_id: product.id,
+                    name: product.name,
+                    quantity,
+                    selling_price: product.selling_price || 0,
+                    cost_price: product.cost_price || 0
+                }
+            ]
+        })
         setSelectedUnaccountedProduct("")
         setUnaccountedQty("1")
         setIsUnaccountedDialogOpen(false)
@@ -215,6 +356,17 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
     const removeUnaccountedSale = (productId: number) => {
         setUnaccountedSales(prev => prev.filter(s => s.product_id !== productId))
     }
+
+    const ensureProductsLoaded = useCallback(async () => {
+        if (allProducts.length > 0) return
+        const products = await getProducts(clubId)
+        setAllProducts(products.map(p => ({
+            id: p.id,
+            name: p.name,
+            selling_price: p.selling_price,
+            cost_price: p.cost_price
+        })))
+    }, [allProducts.length, clubId])
 
     const handleAddProduct = async () => {
         if (!selectedProductToAdd) return
@@ -236,15 +388,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
 
     const openAddDialog = async () => {
         setIsAddDialogOpen(true)
-        if (allProducts.length === 0) {
-            const products = await getProducts(clubId)
-            setAllProducts(products.map(p => ({ 
-                id: p.id, 
-                name: p.name,
-                selling_price: p.selling_price,
-                cost_price: p.cost_price
-            })))
-        }
+        await ensureProductsLoaded()
     }
 
     const handleBarcodeScan = useCallback(async (barcode: string): Promise<boolean> => {
@@ -335,39 +479,59 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
         setScannedItem(null)
     }
 
+    const compareInventoryItems = useCallback((a: InventoryItem, b: InventoryItem, searchTerm?: string) => {
+        const aSold = soldProductIds.has(Number(a.product_id))
+        const bSold = soldProductIds.has(Number(b.product_id))
+        if (aSold !== bSold) return aSold ? -1 : 1
+
+        const aMod = a.last_modified || 0
+        const bMod = b.last_modified || 0
+        if (aMod !== bMod) return bMod - aMod
+
+        if (searchTerm) {
+            const q = searchTerm.toLowerCase()
+            const aName = a.product_name.toLowerCase()
+            const bName = b.product_name.toLowerCase()
+
+            const aExact = aName === q
+            const bExact = bName === q
+            if (aExact !== bExact) return aExact ? -1 : 1
+
+            const aStarts = aName.startsWith(q)
+            const bStarts = bName.startsWith(q)
+            if (aStarts !== bStarts) return aStarts ? -1 : 1
+        }
+
+        return a.product_name.localeCompare(b.product_name)
+    }, [soldProductIds])
+
     // Filter and Group Items
     const groupedItems = useMemo(() => {
         let filtered = [...items]
+
+        if (quickFilter !== "all") {
+            filtered = filtered.filter(item => {
+                const actual = item.actual_stock
+                const expected = Number(item.expected_stock || 0)
+                if (quickFilter === "uncounted") return actual === null
+                if (quickFilter === "counted") return actual !== null
+                if (quickFilter === "sold") return soldProductIds.has(Number(item.product_id))
+                if (actual === null) return false
+                if (quickFilter === "difference") return Number(actual) !== expected
+                if (quickFilter === "shortage") return Number(actual) < expected
+                if (quickFilter === "excess") return Number(actual) > expected
+                return true
+            })
+        }
         
         if (searchQuery) {
             const q = searchQuery.toLowerCase()
-            filtered = items.filter(i => 
+            filtered = filtered.filter(i => 
                 i.product_name.toLowerCase().includes(q) || 
                 (i.category_name && i.category_name.toLowerCase().includes(q))
             )
             
-            // Sort to put exact name matches and matches at start of string first
-            filtered.sort((a, b) => {
-                const aName = a.product_name.toLowerCase()
-                const bName = b.product_name.toLowerCase()
-                
-                const aExact = aName === q
-                const bExact = bName === q
-                if (aExact && !bExact) return -1
-                if (!aExact && bExact) return 1
-                
-                // Priority: Recently modified items (during this search)
-                const aMod = a.last_modified || 0
-                const bMod = b.last_modified || 0
-                if (aMod !== bMod) return bMod - aMod
-
-                const aStarts = aName.startsWith(q)
-                const bStarts = bName.startsWith(q)
-                if (aStarts && !bStarts) return -1
-                if (!aStarts && bStarts) return 1
-                
-                return aName.localeCompare(bName)
-            })
+            filtered.sort((a, b) => compareInventoryItems(a, b, q))
 
             // When searching, don't group by category, just return flat list
             return [["Результаты поиска", filtered]] as [string, InventoryItem[]][]
@@ -383,13 +547,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
         
         // Sort items within each category: recently changed or newly added first (by timestamp)
         Object.keys(groups).forEach(cat => {
-            groups[cat].sort((a, b) => {
-                const aMod = a.last_modified || 0
-                const bMod = b.last_modified || 0
-                if (aMod !== bMod) return bMod - aMod
-                
-                return a.product_name.localeCompare(b.product_name)
-            })
+            groups[cat].sort((a, b) => compareInventoryItems(a, b))
         })
 
         // Sort categories (put "No Category" last)
@@ -398,7 +556,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
             if (b[0] === "Без категории") return -1
             return a[0].localeCompare(b[0])
         })
-    }, [items, searchQuery])
+    }, [items, searchQuery, quickFilter, compareInventoryItems])
 
     useEffect(() => {
         if (scannedItem) {
@@ -417,8 +575,6 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
 
     if (!inventory) return <div>Инвентаризация не найдена</div>
 
-    const isClosed = inventory.status === 'CLOSED'
-
     return (
         <div className="space-y-6 overscroll-none">
             <BarcodeScanner 
@@ -427,52 +583,82 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                 onClose={() => setIsScannerOpen(false)} 
             />
             {/* Header */}
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                <div className="flex items-center gap-4">
-                    <Button aria-label="Вернуться к списку инвентаризаций" variant="ghost" size="icon" onClick={onClose}>
-                        <ArrowLeft className="h-4 w-4" />
-                    </Button>
-                    <div>
-                        <h2 className="text-xl font-bold flex items-center gap-2">
-                            Инвентаризация #{inventory.id}
-                            {isClosed ? <Badge className="bg-green-500">Завершено</Badge> : <Badge className="bg-amber-500">В процессе</Badge>}
-                        </h2>
-                        <p className="text-sm text-muted-foreground">
-                            Начата: {new Date(inventory.started_at).toLocaleString('ru-RU')}
-                            {inventory.target_metric_key && (
-                                <> | Метрика: <code className="bg-slate-100 px-1 rounded">{inventory.target_metric_key}</code></>
-                            )}
-                        </p>
-                        {/* FIX #8: Progress indicator */}
-                        {!isClosed && (
-                            <div className="flex items-center gap-2 mt-1">
-                                <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden max-w-[200px]">
-                                    <div 
-                                        className={cn(
-                                            "h-full transition-all",
-                                            uncountedCount === 0 ? "bg-green-500" : "bg-amber-500"
-                                        )}
-                                        style={{ width: `${totalCount > 0 ? ((totalCount - uncountedCount) / totalCount) * 100 : 0}%` }}
-                                    />
+            <div className="rounded-2xl border bg-gradient-to-br from-white via-slate-50 to-slate-100 p-4 md:p-6 shadow-sm">
+                <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                    <div className="space-y-4">
+                        <div className="flex items-start gap-3">
+                            <Button aria-label="Вернуться к списку инвентаризаций" variant="outline" size="icon" onClick={onClose} className="mt-1 shrink-0 rounded-xl">
+                                <ArrowLeft className="h-4 w-4" />
+                            </Button>
+                            <div className="space-y-2">
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <h2 className="text-xl font-black text-slate-900 md:text-2xl">Инвентаризация #{inventory.id}</h2>
+                                    {isClosed ? <Badge className="bg-green-600">Завершено</Badge> : <Badge className="bg-amber-500">В процессе</Badge>}
                                 </div>
-                                <span className={cn(
-                                    "text-xs font-bold",
-                                    uncountedCount === 0 ? "text-green-600" : "text-amber-600"
-                                )}>
-                                    {totalCount - uncountedCount} из {totalCount}
-                                </span>
+                                <div className="flex flex-wrap items-center gap-3 text-sm text-slate-600">
+                                    <span>Начата: {new Date(inventory.started_at).toLocaleString('ru-RU')}</span>
+                                    <span className="inline-flex items-center gap-1">
+                                        <WarehouseIcon className="h-3.5 w-3.5 text-slate-400" />
+                                        {inventory.warehouse_name || "Склад не указан"}
+                                    </span>
+                                    {inventory.target_metric_key && (
+                                        <span className="inline-flex items-center gap-1 rounded-full border bg-white px-2 py-1 text-xs font-semibold text-slate-700">
+                                            Метрика: {inventory.target_metric_key}
+                                        </span>
+                                    )}
+                                </div>
+                                {!isClosed && (
+                                    <div className="rounded-2xl border bg-white/80 p-3">
+                                        <div className="flex items-center justify-between gap-3 text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
+                                            <span>Готовность подсчёта</span>
+                                            <span>{inventorySummary.progress}%</span>
+                                        </div>
+                                        <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100">
+                                            <div
+                                                className={cn(
+                                                    "h-full transition-all",
+                                                    uncountedCount === 0 ? "bg-green-500" : "bg-amber-500"
+                                                )}
+                                                style={{ width: `${inventorySummary.progress}%` }}
+                                            />
+                                        </div>
+                                        <p className="mt-2 text-xs text-slate-500">
+                                            {uncountedCount === 0 ? "Можно завершать подсчёт — все позиции заполнены." : `Осталось проверить ${uncountedCount} поз.`}
+                                        </p>
+                                    </div>
+                                )}
                             </div>
-                        )}
+                        </div>
+
+                        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                            {summaryCards.map(card => {
+                                const Icon = card.icon
+                                return (
+                                    <Card key={card.label} className="border-slate-200/80 shadow-none">
+                                        <CardContent className="flex items-start justify-between p-4">
+                                            <div className="space-y-1">
+                                                <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">{card.label}</p>
+                                                <p className="text-2xl font-black text-slate-900">{card.value}</p>
+                                                <p className="text-xs text-slate-500">{card.hint}</p>
+                                            </div>
+                                            <div className={cn("rounded-xl border p-2.5", card.tone)}>
+                                                <Icon className="h-4 w-4" />
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+                                )
+                            })}
+                        </div>
                     </div>
-                </div>
-                <div className="flex items-center gap-2">
-                     <div className="relative w-full md:w-64">
+
+                    <div className="flex w-full flex-col gap-2 xl:max-w-sm">
+                        <div className="relative w-full">
                         <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                         <Input
-                            placeholder="Поиск товара..."
+                            placeholder="Поиск по товару или категории..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            className="pl-8 text-base"
+                            className="h-11 rounded-xl border-slate-200 bg-white pl-8 text-base"
                         />
                         <button 
                             aria-label="Синхронизировать список товаров"
@@ -491,37 +677,38 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                         >
                             <RefreshCcw className={cn("h-4 w-4", isLoading && "animate-spin")} />
                         </button>
+                        </div>
+                        {!isClosed && (
+                            <div className="grid gap-2 sm:grid-cols-3 xl:grid-cols-1">
+                                <Button variant="outline" onClick={() => setIsScannerOpen(true)} className="h-11 rounded-xl bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100">
+                                    <Camera className="mr-2 h-4 w-4" />
+                                    Сканировать товар
+                                </Button>
+                                <Button variant="outline" onClick={openAddDialog} className="h-11 rounded-xl">
+                                    <Plus className="mr-2 h-4 w-4" />
+                                    Добавить позицию
+                                </Button>
+                                <Button 
+                                    onClick={() => setIsCloseDialogOpen(true)} 
+                                    variant="default" 
+                                    className={cn(
+                                        "h-11 rounded-xl whitespace-nowrap",
+                                        uncountedCount > 0 
+                                            ? "bg-amber-600 hover:bg-amber-700" 
+                                            : "bg-green-600 hover:bg-green-700"
+                                    )}
+                                    disabled={uncountedCount > 0}
+                                >
+                                    <CheckCircle2 className="mr-2 h-4 w-4" />
+                                    {uncountedCount > 0 
+                                        ? `Осталось ${uncountedCount} поз.` 
+                                        : inventory.target_metric_key 
+                                            ? "Завершить и сверить" 
+                                            : "Завершить подсчёт"}
+                                </Button>
+                            </div>
+                        )}
                     </div>
-                    {!isClosed && (
-                        <>
-                            <Button variant="outline" onClick={() => setIsScannerOpen(true)} className="bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100">
-                                <Camera className="h-4 w-4 md:mr-2" />
-                                <span className="hidden md:inline">Сканировать</span>
-                            </Button>
-                            <Button variant="outline" onClick={openAddDialog}>
-                                <Plus className="h-4 w-4 md:mr-2" />
-                                <span className="hidden md:inline">Добавить товар</span>
-                            </Button>
-                            <Button 
-                                onClick={() => setIsCloseDialogOpen(true)} 
-                                variant="default" 
-                                className={cn(
-                                    "whitespace-nowrap",
-                                    uncountedCount > 0 
-                                        ? "bg-amber-600 hover:bg-amber-700" 
-                                        : "bg-green-600 hover:bg-green-700"
-                                )}
-                                disabled={uncountedCount > 0}
-                            >
-                                <CheckCircle2 className="mr-2 h-4 w-4" />
-                                {uncountedCount > 0 
-                                    ? `Сначала посчитайте ${uncountedCount} тов.` 
-                                    : inventory.target_metric_key 
-                                        ? "Завершить и сверить" 
-                                        : "Завершить подсчет"}
-                            </Button>
-                        </>
-                    )}
                 </div>
             </div>
 
@@ -536,6 +723,38 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                                 ? "Введите фактическое количество. Ожидаемый остаток показан для сверки."
                                 : "Введите фактическое количество товара на полках. Система скрывает ожидаемый остаток для чистоты проверки."}
                     </CardDescription>
+                    <div className="flex flex-wrap items-center gap-2 pt-2 text-xs text-slate-500">
+                        <Badge variant="outline" className="bg-white">Групп по категориям: {groupedItems.length}</Badge>
+                        <Badge variant="outline" className="bg-white">Товаров: {items.length}</Badge>
+                        {searchQuery && <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">Поиск: {searchQuery}</Badge>}
+                        {quickFilter !== "all" && (
+                            <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">
+                                Фильтр: {quickFilterOptions.find(option => option.key === quickFilter)?.label}
+                            </Badge>
+                        )}
+                    </div>
+                    <div className="flex flex-wrap gap-2 pt-1">
+                        {quickFilterOptions.map(option => (
+                            <Button
+                                key={option.key}
+                                type="button"
+                                variant={quickFilter === option.key ? "default" : "outline"}
+                                size="sm"
+                                className={cn(
+                                    "h-8 rounded-full px-3 text-xs font-semibold",
+                                    quickFilter === option.key
+                                        ? "bg-slate-900 text-white hover:bg-slate-800"
+                                        : "bg-white"
+                                )}
+                                onClick={() => setQuickFilter(option.key)}
+                            >
+                                {option.label}
+                                <span className="ml-2 rounded-full bg-black/10 px-1.5 py-0.5 text-[10px] leading-none">
+                                    {option.count}
+                                </span>
+                            </Button>
+                        ))}
+                    </div>
                 </CardHeader>
                 <CardContent className="p-0 sm:p-6">
                     {/* Desktop Table */}
@@ -566,13 +785,26 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                                         {categoryItems.map(item => {
                                             // FIX #10: Unified difference (actual - expected, matches DB)
                                             const difference = (item.actual_stock || 0) - (item.expected_stock || 0)
-                                            const revenue = Math.abs(difference) * item.selling_price_snapshot
+                                            const inventoryValue = difference * item.selling_price_snapshot
 
                                             return (
-                                                <TableRow key={item.id} className={isClosed && difference !== 0 ? "bg-slate-50" : scannedItem?.id === item.id ? "bg-blue-50 ring-2 ring-blue-500 ring-inset" : ""}>
+                                                <TableRow key={item.id} className={cn(
+                                                    isClosed && difference < 0 ? "bg-red-50/40" : isClosed && difference > 0 ? "bg-green-50/40" : scannedItem?.id === item.id ? "bg-blue-50 ring-2 ring-blue-500 ring-inset" : "",
+                                                    !isClosed && item.actual_stock !== null && "bg-blue-50/30"
+                                                )}>
                                                     <TableCell className="font-medium pl-8">
                                                         <div className="flex flex-col">
-                                                            <span>{item.product_name}</span>
+                                                            <div className="flex items-center gap-2">
+                                                                <span>{item.product_name}</span>
+                                                                {!isClosed && item.actual_stock !== null && (
+                                                                    <Badge variant="outline" className="h-5 border-blue-200 bg-blue-50 text-[10px] font-bold text-blue-700">Посчитан</Badge>
+                                                                )}
+                                                                {soldProductIds.has(Number(item.product_id)) && (
+                                                                    <Badge variant="outline" className="h-5 border-violet-200 bg-violet-50 text-[10px] font-bold text-violet-700">
+                                                                        POS · {posSoldMap.get(Number(item.product_id)) || 0} шт
+                                                                    </Badge>
+                                                                )}
+                                                            </div>
                                                             {(item.barcode || (item.barcodes && item.barcodes.length > 0)) && (
                                                                 <div className="flex flex-wrap gap-1 mt-1">
                                                                     {item.barcode && (
@@ -670,8 +902,11 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                                                                 </span>
                                                             </TableCell>
                                                             {inventory.target_metric_key && (
-                                                                <TableCell className="text-right font-bold">
-                                                                    {revenue.toLocaleString('ru-RU')} ₽
+                                                                <TableCell className={cn(
+                                                                    "text-right font-bold",
+                                                                    inventoryValue > 0 ? "text-green-600" : inventoryValue < 0 ? "text-red-600" : "text-slate-500"
+                                                                )}>
+                                                                    {inventoryValue > 0 ? `+${inventoryValue.toLocaleString('ru-RU')} ₽` : inventoryValue < 0 ? `${inventoryValue.toLocaleString('ru-RU')} ₽` : '0 ₽'}
                                                                 </TableCell>
                                                             )}
                                                         </>
@@ -702,13 +937,14 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                                 {categoryItems.map(item => {
                                     // FIX #10: Unified difference (actual - expected, matches DB)
                                     const difference = (item.actual_stock || 0) - (item.expected_stock || 0)
-                                    const revenue = Math.abs(difference) * item.selling_price_snapshot
+                                    const inventoryValue = difference * item.selling_price_snapshot
                                     const isModified = item.actual_stock !== null
 
                                     return (
                                         <div key={`mob-item-${item.id}`} className={cn(
                                             "p-4 flex flex-col gap-3 active:bg-slate-50 transition-colors",
-                                            isClosed && difference !== 0 ? "bg-slate-50" :
+                                            isClosed && difference < 0 ? "bg-red-50/50" :
+                                            isClosed && difference > 0 ? "bg-green-50/50" :
                                             scannedItem?.id === item.id ? "bg-blue-50 ring-2 ring-blue-500 ring-inset" : ""
                                         )}>
                                             <div className="flex justify-between items-start gap-4">
@@ -719,6 +955,11 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                                                             <span className="text-[9px] text-slate-400 font-mono bg-slate-100 px-1 rounded flex items-center gap-0.5">
                                                                 <Barcode className="h-2 w-2" />
                                                                 {item.barcode}
+                                                            </span>
+                                                        )}
+                                                        {soldProductIds.has(Number(item.product_id)) && (
+                                                            <span className="text-[9px] font-bold uppercase tracking-wider text-violet-700 bg-violet-50 px-1 rounded border border-violet-200">
+                                                                POS · {posSoldMap.get(Number(item.product_id)) || 0} шт
                                                             </span>
                                                         )}
                                                         <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">{item.selling_price_snapshot} ₽</span>
@@ -741,7 +982,12 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                                                                     {difference === 0 ? "OK" : difference > 0 ? `+${difference}` : `${difference}`}
                                                                 </span>
                                                                 {inventory.target_metric_key && (
-                                                                    <span className="text-xs font-bold text-slate-700">{revenue.toLocaleString('ru-RU')} ₽</span>
+                                                                    <span className={cn(
+                                                                        "text-xs font-bold",
+                                                                        inventoryValue > 0 ? "text-green-600" : inventoryValue < 0 ? "text-red-600" : "text-slate-500"
+                                                                    )}>
+                                                                        {inventoryValue > 0 ? `+${inventoryValue.toLocaleString('ru-RU')} ₽` : inventoryValue < 0 ? `${inventoryValue.toLocaleString('ru-RU')} ₽` : '0 ₽'}
+                                                                    </span>
                                                                 )}
                                                             </div>
                                                         </div>
@@ -835,6 +1081,21 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                     
                     {inventory.target_metric_key && (
                         <div className="space-y-4 py-2">
+                            <div className="grid gap-3 md:grid-cols-3">
+                                <div className="rounded-2xl border bg-slate-50 p-3">
+                                    <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Недостачи</p>
+                                    <p className="mt-1 text-lg font-black text-slate-900">{inventorySummary.shortageItems}</p>
+                                </div>
+                                <div className="rounded-2xl border bg-slate-50 p-3">
+                                    <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Излишки</p>
+                                    <p className="mt-1 text-lg font-black text-slate-900">{inventorySummary.excessItems}</p>
+                                </div>
+                                <div className="rounded-2xl border bg-slate-50 p-3">
+                                    <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Не посчитано</p>
+                                    <p className="mt-1 text-lg font-black text-slate-900">{uncountedCount}</p>
+                                </div>
+                            </div>
+
                             {/* Sales Summary Section */}
                             <div className="border rounded-lg overflow-hidden">
                                 <div className="bg-muted/50 p-2 text-xs font-bold border-b flex justify-between">
@@ -894,8 +1155,8 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                                         type="button" 
                                         variant="outline" 
                                         size="sm" 
-                                        onClick={() => {
-                                            openAddDialog()
+                                        onClick={async () => {
+                                            await ensureProductsLoaded()
                                             setIsUnaccountedDialogOpen(true)
                                         }}
                                         className="h-7 text-[10px] bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-100"
@@ -950,17 +1211,31 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                     )}
 
                     {!inventory.target_metric_key && (
-                        <div className="py-4">
+                        <div className="space-y-3 py-4">
+                            <div className="grid gap-3 md:grid-cols-3">
+                                <div className="rounded-2xl border bg-slate-50 p-3">
+                                    <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Посчитано</p>
+                                    <p className="mt-1 text-lg font-black text-slate-900">{inventorySummary.counted}</p>
+                                </div>
+                                <div className="rounded-2xl border bg-slate-50 p-3">
+                                    <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Недостачи</p>
+                                    <p className="mt-1 text-lg font-black text-slate-900">{inventorySummary.shortageItems}</p>
+                                </div>
+                                <div className="rounded-2xl border bg-slate-50 p-3">
+                                    <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Излишки</p>
+                                    <p className="mt-1 text-lg font-black text-slate-900">{inventorySummary.excessItems}</p>
+                                </div>
+                            </div>
                             <p className="text-sm text-muted-foreground">
-                                Остатки на складе будут обновлены в соответствии с введенными фактическими значениями.
+                                Остатки на складе будут обновлены по введённым фактическим значениям. Перед подтверждением проверьте недостачи и излишки.
                             </p>
                         </div>
                     )}
 
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setIsCloseDialogOpen(false)}>Отмена</Button>
-                        <Button onClick={handleCloseInventory} disabled={(!!inventory.target_metric_key && !reportedRevenue) || isPending} className="bg-green-600 hover:bg-green-700">
-                            {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        <Button onClick={handleCloseInventory} disabled={(!!inventory.target_metric_key && !reportedRevenue) || isPending || isSaving} className="bg-green-600 hover:bg-green-700">
+                            {(isPending || isSaving) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                             {inventory.target_metric_key ? "Сверить и закрыть" : "Обновить остатки"}
                         </Button>
                     </DialogFooter>

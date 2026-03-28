@@ -79,9 +79,9 @@ export default function EmployeeShiftHistoryPage() {
 
                 if (data.template_fields) {
                     const standardKeys = ['cash_income', 'card_income', 'expenses_cash', 'shift_comment', 'expenses']
+                    // Filter reportFields to NOT include standard keys
                     const fields = data.template_fields.filter((f: any) =>
-                        !standardKeys.includes(f.metric_key) &&
-                        !standardKeys.some(k => f.metric_key.includes(k))
+                        !standardKeys.includes(f.metric_key)
                     )
                     setReportFields(fields)
                 }
@@ -178,12 +178,63 @@ export default function EmployeeShiftHistoryPage() {
         })
     }
 
-    const formatMoney = (amount: number | string | null) => {
+    // Robust metric calculation for UI cards and table
+    const getMetricValue = useCallback((shift: Shift | null, field: string) => {
+        if (!shift) return 0;
+        
+        // If it's one of the main system fields
+        if (field === 'expenses' || field === 'cash_income' || field === 'card_income') {
+            // Mapping for report_data keys
+            const keyMap: Record<string, string> = {
+                'expenses': 'expenses_cash',
+                'cash_income': 'cash_income',
+                'card_income': 'card_income'
+            };
+            
+            const reportKey = keyMap[field];
+            const reportVal = shift.report_data?.[reportKey];
+            
+            if (reportVal !== undefined) {
+                if (Array.isArray(reportVal)) {
+                    return reportVal.reduce((sum, item: any) => sum + (Number(item.amount) || 0), 0);
+                }
+                return parseFloat(String(reportVal)) || 0;
+            }
+            
+            // Fallback to the main column value if not in report_data
+            return Number((shift as any)[field]) || 0;
+        }
+
+        // For custom report fields
+        const val = shift.report_data?.[field];
+        if (Array.isArray(val)) {
+            return val.reduce((sum, item: any) => sum + (Number(item.amount) || 0), 0);
+        }
+        return parseFloat(String(val)) || 0;
+    }, []);
+
+    const formatMoney = useCallback((amount: number | string | any[] | null) => {
         if (amount === null || amount === undefined) return '0 ₽'
-        const num = typeof amount === 'string' ? parseFloat(amount) : amount
+        
+        let num: number;
+        if (Array.isArray(amount)) {
+            num = amount.reduce((sum, item: any) => sum + (Number(item.amount) || 0), 0);
+        } else {
+            num = typeof amount === 'string' ? parseFloat(amount) : Number(amount)
+        }
+        
         if (isNaN(num) || num === 0) return '0 ₽'
         return num.toLocaleString('ru-RU', { maximumFractionDigits: 0 }) + ' ₽'
-    }
+    }, []);
+
+    const calculateShiftTotalIncome = (shift: Shift) => {
+        const cash = getMetricValue(shift, 'cash_income');
+        const card = getMetricValue(shift, 'card_income');
+        const customIncome = reportFields
+            .filter(f => f.field_type === 'INCOME')
+            .reduce((sum, f) => sum + getMetricValue(shift, f.metric_key), 0);
+        return cash + card + customIncome;
+    };
 
     const getStatusBadge = (status: string, hasCheckOut: boolean) => {
         if (!hasCheckOut) {
@@ -206,17 +257,23 @@ export default function EmployeeShiftHistoryPage() {
     }
 
     // Sort filtered shifts
-    const sortedShifts = [...shifts].sort((a, b) => {
-        let aVal: any = a[sortBy as keyof Shift]
-        let bVal: any = b[sortBy as keyof Shift]
+    const sortedShifts = [...shifts].sort((a: any, b: any) => {
+        let aVal: any = a[sortBy]
+        let bVal: any = b[sortBy]
+
+        if (sortBy === 'total_revenue') {
+            aVal = calculateShiftTotalIncome(a);
+            bVal = calculateShiftTotalIncome(b);
+        } else if (sortBy === 'expenses') {
+            aVal = getMetricValue(a, 'expenses');
+            bVal = getMetricValue(b, 'expenses');
+        } else if (['cash_income', 'card_income', 'total_hours'].includes(sortBy)) {
+            aVal = getMetricValue(a, sortBy);
+            bVal = getMetricValue(b, sortBy);
+        }
 
         if (aVal === null || aVal === undefined) return 1
         if (bVal === null || bVal === undefined) return -1
-
-        if (['cash_income', 'card_income', 'total_hours'].includes(sortBy)) {
-            aVal = parseFloat(String(aVal)) || 0
-            bVal = parseFloat(String(bVal)) || 0
-        }
 
         if (sortBy === 'check_in') {
             aVal = new Date(aVal).getTime()
@@ -228,21 +285,15 @@ export default function EmployeeShiftHistoryPage() {
         return 0
     })
 
-    // Calculate totals for Custom Fields locally for display if needed, 
-    // but we primarily use API summary for the main cards now.
+    // Calculate totals for Custom Fields locally for display if needed
     const currentDisplayShifts = shifts
-    const totalCash = currentDisplayShifts.reduce((sum, s) => sum + (parseFloat(String(s.cash_income)) || 0), 0)
-    const totalCard = currentDisplayShifts.reduce((sum, s) => sum + (parseFloat(String(s.card_income)) || 0), 0)
-    // Removed expenses calculation
+    const totalCash = currentDisplayShifts.reduce((sum, s) => sum + getMetricValue(s, 'cash_income'), 0)
+    const totalCard = currentDisplayShifts.reduce((sum, s) => sum + getMetricValue(s, 'card_income'), 0)
+    const totalExpenses = currentDisplayShifts.reduce((sum, s) => sum + getMetricValue(s, 'expenses'), 0)
 
     // Revenue = Cash + Card + Other Incomes
     const customFieldTotals = reportFields.map(field => {
-        const total = currentDisplayShifts.reduce((sum, s) => {
-            if (s.report_data && s.report_data[field.metric_key]) {
-                return sum + (parseFloat(String(s.report_data[field.metric_key])) || 0)
-            }
-            return sum
-        }, 0)
+        const total = currentDisplayShifts.reduce((sum, s) => sum + getMetricValue(s, field.metric_key), 0)
         return { ...field, total }
     })
 
@@ -418,10 +469,19 @@ export default function EmployeeShiftHistoryPage() {
                                     </div>
                                 </TableHead>
                                 <TableHead
+                                    className="text-right cursor-pointer hover:bg-muted/50 select-none text-green-600 font-bold"
+                                    onClick={() => handleSort('total_revenue')}
+                                >
+                                    <div className="flex items-center justify-end gap-1">
+                                        Итого Выручка
+                                        <ArrowUpDown className="h-3 w-3" />
+                                    </div>
+                                </TableHead>
+                                <TableHead
                                     className="text-right cursor-pointer hover:bg-muted/50 select-none"
                                     onClick={() => handleSort('cash_income')}
                                 >
-                                    <div className="flex items-center justify-end gap-1">
+                                    <div className="flex items-center justify-end gap-1 text-green-500">
                                         Нал
                                         <ArrowUpDown className="h-3 w-3" />
                                     </div>
@@ -430,8 +490,17 @@ export default function EmployeeShiftHistoryPage() {
                                     className="text-right cursor-pointer hover:bg-muted/50 select-none"
                                     onClick={() => handleSort('card_income')}
                                 >
-                                    <div className="flex items-center justify-end gap-1">
+                                    <div className="flex items-center justify-end gap-1 text-blue-500">
                                         Безнал
+                                        <ArrowUpDown className="h-3 w-3" />
+                                    </div>
+                                </TableHead>
+                                <TableHead
+                                    className="text-right cursor-pointer hover:bg-muted/50 select-none"
+                                    onClick={() => handleSort('expenses')}
+                                >
+                                    <div className="flex items-center justify-end gap-1 text-orange-500">
+                                        Расходы
                                         <ArrowUpDown className="h-3 w-3" />
                                     </div>
                                 </TableHead>
@@ -484,12 +553,14 @@ export default function EmployeeShiftHistoryPage() {
                                             ? `${Number(shift.total_hours).toFixed(1)}ч`
                                             : '-'}
                                     </TableCell>
-                                    <TableCell className="text-right font-medium text-green-500 whitespace-nowrap">{formatMoney(shift.cash_income)}</TableCell>
-                                    <TableCell className="text-right font-medium text-blue-500 whitespace-nowrap">{formatMoney(shift.card_income)}</TableCell>
+                                    <TableCell className="text-right font-bold text-green-600 whitespace-nowrap bg-green-500/5">{formatMoney(calculateShiftTotalIncome(shift))}</TableCell>
+                                    <TableCell className="text-right font-medium text-green-500 whitespace-nowrap">{formatMoney(getMetricValue(shift, 'cash_income'))}</TableCell>
+                                    <TableCell className="text-right font-medium text-blue-500 whitespace-nowrap">{formatMoney(getMetricValue(shift, 'card_income'))}</TableCell>
+                                    <TableCell className="text-right font-medium text-orange-500 whitespace-nowrap">{formatMoney(getMetricValue(shift, 'expenses'))}</TableCell>
                                     {reportFields.map((field: any) => (
                                         <TableCell key={field.metric_key} className="text-right whitespace-nowrap">
                                             {shift.report_data && shift.report_data[field.metric_key] !== undefined
-                                                ? formatMoney(shift.report_data[field.metric_key])
+                                                ? formatMoney(getMetricValue(shift, field.metric_key))
                                                 : '-'}
                                         </TableCell>
                                     ))}
@@ -565,18 +636,22 @@ export default function EmployeeShiftHistoryPage() {
                                 <div className="grid grid-cols-2 gap-3 pt-2 border-t border-border/50">
                                     <div>
                                         <p className="text-xs text-muted-foreground mb-0.5">Наличные</p>
-                                        <p className="font-bold text-green-600">{formatMoney(shift.cash_income)}</p>
+                                        <p className="font-bold text-green-600">{formatMoney(getMetricValue(shift, 'cash_income'))}</p>
                                     </div>
                                     <div>
                                         <p className="text-xs text-muted-foreground mb-0.5">Безнал</p>
-                                        <p className="font-bold text-blue-600">{formatMoney(shift.card_income)}</p>
+                                        <p className="font-bold text-blue-600">{formatMoney(getMetricValue(shift, 'card_income'))}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-xs text-muted-foreground mb-0.5">Расходы</p>
+                                        <p className="font-bold text-orange-600">{formatMoney(getMetricValue(shift, 'expenses'))}</p>
                                     </div>
                                     {reportFields.map((field: any) => (
                                         <div key={field.metric_key}>
                                             <p className="text-xs text-muted-foreground mb-0.5">{field.custom_label || field.label}</p>
                                             <p className="font-medium">
                                                 {shift.report_data && shift.report_data[field.metric_key] !== undefined
-                                                    ? formatMoney(shift.report_data[field.metric_key])
+                                                    ? formatMoney(getMetricValue(shift, field.metric_key))
                                                     : '-'}
                                             </p>
                                         </div>
@@ -614,15 +689,37 @@ export default function EmployeeShiftHistoryPage() {
                             {selectedShift && formatDate(selectedShift.check_in)}
                         </DialogDescription>
                     </DialogHeader>
-                    <div className="space-y-3 py-4">
+                    <div className="space-y-3 py-4 max-h-[60vh] overflow-y-auto">
                         {selectedShift?.report_data && Object.entries(selectedShift.report_data).map(([key, value]) => {
                             // Find label
                             const field = reportFields.find(f => f.metric_key === key);
                             const label = field ? (field.custom_label || field.label) : key.replace(/_/g, ' ');
+                            
+                            const renderValue = () => {
+                                if (Array.isArray(value)) {
+                                    const total = value.reduce((sum, item: any) => sum + (Number(item.amount) || 0), 0);
+                                    if (total === 0 && value.length === 0) return '-';
+                                    return (
+                                        <div className="flex flex-col items-end gap-1">
+                                            <span className="font-bold">{total.toLocaleString()} ₽</span>
+                                            {value.map((item: any, i: number) => (
+                                                <span key={i} className="text-[10px] text-muted-foreground leading-none">
+                                                    {item.amount}₽: {item.comment}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    );
+                                }
+                                if (typeof value === 'object' && value !== null) {
+                                    return JSON.stringify(value);
+                                }
+                                return String(value);
+                            };
+
                             return (
                                 <div key={key} className="flex justify-between items-center bg-muted/50 rounded-lg px-4 py-3">
-                                    <span className="text-muted-foreground capitalize">{label}</span>
-                                    <span className="font-semibold">{String(value)}</span>
+                                    <span className="text-muted-foreground capitalize mr-4">{label}</span>
+                                    <span className="font-semibold text-right">{renderValue()}</span>
                                 </div>
                             );
                         })}

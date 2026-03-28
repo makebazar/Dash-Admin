@@ -1,5 +1,5 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { getProducts, getCategories, getSupplies, getInventories, getWarehouses, getEmployees, getClubTasks, getProcurementLists, getSuppliersForSelect, getClubSettings, getSalesAnalytics, getActiveShiftsForClub, getUserRoleInClub } from "./actions"
+import { getProducts, getCategories, getSupplies, getInventories, getWarehouses, getEmployees, getClubTasks, getProcurementLists, getSuppliersForSelect, getClubSettings, getSalesAnalytics, getActiveShiftsForClub, getInventoryPageAccess } from "./actions"
 import { ProductsTab } from "./_components/ProductsTab"
 import { SalesTab } from "./_components/SalesTab"
 import { TasksTab } from "./_components/TasksTab"
@@ -19,7 +19,13 @@ export default async function InventoryPage({ params, searchParams }: { params: 
 
     if (!userId) return <div className="p-8 text-red-500">Доступ запрещен. Пожалуйста, авторизуйтесь.</div>
 
-    const [products, categories, supplies, inventories, warehouses, employees, tasks, procurementLists, suppliers, clubSettings, sales, shifts, userRole] = await Promise.all([
+    const access = await getInventoryPageAccess(clubId)
+
+    if (!access.canManageInventory) {
+        return <div className="p-8 text-red-500">Доступ к управлению складом закрыт для вашей роли.</div>
+    }
+
+    const [products, categories, supplies, inventories, warehouses, employees, tasks, procurementLists, suppliers, clubSettings, sales, shifts] = await Promise.all([
         getProducts(clubId),
         getCategories(clubId),
         getSupplies(clubId),
@@ -31,13 +37,11 @@ export default async function InventoryPage({ params, searchParams }: { params: 
         getSuppliersForSelect(clubId),
         getClubSettings(clubId),
         getSalesAnalytics(clubId),
-        getActiveShiftsForClub(clubId),
-        getUserRoleInClub(clubId, userId)
+        getActiveShiftsForClub(clubId)
     ])
 
     const isOwner = clubSettings.owner_id === userId
-    const isManager = userRole?.toLowerCase() === 'управляющий'
-    const hasAdminPrivileges = isOwner || isManager
+    const hasAdminPrivileges = access.isFullAccess
     const activeTab = tab || "stock"
 
     return (

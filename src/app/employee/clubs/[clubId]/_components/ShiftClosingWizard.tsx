@@ -50,6 +50,103 @@ interface ExtendedInventoryItem extends InventoryItem {
     last_modified?: number
 }
 
+type InventorySummary = {
+    countedItems: number
+    discrepancyItems: number
+    shortageItems: number
+    excessItems: number
+    shortageValue: number
+    excessValue: number
+    discrepancyValue: number
+    discrepancyQuantity: number
+    isPerfect: boolean
+}
+
+function buildShiftSalesPreview(
+    receipts: ShiftReceipt[],
+    manualSales: { product_id: number, quantity: number, selling_price: number, name: string }[]
+) {
+    const agg = new Map<number, { name: string, qty: number, price: number }>()
+
+    for (const receipt of receipts) {
+        if (receipt.voided_at) continue
+        for (const item of receipt.items || []) {
+            const netQty = Math.max(0, Number(item.quantity) - Number(item.returned_qty || 0))
+            if (netQty <= 0) continue
+
+            const current = agg.get(item.product_id)
+            const price = Number(item.selling_price_snapshot || 0)
+            if (!current) {
+                agg.set(item.product_id, { name: item.product_name, qty: netQty, price })
+            } else {
+                current.qty += netQty
+                current.price = price
+            }
+        }
+    }
+
+    const scanned = Array.from(agg.entries()).map(([productId, value]) => ({
+        id: productId,
+        name: value.name,
+        qty: value.qty,
+        price: value.price,
+        total: value.qty * value.price,
+        isUnaccounted: false
+    }))
+
+    const manual = manualSales.map(sale => ({
+        id: sale.product_id,
+        name: sale.name,
+        qty: sale.quantity,
+        price: sale.selling_price,
+        total: sale.quantity * sale.selling_price,
+        isUnaccounted: true
+    }))
+
+    return [...scanned, ...manual]
+}
+
+function summarizeInventory(items: ExtendedInventoryItem[]): InventorySummary {
+    let countedItems = 0
+    let discrepancyItems = 0
+    let shortageItems = 0
+    let excessItems = 0
+    let shortageValue = 0
+    let excessValue = 0
+    let discrepancyQuantity = 0
+
+    for (const item of items) {
+        if (item.actual_stock === null) continue
+        countedItems += 1
+
+        const difference = Number(item.actual_stock) - Number(item.expected_stock || 0)
+        if (difference === 0) continue
+
+        discrepancyItems += 1
+        discrepancyQuantity += Math.abs(difference)
+
+        if (difference < 0) {
+            shortageItems += 1
+            shortageValue += Math.abs(difference) * Number(item.selling_price_snapshot || 0)
+        } else {
+            excessItems += 1
+            excessValue += difference * Number(item.selling_price_snapshot || 0)
+        }
+    }
+
+    return {
+        countedItems,
+        discrepancyItems,
+        shortageItems,
+        excessItems,
+        shortageValue,
+        excessValue,
+        discrepancyValue: shortageValue + excessValue,
+        discrepancyQuantity,
+        isPerfect: discrepancyItems === 0,
+    }
+}
+
 export function ShiftClosingWizard({
     isOpen,
     onClose,
@@ -95,10 +192,11 @@ export function ShiftClosingWizard({
     const totalSteps = isShiftSalesMode ? (skipInventory ? 2 : 4) : (skipInventory ? 1 : 3)
 
     const [shiftReceipts, setShiftReceipts] = useState<ShiftReceipt[]>([])
+    const [inventorySummary, setInventorySummary] = useState<InventorySummary | null>(null)
 
     // FIX #1: SSE для обновления чеков в реальном времени
     const handleSSEMessage = useCallback((message: any) => {
-        if (message.type === 'RECEIPT_CREATED' || message.type === 'RECEIPT_VOIDED') {
+        if (message.type === 'RECEIPT_CREATED' || message.type === 'RECEIPT_VOIDED' || message.type === 'RECEIPT_ITEM_RETURNED') {
             // Обновляем чеки при создании/аннулировании
             if (activeShiftId) {
                 getShiftReceipts(clubId, userId, String(activeShiftId), { includeVoided: true })
@@ -136,38 +234,7 @@ export function ShiftClosingWizard({
     // Calculate Sales Summary for Preview
     const salesPreview = useMemo(() => {
         if (isShiftSalesMode) {
-            const agg = new Map<number, { name: string, qty: number, price: number }>()
-            for (const r of shiftReceipts) {
-                if (r.voided_at) continue
-                for (const it of r.items || []) {
-                    const current = agg.get(it.product_id)
-                    const price = Number(it.selling_price_snapshot || 0)
-                    if (!current) {
-                        agg.set(it.product_id, { name: it.product_name, qty: Number(it.quantity), price })
-                    } else {
-                        current.qty += Number(it.quantity)
-                        current.price = price
-                    }
-                }
-            }
-
-            const scanned = Array.from(agg.entries()).map(([productId, v]) => ({
-                id: productId,
-                name: v.name,
-                qty: v.qty,
-                price: v.price,
-                total: v.qty * v.price,
-                isUnaccounted: false
-            }))
-            const manualSales = unaccountedSales.map(s => ({
-                id: s.product_id,
-                name: s.name,
-                qty: s.quantity,
-                price: s.selling_price,
-                total: s.quantity * s.selling_price,
-                isUnaccounted: true
-            }))
-            return [...scanned, ...manualSales]
+            return buildShiftSalesPreview(shiftReceipts, unaccountedSales)
         }
 
         const standardSales = inventoryItems
@@ -199,6 +266,8 @@ export function ShiftClosingWizard({
     const forgottenItems = useMemo(() => {
         return inventoryItems.filter(i => i.actual_stock === null)
     }, [inventoryItems])
+
+    const hasInventoryMismatch = isShiftSalesMode && inventorySummary?.isPerfect === false
 
     const revenueKey = useMemo(() => {
         return inventorySettings?.employee_default_metric_key ||
@@ -281,6 +350,7 @@ export function ShiftClosingWizard({
                     setChecklistResponses(data.checklistResponses || {})
                     setProblematicItems(data.problematicItems || {})
                     setCalculationResult(data.calculationResult || null)
+                    setInventorySummary(data.inventorySummary || null)
                     setUnaccountedSales(data.unaccountedSales || [])
                     setShiftReceipts(data.shiftReceipts || [])
                     console.log('Restored state from localStorage')
@@ -302,12 +372,13 @@ export function ShiftClosingWizard({
                 checklistResponses,
                 problematicItems,
                 calculationResult,
+                inventorySummary,
                 unaccountedSales,
                 shiftReceipts
             }
             localStorage.setItem(persistenceKey, JSON.stringify(stateToSave))
         }
-    }, [step, reportData, inventoryId, inventoryItems, checklistResponses, problematicItems, calculationResult, unaccountedSales, isOpen, activeShiftId, persistenceKey])
+    }, [step, reportData, inventoryId, inventoryItems, checklistResponses, problematicItems, calculationResult, inventorySummary, unaccountedSales, isOpen, activeShiftId, persistenceKey])
 
     // Reset state only if NO saved data exists when opening
     useEffect(() => {
@@ -319,6 +390,7 @@ export function ShiftClosingWizard({
                 setInventoryId(null)
                 setInventoryItems([])
                 setCalculationResult(null)
+                setInventorySummary(null)
                 setChecklistResponses({})
                 setProblematicItems({})
                 setScannedItemId(null)
@@ -928,11 +1000,13 @@ export function ShiftClosingWizard({
                 // Sales already committed in real-time, just fetch for display
                 const receipts = await getShiftReceipts(clubId, userId, shiftIdStr, { includeVoided: true })
                 setShiftReceipts(receipts)
+                const nextSalesPreview = buildShiftSalesPreview(receipts, [])
+                const nextCalculatedRevenue = nextSalesPreview.reduce((acc, sale) => acc + sale.total, 0)
 
                 setCalculationResult({
-                    reported: reconcileSnapshot.reported,
-                    calculated: reconcileSnapshot.calculated,
-                    diff: reconcileSnapshot.diff
+                    reported: reportedRevenueValue,
+                    calculated: nextCalculatedRevenue,
+                    diff: reportedRevenueValue - nextCalculatedRevenue
                 })
 
                 if (skipInventory) {
@@ -962,6 +1036,28 @@ export function ShiftClosingWizard({
                 }
 
                 if (isShiftSalesMode) {
+                    const refreshedItems = inventoryId ? await getInventoryItems(inventoryId) : inventoryItems
+                    const mergedItems = refreshedItems.map(item => {
+                        const existing = inventoryItems.find(current => current.id === item.id)
+                        return {
+                            ...item,
+                            actual_stock: existing?.actual_stock ?? item.actual_stock,
+                            is_visible: existing?.is_visible ?? (item.actual_stock !== null),
+                            last_modified: existing?.last_modified
+                        }
+                    })
+                    setInventoryItems(mergedItems)
+                    setInventorySummary(summarizeInventory(mergedItems))
+
+                    const receipts = await getShiftReceipts(clubId, userId, String(activeShiftId), { includeVoided: true })
+                    setShiftReceipts(receipts)
+                    const nextSalesPreview = buildShiftSalesPreview(receipts, [])
+                    const nextCalculatedRevenue = nextSalesPreview.reduce((acc, sale) => acc + sale.total, 0)
+                    setCalculationResult({
+                        reported: reportedRevenueValue,
+                        calculated: nextCalculatedRevenue,
+                        diff: reportedRevenueValue - nextCalculatedRevenue
+                    })
                     setStep(finalizeStep)
                     return
                 }
@@ -1040,26 +1136,42 @@ export function ShiftClosingWizard({
         const product = allProducts.find(p => p.id === Number(selectedUnaccountedProduct))
         if (!product || !unaccountedQty) return
 
+        const quantity = Number(unaccountedQty)
+        if (!Number.isInteger(quantity) || quantity <= 0) {
+            alert("Количество должно быть целым положительным числом")
+            return
+        }
+
         // Check if already in standard inventory (just in case, though they should be separate)
-        const inInventory = inventoryItems.some(i => i.product_id === product.id && i.is_visible)
+        const inInventory = inventoryItems.some(i => i.product_id === product.id)
         if (inInventory) {
             alert("Этот товар уже есть в списке инвентаризации. Просто укажите его остаток там.")
             setIsUnaccountedDialogOpen(false)
             return
         }
 
-        setUnaccountedSales(prev => [
-            ...prev,
-            {
-                product_id: product.id,
-                name: product.name,
-                quantity: Number(unaccountedQty),
-                // @ts-ignore
-                selling_price: product.selling_price || 0,
-                // @ts-ignore
-                cost_price: product.cost_price || 0
+        setUnaccountedSales(prev => {
+            const existing = prev.find(sale => sale.product_id === product.id)
+            if (existing) {
+                return prev.map(sale =>
+                    sale.product_id === product.id
+                        ? { ...sale, quantity: sale.quantity + quantity }
+                        : sale
+                )
             }
-        ])
+            return [
+                ...prev,
+                {
+                    product_id: product.id,
+                    name: product.name,
+                    quantity,
+                    // @ts-ignore
+                    selling_price: product.selling_price || 0,
+                    // @ts-ignore
+                    cost_price: product.cost_price || 0
+                }
+            ]
+        })
         setSelectedUnaccountedProduct("")
         setUnaccountedQty("1")
         setIsUnaccountedDialogOpen(false)
@@ -1564,25 +1676,72 @@ export function ShiftClosingWizard({
 
                         {/* Status Message */}
                         <div className={`p-4 rounded-2xl border flex items-start gap-4 ${
-                            calculationResult.diff === 0 ? 'bg-green-900/10 border-green-900/30 text-green-400' :
-                            calculationResult.diff > 0 ? 'bg-amber-900/10 border-amber-900/30 text-amber-400' : 
-                            'bg-red-900/10 border-red-900/30 text-red-400'
+                            calculationResult.diff < 0
+                                ? 'bg-red-900/10 border-red-900/30 text-red-400'
+                                : calculationResult.diff > 0 || hasInventoryMismatch
+                                    ? 'bg-amber-900/10 border-amber-900/30 text-amber-400'
+                                    : 'bg-green-900/10 border-green-900/30 text-green-400'
                         }`}>
                             <div className="mt-0.5">
-                                {calculationResult.diff === 0 ? <CheckCircle2 className="h-5 w-5" /> : <AlertTriangle className="h-5 w-5" />}
+                                {calculationResult.diff === 0 && !hasInventoryMismatch
+                                    ? <CheckCircle2 className="h-5 w-5" />
+                                    : <AlertTriangle className="h-5 w-5" />}
                             </div>
                             <div className="flex-1">
                                 <div className="font-bold flex justify-between items-center">
-                                    <span>{calculationResult.diff === 0 ? "Смена сходится!" : calculationResult.diff > 0 ? "Обнаружен излишек" : "Обнаружена недостача"}</span>
+                                    <span>
+                                        {isShiftSalesMode
+                                            ? calculationResult.diff === 0
+                                                ? inventorySummary?.isPerfect === false
+                                                    ? "Касса сходится, но по складу есть расхождения"
+                                                    : "Касса и склад сходятся"
+                                                : calculationResult.diff > 0
+                                                    ? "Обнаружен излишек по кассе"
+                                                    : "Обнаружена недостача по кассе"
+                                            : calculationResult.diff === 0
+                                                ? "Смена сходится!"
+                                                : calculationResult.diff > 0
+                                                    ? "Обнаружен излишек"
+                                                    : "Обнаружена недостача"}
+                                    </span>
                                     <span className="text-xl font-black">{calculationResult.diff > 0 ? '+' : ''}{calculationResult.diff.toLocaleString()} ₽</span>
                                 </div>
                                 <p className="text-xs opacity-80 mt-1 leading-relaxed">
-                                    {calculationResult.diff === 0 ? "Данные по складу полностью соответствуют сумме в кассе." : 
-                                     calculationResult.diff > 0 ? "Денег в кассе больше, чем проданного товара. Возможно, вы не указали продажу какого-то товара." : 
-                                     "Денег в кассе меньше, чем должно быть по остаткам склада. Проверьте правильность подсчета."}
+                                    {isShiftSalesMode
+                                        ? calculationResult.diff === 0
+                                            ? inventorySummary?.isPerfect === false
+                                                ? "По кассе всё сходится, но инвентаризация нашла расхождения по остаткам."
+                                                : "По кассе и по остаткам расхождений не найдено."
+                                            : calculationResult.diff > 0
+                                                ? "Денег в кассе больше, чем по пробитым товарам. Проверьте неучтённые продажи и сторно."
+                                                : "Денег в кассе меньше, чем по пробитым товарам. Проверьте возвраты, сторно и корректность отчёта."
+                                        : calculationResult.diff === 0
+                                            ? "Данные по складу полностью соответствуют сумме в кассе."
+                                            : calculationResult.diff > 0
+                                                ? "Денег в кассе больше, чем проданного товара. Возможно, вы не указали продажу какого-то товара."
+                                                : "Денег в кассе меньше, чем должно быть по остаткам склада. Проверьте правильность подсчета."}
                                 </p>
                             </div>
                         </div>
+
+                        {isShiftSalesMode && inventorySummary && (
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="bg-slate-900/50 p-4 rounded-2xl border border-slate-800">
+                                    <span className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Расхождения по товарам</span>
+                                    <div className="text-xl font-bold mt-1">{inventorySummary.discrepancyItems}</div>
+                                    <div className="text-[10px] text-slate-500 mt-1">
+                                        {inventorySummary.discrepancyQuantity} шт. суммарно
+                                    </div>
+                                </div>
+                                <div className="bg-slate-900/50 p-4 rounded-2xl border border-slate-800">
+                                    <span className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Отклонение по складу</span>
+                                    <div className="text-xl font-bold mt-1 text-blue-400">{inventorySummary.discrepancyValue.toLocaleString()} ₽</div>
+                                    <div className="text-[10px] text-slate-500 mt-1">
+                                        Недостача: {inventorySummary.shortageItems} · Излишки: {inventorySummary.excessItems}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
 
                         {/* FORGOTTEN ITEMS WARNING */}
                         {forgottenItems.length > 0 && (

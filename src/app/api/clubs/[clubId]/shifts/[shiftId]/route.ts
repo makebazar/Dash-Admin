@@ -337,13 +337,29 @@ export async function PATCH(
 
         const currentShift = currentShiftRes.rows[0];
 
+        // Helper to sum numeric values from report data (handles numbers, strings, and expense arrays)
+        const sumMetric = (val: any) => {
+            if (Array.isArray(val)) {
+                return val.reduce((sum, item: any) => sum + (Number(item.amount) || 0), 0);
+            }
+            return parseFloat(String(val)) || 0;
+        };
+
         // Prepare merged data for calculation
+        const mergedReportData = body.report_data !== undefined ? body.report_data : currentShift.report_data;
+        
+        // Auto-calculate expenses from report_data if not explicitly provided in body
+        let calculatedExpenses = body.expenses !== undefined ? body.expenses : currentShift.expenses;
+        if (body.report_data !== undefined && body.report_data['expenses_cash'] !== undefined) {
+            calculatedExpenses = sumMetric(body.report_data['expenses_cash']);
+        }
+
         const mergedData = {
             total_hours: body.total_hours !== undefined ? body.total_hours : currentShift.total_hours,
             cash_income: body.cash_income !== undefined ? body.cash_income : currentShift.cash_income,
             card_income: body.card_income !== undefined ? body.card_income : currentShift.card_income,
-            expenses: body.expenses !== undefined ? body.expenses : currentShift.expenses,
-            report_data: body.report_data !== undefined ? body.report_data : currentShift.report_data,
+            expenses: calculatedExpenses,
+            report_data: mergedReportData,
             check_in: body.check_in !== undefined ? body.check_in : currentShift.check_in,
             shift_type: body.shift_type !== undefined ? body.shift_type : currentShift.shift_type
         };
@@ -403,10 +419,11 @@ export async function PATCH(
             updates.push(`card_income = $${paramIndex++}`);
             values.push(body.card_income);
         }
-        if (body.expenses !== undefined) {
-            updates.push(`expenses = $${paramIndex++}`);
-            values.push(body.expenses);
-        }
+        
+        // Use calculatedExpenses for the expenses column update
+        updates.push(`expenses = $${paramIndex++}`);
+        values.push(calculatedExpenses);
+
         if (body.report_comment !== undefined) {
             updates.push(`report_comment = $${paramIndex++}`);
             values.push(body.report_comment);

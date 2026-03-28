@@ -1,13 +1,14 @@
 "use client"
 
-import { useState, useTransition, useEffect } from "react"
-import { Plus, Search, Calendar, User, ClipboardCheck, ArrowRight, CheckCircle2, AlertTriangle, Loader2, Trash2, Warehouse as WarehouseIcon } from "lucide-react"
+import { useState, useTransition, useEffect, useMemo } from "react"
+import { Plus, User, ClipboardCheck, ArrowRight, Loader2, Trash2, Warehouse as WarehouseIcon, Clock3, Boxes, CheckCircle2, Sparkles } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
+import { Card, CardContent } from "@/components/ui/card"
 import { createInventory, deleteInventory, Inventory, Category, Warehouse, getMetrics } from "../actions"
 import { useParams } from "next/navigation"
 import { ActiveInventory } from "./ActiveInventory"
@@ -128,40 +129,136 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
         })
     }
 
-    if (activeInventoryId) {
-        return <ActiveInventory inventoryId={activeInventoryId} onClose={() => setActiveInventoryId(null)} isOwner={isOwner} currentUserId={currentUserId} />
-    }
+    const inventoryStats = useMemo(() => {
+        const openCount = inventories.filter(inv => inv.status === "OPEN").length
+        const closedCount = inventories.filter(inv => inv.status === "CLOSED").length
+        const withMetricCount = inventories.filter(inv => Boolean(inv.target_metric_key)).length
+        return {
+            total: inventories.length,
+            open: openCount,
+            closed: closedCount,
+            withMetric: withMetricCount
+        }
+    }, [inventories])
 
-    // Check if there is already an OPEN inventory in the list that belongs to the current user
-    const openInventory = inventories.find(i => i.status === 'OPEN' && i.created_by === currentUserId)
+    // Check if there is already an OPEN inventory in the club
+    const openInventory = inventories.find(i => i.status === 'OPEN')
 
     // Filter warehouses for dropdown
     const availableWarehouses = isOwner 
         ? warehouses 
         : warehouses.filter(w => (inventorySettings?.employee_allowed_warehouse_ids || []).includes(w.id))
 
+    const inventoryCards = [
+        {
+            label: "Всего инвентаризаций",
+            value: inventoryStats.total,
+            hint: inventoryStats.total === 0 ? "Пока нет истории" : "Вся история по клубу",
+            icon: ClipboardCheck,
+            tone: "text-slate-700 bg-slate-50 border-slate-200"
+        },
+        {
+            label: "Сейчас в работе",
+            value: inventoryStats.open,
+            hint: openInventory ? `Открыта #${openInventory.id}` : "Можно запускать новую",
+            icon: Clock3,
+            tone: "text-amber-700 bg-amber-50 border-amber-200"
+        },
+        {
+            label: "Завершено",
+            value: inventoryStats.closed,
+            hint: inventoryStats.closed > 0 ? "Есть результаты для анализа" : "Закрытых ещё нет",
+            icon: CheckCircle2,
+            tone: "text-green-700 bg-green-50 border-green-200"
+        },
+        {
+            label: "Складов доступно",
+            value: availableWarehouses.length,
+            hint: isOwner ? "Все склады клуба" : "С учётом ограничений роли",
+            icon: Boxes,
+            tone: "text-blue-700 bg-blue-50 border-blue-200"
+        }
+    ]
+
+    const formatMoney = (value: number | null | undefined) => {
+        if (value == null) return "—"
+        return `${Number(value).toLocaleString("ru-RU")} ₽`
+    }
+
+    if (activeInventoryId) {
+        return <ActiveInventory inventoryId={activeInventoryId} onClose={() => setActiveInventoryId(null)} isOwner={isOwner} currentUserId={currentUserId} />
+    }
+
     return (
-        <div className="space-y-4">
-            <div className="flex flex-col sm:flex-row justify-between items-center bg-white p-3 md:p-4 rounded-lg border shadow-sm gap-3">
-                <h3 className="font-medium text-sm md:text-base">История инвентаризаций</h3>
-                {openInventory ? (
-                    <Button onClick={() => setActiveInventoryId(openInventory.id)} variant="default" className="w-full sm:w-auto bg-amber-600 hover:bg-amber-700 h-10 md:h-9">
-                        <ClipboardCheck className="mr-2 h-4 w-4 shrink-0" />
-                        Продолжить текущую
-                    </Button>
-                ) : (
-                    <Button onClick={() => setIsDialogOpen(true)} className="w-full sm:w-auto h-10 md:h-9">
-                        <Plus className="mr-2 h-4 w-4 shrink-0" />
-                        Начать инвентаризацию
-                    </Button>
+        <div className="space-y-5">
+            <div className="rounded-2xl border bg-gradient-to-br from-white via-slate-50 to-slate-100 p-4 md:p-6 shadow-sm">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="space-y-2">
+                        <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
+                            <Sparkles className="h-3.5 w-3.5 text-blue-500" />
+                            Инвентаризация
+                        </div>
+                        <div>
+                            <h3 className="text-lg font-bold text-slate-900 md:text-2xl">Проведение и история подсчётов</h3>
+                            <p className="mt-1 max-w-2xl text-sm text-slate-600">
+                                Здесь удобно запускать новую инвентаризацию, быстро возвращаться к активной и смотреть результаты прошлых сверок.
+                            </p>
+                        </div>
+                    </div>
+
+                    {openInventory ? (
+                        <Button onClick={() => setActiveInventoryId(openInventory.id)} className="h-11 rounded-xl bg-amber-600 px-4 font-bold hover:bg-amber-700">
+                            <ClipboardCheck className="mr-2 h-4 w-4" />
+                            {openInventory.created_by === currentUserId ? `Продолжить #${openInventory.id}` : `Открыть активную #${openInventory.id}`}
+                        </Button>
+                    ) : (
+                        <Button onClick={() => setIsDialogOpen(true)} className="h-11 rounded-xl px-4 font-bold">
+                            <Plus className="mr-2 h-4 w-4" />
+                            Начать новую инвентаризацию
+                        </Button>
+                    )}
+                </div>
+
+                <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                    {inventoryCards.map(card => {
+                        const Icon = card.icon
+                        return (
+                            <Card key={card.label} className="border-slate-200/80 shadow-none">
+                                <CardContent className="flex items-start justify-between p-4">
+                                    <div className="space-y-1">
+                                        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">{card.label}</p>
+                                        <p className="text-2xl font-black text-slate-900">{card.value}</p>
+                                        <p className="text-xs text-slate-500">{card.hint}</p>
+                                    </div>
+                                    <div className={cn("rounded-xl border p-2.5", card.tone)}>
+                                        <Icon className="h-4 w-4" />
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        )
+                    })}
+                </div>
+
+                {openInventory && (
+                    <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50/80 p-4">
+                        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                            <div>
+                                <p className="text-sm font-bold text-amber-900">Сейчас открыта инвентаризация #{openInventory.id}</p>
+                                <p className="text-xs text-amber-800/80">
+                                    Склад: {openInventory.warehouse_name || "Не указан"} · Ответственный: {openInventory.created_by_name || "Неизвестно"}
+                                </p>
+                            </div>
+                            <Badge variant="outline" className="w-fit border-amber-300 bg-white text-amber-700">В процессе</Badge>
+                        </div>
+                    </div>
                 )}
             </div>
 
             {/* Desktop Table */}
-            <div className="hidden md:block rounded-md border bg-white overflow-hidden">
+            <div className="hidden overflow-hidden rounded-2xl border bg-white shadow-sm md:block">
                 <Table>
                     <TableHeader>
-                        <TableRow className="bg-slate-50/50">
+                        <TableRow className="bg-slate-50/80">
                             <TableHead className="font-bold">Дата</TableHead>
                             <TableHead className="font-bold">Склад</TableHead>
                             <TableHead className="font-bold">Статус</TableHead>
@@ -181,8 +278,14 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
                                 </TableCell>
                             </TableRow>
                         ) : inventories.map(inv => {
+                            const isOpen = inv.status === "OPEN"
+                            const isMine = inv.created_by === currentUserId
                             return (
-                                <TableRow key={inv.id} className="hover:bg-slate-50 transition-colors">
+                                <TableRow key={inv.id} className={cn(
+                                    "transition-colors hover:bg-slate-50",
+                                    isOpen && "bg-amber-50/40",
+                                    isMine && isOpen && "ring-1 ring-inset ring-amber-100"
+                                )}>
                                     <TableCell>
                                         <div className="flex flex-col">
                                             <span className="font-medium">
@@ -220,10 +323,10 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
                                         )}
                                     </TableCell>
                                     <TableCell className="text-right font-medium">
-                                        {inv.status === 'CLOSED' && inv.reported_revenue != null ? `${Number(inv.reported_revenue).toLocaleString('ru-RU')} ₽` : '—'}
+                                        {inv.status === 'CLOSED' ? formatMoney(inv.reported_revenue) : '—'}
                                     </TableCell>
                                     <TableCell className="text-right font-bold text-slate-900">
-                                        {inv.status === 'CLOSED' ? `${Number(inv.calculated_revenue).toLocaleString('ru-RU')} ₽` : '—'}
+                                        {inv.status === 'CLOSED' ? formatMoney(inv.calculated_revenue) : '—'}
                                     </TableCell>
                                     <TableCell className="text-right">
                                         {inv.status === 'CLOSED' ? (
@@ -262,11 +365,16 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
             {/* Mobile List View */}
             <div className="md:hidden space-y-3">
                 {inventories.length === 0 ? (
-                    <div className="py-12 text-center text-muted-foreground italic bg-white rounded-xl border border-dashed">Инвентаризаций не проводилось</div>
+                    <div className="rounded-2xl border border-dashed bg-white px-4 py-12 text-center text-sm italic text-muted-foreground">
+                        Инвентаризаций пока не было
+                    </div>
                 ) : inventories.map(inv => {
                     const isClosed = inv.status === 'CLOSED';
                     return (
-                        <div key={inv.id} className="bg-white rounded-xl border p-4 shadow-sm relative">
+                        <div key={inv.id} className={cn(
+                            "rounded-2xl border p-4 shadow-sm",
+                            isClosed ? "bg-white" : "border-amber-200 bg-amber-50/40"
+                        )}>
                             <div className="flex justify-between items-start mb-3">
                                 <div className="flex flex-col">
                                     <div className="flex items-center gap-2 mb-1">
@@ -300,11 +408,11 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
                                 <div className="grid grid-cols-3 gap-2 py-3 border-y border-slate-50 mb-3 bg-slate-50/30 -mx-4 px-4">
                                     <div>
                                         <p className="text-[9px] text-slate-400 uppercase font-bold mb-0.5">Заявлено</p>
-                                        <p className="text-xs font-bold text-slate-900">{Number(inv.reported_revenue || 0).toLocaleString('ru-RU')} ₽</p>
+                                        <p className="text-xs font-bold text-slate-900">{formatMoney(inv.reported_revenue)}</p>
                                     </div>
                                     <div className="text-center">
                                         <p className="text-[9px] text-slate-400 uppercase font-bold mb-0.5">По факту</p>
-                                        <p className="text-xs font-bold text-slate-900">{Number(inv.calculated_revenue || 0).toLocaleString('ru-RU')} ₽</p>
+                                        <p className="text-xs font-bold text-slate-900">{formatMoney(inv.calculated_revenue)}</p>
                                     </div>
                                     <div className="text-right">
                                         <p className="text-[9px] text-slate-400 uppercase font-bold mb-0.5">Разница</p>
@@ -364,7 +472,7 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
 
             {/* New Inventory Dialog */}
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                <DialogContent>
+                <DialogContent className="sm:max-w-[560px]">
                     <DialogHeader>
                         <DialogTitle>Новая инвентаризация</DialogTitle>
                         <DialogDescription>
@@ -375,9 +483,26 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
                     </DialogHeader>
                     
                     <div className="space-y-4 py-4">
+                        <div className="grid gap-3 rounded-2xl border bg-slate-50/70 p-4 md:grid-cols-3">
+                            <div className="space-y-1 rounded-xl bg-white p-3 border">
+                                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Склад</p>
+                                <p className="text-sm font-semibold text-slate-900">{selectedWarehouse ? availableWarehouses.find(w => w.id.toString() === selectedWarehouse)?.name || "Выберите склад" : "Выберите склад"}</p>
+                            </div>
+                            <div className="space-y-1 rounded-xl bg-white p-3 border">
+                                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Категория</p>
+                                <p className="text-sm font-semibold text-slate-900">{selectedCategory === "all" ? "Весь склад" : categories.find(c => c.id.toString() === selectedCategory)?.name || "Категория"}</p>
+                            </div>
+                            <div className="space-y-1 rounded-xl bg-white p-3 border">
+                                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Сверка</p>
+                                <p className="text-sm font-semibold text-slate-900">
+                                    {isOwner ? "Без кассовой метрики" : inventorySettings?.employee_default_metric_key || metrics.find(m => m.key === selectedMetric)?.label || "Нужно выбрать"}
+                                </p>
+                            </div>
+                        </div>
+
                         {/* Warehouse Selection */}
                         <div className="space-y-2">
-                            <Label>Склад</Label>
+                            <Label>Склад для подсчёта</Label>
                             <Select value={selectedWarehouse} onValueChange={setSelectedWarehouse}>
                                 <SelectTrigger>
                                     <SelectValue placeholder="Выберите склад" />
@@ -395,7 +520,7 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
 
                         {/* Category Selection (Optional) */}
                         <div className="space-y-2">
-                            <Label>Категория (фильтр)</Label>
+                            <Label>Что считать</Label>
                             <Select value={selectedCategory} onValueChange={setSelectedCategory}>
                                 <SelectTrigger>
                                     <SelectValue placeholder="Весь склад" />
@@ -433,7 +558,7 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
 
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Отмена</Button>
-                        <Button onClick={handleStartInventory} disabled={!selectedWarehouse || (!isOwner && (!selectedMetric || selectedMetric === "none")) || isPending}>
+                        <Button onClick={handleStartInventory} disabled={!selectedWarehouse || (!isOwner && !inventorySettings?.employee_default_metric_key && (!selectedMetric || selectedMetric === "none")) || isPending}>
                             {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                             Начать подсчет
                         </Button>

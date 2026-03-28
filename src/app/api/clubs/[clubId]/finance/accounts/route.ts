@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/db';
-import { cookies } from 'next/headers';
+import { requireClubApiAccess } from '@/lib/club-api-access';
 
 // GET /api/clubs/[clubId]/finance/accounts
 export async function GET(
@@ -8,12 +8,8 @@ export async function GET(
     { params }: { params: Promise<{ clubId: string }> }
 ) {
     try {
-        const userId = (await cookies()).get('session_user_id')?.value;
-        if (!userId) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
-
         const { clubId } = await params;
+        await requireClubApiAccess(clubId)
 
         // Get all accounts for the club
         const result = await query(
@@ -54,6 +50,10 @@ export async function GET(
 
         return NextResponse.json({ accounts });
     } catch (error) {
+        const status = (error as { status?: number })?.status
+        if (status) {
+            return NextResponse.json({ error: status === 401 ? 'Unauthorized' : 'Forbidden' }, { status })
+        }
         console.error('Error fetching accounts:', error);
         return NextResponse.json({ error: 'Failed to fetch accounts' }, { status: 500 });
     }
@@ -65,12 +65,8 @@ export async function POST(
     { params }: { params: Promise<{ clubId: string }> }
 ) {
     try {
-        const userId = (await cookies()).get('session_user_id')?.value;
-        if (!userId) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
-
         const { clubId } = await params;
+        await requireClubApiAccess(clubId)
         const body = await request.json();
         const {
             name,
@@ -109,6 +105,10 @@ export async function POST(
 
         return NextResponse.json({ account }, { status: 201 });
     } catch (error: any) {
+        const status = error?.status
+        if (status) {
+            return NextResponse.json({ error: status === 401 ? 'Unauthorized' : 'Forbidden' }, { status })
+        }
         console.error('Error creating account:', error);
 
         if (error.code === '23505') { // Unique violation
@@ -125,12 +125,8 @@ export async function PUT(
     { params }: { params: Promise<{ clubId: string }> }
 ) {
     try {
-        const userId = (await cookies()).get('session_user_id')?.value;
-        if (!userId) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
-
         const { clubId } = await params;
+        await requireClubApiAccess(clubId)
         const body = await request.json();
         const {
             id,
@@ -175,6 +171,10 @@ export async function PUT(
 
         return NextResponse.json({ account });
     } catch (error) {
+        const status = (error as { status?: number })?.status
+        if (status) {
+            return NextResponse.json({ error: status === 401 ? 'Unauthorized' : 'Forbidden' }, { status })
+        }
         console.error('Error updating account:', error);
         return NextResponse.json({ error: 'Failed to update account' }, { status: 500 });
     }
@@ -186,12 +186,8 @@ export async function DELETE(
     { params }: { params: Promise<{ clubId: string }> }
 ) {
     try {
-        const userId = (await cookies()).get('session_user_id')?.value;
-        if (!userId) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
-
         const { clubId } = await params;
+        await requireClubApiAccess(clubId)
         const { searchParams } = new URL(request.url);
         const accountId = searchParams.get('id');
 
@@ -230,6 +226,10 @@ export async function DELETE(
             });
         }
     } catch (error) {
+        const status = (error as { status?: number })?.status
+        if (status) {
+            return NextResponse.json({ error: status === 401 ? 'Unauthorized' : 'Forbidden' }, { status })
+        }
         console.error('Error deleting account:', error);
         return NextResponse.json({ error: 'Failed to delete account' }, { status: 500 });
     }

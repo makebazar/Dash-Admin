@@ -68,23 +68,36 @@ export async function PATCH(
         );
         const evaluations = evaluationsRes.rows;
 
+        // Helper to sum numeric values from report data (handles numbers, strings, and expense arrays)
+        const sumMetric = (val: any) => {
+            if (Array.isArray(val)) {
+                return val.reduce((sum, item: any) => sum + (Number(item.amount) || 0), 0);
+            }
+            return parseFloat(String(val)) || 0;
+        };
+
+        // Extract system metrics for separate columns
+        const cashIncome = sumMetric(reportData['cash_income']);
+        const cardIncome = sumMetric(reportData['card_income']);
+        const expenses = sumMetric(reportData['expenses_cash']);
+        const comment = reportData['shift_comment'] || '';
+
+        // Prepare metrics for salary calculator (must be flat Record<string, number>)
+        const metrics: Record<string, number> = {
+            'total_revenue': cashIncome + cardIncome,
+            'revenue_cash': cashIncome,
+            'revenue_card': cardIncome,
+            'expenses': expenses
+        };
+        
+        // Add all other report fields, summing them if they are arrays
+        for (const key in reportData) {
+            metrics[key] = sumMetric(reportData[key]);
+        }
+
         if ((schemeRes.rowCount || 0) > 0) {
             const scheme = schemeRes.rows[0];
             const formula = scheme.formula || {};
-
-            // Prepare metrics map
-            const metrics: Record<string, number> = {
-                'total_revenue': reportData['total_revenue'] ? parseFloat(reportData['total_revenue']) :
-                    ((reportData['cash_income'] ? parseFloat(reportData['cash_income']) : 0) +
-                        (reportData['card_income'] ? parseFloat(reportData['card_income']) : 0)),
-                'revenue_cash': reportData['cash_income'] ? parseFloat(reportData['cash_income']) : 0,
-                'revenue_card': reportData['card_income'] ? parseFloat(reportData['card_income']) : 0
-            };
-            // Add all other report fields
-            for (const key in reportData) {
-                if (typeof reportData[key] === 'number') metrics[key] = reportData[key];
-                else if (typeof reportData[key] === 'string' && !isNaN(parseFloat(reportData[key]))) metrics[key] = parseFloat(reportData[key]);
-            }
 
             // Pass formula directly - calculator now handles normalization
             const calculation = await calculateSalary(
@@ -96,12 +109,6 @@ export async function PATCH(
             calculatedSalary = calculation.total;
             salaryBreakdown = calculation.breakdown;
         }
-
-        // Extract system metrics for separate columns
-        const cashIncome = reportData['cash_income'] ? parseFloat(reportData['cash_income']) : 0;
-        const cardIncome = reportData['card_income'] ? parseFloat(reportData['card_income']) : 0;
-        const expenses = reportData['expenses_cash'] ? parseFloat(reportData['expenses_cash']) : 0;
-        const comment = reportData['shift_comment'] || '';
 
         // End shift and save report
         await query(

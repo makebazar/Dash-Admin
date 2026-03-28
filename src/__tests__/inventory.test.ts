@@ -8,6 +8,10 @@ import {
     adjustWarehouseStock,
     createInventory,
     closeInventory,
+    createShiftReceipt,
+    getWarehouses,
+    generateProcurementList,
+    getAbcAnalysisData,
 } from "@/app/clubs/[clubId]/inventory/actions"
 import { query, getClient } from "@/db"
 
@@ -36,7 +40,15 @@ type MockResult = { rows?: any[]; rowCount?: number }
 
 function createMockClient(handler: (sql: string, params?: any[]) => Promise<MockResult> | MockResult) {
     return {
-        query: vi.fn(async (sql: string, params?: any[]) => handler(sql, params)),
+        query: vi.fn(async (sql: string, params?: any[]) => {
+            if (sql.includes("SELECT owner_id, inventory_settings")) {
+                return { rowCount: 1, rows: [{ owner_id: "user-123", inventory_settings: {} }] }
+            }
+            if (sql.includes("SELECT ce.role as club_role")) {
+                return { rowCount: 1, rows: [{ club_role: "Админ", role_id: null, role_name: "Админ" }] }
+            }
+            return handler(sql, params)
+        }),
         release: vi.fn(),
     }
 }
@@ -179,6 +191,30 @@ describe("Warehouse System Logic", () => {
         expect(client.query).toHaveBeenCalledWith("COMMIT")
     })
 
+    it("filters warehouses for restricted employee access", async () => {
+        const client = {
+            query: vi.fn(async (sql: string) => {
+            if (sql.includes("SELECT owner_id, inventory_settings")) {
+                return { rowCount: 1, rows: [{ owner_id: "owner-1", inventory_settings: { employee_allowed_warehouse_ids: [2] } }] }
+            }
+            if (sql.includes("SELECT ce.role as club_role")) {
+                return { rowCount: 1, rows: [{ club_role: "Сотрудник", role_id: null, role_name: null }] }
+            }
+            if (sql.includes("FROM warehouses w")) {
+                return { rowCount: 1, rows: [{ id: 2, name: "Front", responsible_name: null }] }
+            }
+            return { rows: [], rowCount: 0 }
+            }),
+            release: vi.fn(),
+        }
+        vi.mocked(getClient).mockResolvedValue(client as any)
+
+        const warehouses = await getWarehouses(clubId)
+
+        expect(warehouses).toEqual([{ id: 2, name: "Front", responsible_name: null }])
+        expect(client.query).toHaveBeenCalledWith(expect.stringContaining("w.id = ANY($2)"), [clubId, [2]])
+    })
+
     it("creates draft supply without stock updates", async () => {
         const client = createMockClient((sql, params) => {
             if (sql.includes("SELECT COUNT(*)::int as cnt FROM warehouse_products")) {
@@ -282,6 +318,7 @@ describe("Warehouse System Logic", () => {
 
     it("creates inventory and snapshots products", async () => {
         const client = createMockClient((sql) => {
+            if (sql.includes("WHERE club_id = $1 AND status = 'OPEN'")) return { rowCount: 0, rows: [] }
             if (sql.includes("INSERT INTO warehouse_inventories")) return { rows: [{ id: 44 }] }
             if (sql.includes("FROM warehouse_products p")) {
                 return {
@@ -303,10 +340,43 @@ describe("Warehouse System Logic", () => {
         expect(client.query).toHaveBeenCalledWith("COMMIT")
     })
 
+    it("blocks creating a second open revision inventory", async () => {
+        const client = createMockClient((sql) => {
+            if (sql.includes("WHERE club_id = $1 AND status = 'OPEN'")) {
+                return { rowCount: 1, rows: [{ id: 45, warehouse_id: 2 }] }
+            }
+            return { rows: [], rowCount: 0 }
+        })
+        vi.mocked(getClient).mockResolvedValue(client as any)
+
+        await expect(createInventory(clubId, userId, null, null, 3, null)).rejects.toThrow("В клубе уже есть открытая инвентаризация")
+        expect(client.query).toHaveBeenCalledWith("ROLLBACK")
+    })
+
+    it("blocks POS receipts when club is not in SHIFT sales mode", async () => {
+        const client = createMockClient((sql) => {
+            if (sql.startsWith("SELECT inventory_settings FROM clubs")) {
+                return { rowCount: 1, rows: [{ inventory_settings: { sales_capture_mode: "INVENTORY" } }] }
+            }
+            return { rows: [], rowCount: 0 }
+        })
+        vi.mocked(getClient).mockResolvedValue(client as any)
+
+        await expect(
+            createShiftReceipt(clubId, userId, {
+                shift_id: "shift-1",
+                payment_type: "cash",
+                items: [{ product_id: 1, quantity: 1 }],
+            })
+        ).rejects.toThrow("Продажи через POS отключены для этого клуба")
+
+        expect(client.query).toHaveBeenCalledWith("ROLLBACK")
+    })
+
     it("closes inventory with movement compensation and auto supply", async () => {
         const mainClient = createMockClient((sql, params) => {
-            if (sql.startsWith("SELECT warehouse_id, shift_id, created_by, started_at FROM warehouse_inventories")) {
-                return { rows: [{ warehouse_id: 1, shift_id: "shift-9", created_by: userId, started_at: "2026-01-01T10:00:00Z" }] }
+            if (sql.startsWith("SELECT warehouse_id, shift_id, created_by, started_at, status FROM warehouse_inventories")) {
+                return { rows: [{ warehouse_id: 1, shift_id: "shift-9", created_by: userId, started_at: "2026-01-01T10:00:00Z", status: "OPEN" }] }
             }
             if (sql.startsWith("SELECT inventory_settings FROM clubs")) {
                 return { rows: [{ inventory_settings: { sales_capture_mode: "INVENTORY" } }] }
@@ -358,13 +428,13 @@ describe("Warehouse System Logic", () => {
 
     it("defaults to NONE sales recognition when club is in SHIFT mode", async () => {
         const mainClient = createMockClient((sql) => {
-            if (sql.startsWith("SELECT warehouse_id, shift_id, created_by, started_at FROM warehouse_inventories")) {
-                return { rows: [{ warehouse_id: 1, shift_id: "shift-9", created_by: userId, started_at: "2026-01-01T10:00:00Z" }] }
+            if (sql.startsWith("SELECT warehouse_id, shift_id, created_by, started_at, status FROM warehouse_inventories")) {
+                return { rows: [{ warehouse_id: 1, shift_id: "shift-9", created_by: userId, started_at: "2026-01-01T10:00:00Z", status: "OPEN" }] }
             }
             if (sql.startsWith("SELECT inventory_settings FROM clubs")) {
                 return { rows: [{ inventory_settings: { sales_capture_mode: "SHIFT" } }] }
             }
-            if (sql.includes("FROM warehouse_stock_movements sm") && sql.includes("AND sm.type = 'SALE'")) {
+            if (sql.includes("FROM warehouse_stock_movements sm") && sql.includes("sm.type IN ('SALE', 'RETURN')")) {
                 return { rows: [{ revenue: 500 }] }
             }
             if (sql.includes("FROM warehouse_inventory_items ii")) {
@@ -396,6 +466,226 @@ describe("Warehouse System Logic", () => {
         expect(mainClient.query).toHaveBeenCalledWith(
             expect.stringContaining("UPDATE warehouse_inventories"),
             [77, 1000, 500, 500]
+        )
+        expect(mainClient.query).toHaveBeenCalledWith(
+            expect.stringContaining("sm.type IN ('SALE', 'RETURN')"),
+            [clubId, "shift-9"]
+        )
+    })
+
+    it("aggregates duplicate unaccounted sales on close", async () => {
+        const mainClient = createMockClient((sql) => {
+            if (sql.startsWith("SELECT warehouse_id, shift_id, created_by, started_at, status FROM warehouse_inventories")) {
+                return { rows: [{ warehouse_id: 1, shift_id: "shift-9", created_by: userId, started_at: "2026-01-01T10:00:00Z", status: "OPEN" }] }
+            }
+            if (sql.startsWith("SELECT inventory_settings FROM clubs")) {
+                return { rows: [{ inventory_settings: { sales_capture_mode: "INVENTORY" } }] }
+            }
+            if (sql.includes("SELECT COUNT(*)::int as cnt FROM warehouse_products")) {
+                return { rows: [{ cnt: 1 }], rowCount: 1 }
+            }
+            if (sql.includes("FROM warehouse_inventory_items ii")) {
+                return {
+                    rows: [
+                        {
+                            id: 101,
+                            product_id: 55,
+                            expected_stock: 10,
+                            actual_stock: 10,
+                            movements_during_inventory: 0,
+                            selling_price_snapshot: 100,
+                            cost_price_snapshot: 60,
+                        },
+                    ],
+                }
+            }
+            if (sql.includes("INSERT INTO warehouse_supplies")) return { rows: [{ id: 808 }] }
+            return { rows: [], rowCount: 1 }
+        })
+        const replenishmentClient = createMockClient((sql) => {
+            if (sql.includes("FROM warehouse_replenishment_rules")) return { rows: [] }
+            return { rows: [], rowCount: 1 }
+        })
+        vi.mocked(getClient).mockResolvedValueOnce(mainClient as any).mockResolvedValueOnce(replenishmentClient as any)
+
+        await closeInventory(88, clubId, 400, [
+            { product_id: 99, quantity: 1, selling_price: 100, cost_price: 50 },
+            { product_id: 99, quantity: 2, selling_price: 100, cost_price: 50 },
+        ])
+
+        expect(mainClient.query).toHaveBeenCalledWith(
+            expect.stringContaining("UPDATE warehouse_inventories"),
+            [88, 400, 300, 100]
+        )
+        expect(mainClient.query).toHaveBeenCalledWith(expect.stringContaining("INSERT INTO warehouse_supply_items"), [808, 99, 3, 50, 150])
+    })
+
+    it("includes zero-stock items in procurement and rounds suggested quantity up to box size", async () => {
+        const analyticsClient = createMockClient((sql) => {
+            if (sql.includes("WITH ProductRevenue AS")) return { rows: [] }
+            return { rows: [], rowCount: 1 }
+        })
+        const mainClient = createMockClient((sql) => {
+            if (sql.includes("warehouse_procurement_lists") && sql.includes("RETURNING id")) return { rows: [{ id: 901 }], rowCount: 1 }
+            if (sql.includes("SELECT") && sql.includes("FROM warehouse_products") && sql.includes("ideal_stock_days")) {
+                return {
+                    rows: [
+                        {
+                            id: 77,
+                            name: "Tonic",
+                            current_stock: 0,
+                            min_stock_level: 5,
+                            sales_velocity: 1,
+                            ideal_stock_days: 14,
+                            abc_category: "A",
+                            units_per_box: 12,
+                            days_left: 0,
+                        },
+                    ],
+                }
+            }
+            return { rows: [], rowCount: 1 }
+        })
+        vi.mocked(getClient).mockResolvedValueOnce(mainClient as any).mockResolvedValueOnce(analyticsClient as any)
+
+        await generateProcurementList(clubId, userId)
+
+        expect(mainClient.query).toHaveBeenCalledWith(
+            expect.stringContaining("INSERT INTO warehouse_procurement_items"),
+            [901, 77, 0, 12, 12, 12]
+        )
+    })
+
+    it("does not auto-include non-critical category C products in procurement", async () => {
+        const analyticsClient = createMockClient((sql) => {
+            if (sql.includes("WITH ProductRevenue AS")) return { rows: [] }
+            return { rows: [], rowCount: 1 }
+        })
+        const mainClient = createMockClient((sql) => {
+            if (sql.includes("warehouse_procurement_lists") && sql.includes("RETURNING id")) return { rows: [{ id: 902 }], rowCount: 1 }
+            if (sql.includes("SELECT") && sql.includes("FROM warehouse_products") && sql.includes("ideal_stock_days")) {
+                return {
+                    rows: [
+                        {
+                            id: 81,
+                            name: "Rare syrup",
+                            current_stock: 2,
+                            min_stock_level: 5,
+                            sales_velocity: 1,
+                            ideal_stock_days: 14,
+                            abc_category: "C",
+                            units_per_box: 6,
+                        },
+                    ],
+                }
+            }
+            return { rows: [], rowCount: 1 }
+        })
+        vi.mocked(getClient).mockResolvedValueOnce(mainClient as any).mockResolvedValueOnce(analyticsClient as any)
+
+        await generateProcurementList(clubId, userId)
+
+        expect(mainClient.query).not.toHaveBeenCalledWith(
+            expect.stringContaining("INSERT INTO warehouse_procurement_items"),
+            expect.arrayContaining([902, 81])
+        )
+    })
+
+    it("never auto-includes category C products in optimized mode even with zero stock", async () => {
+        const analyticsClient = createMockClient((sql) => {
+            if (sql.includes("WITH ProductRevenue AS")) return { rows: [] }
+            return { rows: [], rowCount: 1 }
+        })
+        const mainClient = createMockClient((sql) => {
+            if (sql.includes("warehouse_procurement_lists") && sql.includes("RETURNING id")) return { rows: [{ id: 904 }], rowCount: 1 }
+            if (sql.includes("SELECT") && sql.includes("FROM warehouse_products") && sql.includes("ideal_stock_days")) {
+                return {
+                    rows: [
+                        {
+                            id: 83,
+                            name: "Low runner",
+                            current_stock: 0,
+                            min_stock_level: 3,
+                            sales_velocity: 2,
+                            ideal_stock_days: 14,
+                            abc_category: "C",
+                            units_per_box: 6,
+                        },
+                    ],
+                }
+            }
+            return { rows: [], rowCount: 1 }
+        })
+        vi.mocked(getClient).mockResolvedValueOnce(mainClient as any).mockResolvedValueOnce(analyticsClient as any)
+
+        await generateProcurementList(clubId, userId, "optimized")
+
+        expect(mainClient.query).not.toHaveBeenCalledWith(
+            expect.stringContaining("INSERT INTO warehouse_procurement_items"),
+            expect.arrayContaining([904, 83])
+        )
+    })
+
+    it("includes category C products in full procurement mode", async () => {
+        const analyticsClient = createMockClient((sql) => {
+            if (sql.includes("WITH ProductRevenue AS")) return { rows: [] }
+            return { rows: [], rowCount: 1 }
+        })
+        const mainClient = createMockClient((sql, params) => {
+            if (sql.includes("warehouse_procurement_lists") && sql.includes("RETURNING id")) {
+                expect(params).toEqual([clubId, userId, "full"])
+                return { rows: [{ id: 903 }], rowCount: 1 }
+            }
+            if (sql.includes("SELECT") && sql.includes("FROM warehouse_products") && sql.includes("ideal_stock_days")) {
+                return {
+                    rows: [
+                        {
+                            id: 82,
+                            name: "Seasonal syrup",
+                            current_stock: 2,
+                            min_stock_level: 5,
+                            sales_velocity: 1,
+                            ideal_stock_days: 14,
+                            abc_category: "C",
+                            units_per_box: 6,
+                        },
+                    ],
+                }
+            }
+            return { rows: [], rowCount: 1 }
+        })
+        vi.mocked(getClient).mockResolvedValueOnce(mainClient as any).mockResolvedValueOnce(analyticsClient as any)
+
+        await generateProcurementList(clubId, userId, "full")
+
+        expect(mainClient.query).toHaveBeenCalledWith(
+            expect.stringContaining("INSERT INTO warehouse_procurement_items"),
+            [903, 82, 2, 6, 6, 6]
+        )
+    })
+
+    it("uses net sales and historical receipt cost signals in abc analytics", async () => {
+        const client = createMockClient((sql) => {
+            if (sql.includes("WITH ReceiptCosts AS")) {
+                return { rows: [] }
+            }
+            return { rows: [], rowCount: 1 }
+        })
+        vi.mocked(getClient).mockResolvedValue(client as any)
+
+        await getAbcAnalysisData(clubId)
+
+        expect(client.query).toHaveBeenCalledWith(
+            expect.stringContaining("m.type IN ('SALE', 'RETURN')"),
+            [clubId]
+        )
+        expect(client.query).toHaveBeenCalledWith(
+            expect.stringContaining("COALESCE(rc.cost_price_snapshot, p.cost_price)"),
+            [clubId]
+        )
+        expect(client.query).toHaveBeenCalledWith(
+            expect.stringContaining("COALESCE(m.related_entity_type, '') = 'SHIFT_RECEIPT_VOID'"),
+            [clubId]
         )
     })
 })

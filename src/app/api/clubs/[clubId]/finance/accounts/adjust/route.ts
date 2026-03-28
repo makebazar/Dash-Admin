@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/db';
-import { cookies } from 'next/headers';
+import { requireClubApiAccess } from '@/lib/club-api-access';
 
 // POST /api/clubs/[clubId]/finance/accounts/adjust
 export async function POST(
@@ -8,12 +8,8 @@ export async function POST(
     { params }: { params: Promise<{ clubId: string }> }
 ) {
     try {
-        const userId = (await cookies()).get('session_user_id')?.value;
-        if (!userId) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
-
         const { clubId } = await params;
+        const userId = await requireClubApiAccess(clubId)
         const body = await request.json();
         const { account_id, new_balance, reason } = body;
 
@@ -78,6 +74,10 @@ export async function POST(
         });
 
     } catch (error) {
+        const status = (error as { status?: number })?.status
+        if (status) {
+            return NextResponse.json({ error: status === 401 ? 'Unauthorized' : 'Forbidden' }, { status })
+        }
         console.error('Error adjusting account balance:', error);
         return NextResponse.json({ error: 'Failed to adjust balance' }, { status: 500 });
     }
