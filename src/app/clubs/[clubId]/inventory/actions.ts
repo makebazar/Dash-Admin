@@ -2299,6 +2299,30 @@ export async function createShiftReceipt(
     }
 }
 
+export async function createShiftReceiptSafe(
+    clubId: string,
+    userId: string,
+    data: {
+        shift_id: string
+        payment_type: ShiftReceiptPaymentType
+        items: { product_id: number; quantity: number }[]
+        cash_amount?: number
+        card_amount?: number
+        notes?: string
+        warehouse_id?: number
+    }
+) {
+    try {
+        await createShiftReceipt(clubId, userId, data)
+        return { ok: true as const }
+    } catch (error: any) {
+        return {
+            ok: false as const,
+            error: error?.message || "Ошибка пробития товара"
+        }
+    }
+}
+
 async function buildShiftReceiptsFromRows(receiptRows: any[]) {
     const receiptIds = receiptRows.map(r => Number(r.id))
     
@@ -3998,6 +4022,7 @@ export async function getProductByBarcode(clubId: string, barcode: string) {
         const res = await client.query(
             `
             SELECT p.*,
+            (SELECT SUM(quantity) FROM warehouse_stock ws WHERE ws.product_id = p.id${stockFilter}) as total_stock,
             (
                 SELECT json_agg(json_build_object(
                     'warehouse_id', ws.warehouse_id,
@@ -4014,7 +4039,13 @@ export async function getProductByBarcode(clubId: string, barcode: string) {
             `,
             params
         )
-        return res.rows[0] as Product | null
+        const row = res.rows[0]
+        if (!row) return null
+        return {
+            ...row,
+            current_stock: Number(row.total_stock) || 0,
+            stocks: row.stocks || [],
+        } as Product
     } finally {
         client.release()
     }

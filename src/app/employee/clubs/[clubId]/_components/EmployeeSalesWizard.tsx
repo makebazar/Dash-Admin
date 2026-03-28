@@ -13,7 +13,7 @@ import { Loader2, ShoppingCart, Trash2, CreditCard, Banknote, History, X, Search
 import { useUiDialogs } from "@/app/clubs/[clubId]/inventory/_components/useUiDialogs"
 import { useSSE } from "@/hooks/usePOSWebSocket"
 import {
-    createShiftReceipt,
+    createShiftReceiptSafe,
     getProductByBarcode,
     getProducts,
     getShiftReceipts,
@@ -181,6 +181,11 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
         setSelectedCartProductId(product.id)
     }, [])
 
+    const isInStock = useCallback((p: Product) => {
+        const stock = Number((p as any).total_stock ?? p.current_stock ?? 0)
+        return Number.isFinite(stock) && stock > 0
+    }, [])
+
     // USB Scanner - глобальный обработчик (должен быть после addToCart)
     const [barcodeBuffer, setBarcodeBuffer] = useState("")
     const lastKeyTime = useRef<number>(0)
@@ -213,11 +218,16 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
                 // Ищем товар по штрих-коду
                 try {
                     const product = await getProductByBarcode(clubId, barcode)
-                    if (product) {
+                    if (product && isInStock(product)) {
                         addToCart(product, 1)
                         showMessage({
                             title: "📦 Товар добавлен",
                             description: `${product.name} × 1`
+                        })
+                    } else if (product) {
+                        showMessage({
+                            title: "⚠️ Нет остатка",
+                            description: `${product.name} отсутствует на доступном складе POS`
                         })
                     } else {
                         showMessage({
@@ -251,12 +261,7 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
         return () => {
             window.removeEventListener('keydown', handleGlobalKeydown, true)
         }
-    }, [clubId, isReturnDialogOpen, addToCart, showMessage])
-
-    const isInStock = useCallback((p: Product) => {
-        const stock = Number((p as any).total_stock ?? p.current_stock ?? 0)
-        return Number.isFinite(stock) && stock > 0
-    }, [])
+    }, [clubId, isReturnDialogOpen, addToCart, showMessage, isInStock])
 
     const inStockProducts = useMemo(() => {
         return allProducts.filter(isInStock)
@@ -345,7 +350,12 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
                 inputRef.current?.focus()
                 return
             }
-            showMessage({ title: "Не найдено", description: "Товара нет на складе или штрихкод не найден" })
+            const product = await getProductByBarcode(clubId, v).catch(() => null)
+            if (product) {
+                showMessage({ title: "Нет остатка", description: `${product.name} отсутствует на доступном складе POS` })
+            } else {
+                showMessage({ title: "Не найдено", description: "Штрихкод не найден в каталоге" })
+            }
         }
 
         if (suggestions.length > 0) {
@@ -393,15 +403,19 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
         }
 
         startTransition(async () => {
+            const result = await createShiftReceiptSafe(clubId, userId, {
+                shift_id: activeShiftId,
+                payment_type: paymentType,
+                items: cart.map(i => ({ product_id: i.product_id, quantity: i.quantity })),
+                cash_amount: paymentType === 'mixed' ? cash : undefined,
+                card_amount: paymentType === 'mixed' ? card : undefined,
+                notes: receiptNotes || undefined
+            })
+            if (!result.ok) {
+                showMessage({ title: "Ошибка", description: result.error || "Ошибка пробития" })
+                return
+            }
             try {
-                await createShiftReceipt(clubId, userId, {
-                    shift_id: activeShiftId,
-                    payment_type: paymentType,
-                    items: cart.map(i => ({ product_id: i.product_id, quantity: i.quantity })),
-                    cash_amount: paymentType === 'mixed' ? cash : undefined,
-                    card_amount: paymentType === 'mixed' ? card : undefined,
-                    notes: receiptNotes || undefined
-                })
                 setCart([])
                 setSelectedCartProductId(null)
                 setReceiptNotes("")
@@ -411,7 +425,7 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
                 await refresh()
                 inputRef.current?.focus()
             } catch (e: any) {
-                showMessage({ title: "Ошибка", description: e?.message || "Ошибка пробития" })
+                showMessage({ title: "Ошибка", description: e?.message || "Ошибка обновления POS" })
             }
         })
     }

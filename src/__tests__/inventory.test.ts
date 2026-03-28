@@ -12,6 +12,7 @@ import {
     getWarehouses,
     generateProcurementList,
     getAbcAnalysisData,
+    getProductByBarcode,
 } from "@/app/clubs/[clubId]/inventory/actions"
 import { query, getClient } from "@/db"
 
@@ -662,6 +663,32 @@ describe("Warehouse System Logic", () => {
             expect.stringContaining("INSERT INTO warehouse_procurement_items"),
             [903, 82, 2, 6, 6, 6]
         )
+    })
+
+    it("returns barcode product with aggregated stock for POS checks", async () => {
+        const client = createMockClient((sql) => {
+            if (sql.includes("WHERE ws.product_id = p.id")) {
+                return {
+                    rows: [
+                        {
+                            id: 500,
+                            name: "Cola",
+                            barcode: "12345678",
+                            total_stock: "7",
+                            stocks: [{ warehouse_id: 1, warehouse_name: "Бар", quantity: 7, is_default: true }],
+                        },
+                    ],
+                    rowCount: 1,
+                }
+            }
+            return { rows: [], rowCount: 0 }
+        })
+        vi.mocked(getClient).mockResolvedValue(client as any)
+
+        const product = await getProductByBarcode(clubId, "12345678")
+
+        expect(product?.current_stock).toBe(7)
+        expect(product?.stocks).toEqual([{ warehouse_id: 1, warehouse_name: "Бар", quantity: 7, is_default: true }])
     })
 
     it("uses net sales and historical receipt cost signals in abc analytics", async () => {
