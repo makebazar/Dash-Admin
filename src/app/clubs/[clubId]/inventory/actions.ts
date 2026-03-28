@@ -2087,6 +2087,102 @@ async function resolveEmployeeDefaultWarehouseId(
     return Number(id)
 }
 
+async function resolvePosWarehouseIdForItems(
+    client: any,
+    clubId: string,
+    userId: string,
+    items: { product_id: number; quantity: number }[],
+    preferredWarehouseId?: number | null
+) {
+    const scope = await getInventoryAccessScope(client, clubId, userId)
+
+    if (scope.canManageInventory && preferredWarehouseId) {
+        await assertWarehouseBelongsToClub(client, clubId, preferredWarehouseId)
+    }
+    if (!scope.canManageInventory && preferredWarehouseId) {
+        await assertUserCanUseWarehouses(client, clubId, userId, [preferredWarehouseId])
+    }
+
+    const warehouseQuery = scope.canManageInventory
+        ? `
+            SELECT id, name, is_default
+            FROM warehouses
+            WHERE club_id = $1
+              AND is_active = true
+              AND ($2::int IS NULL OR id = $2)
+            ORDER BY CASE WHEN id = $2 THEN 0 ELSE 1 END, is_default DESC, created_at ASC
+        `
+        : `
+            SELECT id, name, is_default
+            FROM warehouses
+            WHERE club_id = $1
+              AND is_active = true
+              AND id = ANY($2)
+              AND ($3::int IS NULL OR id = $3)
+            ORDER BY CASE WHEN id = $3 THEN 0 ELSE 1 END, is_default DESC, created_at ASC
+        `
+
+    const warehouseParams = scope.canManageInventory
+        ? [clubId, preferredWarehouseId ?? null]
+        : [clubId, scope.allowedWarehouseIds, preferredWarehouseId ?? null]
+
+    const warehouseRes = await client.query(warehouseQuery, warehouseParams)
+    if (warehouseRes.rowCount === 0) {
+        throw new Error("Для POS не найден доступный активный склад")
+    }
+
+    const warehouseIds = warehouseRes.rows.map((row: any) => Number(row.id))
+    const productIds = Array.from(new Set(items.map(item => Number(item.product_id))))
+    const stockRes = await client.query(
+        `
+        SELECT warehouse_id, product_id, quantity
+        FROM warehouse_stock
+        WHERE warehouse_id = ANY($1)
+          AND product_id = ANY($2)
+        `,
+        [warehouseIds, productIds]
+    )
+
+    const stockMap = new Map<string, number>()
+    for (const row of stockRes.rows) {
+        stockMap.set(`${row.warehouse_id}:${row.product_id}`, Number(row.quantity || 0))
+    }
+
+    const matchingWarehouse = warehouseRes.rows.find((warehouse: any) =>
+        items.every(item => {
+            const available = stockMap.get(`${warehouse.id}:${item.product_id}`) || 0
+            return available >= item.quantity
+        })
+    )
+
+    if (matchingWarehouse) {
+        return Number(matchingWarehouse.id)
+    }
+
+    const itemSummaries = await client.query(
+        `
+        SELECT id, name
+        FROM warehouse_products
+        WHERE club_id = $1
+          AND id = ANY($2)
+        `,
+        [clubId, productIds]
+    )
+    const productNames = new Map<number, string>()
+    for (const row of itemSummaries.rows) {
+        productNames.set(Number(row.id), String(row.name))
+    }
+
+    const details = items.map(item => {
+        const perWarehouse = warehouseRes.rows
+            .map((warehouse: any) => `${warehouse.name}: ${stockMap.get(`${warehouse.id}:${item.product_id}`) || 0}`)
+            .join(", ")
+        return `${productNames.get(item.product_id) || `Товар #${item.product_id}`} — ${perWarehouse}`
+    }).join("; ")
+
+    throw new Error(`Недостаточно товара на доступных POS-складах. ${details}`)
+}
+
 export async function createShiftReceipt(
     clubId: string,
     userId: string,
@@ -2128,7 +2224,7 @@ export async function createShiftReceipt(
         )
         if (shiftCheck.rowCount === 0) throw new Error("Смена не найдена или уже завершена")
 
-        const warehouseId = await resolveEmployeeDefaultWarehouseId(client, clubId, userId, data.warehouse_id ?? null)
+        const warehouseId = await resolvePosWarehouseIdForItems(client, clubId, userId, normalizedItems, data.warehouse_id ?? null)
 
         const productIds = Array.from(new Set(normalizedItems.map(i => i.product_id)))
         const pricesRes = await client.query(
