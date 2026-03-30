@@ -1643,7 +1643,21 @@ export async function getSalesAnalytics(clubId: string, limit: number = 500) {
         LEFT JOIN users u ON sm.user_id = u.id
         LEFT JOIN shifts s ON sm.shift_id = s.id
         LEFT JOIN users su ON s.user_id = su.id
-        LEFT JOIN warehouse_inventories inv ON s.id = inv.shift_id
+        LEFT JOIN LATERAL (
+            SELECT
+                wi.reported_revenue,
+                wi.calculated_revenue,
+                wi.revenue_difference
+            FROM warehouse_inventories wi
+            WHERE wi.shift_id = s.id
+              AND wi.club_id = $1
+            ORDER BY
+                CASE WHEN wi.status = 'CLOSED' THEN 0 ELSE 1 END,
+                wi.closed_at DESC NULLS LAST,
+                wi.started_at DESC,
+                wi.id DESC
+            LIMIT 1
+        ) inv ON TRUE
         -- Join for voided receipts
         LEFT JOIN shift_receipts sr ON sm.related_entity_type = 'SHIFT_RECEIPT' AND sm.related_entity_id = sr.id AND sr.voided_at IS NOT NULL
         WHERE sm.club_id = $1 
@@ -3613,7 +3627,7 @@ export async function getInventoryItems(inventoryId: number) {
     const client = await import("@/db").then(m => m.getClient())
     try {
         const sessionUserId = await requireSessionUserId()
-        const invHeader = await client.query('SELECT club_id, warehouse_id, started_at FROM warehouse_inventories WHERE id = $1', [inventoryId])
+        const invHeader = await client.query('SELECT club_id, warehouse_id, started_at, closed_at, status FROM warehouse_inventories WHERE id = $1', [inventoryId])
         const inv = invHeader.rows[0]
         if (!inv) throw new Error("Инвентаризация не найдена")
         await assertSessionUserCanAccessClub(String(inv.club_id), sessionUserId)
@@ -3637,13 +3651,14 @@ export async function getInventoryItems(inventoryId: number) {
                 FROM warehouse_stock_movements
                 WHERE warehouse_id = $2
                   AND created_at > $3
+                  AND ($5::timestamp IS NULL OR created_at <= $5)
                   AND club_id = $4
                   AND COALESCE(related_entity_type, '') != 'INVENTORY'
                 GROUP BY product_id
             ) movements ON movements.product_id = ii.product_id
             WHERE ii.inventory_id = $1
             ORDER BY c.name NULLS LAST, p.name
-        `, [inventoryId, inv.warehouse_id, inv.started_at, inv.club_id])
+        `, [inventoryId, inv.warehouse_id, inv.started_at, inv.club_id, inv.status === 'CLOSED' ? inv.closed_at : null])
 
         const items = res.rows as (InventoryItem & { movement_during_inventory?: number | string })[]
 

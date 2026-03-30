@@ -1,9 +1,8 @@
 "use client"
 
-import { useEffect, useState, useCallback, useMemo } from "react"
+import { memo, useEffect, useState, useCallback, useMemo } from "react"
 import { useParams } from "next/navigation"
 import {
-    LayoutGrid,
     Plus,
     ChevronLeft,
     MoreVertical,
@@ -13,7 +12,6 @@ import {
     MapPin,
     Monitor,
     Layers,
-    Save,
     X,
     FolderPlus,
     MousePointer2,
@@ -60,7 +58,6 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Label } from "@/components/ui/label"
-import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
@@ -116,6 +113,872 @@ interface Employee {
     full_name: string
 }
 
+const sortWorkplaceIssues = (a: any, b: any) => {
+    const aActive = a.status === 'OPEN' || a.status === 'IN_PROGRESS'
+    const bActive = b.status === 'OPEN' || b.status === 'IN_PROGRESS'
+
+    if (aActive && !bActive) return -1
+    if (!aActive && bActive) return 1
+
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+}
+
+interface ZoneSectionProps {
+    zone: string
+    workstations: Workstation[]
+    equipmentByWorkstationId: Map<string, Equipment[]>
+    activeIssueCountByWorkstationId: Map<string, number>
+    activeIssueCountByEquipmentId: Map<string, number>
+    zoneIssuesCount: number
+    onOpenDetails: (wsId: string) => void
+    onEdit: (ws: Workstation) => void
+    onDelete: (wsId: string) => void
+    onOpenAssignDialog: (wsId: string) => void
+    onCreate: (zone?: string) => void
+    onUnassignEquipment: (equipmentId: string) => void
+    renderEquipmentIcon: (type: string) => React.ReactNode
+}
+
+interface WorkstationDetailsDialogProps {
+    open: boolean
+    onOpenChange: (open: boolean) => void
+    clubId: string
+    workstation: Workstation | null
+    equipment: Equipment[]
+    employees: Employee[]
+    issues: any[]
+    equipmentById: Map<string, Equipment>
+    isAssigningWorkstationId: string | null
+    isSavingIntervalId: string | null
+    isSavingCpuThermalId: string | null
+    isSavingGpuThermalId: string | null
+    onAssignWorkstation: (userId: string | null) => Promise<void>
+    onOpenAssignDialog: (wsId: string) => void
+    onUnassignEquipment: (equipmentId: string) => Promise<void>
+    onToggleMaintenance: (equipmentId: string, enabled: boolean) => Promise<void>
+    onSaveInterval: (equipmentId: string, payload: { intervalDays: number; lastCleanedAt: string | null }) => Promise<void>
+    onSaveCpuThermal: (equipmentId: string, payload: { changedAt: string | null; intervalDays: number | null; type: string | null; note: string | null }) => Promise<void>
+    onSaveGpuThermal: (equipmentId: string, payload: { changedAt: string | null; intervalDays: number | null; type: string | null; note: string | null }) => Promise<void>
+    renderEquipmentIcon: (type: string) => React.ReactNode
+    renderIssueStatusBadge: (status: string) => React.ReactNode
+}
+
+const WorkstationDetailsDialog = memo(function WorkstationDetailsDialog({
+    open,
+    onOpenChange,
+    clubId,
+    workstation,
+    equipment,
+    employees,
+    issues,
+    equipmentById,
+    isAssigningWorkstationId,
+    isSavingIntervalId,
+    isSavingCpuThermalId,
+    isSavingGpuThermalId,
+    onAssignWorkstation,
+    onOpenAssignDialog,
+    onUnassignEquipment,
+    onToggleMaintenance,
+    onSaveInterval,
+    onSaveCpuThermal,
+    onSaveGpuThermal,
+    renderEquipmentIcon,
+    renderIssueStatusBadge,
+}: WorkstationDetailsDialogProps) {
+    const [intervalDrafts, setIntervalDrafts] = useState<Record<string, string>>({})
+    const [lastCleanedDrafts, setLastCleanedDrafts] = useState<Record<string, string>>({})
+    const [cpuThermalPasteDateDrafts, setCpuThermalPasteDateDrafts] = useState<Record<string, string>>({})
+    const [cpuThermalPasteIntervalDrafts, setCpuThermalPasteIntervalDrafts] = useState<Record<string, string>>({})
+    const [cpuThermalPasteTypeDrafts, setCpuThermalPasteTypeDrafts] = useState<Record<string, string>>({})
+    const [cpuThermalPasteNoteDrafts, setCpuThermalPasteNoteDrafts] = useState<Record<string, string>>({})
+    const [gpuThermalPasteDateDrafts, setGpuThermalPasteDateDrafts] = useState<Record<string, string>>({})
+    const [gpuThermalPasteIntervalDrafts, setGpuThermalPasteIntervalDrafts] = useState<Record<string, string>>({})
+    const [gpuThermalPasteTypeDrafts, setGpuThermalPasteTypeDrafts] = useState<Record<string, string>>({})
+    const [gpuThermalPasteNoteDrafts, setGpuThermalPasteNoteDrafts] = useState<Record<string, string>>({})
+
+    useEffect(() => {
+        if (!open || !workstation) return
+
+        const drafts: Record<string, string> = {}
+        const cleanedDrafts: Record<string, string> = {}
+        const cpuDateDrafts: Record<string, string> = {}
+        const cpuIntervalDraftsMap: Record<string, string> = {}
+        const cpuTypeDrafts: Record<string, string> = {}
+        const cpuNoteDrafts: Record<string, string> = {}
+        const gpuDateDrafts: Record<string, string> = {}
+        const gpuIntervalDraftsMap: Record<string, string> = {}
+        const gpuTypeDrafts: Record<string, string> = {}
+        const gpuNoteDrafts: Record<string, string> = {}
+
+        for (const item of equipment) {
+            drafts[item.id] = String(item.cleaning_interval_days ?? 30)
+
+            let cleanedValue = ""
+            if (item.last_cleaned_at) {
+                const d = new Date(item.last_cleaned_at)
+                cleanedValue = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+            }
+            cleanedDrafts[item.id] = cleanedValue
+
+            let cpuDateValue = ""
+            if (item.cpu_thermal_paste_last_changed_at) {
+                const d = new Date(item.cpu_thermal_paste_last_changed_at)
+                cpuDateValue = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+            }
+            cpuDateDrafts[item.id] = cpuDateValue
+            cpuIntervalDraftsMap[item.id] = String(item.cpu_thermal_paste_interval_days ?? 365)
+            cpuTypeDrafts[item.id] = item.cpu_thermal_paste_type ?? ""
+            cpuNoteDrafts[item.id] = item.cpu_thermal_paste_note ?? ""
+
+            let gpuDateValue = ""
+            if (item.gpu_thermal_paste_last_changed_at) {
+                const d = new Date(item.gpu_thermal_paste_last_changed_at)
+                gpuDateValue = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+            }
+            gpuDateDrafts[item.id] = gpuDateValue
+            gpuIntervalDraftsMap[item.id] = String(item.gpu_thermal_paste_interval_days ?? 365)
+            gpuTypeDrafts[item.id] = item.gpu_thermal_paste_type ?? ""
+            gpuNoteDrafts[item.id] = item.gpu_thermal_paste_note ?? ""
+        }
+
+        setIntervalDrafts(drafts)
+        setLastCleanedDrafts(cleanedDrafts)
+        setCpuThermalPasteDateDrafts(cpuDateDrafts)
+        setCpuThermalPasteIntervalDrafts(cpuIntervalDraftsMap)
+        setCpuThermalPasteTypeDrafts(cpuTypeDrafts)
+        setCpuThermalPasteNoteDrafts(cpuNoteDrafts)
+        setGpuThermalPasteDateDrafts(gpuDateDrafts)
+        setGpuThermalPasteIntervalDrafts(gpuIntervalDraftsMap)
+        setGpuThermalPasteTypeDrafts(gpuTypeDrafts)
+        setGpuThermalPasteNoteDrafts(gpuNoteDrafts)
+    }, [equipment, open, workstation])
+
+    const primaryEquipment = useMemo(() => {
+        const priority = ["PC", "CONSOLE", "TV"]
+        for (const type of priority) {
+            const found = equipment.find(item => item.type === type)
+            if (found) return found
+        }
+        return equipment[0] || null
+    }, [equipment])
+
+    const primaryLabel = useMemo(() => {
+        if (!primaryEquipment) return "Основное устройство"
+        if (primaryEquipment.type === "CONSOLE") return "Основная консоль"
+        if (primaryEquipment.type === "TV") return "Основной дисплей"
+        return "Основной ПК"
+    }, [primaryEquipment])
+
+    const primaryDescription = useMemo(() => {
+        if (!primaryEquipment) return "Регулярность чистки"
+        if (primaryEquipment.type === "CONSOLE") return "Регулярность чистки консоли"
+        if (primaryEquipment.type === "TV") return "Регулярность чистки дисплея"
+        return "Регулярность чистки рабочего места"
+    }, [primaryEquipment])
+
+    const thermalEligible = useMemo(() => {
+        return primaryEquipment ? ["PC", "CONSOLE"].includes(primaryEquipment.type) : false
+    }, [primaryEquipment])
+
+    const gpuEligible = useMemo(() => {
+        return primaryEquipment ? primaryEquipment.type === "PC" : false
+    }, [primaryEquipment])
+
+    const peripheralEquipment = useMemo(() => {
+        if (!primaryEquipment) return equipment
+        return equipment.filter(item => item.id !== primaryEquipment.id)
+    }, [equipment, primaryEquipment])
+
+    const workplaceIssues = useMemo(() => {
+        const equipmentIds = new Set(equipment.map(item => item.id))
+        return issues.filter(issue => equipmentIds.has(issue.equipment_id)).sort(sortWorkplaceIssues)
+    }, [equipment, issues])
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="sm:max-w-[900px] max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                    <DialogTitle>{workstation ? `Место ${workstation.name}` : "Место"}</DialogTitle>
+                    <DialogDescription>
+                        {workstation ? `${workstation.zone} • ${equipment.length} устройств` : ""}
+                    </DialogDescription>
+                </DialogHeader>
+
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                    <Label className="text-xs text-muted-foreground">Ответственный</Label>
+                    <Select
+                        value={workstation?.assigned_user_id || "none"}
+                        onValueChange={(val) => onAssignWorkstation(val === "none" ? null : val)}
+                        disabled={isAssigningWorkstationId === workstation?.id}
+                    >
+                        <SelectTrigger className="w-full sm:w-[260px]">
+                            <SelectValue placeholder="Не назначено" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="none">⛔ Не требует обслуживания</SelectItem>
+                            {employees.map(emp => (
+                                <SelectItem key={emp.id} value={emp.id}>{emp.full_name}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
+
+                <Tabs defaultValue="equipment" className="pt-2">
+                    <TabsList className="w-full justify-start bg-transparent p-0 h-auto gap-4 border-b rounded-none">
+                        <TabsTrigger value="equipment" variant="underline" className="px-0">Оборудование</TabsTrigger>
+                        <TabsTrigger value="maintenance" variant="underline" className="px-0">Обслуживание</TabsTrigger>
+                        <TabsTrigger value="issues" variant="underline" className="px-0">Инциденты</TabsTrigger>
+                    </TabsList>
+
+                    <TabsContent value="equipment" className="mt-4">
+                        <div className="flex items-center justify-between gap-3">
+                            <div className="min-w-0">
+                                <div className="text-sm font-semibold text-slate-900">Оборудование на месте</div>
+                                <div className="text-xs text-muted-foreground truncate">Добавляй со склада, удаление — отправка на склад</div>
+                            </div>
+                            <Button
+                                size="sm"
+                                className="shrink-0"
+                                onClick={() => {
+                                    if (workstation) onOpenAssignDialog(workstation.id)
+                                }}
+                            >
+                                <Plus className="h-4 w-4 mr-1.5" />
+                                Добавить
+                            </Button>
+                        </div>
+
+                        <div className="mt-4 space-y-4">
+                            <Card className="border-slate-200">
+                                <CardHeader className="pb-2">
+                                    <CardTitle className="text-base">{primaryLabel}</CardTitle>
+                                    <CardDescription>{primaryDescription}</CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                    {!primaryEquipment ? (
+                                        <div className="flex items-center justify-between gap-3 rounded-lg border border-dashed border-slate-200 p-4">
+                                            <div className="text-sm text-muted-foreground">Основное устройство не назначено</div>
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                onClick={() => {
+                                                    if (workstation) onOpenAssignDialog(workstation.id)
+                                                }}
+                                            >
+                                                Назначить
+                                            </Button>
+                                        </div>
+                                    ) : (
+                                        <div className="flex items-center justify-between gap-3 rounded-lg border border-slate-100 bg-slate-50 p-4">
+                                            <div className="flex items-center gap-3 min-w-0">
+                                                <div className="h-10 w-10 rounded-lg bg-white border flex items-center justify-center text-slate-500 shrink-0 shadow-sm">
+                                                    {renderEquipmentIcon(primaryEquipment.type)}
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <div className="flex items-center gap-2 flex-wrap">
+                                                        <p className="text-sm font-semibold truncate max-w-[420px]">{primaryEquipment.name}</p>
+                                                        <Badge variant="outline" className="text-[10px] h-5 px-1 bg-white text-slate-500 border-slate-200 font-normal">
+                                                            {primaryEquipment.type_name || primaryEquipment.type}
+                                                        </Badge>
+                                                    </div>
+                                                    <div className="text-[10px] text-muted-foreground truncate">{primaryEquipment.brand} {primaryEquipment.model}</div>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-2 shrink-0">
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => onUnassignEquipment(primaryEquipment.id)}
+                                                >
+                                                    <X className="h-4 w-4 mr-1.5" />
+                                                    На склад
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </CardContent>
+                            </Card>
+
+                            <Card className="border-slate-200">
+                                <CardHeader className="pb-2">
+                                    <CardTitle className="text-base">Периферия</CardTitle>
+                                    <CardDescription>Устройства, привязанные к месту</CardDescription>
+                                </CardHeader>
+                                <CardContent className="space-y-2">
+                                    {peripheralEquipment.length === 0 ? (
+                                        <div className="text-sm text-muted-foreground">Периферия не назначена</div>
+                                    ) : (
+                                        peripheralEquipment.map(item => (
+                                            <div key={item.id} className="flex items-center justify-between gap-3 rounded-lg border border-slate-100 bg-white p-3">
+                                                <div className="flex items-center gap-3 min-w-0">
+                                                    <div className="h-9 w-9 rounded-lg bg-slate-50 border flex items-center justify-center text-slate-500 shrink-0">
+                                                        {renderEquipmentIcon(item.type)}
+                                                    </div>
+                                                    <div className="min-w-0">
+                                                        <div className="flex items-center gap-2 flex-wrap">
+                                                            <p className="text-sm font-semibold truncate max-w-[420px] text-slate-900">{item.name}</p>
+                                                            <Badge variant="secondary" className="text-[10px] h-5 px-1.5 font-normal bg-slate-100 text-slate-600 hover:bg-slate-200">
+                                                                {item.type_name || item.type}
+                                                            </Badge>
+                                                        </div>
+                                                        <div className="text-[10px] text-muted-foreground truncate">{item.brand} {item.model}</div>
+                                                    </div>
+                                                </div>
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    className="shrink-0"
+                                                    onClick={() => onUnassignEquipment(item.id)}
+                                                >
+                                                    <X className="h-4 w-4 mr-1.5" />
+                                                    На склад
+                                                </Button>
+                                            </div>
+                                        ))
+                                    )}
+                                </CardContent>
+                            </Card>
+                        </div>
+                    </TabsContent>
+
+                    <TabsContent value="maintenance" className="mt-4">
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <div className="space-y-6">
+                                <Card className="border-slate-200">
+                                    <CardHeader className="pb-2">
+                                        <CardTitle className="text-base">{primaryLabel}</CardTitle>
+                                        <CardDescription>{primaryDescription}</CardDescription>
+                                    </CardHeader>
+                                    <CardContent className="space-y-3">
+                                        {!primaryEquipment ? (
+                                            <div className="text-sm text-muted-foreground">Основное устройство не назначено</div>
+                                        ) : (
+                                            <div className="flex flex-col gap-4 rounded-lg border border-slate-100 bg-slate-50 p-4">
+                                                <div className="flex items-center justify-between gap-3 w-full">
+                                                    <div className="flex items-center gap-3 min-w-0">
+                                                        <div className="h-10 w-10 rounded-lg bg-white border flex items-center justify-center text-slate-500 shrink-0 shadow-sm">
+                                                            {renderEquipmentIcon(primaryEquipment.type)}
+                                                        </div>
+                                                        <div className="min-w-0 flex-1">
+                                                            <p className="text-sm font-semibold truncate">{primaryEquipment.name}</p>
+                                                            <div className="flex items-center gap-2">
+                                                                <Badge variant="outline" className="text-[10px] h-5 px-1 bg-white text-slate-500 border-slate-200 font-normal">{primaryEquipment.type_name || primaryEquipment.type}</Badge>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex items-center gap-2 shrink-0">
+                                                        <Label htmlFor={`maintenance-${primaryEquipment.id}`} className="text-xs text-muted-foreground cursor-pointer">Обслуживание</Label>
+                                                        <input
+                                                            type="checkbox"
+                                                            id={`maintenance-${primaryEquipment.id}`}
+                                                            className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                                                            checked={primaryEquipment.maintenance_enabled !== false}
+                                                            onChange={(e) => onToggleMaintenance(primaryEquipment.id, e.target.checked)}
+                                                        />
+                                                    </div>
+                                                </div>
+
+                                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+                                                    <div className="flex flex-col gap-1.5 sm:col-span-2">
+                                                        <Label className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Посл. чистка</Label>
+                                                        <Input
+                                                            type="date"
+                                                            className="w-full h-9 text-xs bg-white"
+                                                            value={lastCleanedDrafts[primaryEquipment.id] ?? ""}
+                                                            onChange={(e) => setLastCleanedDrafts(prev => ({ ...prev, [primaryEquipment.id]: e.target.value }))}
+                                                        />
+                                                    </div>
+                                                    <div className="flex flex-col gap-1.5">
+                                                        <Label className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Интервал (дн.)</Label>
+                                                        <Input
+                                                            type="number"
+                                                            min={1}
+                                                            className="w-full h-9 text-xs bg-white"
+                                                            value={intervalDrafts[primaryEquipment.id] ?? String(primaryEquipment.cleaning_interval_days ?? 30)}
+                                                            onChange={(e) => setIntervalDrafts(prev => ({ ...prev, [primaryEquipment.id]: e.target.value }))}
+                                                        />
+                                                    </div>
+                                                    <div className="sm:col-span-3">
+                                                        <Button
+                                                            size="sm"
+                                                            className="h-9 w-full bg-slate-900 text-white hover:bg-slate-800"
+                                                            disabled={isSavingIntervalId === primaryEquipment.id}
+                                                            onClick={() => onSaveInterval(primaryEquipment.id, {
+                                                                intervalDays: parseInt(intervalDrafts[primaryEquipment.id] ?? String(primaryEquipment.cleaning_interval_days ?? 30), 10),
+                                                                lastCleanedAt: lastCleanedDrafts[primaryEquipment.id] || null
+                                                            })}
+                                                        >
+                                                            {isSavingIntervalId === primaryEquipment.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Сохранить"}
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </CardContent>
+                                </Card>
+
+                                <Card className="border-slate-200">
+                                    <CardHeader className="pb-2">
+                                        <CardTitle className="text-base">Процессор</CardTitle>
+                                        <CardDescription>Обслуживание CPU (термопаста)</CardDescription>
+                                    </CardHeader>
+                                    <CardContent className="space-y-3">
+                                        {!primaryEquipment ? (
+                                            <div className="text-sm text-muted-foreground">Основное устройство не назначено</div>
+                                        ) : !thermalEligible ? (
+                                            <div className="text-sm text-muted-foreground">Доступно для ПК и консолей</div>
+                                        ) : (
+                                            <div className="space-y-3">
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                                    <div className="space-y-1">
+                                                        <Label className="text-xs text-muted-foreground">Дата обслуживания</Label>
+                                                        <Input
+                                                            type="date"
+                                                            value={cpuThermalPasteDateDrafts[primaryEquipment.id] ?? ""}
+                                                            onChange={(e) => setCpuThermalPasteDateDrafts(prev => ({ ...prev, [primaryEquipment.id]: e.target.value }))}
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-1">
+                                                        <Label className="text-xs text-muted-foreground">Интервал (дней)</Label>
+                                                        <Input
+                                                            type="number"
+                                                            min={1}
+                                                            value={cpuThermalPasteIntervalDrafts[primaryEquipment.id] ?? ""}
+                                                            onChange={(e) => setCpuThermalPasteIntervalDrafts(prev => ({ ...prev, [primaryEquipment.id]: e.target.value }))}
+                                                        />
+                                                    </div>
+                                                </div>
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                                    <div className="space-y-1">
+                                                        <Label className="text-xs text-muted-foreground">Материал</Label>
+                                                        <Input
+                                                            placeholder="Arctic MX-4"
+                                                            value={cpuThermalPasteTypeDrafts[primaryEquipment.id] ?? ""}
+                                                            onChange={(e) => setCpuThermalPasteTypeDrafts(prev => ({ ...prev, [primaryEquipment.id]: e.target.value }))}
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-1">
+                                                        <Label className="text-xs text-muted-foreground">Заметка</Label>
+                                                        <Input
+                                                            placeholder="Например, жидкий металл"
+                                                            value={cpuThermalPasteNoteDrafts[primaryEquipment.id] ?? ""}
+                                                            onChange={(e) => setCpuThermalPasteNoteDrafts(prev => ({ ...prev, [primaryEquipment.id]: e.target.value }))}
+                                                        />
+                                                    </div>
+                                                </div>
+                                                <Button
+                                                    size="sm"
+                                                    className="h-8"
+                                                    disabled={isSavingCpuThermalId === primaryEquipment.id}
+                                                    onClick={() => onSaveCpuThermal(primaryEquipment.id, {
+                                                        changedAt: cpuThermalPasteDateDrafts[primaryEquipment.id] || null,
+                                                        intervalDays: cpuThermalPasteIntervalDrafts[primaryEquipment.id] ? parseInt(cpuThermalPasteIntervalDrafts[primaryEquipment.id], 10) : null,
+                                                        type: cpuThermalPasteTypeDrafts[primaryEquipment.id] || null,
+                                                        note: cpuThermalPasteNoteDrafts[primaryEquipment.id] || null
+                                                    })}
+                                                >
+                                                    {isSavingCpuThermalId === primaryEquipment.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Сохранить"}
+                                                </Button>
+                                            </div>
+                                        )}
+                                    </CardContent>
+                                </Card>
+
+                                {gpuEligible && (
+                                    <Card className="border-slate-200">
+                                        <CardHeader className="pb-2">
+                                            <CardTitle className="text-base">Видеокарта</CardTitle>
+                                            <CardDescription>Обслуживание GPU (термопаста/термопрокладки)</CardDescription>
+                                        </CardHeader>
+                                        <CardContent className="space-y-3">
+                                            {!primaryEquipment ? (
+                                                <div className="text-sm text-muted-foreground">Основное устройство не назначено</div>
+                                            ) : (
+                                                <div className="space-y-3">
+                                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                                        <div className="space-y-1">
+                                                            <Label className="text-xs text-muted-foreground">Дата обслуживания</Label>
+                                                            <Input
+                                                                type="date"
+                                                                value={gpuThermalPasteDateDrafts[primaryEquipment.id] ?? ""}
+                                                                onChange={(e) => setGpuThermalPasteDateDrafts(prev => ({ ...prev, [primaryEquipment.id]: e.target.value }))}
+                                                            />
+                                                        </div>
+                                                        <div className="space-y-1">
+                                                            <Label className="text-xs text-muted-foreground">Интервал (дней)</Label>
+                                                            <Input
+                                                                type="number"
+                                                                min={1}
+                                                                value={gpuThermalPasteIntervalDrafts[primaryEquipment.id] ?? ""}
+                                                                onChange={(e) => setGpuThermalPasteIntervalDrafts(prev => ({ ...prev, [primaryEquipment.id]: e.target.value }))}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                                        <div className="space-y-1">
+                                                            <Label className="text-xs text-muted-foreground">Материал</Label>
+                                                            <Input
+                                                                placeholder="Термопаста/прокладки"
+                                                                value={gpuThermalPasteTypeDrafts[primaryEquipment.id] ?? ""}
+                                                                onChange={(e) => setGpuThermalPasteTypeDrafts(prev => ({ ...prev, [primaryEquipment.id]: e.target.value }))}
+                                                            />
+                                                        </div>
+                                                        <div className="space-y-1">
+                                                            <Label className="text-xs text-muted-foreground">Заметка</Label>
+                                                            <Input
+                                                                placeholder="Например, замена прокладок"
+                                                                value={gpuThermalPasteNoteDrafts[primaryEquipment.id] ?? ""}
+                                                                onChange={(e) => setGpuThermalPasteNoteDrafts(prev => ({ ...prev, [primaryEquipment.id]: e.target.value }))}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                    <Button
+                                                        size="sm"
+                                                        className="h-8"
+                                                        disabled={isSavingGpuThermalId === primaryEquipment.id}
+                                                        onClick={() => onSaveGpuThermal(primaryEquipment.id, {
+                                                            changedAt: gpuThermalPasteDateDrafts[primaryEquipment.id] || null,
+                                                            intervalDays: gpuThermalPasteIntervalDrafts[primaryEquipment.id] ? parseInt(gpuThermalPasteIntervalDrafts[primaryEquipment.id], 10) : null,
+                                                            type: gpuThermalPasteTypeDrafts[primaryEquipment.id] || null,
+                                                            note: gpuThermalPasteNoteDrafts[primaryEquipment.id] || null
+                                                        })}
+                                                    >
+                                                        {isSavingGpuThermalId === primaryEquipment.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Сохранить"}
+                                                    </Button>
+                                                </div>
+                                            )}
+                                        </CardContent>
+                                    </Card>
+                                )}
+                            </div>
+
+                            <Card className="border-slate-200">
+                                <CardHeader className="pb-2">
+                                    <CardTitle className="text-base">Периферия</CardTitle>
+                                    <CardDescription>Регулярность чистки для устройств на месте</CardDescription>
+                                </CardHeader>
+                                <CardContent className="space-y-3">
+                                    {peripheralEquipment.length === 0 ? (
+                                        <div className="text-sm text-muted-foreground">Периферия не назначена</div>
+                                    ) : (
+                                        peripheralEquipment.map(item => (
+                                            <div key={item.id} className="rounded-lg border border-slate-100 bg-white p-3 space-y-3">
+                                                <div className="flex items-start justify-between gap-3">
+                                                    <div className="flex items-center gap-3 min-w-0">
+                                                        <div className="h-10 w-10 rounded-lg bg-slate-50 border flex items-center justify-center text-slate-500 shrink-0">
+                                                            {renderEquipmentIcon(item.type)}
+                                                        </div>
+                                                        <div className="min-w-0">
+                                                            <p className="text-sm font-semibold truncate text-slate-900">{item.name}</p>
+                                                            <div className="flex items-center gap-2 mt-0.5">
+                                                                <Badge variant="secondary" className="text-[10px] h-5 px-1.5 font-normal bg-slate-100 text-slate-600 hover:bg-slate-200">{item.type_name || item.type}</Badge>
+                                                                <span className="text-[10px] text-muted-foreground truncate">{item.brand} {item.model}</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex items-center gap-2 shrink-0">
+                                                        <Label className="text-xs text-muted-foreground">Обслуживание</Label>
+                                                        <input
+                                                            type="checkbox"
+                                                            className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                                                            checked={item.maintenance_enabled !== false}
+                                                            onChange={(e) => onToggleMaintenance(item.id, e.target.checked)}
+                                                        />
+                                                    </div>
+                                                </div>
+
+                                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+                                                    <div className="flex flex-col gap-1.5 sm:col-span-2">
+                                                        <Label className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Посл. чистка</Label>
+                                                        <Input
+                                                            type="date"
+                                                            className="h-9 text-xs"
+                                                            value={lastCleanedDrafts[item.id] ?? ""}
+                                                            onChange={(e) => setLastCleanedDrafts(prev => ({ ...prev, [item.id]: e.target.value }))}
+                                                        />
+                                                    </div>
+                                                    <div className="flex flex-col gap-1.5">
+                                                        <Label className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Интервал</Label>
+                                                        <Input
+                                                            type="number"
+                                                            min={1}
+                                                            className="h-9 text-xs"
+                                                            value={intervalDrafts[item.id] ?? String(item.cleaning_interval_days ?? 30)}
+                                                            onChange={(e) => setIntervalDrafts(prev => ({ ...prev, [item.id]: e.target.value }))}
+                                                        />
+                                                    </div>
+                                                    <div className="sm:col-span-3">
+                                                        <Button
+                                                            size="sm"
+                                                            className="h-9 w-full bg-slate-900 text-white hover:bg-slate-800"
+                                                            disabled={isSavingIntervalId === item.id}
+                                                            onClick={() => onSaveInterval(item.id, {
+                                                                intervalDays: parseInt(intervalDrafts[item.id] ?? String(item.cleaning_interval_days ?? 30), 10),
+                                                                lastCleanedAt: lastCleanedDrafts[item.id] || null
+                                                            })}
+                                                        >
+                                                            {isSavingIntervalId === item.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Сохранить"}
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))
+                                    )}
+                                </CardContent>
+                            </Card>
+                        </div>
+                    </TabsContent>
+
+                    <TabsContent value="issues" className="mt-4">
+                        <Card className="border-slate-200">
+                            <CardHeader className="pb-2">
+                                <CardTitle className="text-base flex items-center gap-2">
+                                    <AlertTriangle className="h-4 w-4 text-slate-500" />
+                                    История инцидентов
+                                </CardTitle>
+                                <CardDescription>Список всех проблем с оборудованием на этом месте</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                {workplaceIssues.length === 0 ? (
+                                    <div className="text-center py-8 text-muted-foreground border-2 border-dashed border-slate-100 rounded-lg">
+                                        <div className="h-10 w-10 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-2">
+                                            <Check className="h-5 w-5 text-green-500" />
+                                        </div>
+                                        <p className="text-sm">Инцидентов не зафиксировано</p>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-3">
+                                        {workplaceIssues.map(issue => {
+                                            const issueEquipment = equipmentById.get(issue.equipment_id)
+
+                                            return (
+                                                <div key={issue.id} className={cn(
+                                                    "flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-3 rounded-lg border",
+                                                    (issue.status === 'OPEN' || issue.status === 'IN_PROGRESS')
+                                                        ? "bg-rose-50 border-rose-100"
+                                                        : "bg-white border-slate-100"
+                                                )}>
+                                                    <div className="flex items-start gap-3 min-w-0">
+                                                        <div className={cn(
+                                                            "h-9 w-9 rounded-lg border flex items-center justify-center shrink-0 mt-0.5",
+                                                            (issue.status === 'OPEN' || issue.status === 'IN_PROGRESS')
+                                                                ? "bg-white border-rose-200 text-rose-500"
+                                                                : "bg-slate-50 border-slate-200 text-slate-400"
+                                                        )}>
+                                                            {issueEquipment ? renderEquipmentIcon(issueEquipment.type) : <Wrench className="h-4 w-4" />}
+                                                        </div>
+                                                        <div className="min-w-0 space-y-1">
+                                                            <div className="flex items-center gap-2 flex-wrap">
+                                                                <p className="text-sm font-semibold truncate text-slate-900">{issue.title}</p>
+                                                                {renderIssueStatusBadge(issue.status)}
+                                                            </div>
+                                                            <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
+                                                                <span className="font-medium text-slate-600">{issueEquipment?.name}</span>
+                                                                <span>•</span>
+                                                                <span>{new Date(issue.created_at).toLocaleDateString('ru-RU')}</span>
+                                                                <span>•</span>
+                                                                <span className="flex items-center gap-1">
+                                                                    <User className="h-3 w-3" />
+                                                                    {issue.reported_by_name}
+                                                                </span>
+                                                            </div>
+                                                            {(issue.status === 'OPEN' || issue.status === 'IN_PROGRESS') && (
+                                                                <p className="text-xs text-rose-700 line-clamp-1">{issue.description}</p>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex items-center gap-2 shrink-0">
+                                                        {issue.assigned_to_name && (issue.status === 'OPEN' || issue.status === 'IN_PROGRESS') && (
+                                                            <Badge variant="outline" className="bg-white text-slate-600 font-normal">
+                                                                <User className="h-3 w-3 mr-1" />
+                                                                {issue.assigned_to_name}
+                                                            </Badge>
+                                                        )}
+                                                        <Link href={`/clubs/${clubId}/equipment/issues`} className="text-xs font-medium text-primary hover:underline">
+                                                            Перейти
+                                                        </Link>
+                                                    </div>
+                                                </div>
+                                            )
+                                        })}
+                                    </div>
+                                )}
+                            </CardContent>
+                        </Card>
+                    </TabsContent>
+                </Tabs>
+            </DialogContent>
+        </Dialog>
+    )
+})
+
+const ZoneSection = memo(function ZoneSection({
+    zone,
+    workstations,
+    equipmentByWorkstationId,
+    activeIssueCountByWorkstationId,
+    activeIssueCountByEquipmentId,
+    zoneIssuesCount,
+    onOpenDetails,
+    onEdit,
+    onDelete,
+    onOpenAssignDialog,
+    onCreate,
+    onUnassignEquipment,
+    renderEquipmentIcon,
+}: ZoneSectionProps) {
+    return (
+        <section className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="group flex items-center justify-between px-2 sticky top-0 z-10 bg-background/95 backdrop-blur py-2 border-b">
+                <h2 className="text-lg font-black uppercase tracking-widest text-slate-500 flex items-center gap-3">
+                    <Layers className="h-5 w-5 text-primary" />
+                    {zone}
+                    <Badge variant="secondary" className="bg-slate-100 text-slate-600 border-none px-2">{workstations.length}</Badge>
+                    {zoneIssuesCount > 0 ? (
+                        <Badge variant="outline" className="ml-2 gap-1 flex items-center bg-orange-50 text-orange-700 border-orange-200">
+                            <AlertTriangle className="h-3 w-3" />
+                            {zoneIssuesCount} проблем
+                        </Badge>
+                    ) : null}
+                </h2>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                {workstations.map(ws => {
+                    const wsEquipment = equipmentByWorkstationId.get(ws.id) ?? []
+                    const wsIssueCount = activeIssueCountByWorkstationId.get(ws.id) ?? 0
+
+                    return (
+                        <Card key={ws.id} className={cn(
+                            "group hover:border-primary/50 transition-all border-slate-200 shadow-sm overflow-hidden flex flex-col h-full cursor-pointer",
+                            wsIssueCount > 0 && "border-orange-200 bg-orange-50/10"
+                        )} onClick={() => onOpenDetails(ws.id)}>
+                            <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between space-y-0 bg-slate-50/50 border-b border-slate-100">
+                                <div className="flex items-center gap-3">
+                                    <div className={cn(
+                                        "h-10 w-10 bg-white rounded-xl border flex items-center justify-center text-slate-400 font-bold shadow-sm relative",
+                                        wsIssueCount > 0 && "border-orange-200 text-orange-500"
+                                    )}>
+                                        {ws.name.replace(/[^0-9]/g, '') || <Monitor className="h-5 w-5" />}
+                                        {wsIssueCount > 0 && (
+                                            <div className="absolute -top-1 -right-1 h-2.5 w-2.5 bg-orange-500 rounded-full border-2 border-white animate-pulse" />
+                                        )}
+                                    </div>
+                                    <div>
+                                        <h4 className="font-bold text-slate-900 leading-tight flex items-center gap-2">
+                                            {ws.name}
+                                        </h4>
+                                        <div className="flex flex-col gap-0.5 mt-0.5">
+                                            <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">{wsEquipment.length} устройств</p>
+                                            <div className="flex items-center gap-1.5" title={ws.assigned_user_name || "Не назначено"}>
+                                                <User className={cn("h-3 w-3", ws.assigned_user_name ? "text-primary" : "text-slate-400")} />
+                                                <span className={cn("text-[10px] font-medium truncate max-w-[100px]", ws.assigned_user_name ? "text-primary" : "text-slate-400")}>
+                                                    {ws.assigned_user_name || "Не назначено"}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-primary" onClick={(e) => e.stopPropagation()}>
+                                            <MoreVertical className="h-4 w-4" />
+                                        </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end">
+                                        <DropdownMenuLabel>Действия</DropdownMenuLabel>
+                                        <DropdownMenuItem onClick={() => onEdit(ws)}>
+                                            <Pencil className="mr-2 h-4 w-4" /> Изменить название
+                                        </DropdownMenuItem>
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuItem className="text-rose-600" onClick={() => onDelete(ws.id)}>
+                                            <Trash2 className="mr-2 h-4 w-4" /> Удалить место
+                                        </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+                            </CardHeader>
+
+                            <CardContent className="p-4 flex-1 bg-white">
+                                {wsEquipment.length === 0 ? (
+                                    <div className="h-full min-h-[100px] flex flex-col items-center justify-center text-center border-2 border-dashed border-slate-100 rounded-lg p-4">
+                                        <Monitor className="h-8 w-8 text-slate-200 mb-2" />
+                                        <p className="text-xs text-muted-foreground font-medium">Оборудование не назначено</p>
+                                        <Button variant="link" size="sm" className="text-xs h-auto p-0 mt-1 text-primary" onClick={(e) => { e.stopPropagation(); onOpenAssignDialog(ws.id) }}>
+                                            Назначить сейчас
+                                        </Button>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-2">
+                                        {wsEquipment.map(item => {
+                                            const itemIssueCount = activeIssueCountByEquipmentId.get(item.id) ?? 0
+
+                                            return (
+                                                <div key={item.id} className={cn(
+                                                    "flex items-center justify-between p-2 pl-3 rounded-lg bg-slate-50 border border-slate-100 group/item hover:border-primary/20 hover:bg-primary/5 transition-all relative overflow-hidden",
+                                                    itemIssueCount > 0 && "bg-orange-50/30 border-orange-200 border-l-[3px] border-l-orange-500 pl-2.5"
+                                                )}>
+                                                    <div className="flex items-center gap-3 overflow-hidden relative z-10">
+                                                        <div className={cn(
+                                                            "h-8 w-8 rounded-md bg-white border flex items-center justify-center text-slate-500 shrink-0 relative",
+                                                            itemIssueCount > 0 && "border-orange-200 text-orange-500"
+                                                        )}>
+                                                            {renderEquipmentIcon(item.type)}
+                                                        </div>
+                                                        <div className="min-w-0">
+                                                            <p className={cn(
+                                                                "text-xs font-semibold truncate text-slate-700 group-hover/item:text-primary",
+                                                                itemIssueCount > 0 && "text-orange-700"
+                                                            )}>{item.name}</p>
+                                                            <div className="flex items-center gap-1.5">
+                                                                <p className="text-[10px] text-muted-foreground truncate">{item.brand} {item.model}</p>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="h-6 w-6 opacity-0 group-hover/item:opacity-100 text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-all"
+                                                        title="Убрать с места (на склад)"
+                                                        onClick={(e) => { e.stopPropagation(); onUnassignEquipment(item.id) }}
+                                                    >
+                                                        <X className="h-3 w-3" />
+                                                    </Button>
+                                                </div>
+                                            )
+                                        })}
+                                    </div>
+                                )}
+                            </CardContent>
+
+                            <CardFooter className="p-3 bg-slate-50 border-t border-slate-100">
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="w-full text-xs h-8 bg-white hover:bg-primary hover:text-primary-foreground hover:border-primary transition-all shadow-sm"
+                                    onClick={(e) => { e.stopPropagation(); onOpenAssignDialog(ws.id) }}
+                                >
+                                    <Plus className="h-3 w-3 mr-1.5" /> Добавить оборудование
+                                </Button>
+                            </CardFooter>
+                        </Card>
+                    )
+                })}
+
+                <button
+                    onClick={() => onCreate(zone)}
+                    className="border-2 border-dashed border-slate-200 rounded-xl flex flex-col items-center justify-center gap-3 text-slate-400 hover:border-primary/50 hover:text-primary hover:bg-primary/5 transition-all group min-h-[250px]"
+                >
+                    <div className="h-12 w-12 rounded-full bg-slate-100 group-hover:bg-primary/10 flex items-center justify-center transition-colors">
+                        <Plus className="h-6 w-6" />
+                    </div>
+                    <span className="text-sm font-bold uppercase tracking-widest">Новое место в {zone}</span>
+                </button>
+            </div>
+        </section>
+    )
+})
+
 export default function WorkplacesPage() {
     const { clubId } = useParams()
     const [workstations, setWorkstations] = useState<Workstation[]>([])
@@ -141,17 +1004,7 @@ export default function WorkplacesPage() {
 
     const [isDetailsOpen, setIsDetailsOpen] = useState(false)
     const [detailsWorkstationId, setDetailsWorkstationId] = useState<string | null>(null)
-    const [intervalDrafts, setIntervalDrafts] = useState<Record<string, string>>({})
-    const [lastCleanedDrafts, setLastCleanedDrafts] = useState<Record<string, string>>({})
     const [savingIntervalId, setSavingIntervalId] = useState<string | null>(null)
-    const [cpuThermalPasteDateDrafts, setCpuThermalPasteDateDrafts] = useState<Record<string, string>>({})
-    const [cpuThermalPasteIntervalDrafts, setCpuThermalPasteIntervalDrafts] = useState<Record<string, string>>({})
-    const [cpuThermalPasteTypeDrafts, setCpuThermalPasteTypeDrafts] = useState<Record<string, string>>({})
-    const [cpuThermalPasteNoteDrafts, setCpuThermalPasteNoteDrafts] = useState<Record<string, string>>({})
-    const [gpuThermalPasteDateDrafts, setGpuThermalPasteDateDrafts] = useState<Record<string, string>>({})
-    const [gpuThermalPasteIntervalDrafts, setGpuThermalPasteIntervalDrafts] = useState<Record<string, string>>({})
-    const [gpuThermalPasteTypeDrafts, setGpuThermalPasteTypeDrafts] = useState<Record<string, string>>({})
-    const [gpuThermalPasteNoteDrafts, setGpuThermalPasteNoteDrafts] = useState<Record<string, string>>({})
     const [savingCpuThermalId, setSavingCpuThermalId] = useState<string | null>(null)
     const [savingGpuThermalId, setSavingGpuThermalId] = useState<string | null>(null)
     const [isAssigningWorkstationId, setIsAssigningWorkstationId] = useState<string | null>(null)
@@ -236,20 +1089,20 @@ export default function WorkplacesPage() {
         setNewZoneName("")
     }
 
-    const handleCreate = (zone?: string) => {
+    const handleCreate = useCallback((zone?: string) => {
         setCreateZoneLocked(zone ?? null)
         setEditingWorkplace({
             name: '',
             zone: zone ?? (zones[0] ?? 'General')
         })
         setIsDialogOpen(true)
-    }
+    }, [zones])
 
-    const handleEdit = (ws: Workstation) => {
+    const handleEdit = useCallback((ws: Workstation) => {
         setCreateZoneLocked(null)
         setEditingWorkplace(ws)
         setIsDialogOpen(true)
-    }
+    }, [])
 
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -279,7 +1132,7 @@ export default function WorkplacesPage() {
         }
     }
 
-    const handleDelete = async (id: string) => {
+    const handleDelete = useCallback(async (id: string) => {
         const ws = workstations.find(w => w.id === id)
         if (ws && ws.equipment_count && ws.equipment_count > 0) {
             alert("Нельзя удалить рабочее место, к которому привязано оборудование. Сначала переместите оборудование на склад.")
@@ -296,16 +1149,16 @@ export default function WorkplacesPage() {
         } catch (error) {
             console.error("Error deleting workplace:", error)
         }
-    }
+    }, [clubId, fetchData, workstations])
 
     // --- Equipment Assignment Logic ---
 
-    const handleOpenAssignDialog = (wsId: string) => {
+    const handleOpenAssignDialog = useCallback((wsId: string) => {
         setSelectedWorkstationId(wsId)
         setIsAssignDialogOpen(true)
-    }
+    }, [])
 
-    const handleAssignEquipment = async (equipmentId: string) => {
+    const handleAssignEquipment = useCallback(async (equipmentId: string) => {
         if (!selectedWorkstationId) return
         
         try {
@@ -320,9 +1173,9 @@ export default function WorkplacesPage() {
         } catch (error) {
             console.error("Error assigning equipment:", error)
         }
-    }
+    }, [clubId, fetchData, selectedWorkstationId])
 
-    const handleUnassignEquipment = async (equipmentId: string) => {
+    const handleUnassignEquipment = useCallback(async (equipmentId: string) => {
         try {
             const res = await fetch(`/api/clubs/${clubId}/equipment/${equipmentId}`, {
                 method: "PATCH",
@@ -335,9 +1188,9 @@ export default function WorkplacesPage() {
         } catch (error) {
             console.error("Error unassigning equipment:", error)
         }
-    }
+    }, [clubId, fetchData])
 
-    const handleToggleMaintenance = async (equipmentId: string, enabled: boolean) => {
+    const handleToggleMaintenance = useCallback(async (equipmentId: string, enabled: boolean) => {
         try {
             const res = await fetch(`/api/clubs/${clubId}/equipment/${equipmentId}`, {
                 method: "PATCH",
@@ -354,77 +1207,84 @@ export default function WorkplacesPage() {
         } catch (error) {
             console.error("Error toggling maintenance:", error)
         }
-    }
+    }, [clubId, fetchData])
 
-    const handleOpenDetails = (wsId: string) => {
+    const equipmentByWorkstationId = useMemo(() => {
+        const map = new Map<string, Equipment[]>()
+
+        for (const item of equipment) {
+            if (!item.workstation_id) continue
+            const current = map.get(item.workstation_id)
+            if (current) current.push(item)
+            else map.set(item.workstation_id, [item])
+        }
+
+        return map
+    }, [equipment])
+
+    const equipmentById = useMemo(() => {
+        return new Map(equipment.map(item => [item.id, item]))
+    }, [equipment])
+
+    const workstationsByZone = useMemo(() => {
+        const map = new Map<string, Workstation[]>()
+
+        for (const workstation of workstations) {
+            const current = map.get(workstation.zone)
+            if (current) current.push(workstation)
+            else map.set(workstation.zone, [workstation])
+        }
+
+        return map
+    }, [workstations])
+
+    const activeIssueCountByEquipmentId = useMemo(() => {
+        const map = new Map<string, number>()
+
+        for (const issue of activeIssues) {
+            map.set(issue.equipment_id, (map.get(issue.equipment_id) ?? 0) + 1)
+        }
+
+        return map
+    }, [activeIssues])
+
+    const activeIssueCountByWorkstationId = useMemo(() => {
+        const map = new Map<string, number>()
+
+        equipmentByWorkstationId.forEach((items, workstationId) => {
+            const issuesCount = items.reduce((total, item) => total + (activeIssueCountByEquipmentId.get(item.id) ?? 0), 0)
+            if (issuesCount > 0) {
+                map.set(workstationId, issuesCount)
+            }
+        })
+
+        return map
+    }, [activeIssueCountByEquipmentId, equipmentByWorkstationId])
+
+    const zoneIssueCountByName = useMemo(() => {
+        const map = new Map<string, number>()
+
+        for (const zone of zones) {
+            const issuesCount = (workstationsByZone.get(zone) ?? []).reduce(
+                (total, workstation) => total + (activeIssueCountByWorkstationId.get(workstation.id) ?? 0),
+                0
+            )
+
+            if (issuesCount > 0) {
+                map.set(zone, issuesCount)
+            }
+        }
+
+        return map
+    }, [activeIssueCountByWorkstationId, workstationsByZone, zones])
+
+    const handleOpenDetails = useCallback((wsId: string) => {
         setDetailsWorkstationId(wsId)
-        const drafts: Record<string, string> = {}
-        const cleanedDrafts: Record<string, string> = {}
-        const cpuDateDrafts: Record<string, string> = {}
-        const cpuIntervalDraftsMap: Record<string, string> = {}
-        const cpuTypeDrafts: Record<string, string> = {}
-        const cpuNoteDrafts: Record<string, string> = {}
-        const gpuDateDrafts: Record<string, string> = {}
-        const gpuIntervalDraftsMap: Record<string, string> = {}
-        const gpuTypeDrafts: Record<string, string> = {}
-        const gpuNoteDrafts: Record<string, string> = {}
-
-        equipment
-            .filter(item => item.workstation_id === wsId)
-            .forEach(item => {
-                drafts[item.id] = String(item.cleaning_interval_days ?? 30)
-                
-                let cleanedValue = ""
-                if (item.last_cleaned_at) {
-                    const d = new Date(item.last_cleaned_at)
-                    cleanedValue = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-                }
-                cleanedDrafts[item.id] = cleanedValue
-
-                let cpuDateValue = ""
-                if (item.cpu_thermal_paste_last_changed_at) {
-                    const d = new Date(item.cpu_thermal_paste_last_changed_at)
-                    cpuDateValue = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-                }
-                cpuDateDrafts[item.id] = cpuDateValue
-                cpuIntervalDraftsMap[item.id] = String(item.cpu_thermal_paste_interval_days ?? 365)
-                cpuTypeDrafts[item.id] = item.cpu_thermal_paste_type ?? ""
-                cpuNoteDrafts[item.id] = item.cpu_thermal_paste_note ?? ""
-
-                let gpuDateValue = ""
-                if (item.gpu_thermal_paste_last_changed_at) {
-                    const d = new Date(item.gpu_thermal_paste_last_changed_at)
-                    gpuDateValue = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-                }
-                gpuDateDrafts[item.id] = gpuDateValue
-                gpuIntervalDraftsMap[item.id] = String(item.gpu_thermal_paste_interval_days ?? 365)
-                gpuTypeDrafts[item.id] = item.gpu_thermal_paste_type ?? ""
-                gpuNoteDrafts[item.id] = item.gpu_thermal_paste_note ?? ""
-            })
-        setIntervalDrafts(drafts)
-        setLastCleanedDrafts(cleanedDrafts)
-        setCpuThermalPasteDateDrafts(cpuDateDrafts)
-        setCpuThermalPasteIntervalDrafts(cpuIntervalDraftsMap)
-        setCpuThermalPasteTypeDrafts(cpuTypeDrafts)
-        setCpuThermalPasteNoteDrafts(cpuNoteDrafts)
-        setGpuThermalPasteDateDrafts(gpuDateDrafts)
-        setGpuThermalPasteIntervalDrafts(gpuIntervalDraftsMap)
-        setGpuThermalPasteTypeDrafts(gpuTypeDrafts)
-        setGpuThermalPasteNoteDrafts(gpuNoteDrafts)
         setIsDetailsOpen(true)
-    }
+    }, [])
 
-    const handleIntervalChange = (equipmentId: string, value: string) => {
-        setIntervalDrafts(prev => ({ ...prev, [equipmentId]: value }))
-    }
-
-    const handleLastCleanedChange = (equipmentId: string, value: string) => {
-        setLastCleanedDrafts(prev => ({ ...prev, [equipmentId]: value }))
-    }
-
-    const handleSaveInterval = async (equipmentId: string) => {
-        const raw = intervalDrafts[equipmentId]
-        const value = parseInt(raw, 10)
+    const handleSaveInterval = useCallback(async (equipmentId: string, payload: { intervalDays: number; lastCleanedAt: string | null }) => {
+        const value = payload.intervalDays
         if (!value || value < 1) return
 
         setSavingIntervalId(equipmentId)
@@ -434,7 +1294,7 @@ export default function WorkplacesPage() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ 
                     cleaning_interval_days: value,
-                    last_cleaned_at: lastCleanedDrafts[equipmentId] || null
+                    last_cleaned_at: payload.lastCleanedAt
                 })
             })
             if (res.ok) {
@@ -445,11 +1305,10 @@ export default function WorkplacesPage() {
         } finally {
             setSavingIntervalId(null)
         }
-    }
+    }, [clubId, fetchData])
 
-    const handleCpuThermalSave = async (equipmentId: string) => {
-        const intervalRaw = cpuThermalPasteIntervalDrafts[equipmentId]
-        const intervalValue = intervalRaw ? parseInt(intervalRaw, 10) : null
+    const handleCpuThermalSave = useCallback(async (equipmentId: string, payload: { changedAt: string | null; intervalDays: number | null; type: string | null; note: string | null }) => {
+        const intervalValue = payload.intervalDays
         if (intervalValue !== null && intervalValue < 1) return
 
         setSavingCpuThermalId(equipmentId)
@@ -458,10 +1317,10 @@ export default function WorkplacesPage() {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    cpu_thermal_paste_last_changed_at: cpuThermalPasteDateDrafts[equipmentId] || null,
+                    cpu_thermal_paste_last_changed_at: payload.changedAt,
                     cpu_thermal_paste_interval_days: intervalValue,
-                    cpu_thermal_paste_type: cpuThermalPasteTypeDrafts[equipmentId] || null,
-                    cpu_thermal_paste_note: cpuThermalPasteNoteDrafts[equipmentId] || null
+                    cpu_thermal_paste_type: payload.type,
+                    cpu_thermal_paste_note: payload.note
                 })
             })
             if (res.ok) {
@@ -472,11 +1331,10 @@ export default function WorkplacesPage() {
         } finally {
             setSavingCpuThermalId(null)
         }
-    }
+    }, [clubId, fetchData])
 
-    const handleGpuThermalSave = async (equipmentId: string) => {
-        const intervalRaw = gpuThermalPasteIntervalDrafts[equipmentId]
-        const intervalValue = intervalRaw ? parseInt(intervalRaw, 10) : null
+    const handleGpuThermalSave = useCallback(async (equipmentId: string, payload: { changedAt: string | null; intervalDays: number | null; type: string | null; note: string | null }) => {
+        const intervalValue = payload.intervalDays
         if (intervalValue !== null && intervalValue < 1) return
 
         setSavingGpuThermalId(equipmentId)
@@ -485,10 +1343,10 @@ export default function WorkplacesPage() {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    gpu_thermal_paste_last_changed_at: gpuThermalPasteDateDrafts[equipmentId] || null,
+                    gpu_thermal_paste_last_changed_at: payload.changedAt,
                     gpu_thermal_paste_interval_days: intervalValue,
-                    gpu_thermal_paste_type: gpuThermalPasteTypeDrafts[equipmentId] || null,
-                    gpu_thermal_paste_note: gpuThermalPasteNoteDrafts[equipmentId] || null
+                    gpu_thermal_paste_type: payload.type,
+                    gpu_thermal_paste_note: payload.note
                 })
             })
             if (res.ok) {
@@ -499,9 +1357,9 @@ export default function WorkplacesPage() {
         } finally {
             setSavingGpuThermalId(null)
         }
-    }
+    }, [clubId, fetchData])
 
-    const handleAssignWorkstation = async (userId: string | null) => {
+    const handleAssignWorkstation = useCallback(async (userId: string | null) => {
         if (!detailsWorkstationId) return
 
         setIsAssigningWorkstationId(detailsWorkstationId)
@@ -520,7 +1378,7 @@ export default function WorkplacesPage() {
         } finally {
             setIsAssigningWorkstationId(null)
         }
-    }
+    }, [clubId, detailsWorkstationId, fetchData])
 
     // Filter available equipment for assignment (items on storage or unassigned)
     const availableEquipment = useMemo(() => {
@@ -538,47 +1396,11 @@ export default function WorkplacesPage() {
     }, [workstations, detailsWorkstationId])
 
     const activeEquipment = useMemo(() => {
-        return equipment.filter(item => item.workstation_id === detailsWorkstationId)
-    }, [equipment, detailsWorkstationId])
+        if (!detailsWorkstationId) return []
+        return equipmentByWorkstationId.get(detailsWorkstationId) ?? []
+    }, [detailsWorkstationId, equipmentByWorkstationId])
 
-    const primaryEquipment = useMemo(() => {
-        const priority = ["PC", "CONSOLE", "TV"]
-        for (const type of priority) {
-            const found = activeEquipment.find(item => item.type === type)
-            if (found) return found
-        }
-        return activeEquipment[0] || null
-    }, [activeEquipment])
-
-    const primaryLabel = useMemo(() => {
-        if (!primaryEquipment) return "Основное устройство"
-        if (primaryEquipment.type === "CONSOLE") return "Основная консоль"
-        if (primaryEquipment.type === "TV") return "Основной дисплей"
-        return "Основной ПК"
-    }, [primaryEquipment])
-
-    const primaryDescription = useMemo(() => {
-        if (!primaryEquipment) return "Регулярность чистки"
-        if (primaryEquipment.type === "CONSOLE") return "Регулярность чистки консоли"
-        if (primaryEquipment.type === "TV") return "Регулярность чистки дисплея"
-        return "Регулярность чистки рабочего места"
-    }, [primaryEquipment])
-
-    const thermalEligible = useMemo(() => {
-        return primaryEquipment ? ["PC", "CONSOLE"].includes(primaryEquipment.type) : false
-    }, [primaryEquipment])
-
-    const gpuEligible = useMemo(() => {
-        return primaryEquipment ? primaryEquipment.type === "PC" : false
-    }, [primaryEquipment])
-
-    const peripheralEquipment = useMemo(() => {
-        if (!primaryEquipment) return activeEquipment
-        return activeEquipment.filter(item => item.id !== primaryEquipment.id)
-    }, [activeEquipment, primaryEquipment])
-
-    // Helper to get icon for equipment type
-    const getEquipmentIcon = (type: string) => {
+    const getEquipmentIcon = useCallback((type: string) => {
         switch(type) {
             case 'PC': return <Monitor className="h-4 w-4" />
             case 'MOUSE': return <MousePointer2 className="h-4 w-4" />
@@ -592,9 +1414,9 @@ export default function WorkplacesPage() {
             case 'CHAIR': return <Sofa className="h-4 w-4" />
             default: return <Wrench className="h-4 w-4" />
         }
-    }
+    }, [])
 
-    const getIssueStatusBadge = (status: string) => {
+    const getIssueStatusBadge = useCallback((status: string) => {
         switch (status) {
             case 'OPEN': return <Badge variant="secondary" className="bg-slate-200 text-slate-700 hover:bg-slate-300">Открыто</Badge>
             case 'IN_PROGRESS': return <Badge className="bg-blue-500 hover:bg-blue-600">В работе</Badge>
@@ -602,7 +1424,56 @@ export default function WorkplacesPage() {
             case 'CLOSED': return <Badge variant="outline" className="text-slate-500 border-slate-300">Закрыто</Badge>
             default: return null
         }
-    }
+    }, [])
+
+    const zonesContent = useMemo(() => {
+        if (zones.length === 0 && !isLoading) {
+            return (
+                <div className="text-center py-20 bg-slate-50 rounded-[40px] border-2 border-dashed border-slate-200">
+                    <div className="h-20 w-20 bg-white rounded-3xl flex items-center justify-center mx-auto mb-4 shadow-sm">
+                        <MapPin className="h-10 w-10 text-slate-300" />
+                    </div>
+                    <h3 className="text-lg font-bold">Зоны не созданы</h3>
+                    <p className="text-sm text-muted-foreground mb-6">Создайте первое рабочее место, чтобы организовать пространство клуба</p>
+                    <Button onClick={() => handleCreate()} variant="outline">Создать первое место</Button>
+                </div>
+            )
+        }
+
+        return zones.map(zone => (
+            <ZoneSection
+                key={zone}
+                zone={zone}
+                workstations={workstationsByZone.get(zone) ?? []}
+                equipmentByWorkstationId={equipmentByWorkstationId}
+                activeIssueCountByWorkstationId={activeIssueCountByWorkstationId}
+                activeIssueCountByEquipmentId={activeIssueCountByEquipmentId}
+                zoneIssuesCount={zoneIssueCountByName.get(zone) ?? 0}
+                onOpenDetails={handleOpenDetails}
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+                onOpenAssignDialog={handleOpenAssignDialog}
+                onCreate={handleCreate}
+                onUnassignEquipment={handleUnassignEquipment}
+                renderEquipmentIcon={getEquipmentIcon}
+            />
+        ))
+    }, [
+        activeIssueCountByEquipmentId,
+        activeIssueCountByWorkstationId,
+        equipmentByWorkstationId,
+        getEquipmentIcon,
+        handleCreate,
+        handleDelete,
+        handleEdit,
+        handleOpenAssignDialog,
+        handleOpenDetails,
+        handleUnassignEquipment,
+        isLoading,
+        workstationsByZone,
+        zoneIssueCountByName,
+        zones
+    ])
 
     return (
         <div className="p-8 space-y-8 max-w-[1600px] mx-auto">
@@ -635,703 +1506,35 @@ export default function WorkplacesPage() {
 
             {/* Zones Grid */}
             <div className="space-y-12">
-                {zones.length === 0 && !isLoading ? (
-                    <div className="text-center py-20 bg-slate-50 rounded-[40px] border-2 border-dashed border-slate-200">
-                        <div className="h-20 w-20 bg-white rounded-3xl flex items-center justify-center mx-auto mb-4 shadow-sm">
-                            <MapPin className="h-10 w-10 text-slate-300" />
-                        </div>
-                        <h3 className="text-lg font-bold">Зоны не созданы</h3>
-                        <p className="text-sm text-muted-foreground mb-6">Создайте первое рабочее место, чтобы организовать пространство клуба</p>
-                        <Button onClick={() => handleCreate()} variant="outline">Создать первое место</Button>
-                    </div>
-                ) : (
-                    zones.map(zone => (
-                        <section key={zone} className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                            <div className="group flex items-center justify-between px-2 sticky top-0 z-10 bg-background/95 backdrop-blur py-2 border-b">
-                                <h2 className="text-lg font-black uppercase tracking-widest text-slate-500 flex items-center gap-3">
-                                    <Layers className="h-5 w-5 text-primary" />
-                                    {zone}
-                                    <Badge variant="secondary" className="bg-slate-100 text-slate-600 border-none px-2">{workstations.filter(w => w.zone === zone).length}</Badge>
-                                    {(() => {
-                                        const zoneWorkstations = workstations.filter(w => w.zone === zone)
-                                        const zoneEquipmentIds = equipment
-                                            .filter(e => zoneWorkstations.some(w => w.id === e.workstation_id))
-                                            .map(e => e.id)
-                                        
-                                        const zoneIssuesCount = activeIssues.filter(issue => 
-                                            zoneEquipmentIds.includes(issue.equipment_id)
-                                        ).length
-
-                                        if (zoneIssuesCount > 0) {
-                                            return (
-                                                <Badge variant="outline" className="ml-2 gap-1 flex items-center bg-orange-50 text-orange-700 border-orange-200">
-                                                    <AlertTriangle className="h-3 w-3" />
-                                                    {zoneIssuesCount} проблем
-                                                </Badge>
-                                            )
-                                        }
-                                        return null
-                                    })()}
-                                </h2>
-                            </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                                {workstations.filter(w => w.zone === zone).map(ws => {
-                                    const wsEquipment = equipment.filter(e => e.workstation_id === ws.id)
-                                    const wsIssueCount = activeIssues.filter(issue => 
-                                        wsEquipment.some(e => e.id === issue.equipment_id)
-                                    ).length
-                                    
-                                    return (
-                                        <Card key={ws.id} className={cn(
-                                            "group hover:border-primary/50 transition-all border-slate-200 shadow-sm overflow-hidden flex flex-col h-full cursor-pointer",
-                                            wsIssueCount > 0 && "border-orange-200 bg-orange-50/10"
-                                        )} onClick={() => handleOpenDetails(ws.id)}>
-                                            <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between space-y-0 bg-slate-50/50 border-b border-slate-100">
-                                                <div className="flex items-center gap-3">
-                                                    <div className={cn(
-                                                        "h-10 w-10 bg-white rounded-xl border flex items-center justify-center text-slate-400 font-bold shadow-sm relative",
-                                                        wsIssueCount > 0 && "border-orange-200 text-orange-500"
-                                                    )}>
-                                                        {ws.name.replace(/[^0-9]/g, '') || <Monitor className="h-5 w-5" />}
-                                                        {wsIssueCount > 0 && (
-                                                            <div className="absolute -top-1 -right-1 h-2.5 w-2.5 bg-orange-500 rounded-full border-2 border-white animate-pulse" />
-                                                        )}
-                                                    </div>
-                                                    <div>
-                                                        <h4 className="font-bold text-slate-900 leading-tight flex items-center gap-2">
-                                                            {ws.name}
-                                                        </h4>
-                                                        <div className="flex flex-col gap-0.5 mt-0.5">
-                                                            <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">{wsEquipment.length} устройств</p>
-                                                            <div className="flex items-center gap-1.5" title={ws.assigned_user_name || "Не назначено"}>
-                                                                <User className={cn("h-3 w-3", ws.assigned_user_name ? "text-primary" : "text-slate-400")} />
-                                                                <span className={cn("text-[10px] font-medium truncate max-w-[100px]", ws.assigned_user_name ? "text-primary" : "text-slate-400")}>
-                                                                    {ws.assigned_user_name || "Не назначено"}
-                                                                </span>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                                <DropdownMenu>
-                                                    <DropdownMenuTrigger asChild>
-                                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-primary" onClick={(e) => e.stopPropagation()}>
-                                                            <MoreVertical className="h-4 w-4" />
-                                                        </Button>
-                                                    </DropdownMenuTrigger>
-                                                    <DropdownMenuContent align="end">
-                                                        <DropdownMenuLabel>Действия</DropdownMenuLabel>
-                                                        <DropdownMenuItem onClick={() => handleEdit(ws)}>
-                                                            <Pencil className="mr-2 h-4 w-4" /> Изменить название
-                                                        </DropdownMenuItem>
-                                                        <DropdownMenuSeparator />
-                                                        <DropdownMenuItem className="text-rose-600" onClick={() => handleDelete(ws.id)}>
-                                                            <Trash2 className="mr-2 h-4 w-4" /> Удалить место
-                                                        </DropdownMenuItem>
-                                                    </DropdownMenuContent>
-                                                </DropdownMenu>
-                                            </CardHeader>
-                                            
-                                            <CardContent className="p-4 flex-1 bg-white">
-                                                {wsEquipment.length === 0 ? (
-                                                    <div className="h-full min-h-[100px] flex flex-col items-center justify-center text-center border-2 border-dashed border-slate-100 rounded-lg p-4">
-                                                        <Monitor className="h-8 w-8 text-slate-200 mb-2" />
-                                                        <p className="text-xs text-muted-foreground font-medium">Оборудование не назначено</p>
-                                                        <Button variant="link" size="sm" className="text-xs h-auto p-0 mt-1 text-primary" onClick={(e) => { e.stopPropagation(); handleOpenAssignDialog(ws.id) }}>
-                                                            Назначить сейчас
-                                                        </Button>
-                                                    </div>
-                                                ) : (
-                                                    <div className="space-y-2">
-                                                        {wsEquipment.map(item => {
-                                                            const itemIssues = activeIssues.filter(i => i.equipment_id === item.id)
-                                                            return (
-                                                                <div key={item.id} className={cn(
-                                                                    "flex items-center justify-between p-2 pl-3 rounded-lg bg-slate-50 border border-slate-100 group/item hover:border-primary/20 hover:bg-primary/5 transition-all relative overflow-hidden",
-                                                                    itemIssues.length > 0 && "bg-orange-50/30 border-orange-200 border-l-[3px] border-l-orange-500 pl-2.5"
-                                                                )}>
-                                                                    <div className="flex items-center gap-3 overflow-hidden relative z-10">
-                                                                        <div className={cn(
-                                                                            "h-8 w-8 rounded-md bg-white border flex items-center justify-center text-slate-500 shrink-0 relative",
-                                                                            itemIssues.length > 0 && "border-orange-200 text-orange-500"
-                                                                        )}>
-                                                                            {getEquipmentIcon(item.type)}
-                                                                        </div>
-                                                                        <div className="min-w-0">
-                                                                            <p className={cn(
-                                                                                "text-xs font-semibold truncate text-slate-700 group-hover/item:text-primary",
-                                                                                itemIssues.length > 0 && "text-orange-700"
-                                                                            )}>{item.name}</p>
-                                                                            <div className="flex items-center gap-1.5">
-                                                                                <p className="text-[10px] text-muted-foreground truncate">{item.brand} {item.model}</p>
-                                                                            </div>
-                                                                        </div>
-                                                                    </div>
-                                                                    <Button 
-                                                                        variant="ghost" 
-                                                                        size="icon" 
-                                                                        className="h-6 w-6 opacity-0 group-hover/item:opacity-100 text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-all"
-                                                                        title="Убрать с места (на склад)"
-                                                                        onClick={(e) => { e.stopPropagation(); handleUnassignEquipment(item.id) }}
-                                                                    >
-                                                                        <X className="h-3 w-3" />
-                                                                    </Button>
-                                                                </div>
-                                                            )
-                                                        })}
-                                                    </div>
-                                                )}
-                                            </CardContent>
-                                            
-                                            <CardFooter className="p-3 bg-slate-50 border-t border-slate-100">
-                                                <Button 
-                                                    variant="outline" 
-                                                    size="sm" 
-                                                    className="w-full text-xs h-8 bg-white hover:bg-primary hover:text-primary-foreground hover:border-primary transition-all shadow-sm"
-                                                    onClick={(e) => { e.stopPropagation(); handleOpenAssignDialog(ws.id) }}
-                                                >
-                                                    <Plus className="h-3 w-3 mr-1.5" /> Добавить оборудование
-                                                </Button>
-                                            </CardFooter>
-                                        </Card>
-                                    )
-                                })}
-                                
-                                {/* Add New Workstation Button (Card Style) */}
-                                <button
-                                    onClick={() => handleCreate(zone)}
-                                    className="border-2 border-dashed border-slate-200 rounded-xl flex flex-col items-center justify-center gap-3 text-slate-400 hover:border-primary/50 hover:text-primary hover:bg-primary/5 transition-all group min-h-[250px]"
-                                >
-                                    <div className="h-12 w-12 rounded-full bg-slate-100 group-hover:bg-primary/10 flex items-center justify-center transition-colors">
-                                        <Plus className="h-6 w-6" />
-                                    </div>
-                                    <span className="text-sm font-bold uppercase tracking-widest">Новое место в {zone}</span>
-                                </button>
-                            </div>
-                        </section>
-                    ))
-                )}
+                {zonesContent}
             </div>
 
-            <Dialog
+            <WorkstationDetailsDialog
                 open={isDetailsOpen}
                 onOpenChange={(open) => {
                     setIsDetailsOpen(open)
                     if (!open) setDetailsWorkstationId(null)
                 }}
-            >
-                <DialogContent className="sm:max-w-[900px] max-h-[90vh] overflow-y-auto">
-                    <DialogHeader>
-                        <DialogTitle>{activeWorkstation ? `Место ${activeWorkstation.name}` : "Место"}</DialogTitle>
-                        <DialogDescription>
-                            {activeWorkstation ? `${activeWorkstation.zone} • ${activeEquipment.length} устройств` : ""}
-                        </DialogDescription>
-                    </DialogHeader>
-
-                    <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-                        <Label className="text-xs text-muted-foreground">Ответственный</Label>
-                        <Select
-                            value={activeWorkstation?.assigned_user_id || "none"}
-                            onValueChange={(val) => handleAssignWorkstation(val === "none" ? null : val)}
-                            disabled={isAssigningWorkstationId === detailsWorkstationId}
-                        >
-                            <SelectTrigger className="w-full sm:w-[260px]">
-                                <SelectValue placeholder="Не назначено" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="none">⛔ Не требует обслуживания</SelectItem>
-                                {employees.map(emp => (
-                                    <SelectItem key={emp.id} value={emp.id}>{emp.full_name}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    </div>
-
-                    <Tabs defaultValue="equipment" className="pt-2">
-                        <TabsList className="w-full justify-start bg-transparent p-0 h-auto gap-4 border-b rounded-none">
-                            <TabsTrigger value="equipment" variant="underline" className="px-0">Оборудование</TabsTrigger>
-                            <TabsTrigger value="maintenance" variant="underline" className="px-0">Обслуживание</TabsTrigger>
-                            <TabsTrigger value="issues" variant="underline" className="px-0">Инциденты</TabsTrigger>
-                        </TabsList>
-
-                        <TabsContent value="equipment" className="mt-4">
-                            <div className="flex items-center justify-between gap-3">
-                                <div className="min-w-0">
-                                    <div className="text-sm font-semibold text-slate-900">Оборудование на месте</div>
-                                    <div className="text-xs text-muted-foreground truncate">Добавляй со склада, удаление — отправка на склад</div>
-                                </div>
-                                <Button
-                                    size="sm"
-                                    className="shrink-0"
-                                    onClick={() => {
-                                        if (detailsWorkstationId) handleOpenAssignDialog(detailsWorkstationId)
-                                    }}
-                                >
-                                    <Plus className="h-4 w-4 mr-1.5" />
-                                    Добавить
-                                </Button>
-                            </div>
-
-                            <div className="mt-4 space-y-4">
-                                <Card className="border-slate-200">
-                                    <CardHeader className="pb-2">
-                                        <CardTitle className="text-base">{primaryLabel}</CardTitle>
-                                        <CardDescription>{primaryDescription}</CardDescription>
-                                    </CardHeader>
-                                    <CardContent>
-                                        {!primaryEquipment ? (
-                                            <div className="flex items-center justify-between gap-3 rounded-lg border border-dashed border-slate-200 p-4">
-                                                <div className="text-sm text-muted-foreground">Основное устройство не назначено</div>
-                                                <Button
-                                                    size="sm"
-                                                    variant="outline"
-                                                    onClick={() => {
-                                                        if (detailsWorkstationId) handleOpenAssignDialog(detailsWorkstationId)
-                                                    }}
-                                                >
-                                                    Назначить
-                                                </Button>
-                                            </div>
-                                        ) : (
-                                            <div className="flex items-center justify-between gap-3 rounded-lg border border-slate-100 bg-slate-50 p-4">
-                                                <div className="flex items-center gap-3 min-w-0">
-                                                    <div className="h-10 w-10 rounded-lg bg-white border flex items-center justify-center text-slate-500 shrink-0 shadow-sm">
-                                                        {getEquipmentIcon(primaryEquipment.type)}
-                                                    </div>
-                                                    <div className="min-w-0">
-                                                        <div className="flex items-center gap-2 flex-wrap">
-                                                            <p className="text-sm font-semibold truncate max-w-[420px]">{primaryEquipment.name}</p>
-                                                            <Badge variant="outline" className="text-[10px] h-5 px-1 bg-white text-slate-500 border-slate-200 font-normal">
-                                                                {primaryEquipment.type_name || primaryEquipment.type}
-                                                            </Badge>
-                                                        </div>
-                                                        <div className="text-[10px] text-muted-foreground truncate">{primaryEquipment.brand} {primaryEquipment.model}</div>
-                                                    </div>
-                                                </div>
-                                                <div className="flex items-center gap-2 shrink-0">
-                                                    <Button
-                                                        variant="outline"
-                                                        size="sm"
-                                                        onClick={() => handleUnassignEquipment(primaryEquipment.id)}
-                                                    >
-                                                        <X className="h-4 w-4 mr-1.5" />
-                                                        На склад
-                                                    </Button>
-                                                </div>
-                                            </div>
-                                        )}
-                                    </CardContent>
-                                </Card>
-
-                                <Card className="border-slate-200">
-                                    <CardHeader className="pb-2">
-                                        <CardTitle className="text-base">Периферия</CardTitle>
-                                        <CardDescription>Устройства, привязанные к месту</CardDescription>
-                                    </CardHeader>
-                                    <CardContent className="space-y-2">
-                                        {peripheralEquipment.length === 0 ? (
-                                            <div className="text-sm text-muted-foreground">Периферия не назначена</div>
-                                        ) : (
-                                            peripheralEquipment.map(item => (
-                                                <div key={item.id} className="flex items-center justify-between gap-3 rounded-lg border border-slate-100 bg-white p-3">
-                                                    <div className="flex items-center gap-3 min-w-0">
-                                                        <div className="h-9 w-9 rounded-lg bg-slate-50 border flex items-center justify-center text-slate-500 shrink-0">
-                                                            {getEquipmentIcon(item.type)}
-                                                        </div>
-                                                        <div className="min-w-0">
-                                                            <div className="flex items-center gap-2 flex-wrap">
-                                                                <p className="text-sm font-semibold truncate max-w-[420px] text-slate-900">{item.name}</p>
-                                                                <Badge variant="secondary" className="text-[10px] h-5 px-1.5 font-normal bg-slate-100 text-slate-600 hover:bg-slate-200">
-                                                                    {item.type_name || item.type}
-                                                                </Badge>
-                                                            </div>
-                                                            <div className="text-[10px] text-muted-foreground truncate">{item.brand} {item.model}</div>
-                                                        </div>
-                                                    </div>
-                                                    <Button
-                                                        variant="outline"
-                                                        size="sm"
-                                                        className="shrink-0"
-                                                        onClick={() => handleUnassignEquipment(item.id)}
-                                                    >
-                                                        <X className="h-4 w-4 mr-1.5" />
-                                                        На склад
-                                                    </Button>
-                                                </div>
-                                            ))
-                                        )}
-                                    </CardContent>
-                                </Card>
-                            </div>
-                        </TabsContent>
-
-                        <TabsContent value="maintenance" className="mt-4">
-                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                                <div className="space-y-6">
-                                    <Card className="border-slate-200">
-                                        <CardHeader className="pb-2">
-                                            <CardTitle className="text-base">{primaryLabel}</CardTitle>
-                                            <CardDescription>{primaryDescription}</CardDescription>
-                                        </CardHeader>
-                                        <CardContent className="space-y-3">
-                                            {!primaryEquipment ? (
-                                                <div className="text-sm text-muted-foreground">Основное устройство не назначено</div>
-                                            ) : (
-                                                <div className="flex flex-col gap-4 rounded-lg border border-slate-100 bg-slate-50 p-4">
-                                                    <div className="flex items-center justify-between gap-3 w-full">
-                                                        <div className="flex items-center gap-3 min-w-0">
-                                                            <div className="h-10 w-10 rounded-lg bg-white border flex items-center justify-center text-slate-500 shrink-0 shadow-sm">
-                                                                {getEquipmentIcon(primaryEquipment.type)}
-                                                            </div>
-                                                            <div className="min-w-0 flex-1">
-                                                                <p className="text-sm font-semibold truncate">{primaryEquipment.name}</p>
-                                                                <div className="flex items-center gap-2">
-                                                                    <Badge variant="outline" className="text-[10px] h-5 px-1 bg-white text-slate-500 border-slate-200 font-normal">{primaryEquipment.type_name || primaryEquipment.type}</Badge>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                        <div className="flex items-center gap-2 shrink-0">
-                                                            <Label htmlFor={`maintenance-${primaryEquipment.id}`} className="text-xs text-muted-foreground cursor-pointer">Обслуживание</Label>
-                                                            <input
-                                                                type="checkbox"
-                                                                id={`maintenance-${primaryEquipment.id}`}
-                                                                className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
-                                                                checked={primaryEquipment.maintenance_enabled !== false}
-                                                                onChange={(e) => handleToggleMaintenance(primaryEquipment.id, e.target.checked)}
-                                                            />
-                                                        </div>
-                                                    </div>
-
-                                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
-                                                        <div className="flex flex-col gap-1.5 sm:col-span-2">
-                                                            <Label className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Посл. чистка</Label>
-                                                            <Input
-                                                                type="date"
-                                                                className="w-full h-9 text-xs bg-white"
-                                                                value={lastCleanedDrafts[primaryEquipment.id] ?? ""}
-                                                                onChange={(e) => handleLastCleanedChange(primaryEquipment.id, e.target.value)}
-                                                            />
-                                                        </div>
-                                                        <div className="flex flex-col gap-1.5">
-                                                            <Label className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Интервал (дн.)</Label>
-                                                            <Input
-                                                                type="number"
-                                                                min={1}
-                                                                className="w-full h-9 text-xs bg-white"
-                                                                value={intervalDrafts[primaryEquipment.id] ?? String(primaryEquipment.cleaning_interval_days ?? 30)}
-                                                                onChange={(e) => handleIntervalChange(primaryEquipment.id, e.target.value)}
-                                                            />
-                                                        </div>
-                                                        <div className="sm:col-span-3">
-                                                            <Button
-                                                                size="sm"
-                                                                className="h-9 w-full bg-slate-900 text-white hover:bg-slate-800"
-                                                                disabled={savingIntervalId === primaryEquipment.id}
-                                                                onClick={() => handleSaveInterval(primaryEquipment.id)}
-                                                            >
-                                                                {savingIntervalId === primaryEquipment.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Сохранить"}
-                                                            </Button>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </CardContent>
-                                    </Card>
-
-                                    <Card className="border-slate-200">
-                                        <CardHeader className="pb-2">
-                                            <CardTitle className="text-base">Процессор</CardTitle>
-                                            <CardDescription>Обслуживание CPU (термопаста)</CardDescription>
-                                        </CardHeader>
-                                        <CardContent className="space-y-3">
-                                            {!primaryEquipment ? (
-                                                <div className="text-sm text-muted-foreground">Основное устройство не назначено</div>
-                                            ) : !thermalEligible ? (
-                                                <div className="text-sm text-muted-foreground">Доступно для ПК и консолей</div>
-                                            ) : (
-                                                <div className="space-y-3">
-                                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                                        <div className="space-y-1">
-                                                            <Label className="text-xs text-muted-foreground">Дата обслуживания</Label>
-                                                            <Input
-                                                                type="date"
-                                                                value={cpuThermalPasteDateDrafts[primaryEquipment.id] ?? ""}
-                                                                onChange={(e) => setCpuThermalPasteDateDrafts(prev => ({ ...prev, [primaryEquipment.id]: e.target.value }))}
-                                                            />
-                                                        </div>
-                                                        <div className="space-y-1">
-                                                            <Label className="text-xs text-muted-foreground">Интервал (дней)</Label>
-                                                            <Input
-                                                                type="number"
-                                                                min={1}
-                                                                value={cpuThermalPasteIntervalDrafts[primaryEquipment.id] ?? ""}
-                                                                onChange={(e) => setCpuThermalPasteIntervalDrafts(prev => ({ ...prev, [primaryEquipment.id]: e.target.value }))}
-                                                            />
-                                                        </div>
-                                                    </div>
-                                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                                        <div className="space-y-1">
-                                                            <Label className="text-xs text-muted-foreground">Материал</Label>
-                                                            <Input
-                                                                placeholder="Arctic MX-4"
-                                                                value={cpuThermalPasteTypeDrafts[primaryEquipment.id] ?? ""}
-                                                                onChange={(e) => setCpuThermalPasteTypeDrafts(prev => ({ ...prev, [primaryEquipment.id]: e.target.value }))}
-                                                            />
-                                                        </div>
-                                                        <div className="space-y-1">
-                                                            <Label className="text-xs text-muted-foreground">Заметка</Label>
-                                                            <Input
-                                                                placeholder="Например, жидкий металл"
-                                                                value={cpuThermalPasteNoteDrafts[primaryEquipment.id] ?? ""}
-                                                                onChange={(e) => setCpuThermalPasteNoteDrafts(prev => ({ ...prev, [primaryEquipment.id]: e.target.value }))}
-                                                            />
-                                                        </div>
-                                                    </div>
-                                                    <Button
-                                                        size="sm"
-                                                        className="h-8"
-                                                        disabled={savingCpuThermalId === primaryEquipment.id}
-                                                        onClick={() => handleCpuThermalSave(primaryEquipment.id)}
-                                                    >
-                                                        {savingCpuThermalId === primaryEquipment.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Сохранить"}
-                                                    </Button>
-                                                </div>
-                                            )}
-                                        </CardContent>
-                                    </Card>
-
-                                    {gpuEligible && (
-                                        <Card className="border-slate-200">
-                                            <CardHeader className="pb-2">
-                                                <CardTitle className="text-base">Видеокарта</CardTitle>
-                                                <CardDescription>Обслуживание GPU (термопаста/термопрокладки)</CardDescription>
-                                            </CardHeader>
-                                            <CardContent className="space-y-3">
-                                                {!primaryEquipment ? (
-                                                    <div className="text-sm text-muted-foreground">Основное устройство не назначено</div>
-                                                ) : (
-                                                    <div className="space-y-3">
-                                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                                            <div className="space-y-1">
-                                                                <Label className="text-xs text-muted-foreground">Дата обслуживания</Label>
-                                                                <Input
-                                                                    type="date"
-                                                                    value={gpuThermalPasteDateDrafts[primaryEquipment.id] ?? ""}
-                                                                    onChange={(e) => setGpuThermalPasteDateDrafts(prev => ({ ...prev, [primaryEquipment.id]: e.target.value }))}
-                                                                />
-                                                            </div>
-                                                            <div className="space-y-1">
-                                                                <Label className="text-xs text-muted-foreground">Интервал (дней)</Label>
-                                                                <Input
-                                                                    type="number"
-                                                                    min={1}
-                                                                    value={gpuThermalPasteIntervalDrafts[primaryEquipment.id] ?? ""}
-                                                                    onChange={(e) => setGpuThermalPasteIntervalDrafts(prev => ({ ...prev, [primaryEquipment.id]: e.target.value }))}
-                                                                />
-                                                            </div>
-                                                        </div>
-                                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                                            <div className="space-y-1">
-                                                                <Label className="text-xs text-muted-foreground">Материал</Label>
-                                                                <Input
-                                                                    placeholder="Термопаста/прокладки"
-                                                                    value={gpuThermalPasteTypeDrafts[primaryEquipment.id] ?? ""}
-                                                                    onChange={(e) => setGpuThermalPasteTypeDrafts(prev => ({ ...prev, [primaryEquipment.id]: e.target.value }))}
-                                                                />
-                                                            </div>
-                                                            <div className="space-y-1">
-                                                                <Label className="text-xs text-muted-foreground">Заметка</Label>
-                                                                <Input
-                                                                    placeholder="Например, замена прокладок"
-                                                                    value={gpuThermalPasteNoteDrafts[primaryEquipment.id] ?? ""}
-                                                                    onChange={(e) => setGpuThermalPasteNoteDrafts(prev => ({ ...prev, [primaryEquipment.id]: e.target.value }))}
-                                                                />
-                                                            </div>
-                                                        </div>
-                                                        <Button
-                                                            size="sm"
-                                                            className="h-8"
-                                                            disabled={savingGpuThermalId === primaryEquipment.id}
-                                                            onClick={() => handleGpuThermalSave(primaryEquipment.id)}
-                                                        >
-                                                            {savingGpuThermalId === primaryEquipment.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Сохранить"}
-                                                        </Button>
-                                                    </div>
-                                                )}
-                                            </CardContent>
-                                        </Card>
-                                    )}
-                                </div>
-
-                                <Card className="border-slate-200">
-                                    <CardHeader className="pb-2">
-                                        <CardTitle className="text-base">Периферия</CardTitle>
-                                        <CardDescription>Регулярность чистки для устройств на месте</CardDescription>
-                                    </CardHeader>
-                                    <CardContent className="space-y-3">
-                                        {peripheralEquipment.length === 0 ? (
-                                            <div className="text-sm text-muted-foreground">Периферия не назначена</div>
-                                        ) : (
-                                            peripheralEquipment.map(item => (
-                                                <div key={item.id} className="rounded-lg border border-slate-100 bg-white p-3 space-y-3">
-                                                    <div className="flex items-start justify-between gap-3">
-                                                        <div className="flex items-center gap-3 min-w-0">
-                                                            <div className="h-10 w-10 rounded-lg bg-slate-50 border flex items-center justify-center text-slate-500 shrink-0">
-                                                                {getEquipmentIcon(item.type)}
-                                                            </div>
-                                                            <div className="min-w-0">
-                                                                <p className="text-sm font-semibold truncate text-slate-900">{item.name}</p>
-                                                                <div className="flex items-center gap-2 mt-0.5">
-                                                                    <Badge variant="secondary" className="text-[10px] h-5 px-1.5 font-normal bg-slate-100 text-slate-600 hover:bg-slate-200">{item.type_name || item.type}</Badge>
-                                                                    <span className="text-[10px] text-muted-foreground truncate">{item.brand} {item.model}</span>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                        <div className="flex items-center gap-2 shrink-0">
-                                                            <Label className="text-xs text-muted-foreground">Обслуживание</Label>
-                                                            <input
-                                                                type="checkbox"
-                                                                className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
-                                                                checked={item.maintenance_enabled !== false}
-                                                                onChange={(e) => handleToggleMaintenance(item.id, e.target.checked)}
-                                                            />
-                                                        </div>
-                                                    </div>
-
-                                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
-                                                        <div className="flex flex-col gap-1.5 sm:col-span-2">
-                                                            <Label className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Посл. чистка</Label>
-                                                            <Input
-                                                                type="date"
-                                                                className="h-9 text-xs"
-                                                                value={lastCleanedDrafts[item.id] ?? ""}
-                                                                onChange={(e) => handleLastCleanedChange(item.id, e.target.value)}
-                                                            />
-                                                        </div>
-                                                        <div className="flex flex-col gap-1.5">
-                                                            <Label className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Интервал</Label>
-                                                            <Input
-                                                                type="number"
-                                                                min={1}
-                                                                className="h-9 text-xs"
-                                                                value={intervalDrafts[item.id] ?? String(item.cleaning_interval_days ?? 30)}
-                                                                onChange={(e) => handleIntervalChange(item.id, e.target.value)}
-                                                            />
-                                                        </div>
-                                                        <div className="sm:col-span-3">
-                                                            <Button
-                                                                size="sm"
-                                                                className="h-9 w-full bg-slate-900 text-white hover:bg-slate-800"
-                                                                disabled={savingIntervalId === item.id}
-                                                                onClick={() => handleSaveInterval(item.id)}
-                                                            >
-                                                                {savingIntervalId === item.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Сохранить"}
-                                                            </Button>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            ))
-                                        )}
-                                    </CardContent>
-                                </Card>
-                            </div>
-                        </TabsContent>
-
-                        <TabsContent value="issues" className="mt-4">
-                            <Card className="border-slate-200">
-                                <CardHeader className="pb-2">
-                                    <CardTitle className="text-base flex items-center gap-2">
-                                        <AlertTriangle className="h-4 w-4 text-slate-500" />
-                                        История инцидентов
-                                    </CardTitle>
-                                    <CardDescription>Список всех проблем с оборудованием на этом месте</CardDescription>
-                                </CardHeader>
-                                <CardContent>
-                                    {(() => {
-                                        const workplaceIssues = allIssues.filter(issue =>
-                                            activeEquipment.some(e => e.id === issue.equipment_id)
-                                        ).sort((a, b) => {
-                                            const aActive = a.status === 'OPEN' || a.status === 'IN_PROGRESS'
-                                            const bActive = b.status === 'OPEN' || b.status === 'IN_PROGRESS'
-                                            if (aActive && !bActive) return -1
-                                            if (!aActive && bActive) return 1
-                                            return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-                                        })
-
-                                        if (workplaceIssues.length === 0) {
-                                            return (
-                                                <div className="text-center py-8 text-muted-foreground border-2 border-dashed border-slate-100 rounded-lg">
-                                                    <div className="h-10 w-10 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-2">
-                                                        <Check className="h-5 w-5 text-green-500" />
-                                                    </div>
-                                                    <p className="text-sm">Инцидентов не зафиксировано</p>
-                                                </div>
-                                            )
-                                        }
-
-                                        return (
-                                            <div className="space-y-3">
-                                                {workplaceIssues.map(issue => {
-                                                    const equipment = activeEquipment.find(e => e.id === issue.equipment_id)
-                                                    return (
-                                                        <div key={issue.id} className={cn(
-                                                            "flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-3 rounded-lg border",
-                                                            (issue.status === 'OPEN' || issue.status === 'IN_PROGRESS')
-                                                                ? "bg-rose-50 border-rose-100"
-                                                                : "bg-white border-slate-100"
-                                                        )}>
-                                                            <div className="flex items-start gap-3 min-w-0">
-                                                                <div className={cn(
-                                                                    "h-9 w-9 rounded-lg border flex items-center justify-center shrink-0 mt-0.5",
-                                                                    (issue.status === 'OPEN' || issue.status === 'IN_PROGRESS')
-                                                                        ? "bg-white border-rose-200 text-rose-500"
-                                                                        : "bg-slate-50 border-slate-200 text-slate-400"
-                                                                )}>
-                                                                    {equipment ? getEquipmentIcon(equipment.type) : <Wrench className="h-4 w-4" />}
-                                                                </div>
-                                                                <div className="min-w-0 space-y-1">
-                                                                    <div className="flex items-center gap-2 flex-wrap">
-                                                                        <p className="text-sm font-semibold truncate text-slate-900">{issue.title}</p>
-                                                                        {getIssueStatusBadge(issue.status)}
-                                                                    </div>
-                                                                    <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
-                                                                        <span className="font-medium text-slate-600">{equipment?.name}</span>
-                                                                        <span>•</span>
-                                                                        <span>{new Date(issue.created_at).toLocaleDateString('ru-RU')}</span>
-                                                                        <span>•</span>
-                                                                        <span className="flex items-center gap-1">
-                                                                            <User className="h-3 w-3" />
-                                                                            {issue.reported_by_name}
-                                                                        </span>
-                                                                    </div>
-                                                                    {(issue.status === 'OPEN' || issue.status === 'IN_PROGRESS') && (
-                                                                        <p className="text-xs text-rose-700 line-clamp-1">{issue.description}</p>
-                                                                    )}
-                                                                </div>
-                                                            </div>
-                                                            <div className="flex items-center gap-2 shrink-0">
-                                                                {issue.assigned_to_name && (issue.status === 'OPEN' || issue.status === 'IN_PROGRESS') && (
-                                                                    <Badge variant="outline" className="bg-white text-slate-600 font-normal">
-                                                                        <User className="h-3 w-3 mr-1" />
-                                                                        {issue.assigned_to_name}
-                                                                    </Badge>
-                                                                )}
-                                                                <Link href={`/clubs/${clubId}/equipment/issues`} className="text-xs font-medium text-primary hover:underline">
-                                                                    Перейти
-                                                                </Link>
-                                                            </div>
-                                                        </div>
-                                                    )
-                                                })}
-                                            </div>
-                                        )
-                                    })()}
-                                </CardContent>
-                            </Card>
-                        </TabsContent>
-                    </Tabs>
-                </DialogContent>
-            </Dialog>
+                clubId={clubId as string}
+                workstation={activeWorkstation}
+                equipment={activeEquipment}
+                employees={employees}
+                issues={allIssues}
+                equipmentById={equipmentById}
+                isAssigningWorkstationId={isAssigningWorkstationId}
+                isSavingIntervalId={savingIntervalId}
+                isSavingCpuThermalId={savingCpuThermalId}
+                isSavingGpuThermalId={savingGpuThermalId}
+                onAssignWorkstation={handleAssignWorkstation}
+                onOpenAssignDialog={handleOpenAssignDialog}
+                onUnassignEquipment={handleUnassignEquipment}
+                onToggleMaintenance={handleToggleMaintenance}
+                onSaveInterval={handleSaveInterval}
+                onSaveCpuThermal={handleCpuThermalSave}
+                onSaveGpuThermal={handleGpuThermalSave}
+                renderEquipmentIcon={getEquipmentIcon}
+                renderIssueStatusBadge={getIssueStatusBadge}
+            />
 
             {/* Workplace Edit/Create Dialog */}
             <Dialog

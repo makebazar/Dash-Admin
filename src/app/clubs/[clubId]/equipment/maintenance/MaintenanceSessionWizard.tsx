@@ -26,6 +26,8 @@ interface MaintenanceTask {
     status: string
 }
 
+type TaskReportMode = "OK" | "ISSUE" | "LAUNDRY"
+
 interface MaintenanceSessionWizardProps {
     isOpen: boolean
     onClose: () => void
@@ -41,7 +43,7 @@ export function MaintenanceSessionWizard({ isOpen, onClose, tasks, onComplete }:
     const [isSubmitting, setIsSubmitting] = useState(false)
     
     // Issue reporting state
-    const [hasIssue, setHasIssue] = useState(false)
+    const [reportMode, setReportMode] = useState<TaskReportMode>("OK")
     const [issueTitle, setIssueTitle] = useState("")
     const [issueDescription, setIssueDescription] = useState("")
     const [generalNotes, setGeneralNotes] = useState("")
@@ -82,7 +84,7 @@ export function MaintenanceSessionWizard({ isOpen, onClose, tasks, onComplete }:
     }
 
     const resetIssueForm = () => {
-        setHasIssue(false)
+        setReportMode("OK")
         setIssueTitle("")
         setIssueDescription("")
         setGeneralNotes("")
@@ -117,14 +119,18 @@ export function MaintenanceSessionWizard({ isOpen, onClose, tasks, onComplete }:
             }
             setIsUploading(false)
 
-            const isLaundryEquipment = isLaundryEquipmentType(currentTask.equipment_type)
+            const isIssueReport = reportMode === "ISSUE"
+            const isLaundryReport = reportMode === "LAUNDRY"
+            const hasReport = isIssueReport || isLaundryReport
+            const reportPrefix = isLaundryReport ? "[СТИРКА]" : isIssueReport ? "[ИНЦИДЕНТ]" : null
+
             const completeRes = await fetch(`/api/clubs/${clubId}/equipment/maintenance/${currentTask.id}/complete`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ 
                     photos: photoUrls,
-                    notes: hasIssue
-                        ? `${isLaundryEquipment ? '[СТИРКА]' : '[ИНЦИДЕНТ]'} ${issueTitle}: ${issueDescription}`
+                    notes: hasReport && issueTitle
+                        ? `${reportPrefix} ${issueTitle}: ${issueDescription}`
                         : generalNotes
                 })
             })
@@ -133,8 +139,8 @@ export function MaintenanceSessionWizard({ isOpen, onClose, tasks, onComplete }:
                 throw new Error("Failed to complete task")
             }
 
-            if (hasIssue && issueTitle) {
-                if (isLaundryEquipment) {
+            if (hasReport && issueTitle) {
+                if (isLaundryReport) {
                     const laundryRes = await fetch(`/api/clubs/${clubId}/laundry`, {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
@@ -187,6 +193,9 @@ export function MaintenanceSessionWizard({ isOpen, onClose, tasks, onComplete }:
     if (!isOpen || !currentTask) return null
 
     const instructionContent = instructions[currentTask.equipment_type] || "Инструкция отсутствует."
+    const isLaundryEquipment = isLaundryEquipmentType(currentTask.equipment_type)
+    const hasReport = reportMode === "ISSUE" || reportMode === "LAUNDRY"
+    const isLaundryReport = reportMode === "LAUNDRY"
 
     return (
         <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -257,17 +266,17 @@ export function MaintenanceSessionWizard({ isOpen, onClose, tasks, onComplete }:
                         <div className="space-y-4">
                             <div>
                                 <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Статус проверки</h3>
-                                <div className="grid grid-cols-2 gap-2">
+                                <div className={cn("grid gap-2", isLaundryEquipment ? "grid-cols-3" : "grid-cols-2")}>
                                     <div 
                                         className={cn(
                                             "p-3 rounded-xl border-2 transition-all cursor-pointer flex flex-col items-center justify-center gap-2 text-center",
-                                            !hasIssue 
+                                            reportMode === "OK"
                                                 ? "bg-green-50 border-green-200 text-green-700" 
                                                 : "bg-white border-slate-100 text-slate-400 hover:border-slate-200"
                                         )}
-                                        onClick={() => setHasIssue(false)}
+                                        onClick={() => setReportMode("OK")}
                                     >
-                                        <div className={cn("h-8 w-8 rounded-full flex items-center justify-center transition-colors", !hasIssue ? "bg-green-500 text-white" : "bg-slate-100")}>
+                                        <div className={cn("h-8 w-8 rounded-full flex items-center justify-center transition-colors", reportMode === "OK" ? "bg-green-500 text-white" : "bg-slate-100")}>
                                             <CheckCircle2 className="h-5 w-5" />
                                         </div>
                                         <span className="font-bold text-xs leading-none">В порядке</span>
@@ -276,17 +285,34 @@ export function MaintenanceSessionWizard({ isOpen, onClose, tasks, onComplete }:
                                     <div 
                                         className={cn(
                                             "p-3 rounded-xl border-2 transition-all cursor-pointer flex flex-col items-center justify-center gap-2 text-center",
-                                            hasIssue 
+                                            reportMode === "ISSUE"
                                                 ? "bg-amber-50 border-amber-200 text-amber-700" 
                                                 : "bg-white border-slate-100 text-slate-400 hover:border-slate-200"
                                         )}
-                                        onClick={() => setHasIssue(true)}
+                                        onClick={() => setReportMode("ISSUE")}
                                     >
-                                        <div className={cn("h-8 w-8 rounded-full flex items-center justify-center transition-colors", hasIssue ? "bg-amber-500 text-white" : "bg-slate-100")}>
+                                        <div className={cn("h-8 w-8 rounded-full flex items-center justify-center transition-colors", reportMode === "ISSUE" ? "bg-amber-500 text-white" : "bg-slate-100")}>
                                             <AlertTriangle className="h-5 w-5" />
                                         </div>
                                         <span className="font-bold text-xs leading-none">Проблема</span>
                                     </div>
+
+                                    {isLaundryEquipment && (
+                                        <div
+                                            className={cn(
+                                                "p-3 rounded-xl border-2 transition-all cursor-pointer flex flex-col items-center justify-center gap-2 text-center",
+                                                reportMode === "LAUNDRY"
+                                                    ? "bg-blue-50 border-blue-200 text-blue-700"
+                                                    : "bg-white border-slate-100 text-slate-400 hover:border-slate-200"
+                                            )}
+                                            onClick={() => setReportMode("LAUNDRY")}
+                                        >
+                                            <div className={cn("h-8 w-8 rounded-full flex items-center justify-center transition-colors", reportMode === "LAUNDRY" ? "bg-blue-500 text-white" : "bg-slate-100")}>
+                                                <ImageIcon className="h-5 w-5" />
+                                            </div>
+                                            <span className="font-bold text-xs leading-none">В стирку</span>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 
@@ -328,12 +354,14 @@ export function MaintenanceSessionWizard({ isOpen, onClose, tasks, onComplete }:
                                 </div>
                             </div>
 
-                            {hasIssue ? (
+                            {hasReport ? (
                                 <div className="space-y-4 animate-in fade-in slide-in-from-top-4 duration-300">
                                     <div className="space-y-2">
-                                        <Label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Что случилось?</Label>
+                                        <Label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                                            {isLaundryReport ? "Что отправить в стирку?" : "Что случилось?"}
+                                        </Label>
                                         <Input 
-                                            placeholder="Напр: Залипает кнопка" 
+                                            placeholder={isLaundryReport ? "Напр: Коврик сильно загрязнен" : "Напр: Залипает кнопка"} 
                                             value={issueTitle}
                                             onChange={(e) => setIssueTitle(e.target.value)}
                                             className="rounded-xl border-slate-200 focus:ring-indigo-500/20"
@@ -342,7 +370,7 @@ export function MaintenanceSessionWizard({ isOpen, onClose, tasks, onComplete }:
                                     <div className="space-y-2">
                                         <Label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Подробности</Label>
                                         <Textarea 
-                                            placeholder="Опишите подробнее..." 
+                                            placeholder={isLaundryReport ? "Опишите состояние и причину отправки в стирку..." : "Опишите подробнее..."} 
                                             className="resize-none h-24 rounded-xl border-slate-200 focus:ring-indigo-500/20" 
                                             value={issueDescription}
                                             onChange={(e) => setIssueDescription(e.target.value)}
@@ -376,7 +404,7 @@ export function MaintenanceSessionWizard({ isOpen, onClose, tasks, onComplete }:
                     <div className="flex gap-3 w-full sm:w-auto order-1 sm:order-2">
                         <Button 
                             onClick={handleCompleteTask} 
-                            disabled={isSubmitting || isUploading || (hasIssue && !issueTitle) || (photos.length === 0)}
+                            disabled={isSubmitting || isUploading || (hasReport && !issueTitle) || (photos.length === 0)}
                             className="w-full sm:w-auto h-12 px-8 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold shadow-lg shadow-indigo-200 transition-all hover:translate-y-[-2px] active:translate-y-0 disabled:opacity-50"
                         >
                             {isSubmitting || isUploading ? (
