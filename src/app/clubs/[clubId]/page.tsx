@@ -2,20 +2,17 @@ import Link from "next/link"
 import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
 import {
-    Briefcase,
+    AlertTriangle,
     ChevronRight,
-    HardDrive,
-    LayoutDashboard,
-    Wrench,
 } from "lucide-react"
 import { query } from "@/db"
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { PageHeader, PageShell } from "@/components/layout/PageShell"
+import { PageShell } from "@/components/layout/PageShell"
 import { getClubTasks, getSalesAnalytics } from "./inventory/actions"
 import { getClubEmployeeLeaderboardState } from "@/lib/employee-leaderboard"
+import RevenueTrendChart from "./RevenueTrendChart"
 
 export const dynamic = "force-dynamic"
 
@@ -162,6 +159,25 @@ type InventorySnapshot = {
     returnAmount: number
     returnCount: number
     discrepancyAmount: number
+    criticalCount: number
+    zeroStockCount: number
+    categoryATotalCount: number
+    categoryARiskCount: number
+    categoryAItems: Array<{
+        id: string
+        name: string
+        currentStock: number
+        minStockLevel: number
+        salesVelocity: number
+        daysLeft: number | null
+        status: "critical" | "warning" | "stable"
+    }>
+    criticalItems: Array<{
+        id: string
+        name: string
+        currentStock: number
+        minStockLevel: number
+    }>
     tasks: InventoryTask[]
 }
 
@@ -1088,9 +1104,79 @@ async function getEquipmentSnapshot(clubId: string): Promise<EquipmentSnapshot> 
 }
 
 async function getInventorySnapshot(clubId: string): Promise<InventorySnapshot> {
-    const [tasks, sales] = await Promise.all([
+    const [tasks, sales, criticalItemsResult, categoryAMetricsResult, categoryAItemsResult] = await Promise.all([
         getClubTasks(clubId),
         getSalesAnalytics(clubId, 500),
+        query(
+            `
+            SELECT id, name, current_stock, min_stock_level,
+                   COUNT(*) OVER() as total_critical_count,
+                   SUM(CASE WHEN current_stock <= 0 THEN 1 ELSE 0 END) OVER() as total_zero_stock_count
+            FROM warehouse_products
+            WHERE club_id = $1
+              AND is_active = TRUE
+              AND min_stock_level > 0
+              AND current_stock <= min_stock_level
+            ORDER BY
+                CASE WHEN current_stock <= 0 THEN 0 ELSE 1 END,
+                (current_stock - min_stock_level) ASC,
+                name ASC
+            LIMIT 5
+            `,
+            [clubId]
+        ),
+        query(
+            `
+            SELECT
+                COUNT(*) FILTER (
+                    WHERE is_active = TRUE
+                      AND COALESCE(abc_category, 'C') = 'A'
+                ) as total_a_count,
+                COUNT(*) FILTER (
+                    WHERE is_active = TRUE
+                      AND COALESCE(abc_category, 'C') = 'A'
+                      AND (
+                          current_stock <= 0
+                          OR (COALESCE(min_stock_level, 0) > 0 AND current_stock < min_stock_level)
+                          OR (COALESCE(sales_velocity, 0) > 0 AND current_stock / sales_velocity < 2)
+                      )
+                ) as total_a_risk_count
+            FROM warehouse_products
+            WHERE club_id = $1
+            `,
+            [clubId]
+        ),
+        query(
+            `
+            SELECT
+                id,
+                name,
+                current_stock,
+                min_stock_level,
+                COALESCE(sales_velocity, 0) as sales_velocity
+            FROM warehouse_products
+            WHERE club_id = $1
+              AND is_active = TRUE
+              AND COALESCE(abc_category, 'C') = 'A'
+              AND (
+                  current_stock <= 0
+                  OR (COALESCE(min_stock_level, 0) > 0 AND current_stock < min_stock_level)
+                  OR (COALESCE(sales_velocity, 0) > 0 AND current_stock / sales_velocity < 2)
+              )
+            ORDER BY
+                CASE
+                    WHEN current_stock <= 0 THEN 0
+                    WHEN COALESCE(min_stock_level, 0) > 0 AND current_stock < min_stock_level THEN 1
+                    WHEN COALESCE(sales_velocity, 0) > 0 AND current_stock / sales_velocity < 2 THEN 2
+                    ELSE 3
+                END,
+                current_stock ASC,
+                sales_velocity DESC,
+                name ASC
+            LIMIT 6
+            `,
+            [clubId]
+        ),
     ])
 
     const since = new Date()
@@ -1107,11 +1193,47 @@ async function getInventorySnapshot(clubId: string): Promise<InventorySnapshot> 
         uniqueShiftDiscrepancies.set(shiftId, Math.abs(Number(item.shift_revenue_difference || 0)))
     })
 
+    const criticalItems = criticalItemsResult.rows.map((row: any) => ({
+        id: String(row.id),
+        name: String(row.name),
+        currentStock: Number(row.current_stock || 0),
+        minStockLevel: Number(row.min_stock_level || 0),
+    }))
+    const criticalTotalsRow = criticalItemsResult.rows[0]
+    const categoryAItems = categoryAItemsResult.rows.map((row: any) => {
+        const currentStock = Number(row.current_stock || 0)
+        const minStockLevel = Number(row.min_stock_level || 0)
+        const salesVelocity = Number(row.sales_velocity || 0)
+        const daysLeft = salesVelocity > 0 ? currentStock / salesVelocity : null
+        const status = currentStock <= 0 || (minStockLevel > 0 && currentStock < minStockLevel)
+            ? "critical"
+            : daysLeft !== null && daysLeft < 2
+                ? "warning"
+                : "stable"
+
+        return {
+            id: String(row.id),
+            name: String(row.name),
+            currentStock,
+            minStockLevel,
+            salesVelocity,
+            daysLeft,
+            status,
+        } satisfies InventorySnapshot["categoryAItems"][number]
+    })
+    const categoryATotalsRow = categoryAMetricsResult.rows[0]
+
     return {
         openTasksCount: tasks.length,
         returnAmount: returnRows.reduce((sum: number, item: any) => sum + Math.abs(Number(item.price_at_time || 0) * Number(item.change_amount || 0)), 0),
         returnCount: returnRows.length,
         discrepancyAmount: Array.from(uniqueShiftDiscrepancies.values()).reduce((sum, value) => sum + value, 0),
+        criticalCount: Number(criticalTotalsRow?.total_critical_count || 0),
+        zeroStockCount: Number(criticalTotalsRow?.total_zero_stock_count || 0),
+        categoryATotalCount: Number(categoryATotalsRow?.total_a_count || 0),
+        categoryARiskCount: Number(categoryATotalsRow?.total_a_risk_count || 0),
+        categoryAItems,
+        criticalItems,
         tasks: tasks.slice(0, 5).map((task: any) => ({
             id: String(task.id),
             title: task.title || null,
@@ -1165,11 +1287,14 @@ function SectionTitle({
     return (
         <div className="flex items-start justify-between gap-4">
             <div className="space-y-1">
-                <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
-                {description ? <p className="text-sm text-muted-foreground">{description}</p> : null}
+                <h2 className="text-lg font-semibold tracking-tight text-slate-900">{title}</h2>
+                {description ? <p className="text-sm leading-6 text-muted-foreground">{description}</p> : null}
             </div>
             {href ? (
-                <Link href={href} className="inline-flex items-center gap-1 text-sm font-medium text-primary">
+                <Link
+                    href={href}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 transition-colors hover:border-slate-300 hover:text-slate-900"
+                >
                     Открыть
                     <ChevronRight className="h-4 w-4" />
                 </Link>
@@ -1194,52 +1319,23 @@ export default async function ClubDashboardPage({
     const canViewShifts = hasPermission(access, "view_shifts")
     const [
         shiftStats,
-        revenueTrend,
+        revenueTrendHistory,
         revenueInsights,
+        inventorySnapshot,
         activeShifts,
         nextScheduledShift,
     ] = await Promise.all([
         getShiftStats(clubId),
-        getRevenueTrend(clubId, 30),
+        getRevenueTrend(clubId, 60),
         getRevenueInsights(clubId, 84),
+        getInventorySnapshot(clubId),
         canViewShifts ? getActiveShiftsSnapshot(clubId) : Promise.resolve([]),
         canViewShifts ? getNextScheduledShift(clubId) : Promise.resolve(null),
     ])
 
-    const maxRevenue = Math.max(...revenueTrend.map(item => item.revenue), 1)
+    const revenueTrend = revenueTrendHistory.slice(-30)
+    const previousRevenueTrend = revenueTrendHistory.slice(-60, -30)
     const recentRevenueDays = [...revenueTrend.slice(-7)].reverse()
-    const revenueScaleTicks = [1, 0.75, 0.5, 0.25, 0].map(multiplier => Math.round(maxRevenue * multiplier))
-    const chartWidth = 920
-    const chartHeight = 280
-    const chartPaddingTop = 16
-    const chartPaddingRight = 72
-    const chartPaddingBottom = 36
-    const chartPaddingLeft = 8
-    const chartPlotWidth = chartWidth - chartPaddingLeft - chartPaddingRight
-    const chartPlotHeight = chartHeight - chartPaddingTop - chartPaddingBottom
-    const revenueChartPoints = revenueTrend.map((point, index) => {
-        const x = revenueTrend.length > 1
-            ? chartPaddingLeft + (index / (revenueTrend.length - 1)) * chartPlotWidth
-            : chartPaddingLeft
-        const y = chartPaddingTop + chartPlotHeight - (point.revenue / maxRevenue) * chartPlotHeight
-        return {
-            ...point,
-            x,
-            y,
-        }
-    })
-    const revenueLinePath = revenueChartPoints
-        .map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`)
-        .join(" ")
-    const revenueAreaPath = revenueChartPoints.length > 0
-        ? [
-            `M ${revenueChartPoints[0].x} ${chartPaddingTop + chartPlotHeight}`,
-            ...revenueChartPoints.map((point, index) => `${index === 0 ? "L" : "L"} ${point.x} ${point.y}`),
-            `L ${revenueChartPoints[revenueChartPoints.length - 1].x} ${chartPaddingTop + chartPlotHeight}`,
-            "Z",
-        ].join(" ")
-        : ""
-    const latestRevenuePoint = revenueChartPoints[revenueChartPoints.length - 1] || null
 
     const kpis = [
         {
@@ -1247,12 +1343,15 @@ export default async function ClubDashboardPage({
             visible: true,
             node: (
                 <Link href={`/clubs/${clubId}/shifts`} className="block h-full">
-                    <Card className="h-full border-slate-200/80 shadow-sm transition-colors hover:border-primary/40">
-                        <CardHeader className="space-y-4 pb-3">
-                            <div className="flex items-center justify-between gap-3">
-                                <span className="text-sm font-bold uppercase tracking-wide text-emerald-700">
-                                    Выручка
-                                </span>
+                    <Card className="h-full rounded-none border-0 bg-transparent shadow-none transition-colors sm:rounded-2xl sm:border-slate-200/80 sm:bg-card sm:shadow-sm sm:hover:border-slate-300">
+                        <CardHeader className="space-y-3 px-0 pb-3 pt-0 sm:space-y-4 sm:p-6 sm:pb-3">
+                            <div className="flex items-start justify-between gap-3">
+                                <div className="space-y-1">
+                                    <CardDescription className="text-[10px] font-medium uppercase tracking-[0.12em] text-slate-400 sm:text-[11px] sm:tracking-[0.18em]">
+                                        Финансовый обзор
+                                    </CardDescription>
+                                    <p className="text-[1.75rem] font-semibold tracking-[-0.03em] text-slate-900 sm:text-base sm:tracking-normal">Выручка</p>
+                                </div>
                                 <Badge
                                     variant="outline"
                                     className={cn(
@@ -1265,40 +1364,40 @@ export default async function ClubDashboardPage({
                                     {formatSignedPercent(shiftStats.revenueChange)}
                                 </Badge>
                             </div>
-                            <div>
-                                <CardDescription>Выручка за этот месяц</CardDescription>
-                                <CardTitle className="mt-2 text-2xl">{formatCurrency(shiftStats.revenueTotal)}</CardTitle>
+                            <div className="space-y-1">
+                                <CardDescription className="text-[15px] text-muted-foreground sm:text-sm">Выручка за этот месяц</CardDescription>
+                                <CardTitle className="text-[2.125rem] tracking-[-0.04em] text-slate-900 sm:text-2xl sm:tracking-tight">{formatCurrency(shiftStats.revenueTotal)}</CardTitle>
                             </div>
                         </CardHeader>
-                        <CardContent className="space-y-3 pt-0">
-                            <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-3">
-                                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Прошлый месяц</p>
-                                <p className="mt-1 text-lg font-semibold text-slate-900">
+                        <CardContent className="space-y-3 px-0 pt-0 sm:p-6 sm:pt-0">
+                            <div className="rounded-xl border-0 bg-slate-50/70 p-3 sm:rounded-2xl sm:border sm:border-slate-200 sm:bg-slate-50/80">
+                                <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-slate-400 sm:text-[11px] sm:tracking-wide">Прошлый месяц</p>
+                                <p className="mt-1 text-[1.75rem] font-semibold tracking-[-0.03em] text-slate-900 sm:text-lg sm:tracking-normal">
                                     {shiftStats.previousRevenueTotal > 0
                                         ? formatCurrency(shiftStats.previousRevenueTotal)
                                         : "Нет данных"}
                                 </p>
                                 {shiftStats.previousRevenueParts.length > 0 ? (
-                                    <p className="mt-2 text-xs text-muted-foreground">
+                                    <p className="mt-2 text-[15px] leading-6 text-muted-foreground sm:text-xs sm:leading-5">
                                         {shiftStats.previousRevenueParts.map(part => `${part.label} ${formatCurrency(part.amount)}`).join(" · ")}
                                     </p>
                                 ) : null}
                             </div>
-                            <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-3">
-                                <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">Этот месяц</p>
-                                <p className="mt-1 text-lg font-semibold text-slate-900">{formatCurrency(shiftStats.revenueTotal)}</p>
+                            <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-3 sm:rounded-2xl">
+                                <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-emerald-700 sm:text-[11px] sm:tracking-[0.16em]">Этот месяц</p>
+                                <p className="mt-1 text-[1.75rem] font-semibold tracking-[-0.03em] text-slate-900 sm:text-lg sm:tracking-normal">{formatCurrency(shiftStats.revenueTotal)}</p>
                                 {shiftStats.currentRevenueParts.length > 0 ? (
-                                    <p className="mt-2 text-xs text-muted-foreground">
+                                    <p className="mt-2 text-[15px] leading-6 text-muted-foreground sm:text-xs sm:leading-5">
                                         {shiftStats.currentRevenueParts.map(part => `${part.label} ${formatCurrency(part.amount)}`).join(" · ")}
                                     </p>
                                 ) : null}
                             </div>
-                            <div className="rounded-2xl border border-slate-200 bg-white p-3">
-                                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Разница</p>
-                                <p className="mt-1 text-lg font-semibold text-slate-900">
+                            <div className="rounded-xl border-0 bg-slate-50/70 p-3 sm:rounded-2xl sm:border sm:border-slate-200 sm:bg-white">
+                                <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-slate-400 sm:text-[11px] sm:tracking-wide">Разница</p>
+                                <p className="mt-1 text-[1.75rem] font-semibold tracking-[-0.03em] text-slate-900 sm:text-lg sm:tracking-normal">
                                     {formatCurrency(shiftStats.revenueTotal - shiftStats.previousRevenueTotal)}
                                 </p>
-                                <p className="mt-1 text-sm text-muted-foreground">
+                                <p className="mt-1 text-[15px] leading-6 text-muted-foreground sm:text-sm sm:leading-5">
                                     {shiftStats.revenueChange >= 0 ? "Это больше прошлого месяца на " : "Это меньше прошлого месяца на "}
                                     {Math.abs(shiftStats.revenueChange).toFixed(1)}%
                                 </p>
@@ -1313,18 +1412,17 @@ export default async function ClubDashboardPage({
             visible: canViewShifts,
             node: (
                 <Link href={`/clubs/${clubId}/shifts`} className="block h-full">
-                    <Card className="h-full border-slate-200/80 shadow-sm transition-colors hover:border-primary/40">
-                        <CardHeader className="space-y-4 pb-3">
-                            <div className="flex items-center justify-between gap-3">
-                                <span className="text-sm font-bold uppercase tracking-wide text-slate-600">
-                                    Смены
-                                </span>
-                            </div>
-                            <div>
-                                <CardDescription>Сейчас в клубе</CardDescription>
+                    <Card className="h-full rounded-none border-0 bg-transparent shadow-none transition-colors sm:rounded-2xl sm:border-slate-200/80 sm:bg-card sm:shadow-sm sm:hover:border-slate-300">
+                        <CardHeader className="space-y-3 px-0 pb-3 pt-0 sm:space-y-4 sm:p-6 sm:pb-3">
+                            <div className="space-y-1">
+                                <CardDescription className="text-[10px] font-medium uppercase tracking-[0.12em] text-slate-400 sm:text-[11px] sm:tracking-[0.18em]">
+                                    Операционный обзор
+                                </CardDescription>
+                                <p className="text-[1.75rem] font-semibold tracking-[-0.03em] text-slate-900 sm:text-base sm:tracking-normal">Смены</p>
+                                <CardDescription className="text-[15px] text-muted-foreground sm:text-sm">Сейчас в клубе</CardDescription>
                             </div>
                         </CardHeader>
-                        <CardContent className="space-y-3 pt-0">
+                        <CardContent className="space-y-3 px-0 pt-0 sm:p-6 sm:pt-0">
                             <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-3">
                                 <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Кто сейчас на смене</p>
                                 {activeShifts.length > 0 ? (
@@ -1340,7 +1438,7 @@ export default async function ClubDashboardPage({
                                     <p className="mt-1 text-sm font-medium text-slate-900">Сейчас активных смен нет</p>
                                 )}
                             </div>
-                            <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                            <div className="rounded-xl border-0 bg-slate-50/70 p-3 sm:rounded-2xl sm:border sm:border-slate-200 sm:bg-white">
                                 <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Кто следующий по смене</p>
                                 {nextScheduledShift ? (
                                     <div className="mt-2 flex items-center justify-between gap-3 text-sm">
@@ -1379,22 +1477,16 @@ export default async function ClubDashboardPage({
 
     return (
         <PageShell maxWidth="7xl">
-            <PageHeader
-                title={access.clubName}
-                description={`Owner dashboard клуба: деньги, риски, команда и live-состояние.${access.roleName ? ` Роль: ${access.roleName}.` : ""}`}
-            >
-                <Link href={`/clubs/${clubId}/finance`}>
-                    <Button variant="outline">Финансы</Button>
-                </Link>
-                <Link href={`/clubs/${clubId}/shifts`}>
-                    <Button variant="outline">Смены</Button>
-                </Link>
-                <Link href={`/clubs/${clubId}/requests`}>
-                    <Button>Фокус на задачи</Button>
-                </Link>
-            </PageHeader>
+            <div className="space-y-1 pb-1 sm:pb-2">
+                <h1 className="text-[2.125rem] font-semibold tracking-[-0.03em] text-slate-900 sm:text-3xl sm:tracking-tight">
+                    {access.clubName}
+                </h1>
+                <p className="text-[15px] text-muted-foreground sm:text-sm">
+                    Обзор клуба
+                </p>
+            </div>
 
-            <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(340px,1fr))]">
+            <div className="grid gap-3 sm:gap-4 [grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr))]">
                 {kpis.map(item => (
                     <div key={item.key} className="h-full">
                         {item.node}
@@ -1403,163 +1495,55 @@ export default async function ClubDashboardPage({
             </div>
 
             <div className="grid gap-6 xl:grid-cols-[minmax(0,1.6fr)_minmax(360px,0.9fr)]">
-                <Card className="border-slate-200/80 shadow-sm">
-                    <CardHeader className="space-y-4">
+                <Card className="min-w-0 overflow-hidden rounded-none border-0 bg-transparent shadow-none sm:rounded-2xl sm:border-slate-200/80 sm:bg-card sm:shadow-sm">
+                    <CardHeader className="space-y-3 px-0 pb-4 pt-0 sm:space-y-4 sm:p-6">
                         <SectionTitle
                             title="Динамика выручки"
                             description="30 последних дней по закрытым сменам"
                             href={`/clubs/${clubId}/shifts`}
                         />
                     </CardHeader>
-                    <CardContent>
-                        <div className="rounded-3xl border border-slate-200 bg-gradient-to-b from-slate-50 to-white p-3 sm:p-4">
-                            <svg
-                                viewBox={`0 0 ${chartWidth} ${chartHeight}`}
-                                className="h-[220px] w-full sm:h-[260px] lg:h-[300px]"
-                                role="img"
-                                aria-label="График выручки за 30 дней"
-                            >
-                                {revenueScaleTicks.map((tick, index) => {
-                                    const y = chartPaddingTop + chartPlotHeight - (tick / maxRevenue) * chartPlotHeight
-                                    return (
-                                        <g key={`${tick}-${index}`}>
-                                            <line
-                                                x1={chartPaddingLeft}
-                                                x2={chartPaddingLeft + chartPlotWidth}
-                                                y1={y}
-                                                y2={y}
-                                                stroke="#E2E8F0"
-                                                strokeDasharray="4 4"
-                                            />
-                                            <text
-                                                x={chartWidth - 4}
-                                                y={y + 4}
-                                                textAnchor="end"
-                                                fontSize="11"
-                                                fill="#64748B"
-                                            >
-                                                {formatCompactCurrency(tick)}
-                                            </text>
-                                        </g>
-                                    )
-                                })}
-
-                                {revenueAreaPath ? (
-                                    <path
-                                        d={revenueAreaPath}
-                                        fill="url(#revenueAreaGradient)"
-                                        opacity="0.9"
-                                    />
-                                ) : null}
-
-                                {revenueLinePath ? (
-                                    <path
-                                        d={revenueLinePath}
-                                        fill="none"
-                                        stroke="#2563EB"
-                                        strokeWidth="3"
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                    />
-                                ) : null}
-
-                                {revenueChartPoints.map((point, index) => {
-                                    const showLabel = index === revenueChartPoints.length - 1 || index % 5 === 0
-                                    return (
-                                        <g key={point.date}>
-                                            <circle
-                                                cx={point.x}
-                                                cy={point.y}
-                                                r={index === revenueChartPoints.length - 1 ? 4.5 : 3}
-                                                fill={point.revenue === 0 ? "#CBD5E1" : "#2563EB"}
-                                                stroke="#fff"
-                                                strokeWidth="2"
-                                            />
-                                            {showLabel ? (
-                                                <text
-                                                    x={point.x}
-                                                    y={chartHeight - 10}
-                                                    textAnchor="middle"
-                                                    fontSize="11"
-                                                    fill="#64748B"
-                                                >
-                                                    {formatDate(point.date)}
-                                                </text>
-                                            ) : null}
-                                        </g>
-                                    )
-                                })}
-
-                                {latestRevenuePoint ? (
-                                    <g>
-                                        <rect
-                                            x={Math.max(latestRevenuePoint.x - 44, chartPaddingLeft)}
-                                            y={Math.max(latestRevenuePoint.y - 36, chartPaddingTop)}
-                                            width="88"
-                                            height="24"
-                                            rx="12"
-                                            fill="#FFFFFF"
-                                            stroke="#BFDBFE"
-                                        />
-                                        <text
-                                            x={latestRevenuePoint.x}
-                                            y={Math.max(latestRevenuePoint.y - 20, chartPaddingTop + 16)}
-                                            textAnchor="middle"
-                                            fontSize="11"
-                                            fontWeight="600"
-                                            fill="#1E40AF"
-                                        >
-                                            {formatCompactCurrency(latestRevenuePoint.revenue)}
-                                        </text>
-                                    </g>
-                                ) : null}
-
-                                <defs>
-                                    <linearGradient id="revenueAreaGradient" x1="0" x2="0" y1="0" y2="1">
-                                        <stop offset="0%" stopColor="#60A5FA" stopOpacity="0.35" />
-                                        <stop offset="100%" stopColor="#60A5FA" stopOpacity="0.04" />
-                                    </linearGradient>
-                                </defs>
-                            </svg>
-                        </div>
-                        <div className="mt-6 space-y-5 border-t border-slate-100 pt-6">
+                    <CardContent className="min-w-0 px-0 pt-0 sm:p-6 sm:pt-0">
+                        <RevenueTrendChart currentData={revenueTrend} previousData={previousRevenueTrend} />
+                        <div className="mt-5 space-y-4 border-t border-slate-100 pt-5 sm:mt-6 sm:space-y-5 sm:pt-6">
                             <div className="flex items-start justify-between gap-4">
                                 <div className="space-y-1">
-                                    <h3 className="font-semibold tracking-tight">Что видно по дням</h3>
+                                    <h3 className="font-semibold tracking-tight text-slate-900">Что видно по дням</h3>
                                     <p className="text-sm text-muted-foreground">Короткие выводы по последним 12 неделям выручки</p>
                                 </div>
                             </div>
 
-                            <div className="grid gap-3 md:grid-cols-2">
+                            <div className="grid gap-2.5 md:grid-cols-2 sm:gap-3">
                                 {revenueInsights.insights.map((insight, index) => (
                                     <div
                                         key={`${insight.title}-${index}`}
                                         className={cn(
-                                            "rounded-2xl border p-4",
-                                            insight.tone === "success" && "border-emerald-200 bg-emerald-50/60",
-                                            insight.tone === "warning" && "border-amber-200 bg-amber-50/60",
-                                            insight.tone === "default" && "border-slate-200 bg-slate-50/70"
+                                            "rounded-xl border-0 p-3 sm:rounded-2xl sm:border sm:p-4",
+                                            insight.tone === "success" && "bg-emerald-50/70 sm:border-emerald-200 sm:bg-emerald-50/60",
+                                            insight.tone === "warning" && "bg-amber-50/70 sm:border-amber-200 sm:bg-amber-50/60",
+                                            insight.tone === "default" && "bg-slate-50/80 sm:border-slate-200 sm:bg-slate-50/70"
                                         )}
                                     >
-                                        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{insight.title}</p>
+                                        <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-slate-400">{insight.title}</p>
                                         <p className="mt-2 text-base font-semibold text-slate-900">{insight.value}</p>
                                         <p className="mt-1 text-sm text-muted-foreground">{insight.description}</p>
                                     </div>
                                 ))}
                             </div>
 
-                            <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
-                                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Средняя выручка по дням недели</p>
-                                <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+                            <div className="rounded-xl border-0 bg-slate-50/80 p-3 sm:rounded-2xl sm:border sm:border-slate-200 sm:bg-slate-50/70 sm:p-4">
+                                <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-slate-400">Средняя выручка по дням недели</p>
+                                <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
                                     {revenueInsights.weekdayAverages.map(item => (
                                         <div
                                             key={item.weekday}
                                             className={cn(
-                                                "rounded-xl border bg-white px-3 py-2",
-                                                item.isWeekend && "border-rose-200 bg-rose-50/70"
+                                                "rounded-lg border-0 bg-white/80 px-3 py-2 sm:rounded-xl sm:border",
+                                                item.isWeekend && "bg-rose-50/80 sm:border-rose-200 sm:bg-rose-50/70",
+                                                !item.isWeekend && "sm:border-slate-200"
                                             )}
                                         >
-                                            <p className={cn("text-[11px] font-semibold uppercase tracking-wide text-slate-500", item.isWeekend && "text-rose-700")}>
+                                            <p className={cn("text-[11px] font-medium uppercase tracking-[0.14em] text-slate-400", item.isWeekend && "text-rose-700")}>
                                                 {item.shortLabel}
                                             </p>
                                             <p className="mt-1 text-sm font-semibold text-slate-900">{formatCompactCurrency(item.avgRevenue)}</p>
@@ -1574,59 +1558,64 @@ export default async function ClubDashboardPage({
 
             </div>
 
-            <div className="grid gap-4 lg:grid-cols-4">
-                <Link href={`/clubs/${clubId}/finance`}>
-                    <Card className="h-full border-slate-200/80 shadow-sm transition-colors hover:border-primary/40">
-                        <CardContent className="flex items-center gap-4 p-5">
-                            <div className="rounded-xl bg-emerald-100 p-2.5 text-emerald-700">
-                                <Briefcase className="h-5 w-5" />
+            <div className="space-y-4">
+                <Link href={`/clubs/${clubId}/inventory`} className="block">
+                    <Card className="rounded-none border-0 bg-transparent shadow-none transition-colors sm:rounded-2xl sm:border-slate-200/80 sm:bg-card sm:shadow-sm sm:hover:border-slate-300">
+                        <CardHeader className="px-0 pb-4 pt-0 sm:p-6 sm:pb-4">
+                            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                                <div className="space-y-1">
+                                    <CardDescription className="text-[11px] font-medium uppercase tracking-[0.18em] text-slate-400">Складской обзор</CardDescription>
+                                    <CardTitle className="text-[1.75rem] tracking-[-0.03em] text-slate-900 sm:text-xl sm:tracking-normal">Склад под контролем</CardTitle>
+                                    <CardDescription className="max-w-2xl text-[15px] leading-6 sm:text-sm">
+                                        Ключевые товары категории A, которым уже нужно внимание и пополнение
+                                    </CardDescription>
+                                </div>
                             </div>
-                            <div>
-                                <p className="font-medium">Финансы</p>
-                                <p className="text-sm text-muted-foreground">ДДС, счета и статьи расходов</p>
-                            </div>
+                        </CardHeader>
+                        <CardContent className="px-0 pt-0 sm:p-6 sm:pt-0">
+                            <div className="rounded-xl border-0 bg-slate-50/80 p-3 sm:rounded-2xl sm:border sm:border-slate-200 sm:bg-slate-50/70 sm:p-4">
+                                    <div className="flex items-center justify-between gap-3">
+                                        <div>
+                                            <p className="text-sm font-semibold text-slate-900">Товары категории A</p>
+                                            <p className="text-xs leading-5 text-muted-foreground">Ключевые товары, которые уже нужно пополнить или проверить вручную</p>
+                                        </div>
+                                        <span className="rounded-full bg-white px-2.5 py-1 text-xs font-medium text-slate-500 ring-1 ring-slate-200">Топ-6</span>
+                                    </div>
+                                    <div className="mt-4 grid gap-2">
+                                        {inventorySnapshot.categoryAItems.length > 0 ? inventorySnapshot.categoryAItems.map(item => (
+                                            <div key={item.id} className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 rounded-lg border-0 bg-white px-3 py-3 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:rounded-xl sm:border sm:border-white sm:px-4 sm:shadow-sm">
+                                                <div className="min-w-0">
+                                                    <p className="truncate text-sm font-medium text-slate-900">{item.name}</p>
+                                                    <p className="mt-1 text-xs text-muted-foreground">
+                                                        {item.minStockLevel > 0 ? `минимум: ${item.minStockLevel} шт.` : "минимум не задан"}
+                                                        {item.daysLeft !== null ? ` • запас: ${item.daysLeft.toFixed(1)} дн.` : item.salesVelocity > 0 ? " • запас не рассчитан" : " • нет скорости продаж"}
+                                                    </p>
+                                                </div>
+                                                <div className="text-right sm:order-none order-3 col-span-2 sm:col-span-1">
+                                                    <p className="text-[11px] uppercase tracking-wide text-slate-400">Остаток</p>
+                                                    <p className="text-sm font-semibold text-slate-900">{item.currentStock} шт.</p>
+                                                </div>
+                                                <div className={cn(
+                                                    "inline-flex items-center gap-1 self-start rounded-full px-2.5 py-1 text-xs font-semibold",
+                                                    item.status === "critical" && "bg-rose-50 text-rose-700",
+                                                    item.status === "warning" && "bg-amber-50 text-amber-700",
+                                                    item.status === "stable" && "bg-emerald-50 text-emerald-700"
+                                                )}>
+                                                    <AlertTriangle className="h-3.5 w-3.5" />
+                                                    {item.status === "critical" ? "Критично" : item.status === "warning" ? "Скоро" : "Норма"}
+                                                </div>
+                                            </div>
+                                        )) : (
+                                            <div className="rounded-xl border border-dashed border-emerald-200 bg-emerald-50/70 px-4 py-8 text-sm text-emerald-800">
+                                                Сейчас нет проблемных товаров категории A
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
                         </CardContent>
                     </Card>
                 </Link>
-                <Link href={`/clubs/${clubId}/inventory`}>
-                    <Card className="h-full border-slate-200/80 shadow-sm transition-colors hover:border-primary/40">
-                        <CardContent className="flex items-center gap-4 p-5">
-                            <div className="rounded-xl bg-blue-100 p-2.5 text-blue-700">
-                                <HardDrive className="h-5 w-5" />
-                            </div>
-                            <div>
-                                <p className="font-medium">Склад</p>
-                                <p className="text-sm text-muted-foreground">Продажи, пополнение и инвентаризация</p>
-                            </div>
-                        </CardContent>
-                    </Card>
-                </Link>
-                <Link href={`/clubs/${clubId}/equipment`}>
-                    <Card className="h-full border-slate-200/80 shadow-sm transition-colors hover:border-primary/40">
-                        <CardContent className="flex items-center gap-4 p-5">
-                            <div className="rounded-xl bg-violet-100 p-2.5 text-violet-700">
-                                <Wrench className="h-5 w-5" />
-                            </div>
-                            <div>
-                                <p className="font-medium">Оборудование</p>
-                                <p className="text-sm text-muted-foreground">Инциденты, обслуживание и регламент</p>
-                            </div>
-                        </CardContent>
-                    </Card>
-                </Link>
-                <Link href={`/clubs/${clubId}/shifts`}>
-                    <Card className="h-full border-slate-200/80 shadow-sm transition-colors hover:border-primary/40">
-                        <CardContent className="flex items-center gap-4 p-5">
-                            <div className="rounded-xl bg-amber-100 p-2.5 text-amber-700">
-                                <LayoutDashboard className="h-5 w-5" />
-                            </div>
-                            <div>
-                                <p className="font-medium">Смены</p>
-                                <p className="text-sm text-muted-foreground">Выручка, отчеты и контроль по людям</p>
-                            </div>
-                        </CardContent>
-                    </Card>
-                </Link>
+
             </div>
         </PageShell>
     )

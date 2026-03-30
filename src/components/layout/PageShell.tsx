@@ -23,7 +23,7 @@ export function PageShell({ children, className, maxWidth = "full", ...props }: 
     }[maxWidth]
 
     return (
-        <div className="flex-1 space-y-8 p-8 pt-6 min-h-screen bg-background">
+        <div className="flex-1 space-y-6 p-4 pt-4 pb-24 min-h-screen bg-background sm:space-y-8 sm:p-6 sm:pt-6 sm:pb-8 lg:p-8">
             <div className={cn("mx-auto space-y-8", maxWidthClass, className)} {...props}>
                 {children}
             </div>

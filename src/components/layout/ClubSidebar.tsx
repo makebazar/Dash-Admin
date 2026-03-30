@@ -14,7 +14,6 @@ import {
     Package,
     Wallet,
     ClipboardCheck,
-    Building2,
     Briefcase,
     FileText,
     Calendar,
@@ -30,6 +29,7 @@ import { cn } from "@/lib/utils"
 interface Club {
     id: string
     name: string
+    address?: string | null
 }
 
 interface ClubSidebarProps {
@@ -102,10 +102,7 @@ export function ClubSidebarContent({ club, clubId, onLinkClick }: ClubSidebarCon
         <div className="flex h-full flex-col">
             {/* Logo */}
             <div className="flex h-16 items-center border-b border-border px-6">
-                <Link href="/dashboard" className="flex items-center gap-2" onClick={onLinkClick}>
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-tr from-purple-500 to-blue-500">
-                        <Building2 className="h-5 w-5 text-white" />
-                    </div>
+                <Link href="/dashboard" className="flex items-center" onClick={onLinkClick}>
                     <span className="text-lg font-semibold">DashAdmin</span>
                 </Link>
             </div>
@@ -119,9 +116,11 @@ export function ClubSidebarContent({ club, clubId, onLinkClick }: ClubSidebarCon
 
             {/* Club Name */}
             <div className="border-b border-border px-6 py-4">
-                <div className="flex items-center gap-2">
-                    <Building2 className="h-5 w-5 text-purple-600" />
+                <div className="space-y-1">
                     <span className="font-semibold">{club?.name || 'Загрузка...'}</span>
+                    {club?.address ? (
+                        <p className="text-sm text-muted-foreground">{club.address}</p>
+                    ) : null}
                 </div>
                 {!subscriptionIsActive ? (
                     <p className="mt-2 rounded-md bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700">

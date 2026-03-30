@@ -5,6 +5,7 @@ import { useParams } from "next/navigation"
 import {
     Plus,
     ChevronLeft,
+    ChevronDown,
     MoreVertical,
     Pencil,
     Trash2,
@@ -163,6 +164,218 @@ interface WorkstationDetailsDialogProps {
     renderIssueStatusBadge: (status: string) => React.ReactNode
 }
 
+interface ThermalMaintenanceCardProps {
+    title: string
+    description: string
+    summary: string
+    isOpen: boolean
+    onToggleOpen: () => void
+    dateValue: string
+    intervalValue: string
+    typeValue: string
+    noteValue: string
+    typePlaceholder: string
+    notePlaceholder: string
+    isSaving: boolean
+    onDateChange: (value: string) => void
+    onIntervalChange: (value: string) => void
+    onTypeChange: (value: string) => void
+    onNoteChange: (value: string) => void
+    onSave: () => void
+}
+
+const ThermalMaintenanceCard = memo(function ThermalMaintenanceCard({
+    title,
+    description,
+    summary,
+    isOpen,
+    onToggleOpen,
+    dateValue,
+    intervalValue,
+    typeValue,
+    noteValue,
+    typePlaceholder,
+    notePlaceholder,
+    isSaving,
+    onDateChange,
+    onIntervalChange,
+    onTypeChange,
+    onNoteChange,
+    onSave,
+}: ThermalMaintenanceCardProps) {
+    return (
+        <Card className="border-slate-200">
+            <CardHeader className="pb-2">
+                <CardTitle className="text-base">{title}</CardTitle>
+                <CardDescription>{description}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+                <div className="rounded-lg border border-slate-200 bg-slate-50/60">
+                    <button
+                        type="button"
+                        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
+                        onClick={onToggleOpen}
+                    >
+                        <div>
+                            <p className="text-sm font-medium text-slate-900">{summary}</p>
+                            <p className="text-xs text-muted-foreground">Дата, интервал и материал</p>
+                        </div>
+                        <ChevronDown className={cn("h-4 w-4 text-slate-400 transition-transform", isOpen && "rotate-180")} />
+                    </button>
+                    {isOpen ? (
+                        <div className="space-y-3 border-t border-slate-200 px-4 py-4">
+                            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                <div className="space-y-1">
+                                    <Label className="text-xs text-muted-foreground">Дата обслуживания</Label>
+                                    <Input
+                                        type="date"
+                                        value={dateValue}
+                                        onChange={(e) => onDateChange(e.target.value)}
+                                    />
+                                </div>
+                                <div className="space-y-1">
+                                    <Label className="text-xs text-muted-foreground">Интервал (дней)</Label>
+                                    <Input
+                                        type="number"
+                                        min={1}
+                                        value={intervalValue}
+                                        onChange={(e) => onIntervalChange(e.target.value)}
+                                    />
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                <div className="space-y-1">
+                                    <Label className="text-xs text-muted-foreground">Материал</Label>
+                                    <Input
+                                        placeholder={typePlaceholder}
+                                        value={typeValue}
+                                        onChange={(e) => onTypeChange(e.target.value)}
+                                    />
+                                </div>
+                                <div className="space-y-1">
+                                    <Label className="text-xs text-muted-foreground">Заметка</Label>
+                                    <Input
+                                        placeholder={notePlaceholder}
+                                        value={noteValue}
+                                        onChange={(e) => onNoteChange(e.target.value)}
+                                    />
+                                </div>
+                            </div>
+                            <Button size="sm" className="h-8" disabled={isSaving} onClick={onSave}>
+                                {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : "Сохранить"}
+                            </Button>
+                        </div>
+                    ) : null}
+                </div>
+            </CardContent>
+        </Card>
+    )
+})
+
+interface PeripheralMaintenanceItemProps {
+    item: Equipment
+    expanded: boolean
+    intervalValue: string
+    lastCleanedValue: string
+    isSaving: boolean
+    renderEquipmentIcon: (type: string) => React.ReactNode
+    onToggleExpanded: (id: string) => void
+    onToggleMaintenance: (equipmentId: string, enabled: boolean) => Promise<void>
+    onLastCleanedChange: (equipmentId: string, value: string) => void
+    onIntervalChange: (equipmentId: string, value: string) => void
+    onSaveInterval: (equipmentId: string, payload: { intervalDays: number; lastCleanedAt: string | null }) => Promise<void>
+}
+
+const PeripheralMaintenanceItem = memo(function PeripheralMaintenanceItem({
+    item,
+    expanded,
+    intervalValue,
+    lastCleanedValue,
+    isSaving,
+    renderEquipmentIcon,
+    onToggleExpanded,
+    onToggleMaintenance,
+    onLastCleanedChange,
+    onIntervalChange,
+    onSaveInterval,
+}: PeripheralMaintenanceItemProps) {
+    return (
+        <div className="rounded-lg border border-slate-100 bg-white p-3 space-y-3">
+            <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                    <div className="h-10 w-10 rounded-lg bg-slate-50 border flex items-center justify-center text-slate-500 shrink-0">
+                        {renderEquipmentIcon(item.type)}
+                    </div>
+                    <div className="min-w-0">
+                        <p className="text-sm font-semibold truncate text-slate-900">{item.name}</p>
+                        <div className="flex items-center gap-2 mt-0.5">
+                            <Badge variant="secondary" className="text-[10px] h-5 px-1.5 font-normal bg-slate-100 text-slate-600 hover:bg-slate-200">
+                                {item.type_name || item.type}
+                            </Badge>
+                            <span className="text-[10px] text-muted-foreground truncate">{item.brand} {item.model}</span>
+                        </div>
+                    </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                    <Label className="text-xs text-muted-foreground">Обслуживание</Label>
+                    <input
+                        type="checkbox"
+                        className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                        checked={item.maintenance_enabled !== false}
+                        onChange={(e) => onToggleMaintenance(item.id, e.target.checked)}
+                    />
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 px-2 text-xs"
+                        onClick={() => onToggleExpanded(item.id)}
+                    >
+                        {expanded ? "Скрыть" : "Настроить"}
+                    </Button>
+                </div>
+            </div>
+
+            {expanded ? (
+                <div className="grid grid-cols-1 gap-3 items-end sm:grid-cols-3">
+                    <div className="flex flex-col gap-1.5 sm:col-span-2">
+                        <Label className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Посл. чистка</Label>
+                        <Input
+                            type="date"
+                            className="h-9 text-xs"
+                            value={lastCleanedValue}
+                            onChange={(e) => onLastCleanedChange(item.id, e.target.value)}
+                        />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                        <Label className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Интервал</Label>
+                        <Input
+                            type="number"
+                            min={1}
+                            className="h-9 text-xs"
+                            value={intervalValue}
+                            onChange={(e) => onIntervalChange(item.id, e.target.value)}
+                        />
+                    </div>
+                    <div className="sm:col-span-3">
+                        <Button
+                            size="sm"
+                            className="h-9 w-full bg-slate-900 text-white hover:bg-slate-800"
+                            disabled={isSaving}
+                            onClick={() => onSaveInterval(item.id, {
+                                intervalDays: parseInt(intervalValue, 10),
+                                lastCleanedAt: lastCleanedValue || null
+                            })}
+                        >
+                            {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : "Сохранить"}
+                        </Button>
+                    </div>
+                </div>
+            ) : null}
+        </div>
+    )
+})
+
 const WorkstationDetailsDialog = memo(function WorkstationDetailsDialog({
     open,
     onOpenChange,
@@ -186,6 +399,10 @@ const WorkstationDetailsDialog = memo(function WorkstationDetailsDialog({
     renderEquipmentIcon,
     renderIssueStatusBadge,
 }: WorkstationDetailsDialogProps) {
+    const [activeTab, setActiveTab] = useState<"equipment" | "maintenance" | "issues">("equipment")
+    const [isCpuSectionOpen, setIsCpuSectionOpen] = useState(false)
+    const [isGpuSectionOpen, setIsGpuSectionOpen] = useState(false)
+    const [expandedPeripheralId, setExpandedPeripheralId] = useState<string | null>(null)
     const [intervalDrafts, setIntervalDrafts] = useState<Record<string, string>>({})
     const [lastCleanedDrafts, setLastCleanedDrafts] = useState<Record<string, string>>({})
     const [cpuThermalPasteDateDrafts, setCpuThermalPasteDateDrafts] = useState<Record<string, string>>({})
@@ -198,7 +415,25 @@ const WorkstationDetailsDialog = memo(function WorkstationDetailsDialog({
     const [gpuThermalPasteNoteDrafts, setGpuThermalPasteNoteDrafts] = useState<Record<string, string>>({})
 
     useEffect(() => {
-        if (!open || !workstation) return
+        if (!open) {
+            setActiveTab("equipment")
+            setIsCpuSectionOpen(false)
+            setIsGpuSectionOpen(false)
+            setExpandedPeripheralId(null)
+            return
+        }
+    }, [open])
+
+    useEffect(() => {
+        if (activeTab !== "maintenance") {
+            setIsCpuSectionOpen(false)
+            setIsGpuSectionOpen(false)
+            setExpandedPeripheralId(null)
+        }
+    }, [activeTab])
+
+    useEffect(() => {
+        if (!open || !workstation || activeTab !== "maintenance") return
 
         const drafts: Record<string, string> = {}
         const cleanedDrafts: Record<string, string> = {}
@@ -252,7 +487,7 @@ const WorkstationDetailsDialog = memo(function WorkstationDetailsDialog({
         setGpuThermalPasteIntervalDrafts(gpuIntervalDraftsMap)
         setGpuThermalPasteTypeDrafts(gpuTypeDrafts)
         setGpuThermalPasteNoteDrafts(gpuNoteDrafts)
-    }, [equipment, open, workstation])
+    }, [activeTab, equipment, open, workstation])
 
     const primaryEquipment = useMemo(() => {
         const priority = ["PC", "CONSOLE", "TV"]
@@ -291,9 +526,22 @@ const WorkstationDetailsDialog = memo(function WorkstationDetailsDialog({
     }, [equipment, primaryEquipment])
 
     const workplaceIssues = useMemo(() => {
+        if (activeTab !== "issues") return []
         const equipmentIds = new Set(equipment.map(item => item.id))
         return issues.filter(issue => equipmentIds.has(issue.equipment_id)).sort(sortWorkplaceIssues)
-    }, [equipment, issues])
+    }, [activeTab, equipment, issues])
+
+    const handleToggleExpandedPeripheral = useCallback((id: string) => {
+        setExpandedPeripheralId(current => current === id ? null : id)
+    }, [])
+
+    const handlePeripheralLastCleanedChange = useCallback((equipmentId: string, value: string) => {
+        setLastCleanedDrafts(prev => ({ ...prev, [equipmentId]: value }))
+    }, [])
+
+    const handlePeripheralIntervalChange = useCallback((equipmentId: string, value: string) => {
+        setIntervalDrafts(prev => ({ ...prev, [equipmentId]: value }))
+    }, [])
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -324,7 +572,7 @@ const WorkstationDetailsDialog = memo(function WorkstationDetailsDialog({
                     </Select>
                 </div>
 
-                <Tabs defaultValue="equipment" className="pt-2">
+                <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as "equipment" | "maintenance" | "issues")} className="pt-2">
                     <TabsList className="w-full justify-start bg-transparent p-0 h-auto gap-4 border-b rounded-none">
                         <TabsTrigger value="equipment" variant="underline" className="px-0">Оборудование</TabsTrigger>
                         <TabsTrigger value="maintenance" variant="underline" className="px-0">Обслуживание</TabsTrigger>
@@ -529,127 +777,71 @@ const WorkstationDetailsDialog = memo(function WorkstationDetailsDialog({
                                         ) : !thermalEligible ? (
                                             <div className="text-sm text-muted-foreground">Доступно для ПК и консолей</div>
                                         ) : (
-                                            <div className="space-y-3">
-                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                                    <div className="space-y-1">
-                                                        <Label className="text-xs text-muted-foreground">Дата обслуживания</Label>
-                                                        <Input
-                                                            type="date"
-                                                            value={cpuThermalPasteDateDrafts[primaryEquipment.id] ?? ""}
-                                                            onChange={(e) => setCpuThermalPasteDateDrafts(prev => ({ ...prev, [primaryEquipment.id]: e.target.value }))}
-                                                        />
-                                                    </div>
-                                                    <div className="space-y-1">
-                                                        <Label className="text-xs text-muted-foreground">Интервал (дней)</Label>
-                                                        <Input
-                                                            type="number"
-                                                            min={1}
-                                                            value={cpuThermalPasteIntervalDrafts[primaryEquipment.id] ?? ""}
-                                                            onChange={(e) => setCpuThermalPasteIntervalDrafts(prev => ({ ...prev, [primaryEquipment.id]: e.target.value }))}
-                                                        />
-                                                    </div>
-                                                </div>
-                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                                    <div className="space-y-1">
-                                                        <Label className="text-xs text-muted-foreground">Материал</Label>
-                                                        <Input
-                                                            placeholder="Arctic MX-4"
-                                                            value={cpuThermalPasteTypeDrafts[primaryEquipment.id] ?? ""}
-                                                            onChange={(e) => setCpuThermalPasteTypeDrafts(prev => ({ ...prev, [primaryEquipment.id]: e.target.value }))}
-                                                        />
-                                                    </div>
-                                                    <div className="space-y-1">
-                                                        <Label className="text-xs text-muted-foreground">Заметка</Label>
-                                                        <Input
-                                                            placeholder="Например, жидкий металл"
-                                                            value={cpuThermalPasteNoteDrafts[primaryEquipment.id] ?? ""}
-                                                            onChange={(e) => setCpuThermalPasteNoteDrafts(prev => ({ ...prev, [primaryEquipment.id]: e.target.value }))}
-                                                        />
-                                                    </div>
-                                                </div>
-                                                <Button
-                                                    size="sm"
-                                                    className="h-8"
-                                                    disabled={isSavingCpuThermalId === primaryEquipment.id}
-                                                    onClick={() => onSaveCpuThermal(primaryEquipment.id, {
-                                                        changedAt: cpuThermalPasteDateDrafts[primaryEquipment.id] || null,
-                                                        intervalDays: cpuThermalPasteIntervalDrafts[primaryEquipment.id] ? parseInt(cpuThermalPasteIntervalDrafts[primaryEquipment.id], 10) : null,
-                                                        type: cpuThermalPasteTypeDrafts[primaryEquipment.id] || null,
-                                                        note: cpuThermalPasteNoteDrafts[primaryEquipment.id] || null
-                                                    })}
-                                                >
-                                                    {isSavingCpuThermalId === primaryEquipment.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Сохранить"}
-                                                </Button>
-                                            </div>
+                                            <ThermalMaintenanceCard
+                                                title="Процессор"
+                                                description="Обслуживание CPU (термопаста)"
+                                                summary="Настройки CPU"
+                                                isOpen={isCpuSectionOpen}
+                                                onToggleOpen={() => setIsCpuSectionOpen(current => !current)}
+                                                dateValue={cpuThermalPasteDateDrafts[primaryEquipment.id] ?? ""}
+                                                intervalValue={cpuThermalPasteIntervalDrafts[primaryEquipment.id] ?? ""}
+                                                typeValue={cpuThermalPasteTypeDrafts[primaryEquipment.id] ?? ""}
+                                                noteValue={cpuThermalPasteNoteDrafts[primaryEquipment.id] ?? ""}
+                                                typePlaceholder="Arctic MX-4"
+                                                notePlaceholder="Например, жидкий металл"
+                                                isSaving={isSavingCpuThermalId === primaryEquipment.id}
+                                                onDateChange={(value) => setCpuThermalPasteDateDrafts(prev => ({ ...prev, [primaryEquipment.id]: value }))}
+                                                onIntervalChange={(value) => setCpuThermalPasteIntervalDrafts(prev => ({ ...prev, [primaryEquipment.id]: value }))}
+                                                onTypeChange={(value) => setCpuThermalPasteTypeDrafts(prev => ({ ...prev, [primaryEquipment.id]: value }))}
+                                                onNoteChange={(value) => setCpuThermalPasteNoteDrafts(prev => ({ ...prev, [primaryEquipment.id]: value }))}
+                                                onSave={() => onSaveCpuThermal(primaryEquipment.id, {
+                                                    changedAt: cpuThermalPasteDateDrafts[primaryEquipment.id] || null,
+                                                    intervalDays: cpuThermalPasteIntervalDrafts[primaryEquipment.id] ? parseInt(cpuThermalPasteIntervalDrafts[primaryEquipment.id], 10) : null,
+                                                    type: cpuThermalPasteTypeDrafts[primaryEquipment.id] || null,
+                                                    note: cpuThermalPasteNoteDrafts[primaryEquipment.id] || null
+                                                })}
+                                            />
                                         )}
                                     </CardContent>
                                 </Card>
 
                                 {gpuEligible && (
-                                    <Card className="border-slate-200">
-                                        <CardHeader className="pb-2">
-                                            <CardTitle className="text-base">Видеокарта</CardTitle>
-                                            <CardDescription>Обслуживание GPU (термопаста/термопрокладки)</CardDescription>
-                                        </CardHeader>
-                                        <CardContent className="space-y-3">
-                                            {!primaryEquipment ? (
+                                    !primaryEquipment ? (
+                                        <Card className="border-slate-200">
+                                            <CardHeader className="pb-2">
+                                                <CardTitle className="text-base">Видеокарта</CardTitle>
+                                                <CardDescription>Обслуживание GPU (термопаста/термопрокладки)</CardDescription>
+                                            </CardHeader>
+                                            <CardContent className="space-y-3">
                                                 <div className="text-sm text-muted-foreground">Основное устройство не назначено</div>
-                                            ) : (
-                                                <div className="space-y-3">
-                                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                                        <div className="space-y-1">
-                                                            <Label className="text-xs text-muted-foreground">Дата обслуживания</Label>
-                                                            <Input
-                                                                type="date"
-                                                                value={gpuThermalPasteDateDrafts[primaryEquipment.id] ?? ""}
-                                                                onChange={(e) => setGpuThermalPasteDateDrafts(prev => ({ ...prev, [primaryEquipment.id]: e.target.value }))}
-                                                            />
-                                                        </div>
-                                                        <div className="space-y-1">
-                                                            <Label className="text-xs text-muted-foreground">Интервал (дней)</Label>
-                                                            <Input
-                                                                type="number"
-                                                                min={1}
-                                                                value={gpuThermalPasteIntervalDrafts[primaryEquipment.id] ?? ""}
-                                                                onChange={(e) => setGpuThermalPasteIntervalDrafts(prev => ({ ...prev, [primaryEquipment.id]: e.target.value }))}
-                                                            />
-                                                        </div>
-                                                    </div>
-                                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                                        <div className="space-y-1">
-                                                            <Label className="text-xs text-muted-foreground">Материал</Label>
-                                                            <Input
-                                                                placeholder="Термопаста/прокладки"
-                                                                value={gpuThermalPasteTypeDrafts[primaryEquipment.id] ?? ""}
-                                                                onChange={(e) => setGpuThermalPasteTypeDrafts(prev => ({ ...prev, [primaryEquipment.id]: e.target.value }))}
-                                                            />
-                                                        </div>
-                                                        <div className="space-y-1">
-                                                            <Label className="text-xs text-muted-foreground">Заметка</Label>
-                                                            <Input
-                                                                placeholder="Например, замена прокладок"
-                                                                value={gpuThermalPasteNoteDrafts[primaryEquipment.id] ?? ""}
-                                                                onChange={(e) => setGpuThermalPasteNoteDrafts(prev => ({ ...prev, [primaryEquipment.id]: e.target.value }))}
-                                                            />
-                                                        </div>
-                                                    </div>
-                                                    <Button
-                                                        size="sm"
-                                                        className="h-8"
-                                                        disabled={isSavingGpuThermalId === primaryEquipment.id}
-                                                        onClick={() => onSaveGpuThermal(primaryEquipment.id, {
-                                                            changedAt: gpuThermalPasteDateDrafts[primaryEquipment.id] || null,
-                                                            intervalDays: gpuThermalPasteIntervalDrafts[primaryEquipment.id] ? parseInt(gpuThermalPasteIntervalDrafts[primaryEquipment.id], 10) : null,
-                                                            type: gpuThermalPasteTypeDrafts[primaryEquipment.id] || null,
-                                                            note: gpuThermalPasteNoteDrafts[primaryEquipment.id] || null
-                                                        })}
-                                                    >
-                                                        {isSavingGpuThermalId === primaryEquipment.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Сохранить"}
-                                                    </Button>
-                                                </div>
-                                            )}
-                                        </CardContent>
-                                    </Card>
+                                            </CardContent>
+                                        </Card>
+                                    ) : (
+                                        <ThermalMaintenanceCard
+                                            title="Видеокарта"
+                                            description="Обслуживание GPU (термопаста/термопрокладки)"
+                                            summary="Настройки GPU"
+                                            isOpen={isGpuSectionOpen}
+                                            onToggleOpen={() => setIsGpuSectionOpen(current => !current)}
+                                            dateValue={gpuThermalPasteDateDrafts[primaryEquipment.id] ?? ""}
+                                            intervalValue={gpuThermalPasteIntervalDrafts[primaryEquipment.id] ?? ""}
+                                            typeValue={gpuThermalPasteTypeDrafts[primaryEquipment.id] ?? ""}
+                                            noteValue={gpuThermalPasteNoteDrafts[primaryEquipment.id] ?? ""}
+                                            typePlaceholder="Термопаста/прокладки"
+                                            notePlaceholder="Например, замена прокладок"
+                                            isSaving={isSavingGpuThermalId === primaryEquipment.id}
+                                            onDateChange={(value) => setGpuThermalPasteDateDrafts(prev => ({ ...prev, [primaryEquipment.id]: value }))}
+                                            onIntervalChange={(value) => setGpuThermalPasteIntervalDrafts(prev => ({ ...prev, [primaryEquipment.id]: value }))}
+                                            onTypeChange={(value) => setGpuThermalPasteTypeDrafts(prev => ({ ...prev, [primaryEquipment.id]: value }))}
+                                            onNoteChange={(value) => setGpuThermalPasteNoteDrafts(prev => ({ ...prev, [primaryEquipment.id]: value }))}
+                                            onSave={() => onSaveGpuThermal(primaryEquipment.id, {
+                                                changedAt: gpuThermalPasteDateDrafts[primaryEquipment.id] || null,
+                                                intervalDays: gpuThermalPasteIntervalDrafts[primaryEquipment.id] ? parseInt(gpuThermalPasteIntervalDrafts[primaryEquipment.id], 10) : null,
+                                                type: gpuThermalPasteTypeDrafts[primaryEquipment.id] || null,
+                                                note: gpuThermalPasteNoteDrafts[primaryEquipment.id] || null
+                                            })}
+                                        />
+                                    )
                                 )}
                             </div>
 
@@ -663,66 +855,20 @@ const WorkstationDetailsDialog = memo(function WorkstationDetailsDialog({
                                         <div className="text-sm text-muted-foreground">Периферия не назначена</div>
                                     ) : (
                                         peripheralEquipment.map(item => (
-                                            <div key={item.id} className="rounded-lg border border-slate-100 bg-white p-3 space-y-3">
-                                                <div className="flex items-start justify-between gap-3">
-                                                    <div className="flex items-center gap-3 min-w-0">
-                                                        <div className="h-10 w-10 rounded-lg bg-slate-50 border flex items-center justify-center text-slate-500 shrink-0">
-                                                            {renderEquipmentIcon(item.type)}
-                                                        </div>
-                                                        <div className="min-w-0">
-                                                            <p className="text-sm font-semibold truncate text-slate-900">{item.name}</p>
-                                                            <div className="flex items-center gap-2 mt-0.5">
-                                                                <Badge variant="secondary" className="text-[10px] h-5 px-1.5 font-normal bg-slate-100 text-slate-600 hover:bg-slate-200">{item.type_name || item.type}</Badge>
-                                                                <span className="text-[10px] text-muted-foreground truncate">{item.brand} {item.model}</span>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                    <div className="flex items-center gap-2 shrink-0">
-                                                        <Label className="text-xs text-muted-foreground">Обслуживание</Label>
-                                                        <input
-                                                            type="checkbox"
-                                                            className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
-                                                            checked={item.maintenance_enabled !== false}
-                                                            onChange={(e) => onToggleMaintenance(item.id, e.target.checked)}
-                                                        />
-                                                    </div>
-                                                </div>
-
-                                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
-                                                    <div className="flex flex-col gap-1.5 sm:col-span-2">
-                                                        <Label className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Посл. чистка</Label>
-                                                        <Input
-                                                            type="date"
-                                                            className="h-9 text-xs"
-                                                            value={lastCleanedDrafts[item.id] ?? ""}
-                                                            onChange={(e) => setLastCleanedDrafts(prev => ({ ...prev, [item.id]: e.target.value }))}
-                                                        />
-                                                    </div>
-                                                    <div className="flex flex-col gap-1.5">
-                                                        <Label className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Интервал</Label>
-                                                        <Input
-                                                            type="number"
-                                                            min={1}
-                                                            className="h-9 text-xs"
-                                                            value={intervalDrafts[item.id] ?? String(item.cleaning_interval_days ?? 30)}
-                                                            onChange={(e) => setIntervalDrafts(prev => ({ ...prev, [item.id]: e.target.value }))}
-                                                        />
-                                                    </div>
-                                                    <div className="sm:col-span-3">
-                                                        <Button
-                                                            size="sm"
-                                                            className="h-9 w-full bg-slate-900 text-white hover:bg-slate-800"
-                                                            disabled={isSavingIntervalId === item.id}
-                                                            onClick={() => onSaveInterval(item.id, {
-                                                                intervalDays: parseInt(intervalDrafts[item.id] ?? String(item.cleaning_interval_days ?? 30), 10),
-                                                                lastCleanedAt: lastCleanedDrafts[item.id] || null
-                                                            })}
-                                                        >
-                                                            {isSavingIntervalId === item.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Сохранить"}
-                                                        </Button>
-                                                    </div>
-                                                </div>
-                                            </div>
+                                            <PeripheralMaintenanceItem
+                                                key={item.id}
+                                                item={item}
+                                                expanded={expandedPeripheralId === item.id}
+                                                intervalValue={intervalDrafts[item.id] ?? String(item.cleaning_interval_days ?? 30)}
+                                                lastCleanedValue={lastCleanedDrafts[item.id] ?? ""}
+                                                isSaving={isSavingIntervalId === item.id}
+                                                renderEquipmentIcon={renderEquipmentIcon}
+                                                onToggleExpanded={handleToggleExpandedPeripheral}
+                                                onToggleMaintenance={onToggleMaintenance}
+                                                onLastCleanedChange={handlePeripheralLastCleanedChange}
+                                                onIntervalChange={handlePeripheralIntervalChange}
+                                                onSaveInterval={onSaveInterval}
+                                            />
                                         ))
                                     )}
                                 </CardContent>

@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { Loader2, Clock, DollarSign, FileText, Eye, TrendingUp, Wallet, CheckCircle, CalendarDays, Sun, Moon, ArrowUpDown, ChevronLeft, ChevronRight } from "lucide-react"
+import { cn } from "@/lib/utils"
 
 interface Shift {
     id: string
@@ -163,11 +164,20 @@ export default function EmployeeShiftHistoryPage() {
 
     const formatDate = (dateStr: string) => {
         return new Date(dateStr).toLocaleDateString('ru-RU', {
+            weekday: 'short',
             day: '2-digit',
             month: '2-digit',
-            year: 'numeric',
             timeZone: clubTimezone
         })
+    }
+
+    const isWeekendDate = (dateStr: string) => {
+        const weekday = new Intl.DateTimeFormat('en-US', {
+            weekday: 'short',
+            timeZone: clubTimezone
+        }).format(new Date(dateStr))
+
+        return weekday === 'Sat' || weekday === 'Sun'
     }
 
     const formatTime = (dateStr: string) => {
@@ -527,9 +537,15 @@ export default function EmployeeShiftHistoryPage() {
                                         </div>
                                     </TableCell>
                                 </TableRow>
-                            ) : sortedShifts.map((shift) => (
+                            ) : sortedShifts.map((shift) => {
+                                const isWeekend = isWeekendDate(shift.check_in)
+
+                                return (
                                 <TableRow key={shift.id} className="hover:bg-muted/50">
-                                    <TableCell className="font-medium whitespace-nowrap">
+                                    <TableCell className={cn(
+                                        "font-medium whitespace-nowrap",
+                                        isWeekend && "text-rose-600 bg-rose-50/60 dark:bg-rose-950/20 dark:text-rose-400"
+                                    )}>
                                         {formatDate(shift.check_in)}
                                     </TableCell>
                                     <TableCell className="whitespace-nowrap">
@@ -581,7 +597,8 @@ export default function EmployeeShiftHistoryPage() {
                                         )}
                                     </TableCell>
                                 </TableRow>
-                            ))}
+                                )
+                            })}
                         </TableBody>
                     </Table>
                 </CardContent>
@@ -602,10 +619,16 @@ export default function EmployeeShiftHistoryPage() {
                         </CardContent>
                     </Card>
                 ) : (
-                    sortedShifts.map((shift) => (
+                    sortedShifts.map((shift) => {
+                        const isWeekend = isWeekendDate(shift.check_in)
+
+                        return (
                         <Card key={shift.id} className="border-0 shadow-md overflow-hidden">
                             <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between space-y-0 bg-muted/20">
-                                <div className="font-bold text-lg">
+                                <div className={cn(
+                                    "font-bold text-lg",
+                                    isWeekend && "text-rose-600 dark:text-rose-400"
+                                )}>
                                     {formatDate(shift.check_in)}
                                 </div>
                                 {getStatusBadge(shift.status, !!shift.check_out)}
@@ -671,7 +694,8 @@ export default function EmployeeShiftHistoryPage() {
                                 )}
                             </CardContent>
                         </Card>
-                    ))
+                        )
+                    })
                 )}
             </div>
 

@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Loader2, Clock, DollarSign, FileText, Eye, TrendingUp, Wallet, Edit, CheckCircle, CalendarDays, Sun, Moon, Trash2, ArrowUpDown, ChevronLeft, ChevronRight, RefreshCw, CheckSquare, Wrench, Package } from "lucide-react"
 import { ShiftExcelImport } from "@/components/payroll/ShiftExcelImport"
 import { cn } from "@/lib/utils"
@@ -582,11 +583,20 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
 
     const formatDate = useCallback((dateStr: string) => {
         return new Date(dateStr).toLocaleDateString('ru-RU', {
+            weekday: 'short',
             day: '2-digit',
             month: '2-digit',
-            year: 'numeric',
             timeZone: clubTimezone
         })
+    }, [clubTimezone])
+
+    const isWeekendDate = useCallback((dateStr: string) => {
+        const weekday = new Intl.DateTimeFormat('en-US', {
+            weekday: 'short',
+            timeZone: clubTimezone
+        }).format(new Date(dateStr))
+
+        return weekday === 'Sat' || weekday === 'Sun'
     }, [clubTimezone])
 
     const formatTime = useCallback((dateStr: string) => {
@@ -664,6 +674,27 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
         }
         return <Badge className="bg-blue-500/10 text-blue-500 border-blue-500/20">Закрыта</Badge>
     }
+
+    const hasShiftReport = useCallback((shift: Shift) => {
+        if (shift.report_comment?.trim()) return true
+        return Boolean(shift.report_data && Object.keys(shift.report_data).length > 0)
+    }, [])
+
+    const reportEmployees = useMemo(() => {
+        const uniqueEmployees = new Map<string, string>()
+
+        shifts.forEach((shift) => {
+            if (!hasShiftReport(shift)) return
+            if (!shift.user_id || !shift.employee_name) return
+            if (!uniqueEmployees.has(shift.user_id)) {
+                uniqueEmployees.set(shift.user_id, shift.employee_name)
+            }
+        })
+
+        return Array.from(uniqueEmployees.entries())
+            .map(([id, full_name]) => ({ id, full_name }))
+            .sort((a, b) => a.full_name.localeCompare(b.full_name, 'ru'))
+    }, [shifts, hasShiftReport])
 
     // Filter shifts based on employee
     const filteredShifts = useMemo(() => {
@@ -813,107 +844,106 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
 
             {/* Date Filters */}
             <Card className="border-dashed bg-transparent shadow-none border-none p-0">
-                <div className="grid grid-cols-1 gap-3 bg-background border rounded-lg p-3 shadow-sm sm:flex sm:flex-wrap sm:items-center sm:gap-4">
-                    <Popover>
-                        <PopoverTrigger asChild>
-                            <Button
-                                variant="outline"
-                                className={cn(
-                                    "justify-start text-left font-normal w-full sm:w-[220px] capitalize",
-                                    !selectedMonth && "text-muted-foreground"
-                                )}
-                            >
-                                <CalendarDays className="mr-2 h-4 w-4" />
-                                {selectedMonth ? (
-                                    (() => {
-                                        const now = new Date();
-                                        const target = new Date(now.getFullYear(), now.getMonth() + parseInt(selectedMonth), 1);
-                                        return target.toLocaleString('ru-RU', { month: 'long', year: 'numeric' });
-                                    })()
-                                ) : (
-                                    <span>Выберите месяц</span>
-                                )}
-                            </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                            <div className="p-2 w-48">
-                                <div className="grid gap-1">
-                                    {[0, -1, -2, -3].map((offset) => {
-                                        const now = new Date();
-                                        const target = new Date(now.getFullYear(), now.getMonth() + offset, 1);
-                                        const label = target.toLocaleString('ru-RU', { month: 'long', year: 'numeric' });
-                                        return (
-                                            <Button
-                                                key={offset}
-                                                variant={selectedMonth === String(offset) ? "default" : "ghost"}
-                                                className="justify-start w-full capitalize h-9 px-2.5 font-normal"
-                                                onClick={() => {
-                                                    handleMonthSelect(offset);
-                                                }}
-                                            >
-                                                {label}
-                                            </Button>
-                                        )
-                                    })}
+                <div className="flex flex-col gap-2 bg-background border rounded-lg p-3 shadow-sm lg:flex-row lg:flex-wrap lg:items-center">
+                    <div className="w-full lg:w-auto lg:min-w-[180px] lg:max-w-[200px]">
+                        <Popover>
+                            <PopoverTrigger asChild>
+                                <Button
+                                    variant="outline"
+                                    className={cn(
+                                        "justify-start text-left font-normal w-full capitalize lg:px-3",
+                                        !selectedMonth && "text-muted-foreground"
+                                    )}
+                                >
+                                    <CalendarDays className="mr-2 h-4 w-4 shrink-0" />
+                                    <span className="truncate">
+                                        {selectedMonth ? (
+                                            (() => {
+                                                const now = new Date();
+                                                const target = new Date(now.getFullYear(), now.getMonth() + parseInt(selectedMonth), 1);
+                                                return target.toLocaleString('ru-RU', { month: 'long', year: 'numeric' });
+                                            })()
+                                        ) : (
+                                            "Выберите месяц"
+                                        )}
+                                    </span>
+                                </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0" align="start">
+                                <div className="p-2 w-48">
+                                    <div className="grid gap-1">
+                                        {[0, -1, -2, -3].map((offset) => {
+                                            const now = new Date();
+                                            const target = new Date(now.getFullYear(), now.getMonth() + offset, 1);
+                                            const label = target.toLocaleString('ru-RU', { month: 'long', year: 'numeric' });
+                                            return (
+                                                <Button
+                                                    key={offset}
+                                                    variant={selectedMonth === String(offset) ? "default" : "ghost"}
+                                                    className="justify-start w-full capitalize h-9 px-2.5 font-normal"
+                                                    onClick={() => {
+                                                        handleMonthSelect(offset);
+                                                    }}
+                                                >
+                                                    {label}
+                                                </Button>
+                                            )
+                                        })}
+                                    </div>
                                 </div>
-                            </div>
-                        </PopoverContent>
-                    </Popover>
+                            </PopoverContent>
+                        </Popover>
+                    </div>
 
-                    <div className="hidden sm:block h-6 w-px bg-border" />
-
-                    <div className="grid grid-cols-1 gap-2 sm:flex sm:items-center sm:gap-2 w-full sm:w-auto">
-                        <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center sm:gap-2">
-                            <Input
-                                placeholder="ДД.ММ.ГГГГ"
-                                value={dateToDisplay(filterStartDate)}
-                                onChange={(e) => {
-                                    const formatted = formatDisplayDate(e.target.value);
-                                    setFilterStartDate(dateToInternal(formatted));
-                                }}
-                                className="w-full sm:w-[120px]"
-                            />
-                            <Input
-                                placeholder="ДД.ММ.ГГГГ"
-                                value={dateToDisplay(filterEndDate)}
-                                onChange={(e) => {
-                                    const formatted = formatDisplayDate(e.target.value);
-                                    setFilterEndDate(dateToInternal(formatted));
-                                }}
-                                className="w-full sm:w-[120px]"
-                            />
-                        </div>
+                    <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center lg:w-auto lg:flex-nowrap">
+                        <Input
+                            placeholder="ДД.ММ.ГГГГ"
+                            value={dateToDisplay(filterStartDate)}
+                            onChange={(e) => {
+                                const formatted = formatDisplayDate(e.target.value);
+                                setFilterStartDate(dateToInternal(formatted));
+                            }}
+                            className="w-full sm:w-[116px]"
+                        />
+                        <Input
+                            placeholder="ДД.ММ.ГГГГ"
+                            value={dateToDisplay(filterEndDate)}
+                            onChange={(e) => {
+                                const formatted = formatDisplayDate(e.target.value);
+                                setFilterEndDate(dateToInternal(formatted));
+                            }}
+                            className="w-full sm:w-[116px]"
+                        />
                         <Button
                             variant="secondary"
                             size="sm"
                             onClick={handleCustomDateFilter}
-                            className="h-10 sm:h-9 w-full sm:w-auto"
+                            className="h-10 sm:h-9 w-full sm:w-auto sm:px-4 lg:shrink-0"
                         >
                             Применить
                         </Button>
                     </div>
 
-                    <div className="hidden sm:block h-6 w-px bg-border" />
-
-                    <select
-                        value={filterEmployee}
-                        onChange={e => setFilterEmployee(e.target.value)}
-                        className="h-10 w-full sm:w-[240px] rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                    >
-                        <option value="">Все сотрудники</option>
-                        {employees.map(emp => (
-                            <option key={emp.id} value={emp.id}>
-                                {emp.full_name}
-                            </option>
-                        ))}
-                    </select>
+                    <Select value={filterEmployee || "all"} onValueChange={(value) => setFilterEmployee(value === "all" ? "" : value)}>
+                        <SelectTrigger className="h-10 w-full lg:w-[220px] lg:min-w-[220px] lg:flex-none">
+                            <SelectValue placeholder="Все сотрудники" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">Все сотрудники</SelectItem>
+                            {reportEmployees.map((emp) => (
+                                <SelectItem key={emp.id} value={emp.id}>
+                                    {emp.full_name}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
 
                     {(filterStartDate || filterEndDate || (selectedMonth && selectedMonth !== '0')) && (
                         <Button
                             variant="ghost"
                             size="sm"
                             onClick={clearFilters}
-                            className="w-full sm:w-auto sm:ml-auto text-muted-foreground hover:text-foreground"
+                            className="h-10 sm:h-9 w-full sm:w-auto lg:ml-auto lg:shrink-0 text-muted-foreground hover:text-foreground"
                         >
                             Сбросить
                         </Button>
@@ -1094,7 +1124,7 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
             <Card>
                 <CardHeader>
                     <CardTitle>История смен</CardTitle>
-                    <CardDescription>Последние 100 смен с отчетами</CardDescription>
+                    <CardDescription>Смены за выбранный период</CardDescription>
                 </CardHeader>
                 <CardContent>
                     <div className="md:hidden space-y-3">
@@ -1106,7 +1136,10 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                                 </div>
                             </div>
                         ) : (
-                            sortedShifts.map((shift) => (
+                            sortedShifts.map((shift) => {
+                                const isWeekend = isWeekendDate(shift.check_in)
+
+                                return (
                                 <div
                                     key={shift.id}
                                     className="rounded-lg border bg-background p-3 active:bg-muted/30 cursor-pointer"
@@ -1115,7 +1148,10 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                                     <div className="flex items-start justify-between gap-3">
                                         <div className="min-w-0">
                                             <div className="flex items-center gap-2 flex-wrap">
-                                                <span className="font-medium whitespace-nowrap">{formatDate(shift.check_in)}</span>
+                                                <span className={cn(
+                                                    "font-medium whitespace-nowrap",
+                                                    isWeekend && "text-rose-600 dark:text-rose-400"
+                                                )}>{formatDate(shift.check_in)}</span>
                                                 {shift.shift_type === 'NIGHT' ? (
                                                     <span className="inline-flex items-center gap-1 text-blue-500 text-xs">
                                                         <Moon className="h-3.5 w-3.5" />
@@ -1254,7 +1290,8 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                                         </Button>
                                     </div>
                                 </div>
-                            ))
+                                )
+                            })
                         )}
                     </div>
 
@@ -1344,7 +1381,10 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                                         </div>
                                     </TableCell>
                                 </TableRow>
-                            ) : sortedShifts.map((shift) => (
+                            ) : sortedShifts.map((shift) => {
+                                const isWeekend = isWeekendDate(shift.check_in)
+
+                                return (
                                 <TableRow 
                                     key={shift.id} 
                                     className="hover:bg-muted/50 cursor-pointer group"
@@ -1354,7 +1394,10 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                                         handleViewShift(shift);
                                     }}
                                 >
-                                    <TableCell className="font-medium whitespace-nowrap">
+                                    <TableCell className={cn(
+                                        "font-medium whitespace-nowrap",
+                                        isWeekend && "text-rose-600 bg-rose-50/60 dark:bg-rose-950/20 dark:text-rose-400"
+                                    )}>
                                         {formatDate(shift.check_in)}
                                     </TableCell>
                                     <TableCell className="whitespace-nowrap">
@@ -1440,7 +1483,8 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                                         </div>
                                     </TableCell>
                                 </TableRow>
-                            ))}
+                                )
+                            })}
                         </TableBody>
                     </Table>
                     </div>

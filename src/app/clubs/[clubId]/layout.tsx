@@ -52,13 +52,13 @@ export default async function ClubLayout({
 
     // Fetch club data for sidebar
     const result = await query(
-        'SELECT id, name FROM clubs WHERE id = $1',
+        'SELECT id, name, address FROM clubs WHERE id = $1',
         [clubId]
     )
     const club = result.rows[0] || null
 
     return (
-        <div className="flex h-screen bg-background flex-col md:flex-row overflow-hidden">
+        <div className="flex min-h-dvh bg-background flex-col md:h-screen md:flex-row md:overflow-hidden">
             <ClubSidebar clubId={clubId} club={club} />
             
             <div className="md:hidden">
@@ -67,7 +67,7 @@ export default async function ClubLayout({
                 </MobileNav>
             </div>
 
-            <main className="flex-1 overflow-auto w-full max-w-full">{children}</main>
+            <main className="flex-1 overflow-y-auto overflow-x-hidden w-full max-w-full">{children}</main>
         </div>
     )
 }
