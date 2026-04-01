@@ -215,8 +215,8 @@ export default function MaintenanceSchedule() {
     const fetchData = useCallback(async () => {
         setIsLoading(true)
         try {
-            const firstDay = new Date(selectedYear, selectedMonth - 1, 1).toISOString().split("T")[0]
-            const lastDay = new Date(selectedYear, selectedMonth, 0).toISOString().split("T")[0]
+            const firstDay = getLocalDateKey(new Date(selectedYear, selectedMonth - 1, 1))
+            const lastDay = getLocalDateKey(new Date(selectedYear, selectedMonth, 0))
 
             await ensurePlan(firstDay, lastDay)
 

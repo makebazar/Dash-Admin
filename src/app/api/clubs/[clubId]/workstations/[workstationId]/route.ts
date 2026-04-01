@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/db';
 import { cookies } from 'next/headers';
+import { formatLocalDate } from '@/lib/utils';
 
 export async function PATCH(
     request: Request,
@@ -91,7 +92,7 @@ export async function PATCH(
 
             // If a new user is assigned, move their PENDING tasks to their next shift
             if (assignedUserId) {
-                const today = new Date().toISOString().split('T')[0];
+                const today = formatLocalDate(new Date());
                 const nextShift = await query(
                     `SELECT date FROM work_schedules 
                      WHERE club_id = $1 AND user_id = $2 AND date >= $3
@@ -101,7 +102,7 @@ export async function PATCH(
 
                 if (nextShift.rowCount && nextShift.rowCount > 0) {
                     const shiftDate = nextShift.rows[0].date;
-                    const shiftDateStr = shiftDate instanceof Date ? shiftDate.toISOString().split('T')[0] : shiftDate;
+                    const shiftDateStr = shiftDate instanceof Date ? formatLocalDate(shiftDate) : shiftDate;
                     
                     await query(
                         `UPDATE equipment_maintenance_tasks 

@@ -74,6 +74,7 @@ export default function EmployeeTasksPage() {
     const ensurePlan = useCallback(async (date: Date) => {
         try {
             const firstDay = format(startOfMonth(date), 'yyyy-MM-dd')
+            const lastDay = format(endOfMonth(date), 'yyyy-MM-dd')
             
             // Just ensure we have tasks generated for today/upcoming
             await fetch(`/api/clubs/${clubId}/equipment/maintenance`, {
@@ -81,7 +82,7 @@ export default function EmployeeTasksPage() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     date_from: firstDay,
-                    date_to: firstDay, // Not used for "Smart Horizon" but required by API
+                    date_to: lastDay,
                     task_type: 'CLEANING'
                 })
             })
@@ -93,7 +94,7 @@ export default function EmployeeTasksPage() {
     const fetchData = useCallback(async () => {
         setIsLoading(true)
         try {
-            const today = new Date().toISOString().split('T')[0]
+            const today = format(new Date(), 'yyyy-MM-dd')
             const now = new Date()
             const monthStart = format(startOfMonth(now), 'yyyy-MM-dd')
             const monthEnd = format(endOfMonth(now), 'yyyy-MM-dd')

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { query } from '@/db';
 import { cookies } from 'next/headers';
 import { calculateMaintenanceOverduePenalty } from '@/lib/maintenance-penalties';
+import { formatLocalDate } from '@/lib/utils';
 
 // PATCH - Update/complete maintenance task
 export async function PATCH(
@@ -167,7 +168,7 @@ export async function PATCH(
                                 // Logic preserved from previous edit, though redundant if interval >= 1
                             }
 
-                            const nextDueStr = nextDue.toISOString().split('T')[0];
+                            const nextDueStr = formatLocalDate(nextDue);
                             console.log(`[Maintenance] Next Due String: ${nextDueStr}`);
                             
                             // Find shift for assigned user if any AND user is active
@@ -193,7 +194,8 @@ export async function PATCH(
                                         [clubId, assignedUserId, nextDueStr]
                                     );
                                     if (shiftRes.rowCount && shiftRes.rowCount > 0) {
-                                        finalDate = shiftRes.rows[0].date;
+                                        const shiftDate = shiftRes.rows[0].date;
+                                        finalDate = shiftDate instanceof Date ? formatLocalDate(shiftDate) : String(shiftDate);
                                         console.log(`[Maintenance] Found shift: ${finalDate}`);
                                     } else {
                                         console.log(`[Maintenance] No shift found, keeping ${finalDate}`);

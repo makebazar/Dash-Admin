@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/db';
 import { requireClubApiAccess } from '@/lib/club-api-access';
+import { formatLocalDate } from '@/lib/utils';
 
 // GET /api/clubs/[clubId]/finance/analytics
 export async function GET(
@@ -29,7 +30,7 @@ export async function GET(
             const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
             const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
             dateCondition = `AND transaction_date BETWEEN $2 AND $3`;
-            values.push(firstDay.toISOString().split('T')[0], lastDay.toISOString().split('T')[0]);
+            values.push(formatLocalDate(firstDay), formatLocalDate(lastDay));
         }
 
         // 1. INCOME AND EXPENSES SUMMARY

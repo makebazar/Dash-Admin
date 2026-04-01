@@ -83,7 +83,7 @@ import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
-import { cn } from "@/lib/utils"
+import { cn, formatLocalDate } from "@/lib/utils"
 import { InstructionsTab } from "./InstructionsTab"
 
 // --- Types ---
@@ -473,7 +473,7 @@ export default function EquipmentInventory() {
         const url = URL.createObjectURL(blob)
         const link = document.createElement("a")
         link.setAttribute("href", url)
-        link.setAttribute("download", `inventory_export_${new Date().toISOString().split('T')[0]}.csv`)
+        link.setAttribute("download", `inventory_export_${formatLocalDate(new Date())}.csv`)
         link.style.visibility = 'hidden'
         document.body.appendChild(link)
         link.click()

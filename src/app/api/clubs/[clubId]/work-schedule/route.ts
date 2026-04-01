@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/db';
 import { cookies } from 'next/headers';
+import { formatLocalDate } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
 
@@ -93,8 +94,8 @@ export async function GET(
         }
 
         const startOfMonth = `${year}-${month.toString().padStart(2, '0')}-01`;
-        const startDate = new Date(year, month - 1, -2).toISOString().split('T')[0]; // 3 days before 1st of the month
-        const endOfMonth = new Date(year, month, 0).toISOString().split('T')[0];
+        const startDate = formatLocalDate(new Date(year, month - 1, -2));
+        const endOfMonth = formatLocalDate(new Date(year, month, 0));
 
         // Get employees
         let employees = [];
@@ -194,7 +195,7 @@ export async function PATCH(
                 const deletedDate = new Date(date);
                 const nextDay = new Date(deletedDate);
                 nextDay.setDate(nextDay.getDate() + 1);
-                const nextDayStr = nextDay.toISOString().split('T')[0];
+                const nextDayStr = formatLocalDate(nextDay);
 
                 const nextShiftRes = await query(
                     `SELECT date FROM work_schedules 
@@ -206,7 +207,7 @@ export async function PATCH(
                 if (nextShiftRes.rowCount && nextShiftRes.rowCount > 0) {
                     // Found a new date, move tasks there
                     const newDate = nextShiftRes.rows[0].date;
-                    const newDateStr = newDate instanceof Date ? newDate.toISOString().split('T')[0] : newDate;
+                    const newDateStr = newDate instanceof Date ? formatLocalDate(newDate) : newDate;
                     
                     const taskIds = affectedTasks.rows.map((t: any) => t.id);
                     

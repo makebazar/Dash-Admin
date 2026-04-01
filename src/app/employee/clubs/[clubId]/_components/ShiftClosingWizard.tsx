@@ -267,6 +267,41 @@ export function ShiftClosingWizard({
         return inventoryItems.filter(i => i.actual_stock === null)
     }, [inventoryItems])
 
+    const discrepancyItems = useMemo(() => {
+        return inventoryItems
+            .filter(item => item.actual_stock !== null)
+            .map(item => {
+                const expected = Number(item.expected_stock || 0)
+                const actual = Number(item.actual_stock || 0)
+                const difference = actual - expected
+
+                return {
+                    id: item.id,
+                    product_name: item.product_name,
+                    expected_stock: expected,
+                    actual_stock: actual,
+                    difference,
+                    value: Math.abs(difference) * Number(item.selling_price_snapshot || 0)
+                }
+            })
+            .filter(item => item.difference !== 0)
+            .sort((a, b) => {
+                if (Math.sign(a.difference) !== Math.sign(b.difference)) return a.difference - b.difference
+                if (Math.abs(a.difference) !== Math.abs(b.difference)) return Math.abs(b.difference) - Math.abs(a.difference)
+                return a.product_name.localeCompare(b.product_name)
+            })
+    }, [inventoryItems])
+
+    const shortageDiscrepancyItems = useMemo(
+        () => discrepancyItems.filter(item => item.difference < 0),
+        [discrepancyItems]
+    )
+
+    const excessDiscrepancyItems = useMemo(
+        () => discrepancyItems.filter(item => item.difference > 0),
+        [discrepancyItems]
+    )
+
     const hasInventoryMismatch = isShiftSalesMode && inventorySummary?.isPerfect === false
 
     const revenueKey = useMemo(() => {
@@ -1738,6 +1773,94 @@ export function ShiftClosingWizard({
                                     <div className="text-xl font-bold mt-1 text-blue-400">{inventorySummary.discrepancyValue.toLocaleString()} ₽</div>
                                     <div className="text-[10px] text-slate-500 mt-1">
                                         Недостача: {inventorySummary.shortageItems} · Излишки: {inventorySummary.excessItems}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {isShiftSalesMode && discrepancyItems.length > 0 && (
+                            <div className="grid gap-4 lg:grid-cols-2">
+                                <div className="rounded-2xl border border-red-500/20 bg-red-900/10 overflow-hidden">
+                                    <div className="flex items-center justify-between px-4 py-3 border-b border-red-500/20">
+                                        <div>
+                                            <h4 className="font-bold text-sm text-red-300">Недостача по товарам</h4>
+                                            <p className="text-[10px] text-red-200/70">Какие позиции оказались ниже ожидания</p>
+                                        </div>
+                                        <Badge variant="outline" className="border-red-400/30 bg-red-500/10 text-red-200">
+                                            {shortageDiscrepancyItems.length}
+                                        </Badge>
+                                    </div>
+                                    <div className="max-h-[240px] overflow-y-auto p-3 space-y-2">
+                                        {shortageDiscrepancyItems.length === 0 ? (
+                                            <div className="rounded-xl bg-slate-950/40 px-3 py-4 text-xs text-slate-400">
+                                                Недостач нет
+                                            </div>
+                                        ) : (
+                                            shortageDiscrepancyItems.map(item => (
+                                                <div key={item.id} className="flex items-start justify-between gap-3 rounded-xl bg-slate-950/40 px-3 py-2">
+                                                    <div className="min-w-0">
+                                                        <div className="text-sm font-medium text-slate-100">{item.product_name}</div>
+                                                        <div className="mt-1 text-[11px] text-slate-400">
+                                                            {inventorySettings?.blind_inventory_enabled
+                                                                ? `Факт: ${item.actual_stock} шт.`
+                                                                : `Ожидалось: ${item.expected_stock} шт. · Факт: ${item.actual_stock} шт.`}
+                                                        </div>
+                                                    </div>
+                                                    <div className="shrink-0 text-right">
+                                                        <div className="rounded-lg bg-red-500/15 px-2 py-1 text-xs font-bold text-red-300">
+                                                            {item.difference} шт.
+                                                        </div>
+                                                        {item.value > 0 && (
+                                                            <div className="mt-1 text-[10px] text-red-200/70">
+                                                                {item.value.toLocaleString()} ₽
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div className="rounded-2xl border border-blue-500/20 bg-blue-900/10 overflow-hidden">
+                                    <div className="flex items-center justify-between px-4 py-3 border-b border-blue-500/20">
+                                        <div>
+                                            <h4 className="font-bold text-sm text-blue-300">Излишек по товарам</h4>
+                                            <p className="text-[10px] text-blue-200/70">Какие позиции оказались выше ожидания</p>
+                                        </div>
+                                        <Badge variant="outline" className="border-blue-400/30 bg-blue-500/10 text-blue-200">
+                                            {excessDiscrepancyItems.length}
+                                        </Badge>
+                                    </div>
+                                    <div className="max-h-[240px] overflow-y-auto p-3 space-y-2">
+                                        {excessDiscrepancyItems.length === 0 ? (
+                                            <div className="rounded-xl bg-slate-950/40 px-3 py-4 text-xs text-slate-400">
+                                                Излишков нет
+                                            </div>
+                                        ) : (
+                                            excessDiscrepancyItems.map(item => (
+                                                <div key={item.id} className="flex items-start justify-between gap-3 rounded-xl bg-slate-950/40 px-3 py-2">
+                                                    <div className="min-w-0">
+                                                        <div className="text-sm font-medium text-slate-100">{item.product_name}</div>
+                                                        <div className="mt-1 text-[11px] text-slate-400">
+                                                            {inventorySettings?.blind_inventory_enabled
+                                                                ? `Факт: ${item.actual_stock} шт.`
+                                                                : `Ожидалось: ${item.expected_stock} шт. · Факт: ${item.actual_stock} шт.`}
+                                                        </div>
+                                                    </div>
+                                                    <div className="shrink-0 text-right">
+                                                        <div className="rounded-lg bg-blue-500/15 px-2 py-1 text-xs font-bold text-blue-300">
+                                                            +{item.difference} шт.
+                                                        </div>
+                                                        {item.value > 0 && (
+                                                            <div className="mt-1 text-[10px] text-blue-200/70">
+                                                                {item.value.toLocaleString()} ₽
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            ))
+                                        )}
                                     </div>
                                 </div>
                             </div>

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useMemo, useRef } from "react"
-import { cn } from "@/lib/utils"
+import { cn, formatLocalDate } from "@/lib/utils"
 import { Sun, Moon, Plus, Loader2, GripVertical, Calendar as CalendarIcon } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import {
@@ -266,7 +266,7 @@ export function WorkScheduleGrid({ clubId, month, year, initialData, refreshData
                 day: date.getDate(),
                 month: date.getMonth() + 1,
                 year: date.getFullYear(),
-                dateStr: date.toISOString().split('T')[0],
+                dateStr: formatLocalDate(date),
                 isOutside: true
             });
         }
@@ -278,7 +278,7 @@ export function WorkScheduleGrid({ clubId, month, year, initialData, refreshData
                 day: d,
                 month: month,
                 year: year,
-                dateStr: date.toISOString().split('T')[0],
+                dateStr: formatLocalDate(date),
                 isOutside: false
             });
         }

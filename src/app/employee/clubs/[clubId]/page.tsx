@@ -129,6 +129,13 @@ interface RecentShift {
     earnings: number
 }
 
+const formatLocalDate = (date: Date) => {
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+}
+
 export default function EmployeeClubPage({ params }: { params: Promise<{ clubId: string }> }) {
     const router = useRouter()
     const [clubId, setClubId] = useState<string>('')
@@ -368,6 +375,20 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
 
     const fetchData = async (id: string) => {
         try {
+            const now = new Date()
+            const monthStart = formatLocalDate(new Date(now.getFullYear(), now.getMonth(), 1))
+            const monthEnd = formatLocalDate(new Date(now.getFullYear(), now.getMonth() + 1, 0))
+
+            await fetch(`/api/clubs/${id}/equipment/maintenance`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    date_from: monthStart,
+                    date_to: monthEnd,
+                    task_type: "CLEANING"
+                })
+            })
+
             // Оптимизация: выполняем все запросы параллельно
             const results = await Promise.all([
                 fetch(`/api/employee/clubs/${id}/active-shift`).then(r => r.json()),

@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Zap, Calendar, DollarSign } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { formatLocalDate } from "@/lib/utils"
 
 interface RecurringPayment {
     id: number
@@ -39,7 +40,7 @@ interface PaymentModalProps {
 
 export function PaymentModal({ isOpen, onClose, payment, accounts, onConfirm }: PaymentModalProps) {
     const [amount, setAmount] = useState<string>("")
-    const [date, setDate] = useState<string>(new Date().toISOString().split('T')[0])
+    const [date, setDate] = useState<string>(formatLocalDate(new Date()))
     const [consumption, setConsumption] = useState<string>("")
     const [unitPrice, setUnitPrice] = useState<string>("")
     const [selectedAccountId, setSelectedAccountId] = useState<string>("")
@@ -47,7 +48,7 @@ export function PaymentModal({ isOpen, onClose, payment, accounts, onConfirm }: 
 
     useEffect(() => {
         if (payment && isOpen) {
-            setDate(new Date().toISOString().split('T')[0])
+            setDate(formatLocalDate(new Date()))
             // Default to payment's account if set, otherwise first available account
             const defaultAccount = payment.account_id ? payment.account_id.toString() : (accounts.length > 0 ? accounts[0].id.toString() : "")
             setSelectedAccountId(defaultAccount)

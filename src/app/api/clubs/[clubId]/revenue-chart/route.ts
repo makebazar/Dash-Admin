@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/db';
 import { cookies } from 'next/headers';
+import { formatLocalDate } from '@/lib/utils';
 
 export async function GET(
     request: Request,
@@ -43,7 +44,7 @@ export async function GET(
 
         const revenueByDate = new Map(
             result.rows.map(row => [
-                new Date(row.date).toISOString().split('T')[0],
+                formatLocalDate(new Date(row.date)),
                 parseFloat(row.revenue)
             ])
         );
@@ -51,7 +52,7 @@ export async function GET(
             const day = new Date();
             day.setHours(0, 0, 0, 0);
             day.setDate(day.getDate() - (days - 1 - index));
-            const key = day.toISOString().split('T')[0];
+            const key = formatLocalDate(day);
             return {
                 date: key,
                 revenue: revenueByDate.get(key) || 0

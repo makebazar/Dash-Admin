@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/db';
 import { cookies } from 'next/headers';
+import { formatLocalDate } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
 
@@ -47,7 +48,7 @@ export async function GET(
         }
 
         const startOfMonth = `${year}-${month.toString().padStart(2, '0')}-01`;
-        const endOfMonth = new Date(year, month, 0).toISOString().split('T')[0];
+        const endOfMonth = formatLocalDate(new Date(year, month, 0));
 
         // Get employees - FILTERED for Admins
         // We look for roles containing 'админ' or 'admin' (case insensitive)

@@ -3,6 +3,13 @@ import { query } from '@/db';
 import { cookies } from 'next/headers';
 import { calculateMaintenanceQualityMetrics } from '@/lib/maintenance-kpi-quality';
 
+const formatLocalDate = (value: Date) => {
+    const year = value.getFullYear();
+    const month = String(value.getMonth() + 1).padStart(2, '0');
+    const day = String(value.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
+
 // GET - List maintenance tasks
 export async function GET(
     request: Request,
@@ -205,7 +212,7 @@ export async function GET(
         const result = await query(finalSql, queryParams);
 
         // Get stats
-        const todayStr = new Date().toISOString().split('T')[0];
+        const todayStr = formatLocalDate(new Date());
         const statsConditions = [`e.club_id = $1`];
         const statsParams: any[] = [clubId, todayStr, dateFrom || null, dateTo || null];
         let statsParamIndex = 5;
@@ -352,12 +359,6 @@ export async function POST(
         }
 
         const parseDate = (value: string) => new Date(`${value}T00:00:00`);
-        const formatDate = (value: Date) => {
-            const year = value.getFullYear();
-            const month = String(value.getMonth() + 1).padStart(2, '0');
-            const day = String(value.getDate()).padStart(2, '0');
-            return `${year}-${month}-${day}`;
-        };
 
         let scheduleMap: Record<string, string[]> | null = null;
         try {
@@ -370,7 +371,7 @@ export async function POST(
                 if (!map[row.user_id]) map[row.user_id] = [];
                 // Date handling
                 const d = row.date;
-                const dStr = d instanceof Date ? d.toISOString().split('T')[0] : String(d);
+                const dStr = d instanceof Date ? formatLocalDate(d) : String(d);
                 map[row.user_id].push(dStr);
             });
             Object.keys(map).forEach(key => map[key].sort());
@@ -497,7 +498,7 @@ export async function POST(
                 nextDue = new Date(windowStart);
             }
 
-            const nominalDueDate = formatDate(nextDue);
+            const nominalDueDate = formatLocalDate(nextDue);
             let finalDueDate = nominalDueDate;
             let finalAssignedUserId = eq.assigned_user_id ?? null;
 

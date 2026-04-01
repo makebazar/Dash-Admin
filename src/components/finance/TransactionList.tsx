@@ -30,6 +30,7 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { formatLocalDate } from "@/lib/utils"
 
 interface Transaction {
     id: number
@@ -125,7 +126,7 @@ export default function TransactionList({
         type: 'expense' as 'income' | 'expense',
         payment_method: 'cash',
         status: 'completed',
-        transaction_date: new Date().toISOString().split('T')[0],
+        transaction_date: formatLocalDate(new Date()),
         description: '',
         notes: ''
     })
@@ -260,7 +261,7 @@ export default function TransactionList({
             type: 'expense',
             payment_method: 'cash',
             status: 'completed',
-            transaction_date: new Date().toISOString().split('T')[0],
+            transaction_date: formatLocalDate(new Date()),
             description: '',
             notes: ''
         })

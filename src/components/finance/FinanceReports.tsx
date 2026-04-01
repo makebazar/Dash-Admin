@@ -25,6 +25,7 @@ import {
     TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { Info } from "lucide-react"
+import { formatLocalDate } from "@/lib/utils"
 
 const UITooltip = Tooltip
 
@@ -62,8 +63,8 @@ export default function FinanceReports({ clubId }: FinanceReportsProps) {
         const firstDay = new Date(now.getFullYear(), now.getMonth(), 1)
         const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0)
 
-        setStartDate(firstDay.toISOString().split('T')[0])
-        setEndDate(lastDay.toISOString().split('T')[0])
+        setStartDate(formatLocalDate(firstDay))
+        setEndDate(formatLocalDate(lastDay))
     }, [])
 
     useEffect(() => {

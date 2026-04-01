@@ -6,7 +6,7 @@ import {
     ChevronRight,
 } from "lucide-react"
 import { query } from "@/db"
-import { cn } from "@/lib/utils"
+import { cn, formatLocalDate } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { PageShell } from "@/components/layout/PageShell"
@@ -953,7 +953,7 @@ async function getNextScheduledShift(clubId: string): Promise<NextScheduledShift
     return {
         userName: row.user_name,
         shiftType: row.shift_type || "DAY",
-        date: row.date instanceof Date ? row.date.toISOString().split("T")[0] : String(row.date),
+        date: row.date instanceof Date ? formatLocalDate(row.date) : String(row.date),
     }
 }
 

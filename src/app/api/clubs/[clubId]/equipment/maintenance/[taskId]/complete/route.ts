@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { query } from '@/db';
 import { cookies } from 'next/headers';
 import { calculateMaintenanceOverduePenalty } from '@/lib/maintenance-penalties';
+import { formatLocalDate } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
 
@@ -153,7 +154,7 @@ export async function POST(
              
              const nextDueDate = new Date();
              nextDueDate.setDate(nextDueDate.getDate() + intervalDays);
-             const nextDueDateStr = nextDueDate.toISOString().split('T')[0];
+             const nextDueDateStr = formatLocalDate(nextDueDate);
              
              // Find shift for assigned user if any AND user is active
              let finalDate = nextDueDateStr;
@@ -179,7 +180,7 @@ export async function POST(
                      if (shiftRes.rowCount && shiftRes.rowCount > 0) {
                          // Ensure we have a string YYYY-MM-DD
                          const d = shiftRes.rows[0].date;
-                         finalDate = d instanceof Date ? d.toISOString().split('T')[0] : d;
+                         finalDate = d instanceof Date ? formatLocalDate(d) : d;
                      }
                  }
              }

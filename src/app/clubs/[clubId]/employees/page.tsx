@@ -16,6 +16,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import Link from "next/link"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { formatLocalDate } from "@/lib/utils"
 
 interface Employee {
     id: string
@@ -175,7 +176,7 @@ export default function EmployeesPage({ params }: { params: Promise<{ clubId: st
 
     const handleDismissEmployee = (employeeId: string) => {
         setEmployeeToDismiss(employeeId)
-        setDismissalDate(new Date().toISOString().split('T')[0])
+        setDismissalDate(formatLocalDate(new Date()))
         setIsDismissModalOpen(true)
     }
 
