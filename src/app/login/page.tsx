@@ -12,6 +12,10 @@ import { Zap, Loader2, ArrowRight } from "lucide-react"
 import { PhoneInput } from "@/components/ui/phone-input"
 
 type MeResponse = {
+    user?: {
+        is_super_admin?: boolean
+        legal_acceptance_required?: boolean
+    }
     ownedClubs?: Array<any>
     employeeClubs?: Array<any>
 }
@@ -34,8 +38,18 @@ export default function LoginPage() {
     const [hasAcceptedLegal, setHasAcceptedLegal] = useState(false)
 
     const routeFromMe = useCallback((data: MeResponse) => {
+        if (data.user?.legal_acceptance_required) {
+            router.push('/legal-consent')
+            return
+        }
+
         const ownedClubs = Array.isArray(data.ownedClubs) ? data.ownedClubs : []
         const employeeClubs = Array.isArray(data.employeeClubs) ? data.employeeClubs : []
+
+        if (data.user?.is_super_admin) {
+            router.push('/super-admin/dashboard')
+            return
+        }
 
         const hasManagerClubs = employeeClubs.some(
             (club: any) => club.role === 'Управляющий' || club.role === 'Manager'
@@ -214,6 +228,12 @@ export default function LoginPage() {
         e.preventDefault()
         setIsLoading(true)
         try {
+            if (isNewUser && !hasAcceptedLegal) {
+                alert('Нужно принять пользовательское соглашение и политику конфиденциальности')
+                setIsLoading(false)
+                return
+            }
+
             if (newPassword !== confirmPassword) {
                 alert('Пароли не совпадают')
                 setIsLoading(false)
@@ -238,6 +258,21 @@ export default function LoginPage() {
             const data = await res.json()
 
             if (data.success) {
+                if (isNewUser) {
+                    const legalRes = await fetch('/api/legal-consent', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ accepted: true, source: 'registration' }),
+                    })
+
+                    const legalData = await legalRes.json()
+                    if (!legalRes.ok) {
+                        alert(legalData.error || 'Не удалось сохранить согласие')
+                        setIsLoading(false)
+                        return
+                    }
+                }
+
                 // После установки пароля — сразу редирект
                 await redirectBasedOnRole()
             } else {
@@ -312,31 +347,10 @@ export default function LoginPage() {
                                 />
                             </div>
 
-                            <div className="rounded-lg border border-white/10 bg-black/30 p-3">
-                                <div className="flex items-start gap-3">
-                                    <Checkbox
-                                        id="legal-consent"
-                                        checked={hasAcceptedLegal}
-                                        onCheckedChange={(checked) => setHasAcceptedLegal(checked === true)}
-                                        className="mt-0.5 border-white/20 data-[state=checked]:border-white data-[state=checked]:bg-white data-[state=checked]:text-black"
-                                    />
-                                    <Label htmlFor="legal-consent" className="text-xs leading-5 text-gray-400">
-                                        Я принимаю{" "}
-                                        <Link href="/terms" className="text-gray-200 transition-colors hover:text-white">
-                                            Пользовательское соглашение
-                                        </Link>
-                                        {" "}и{" "}
-                                        <Link href="/privacy" className="text-gray-200 transition-colors hover:text-white">
-                                            Политику конфиденциальности
-                                        </Link>
-                                    </Label>
-                                </div>
-                            </div>
-
                             <Button
                                 type="submit"
                                 className="w-full bg-white text-black hover:bg-gray-200"
-                                disabled={isLoading || !hasAcceptedLegal}
+                                disabled={isLoading}
                             >
                                 {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                                 Продолжить <ArrowRight className="ml-2 w-4 h-4" />
@@ -432,6 +446,28 @@ export default function LoginPage() {
                                     required
                                 />
                             </div>
+                            {isNewUser ? (
+                                <div className="rounded-lg border border-white/10 bg-black/30 p-3">
+                                    <div className="flex items-start gap-3">
+                                        <Checkbox
+                                            id="legal-consent"
+                                            checked={hasAcceptedLegal}
+                                            onCheckedChange={(checked) => setHasAcceptedLegal(checked === true)}
+                                            className="mt-0.5 border-white/20 data-[state=checked]:border-white data-[state=checked]:bg-white data-[state=checked]:text-black"
+                                        />
+                                        <Label htmlFor="legal-consent" className="text-xs leading-5 text-gray-400">
+                                            Я принимаю{" "}
+                                            <Link href="/terms" className="text-gray-200 transition-colors hover:text-white">
+                                                Пользовательское соглашение
+                                            </Link>
+                                            {" "}и{" "}
+                                            <Link href="/privacy" className="text-gray-200 transition-colors hover:text-white">
+                                                Политику конфиденциальности
+                                            </Link>
+                                        </Label>
+                                    </div>
+                                </div>
+                            ) : null}
                             <Button type="submit" className="w-full bg-white text-black hover:bg-gray-200" disabled={isLoading}>
                                 {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                                 Установить пароль <ArrowRight className="ml-2 w-4 h-4" />

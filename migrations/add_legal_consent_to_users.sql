@@ -1,0 +1,5 @@
+ALTER TABLE users ADD COLUMN IF NOT EXISTS legal_accepted_at TIMESTAMP;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS terms_accepted_at TIMESTAMP;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS privacy_accepted_at TIMESTAMP;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS legal_acceptance_version VARCHAR(32);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS legal_acceptance_source VARCHAR(32);

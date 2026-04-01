@@ -5,6 +5,8 @@ import { isSuperAdmin } from '@/lib/super-admin';
 import { resolveSubscriptionState } from '@/lib/subscriptions';
 import { hasColumn } from '@/lib/db-compat';
 
+const LEGAL_ACCEPTANCE_VERSION = '2026-04-01'
+
 export async function GET() {
     try {
         const userId = (await cookies()).get('session_user_id')?.value;
@@ -19,6 +21,8 @@ export async function GET() {
         // Get user info
         const hasSubscriptionStatus = await hasColumn('users', 'subscription_status');
         const hasSubscriptionCanceledAt = await hasColumn('users', 'subscription_canceled_at');
+        const hasLegalAcceptedAt = await hasColumn('users', 'legal_accepted_at');
+        const hasLegalAcceptanceVersion = await hasColumn('users', 'legal_acceptance_version');
         const userResult = await query(
             `SELECT 
                 id,
@@ -29,7 +33,9 @@ export async function GET() {
                 ${hasSubscriptionStatus ? 'subscription_status' : "NULL::varchar as subscription_status"},
                 subscription_started_at,
                 subscription_ends_at,
-                ${hasSubscriptionCanceledAt ? 'subscription_canceled_at' : "NULL::timestamp as subscription_canceled_at"}
+                ${hasSubscriptionCanceledAt ? 'subscription_canceled_at' : "NULL::timestamp as subscription_canceled_at"},
+                ${hasLegalAcceptedAt ? 'legal_accepted_at' : "NULL::timestamp as legal_accepted_at"},
+                ${hasLegalAcceptanceVersion ? 'legal_acceptance_version' : "NULL::varchar as legal_acceptance_version"}
              FROM users
              WHERE id = $1`,
             [userId]
@@ -43,6 +49,7 @@ export async function GET() {
         const user = userResult.rows[0];
         const resolvedSuperAdmin = isSuperAdmin(user.is_super_admin, user.id, user.phone_number);
         const subscription = resolveSubscriptionState(user);
+        const legalAcceptanceRequired = !user.legal_accepted_at || user.legal_acceptance_version !== LEGAL_ACCEPTANCE_VERSION
         console.log('[Auth/Me] User found:', user.full_name);
 
         // Get owned clubs
@@ -166,6 +173,9 @@ export async function GET() {
                 subscription_started_at: user.subscription_started_at,
                 subscription_ends_at: user.subscription_ends_at,
                 subscription_canceled_at: user.subscription_canceled_at,
+                legal_accepted_at: user.legal_accepted_at,
+                legal_acceptance_version: user.legal_acceptance_version,
+                legal_acceptance_required: legalAcceptanceRequired,
                 subscription_limits: {
                     max_clubs: subscription.planDefinition.maxClubs,
                     max_employees_per_club: subscription.planDefinition.maxEmployeesPerClub,
@@ -177,7 +187,8 @@ export async function GET() {
             },
             ownedClubs,
             employeeClubs,
-            has_expired_club_subscription: hasExpiredClubSubscription
+            has_expired_club_subscription: hasExpiredClubSubscription,
+            legal_acceptance_version_required: LEGAL_ACCEPTANCE_VERSION
         });
 
     } catch (error) {

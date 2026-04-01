@@ -35,6 +35,10 @@ export default function SuperAdminLayout({ children }: { children: React.ReactNo
         fetch('/api/auth/me')
             .then(res => res.json())
             .then(data => {
+                if (data?.user?.legal_acceptance_required) {
+                    router.push('/legal-consent')
+                    return
+                }
                 if (data?.user?.is_super_admin) {
                     setIsAuthorized(true)
                     return

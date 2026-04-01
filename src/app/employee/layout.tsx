@@ -44,6 +44,10 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
             const data = await res.json()
 
             if (res.ok) {
+                if (data.user?.legal_acceptance_required) {
+                    router.push('/legal-consent')
+                    return
+                }
                 setUserName(data.user.full_name)
                 setClubs(data.employeeClubs)
                 if (data.ownedClubs && data.ownedClubs.length > 0) {

@@ -122,6 +122,10 @@ export default function DashboardPage() {
             const res = await fetch('/api/auth/me')
             const data = await res.json()
             if (res.ok) {
+                if (data.user?.legal_acceptance_required) {
+                    router.push('/legal-consent')
+                    return
+                }
                 setUserData(data.user)
                 setSelectedPlan(data.user?.subscription_plan || "")
                 if (data.employeeClubs && data.employeeClubs.length > 0) {
