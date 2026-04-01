@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/db';
 import { cookies } from 'next/headers';
-import { formatLocalDate } from '@/lib/utils';
+import { formatDateKeyInTimezone } from '@/lib/utils';
 
 export async function PATCH(
     request: Request,
@@ -92,17 +92,23 @@ export async function PATCH(
 
             // If a new user is assigned, move their PENDING tasks to their next shift
             if (assignedUserId) {
-                const today = formatLocalDate(new Date());
+                const clubRes = await query(
+                    `SELECT COALESCE(timezone, 'Europe/Moscow') as timezone
+                     FROM clubs
+                     WHERE id = $1`,
+                    [clubId]
+                );
+                const today = formatDateKeyInTimezone(new Date(), clubRes.rows[0]?.timezone || 'Europe/Moscow');
                 const nextShift = await query(
-                    `SELECT date FROM work_schedules 
+                    `SELECT TO_CHAR(date, 'YYYY-MM-DD') as date
+                     FROM work_schedules 
                      WHERE club_id = $1 AND user_id = $2 AND date >= $3
                      ORDER BY date ASC LIMIT 1`,
                     [clubId, assignedUserId, today]
                 );
 
                 if (nextShift.rowCount && nextShift.rowCount > 0) {
-                    const shiftDate = nextShift.rows[0].date;
-                    const shiftDateStr = shiftDate instanceof Date ? formatLocalDate(shiftDate) : shiftDate;
+                    const shiftDateStr = String(nextShift.rows[0].date);
                     
                     await query(
                         `UPDATE equipment_maintenance_tasks 

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { query } from '@/db';
 import { cookies } from 'next/headers';
 import { calculateMaintenanceOverduePenalty } from '@/lib/maintenance-penalties';
-import { formatLocalDate } from '@/lib/utils';
+import { formatDateKeyInTimezone, parseDateKey } from '@/lib/utils';
 
 // PATCH - Update/complete maintenance task
 export async function PATCH(
@@ -130,6 +130,14 @@ export async function PATCH(
                     values.push(responsibleUserIdAtCompletion);
                     paramIndex++;
 
+                    const clubRes = await query(
+                        `SELECT COALESCE(timezone, 'Europe/Moscow') as timezone
+                         FROM clubs
+                         WHERE id = $1`,
+                        [clubId]
+                    );
+                    const clubTimezone = clubRes.rows[0]?.timezone || 'Europe/Moscow';
+
                     // AUTO-SCHEDULE NEXT TASK
                     // Find equipment and calculate next due date
                     const eqRes = await query(
@@ -156,7 +164,7 @@ export async function PATCH(
                             
                             console.log(`[Maintenance] Completing task ${taskId}. Equipment ${task.equipment_id}. Raw Interval: ${rawInterval}, Used: ${intervalDays}`);
                             
-                            const nextDue = new Date(); // Start from completion time (now)
+                            const nextDue = parseDateKey(formatDateKeyInTimezone(new Date(), clubTimezone));
                             nextDue.setDate(nextDue.getDate() + intervalDays);
                             
                             console.log(`[Maintenance] Next Due Initial: ${nextDue.toISOString()}`);
@@ -168,7 +176,7 @@ export async function PATCH(
                                 // Logic preserved from previous edit, though redundant if interval >= 1
                             }
 
-                            const nextDueStr = formatLocalDate(nextDue);
+                            const nextDueStr = formatDateKeyInTimezone(nextDue, clubTimezone);
                             console.log(`[Maintenance] Next Due String: ${nextDueStr}`);
                             
                             // Find shift for assigned user if any AND user is active
@@ -188,14 +196,14 @@ export async function PATCH(
                                     console.log(`[Maintenance] Checking shifts for active user ${assignedUserId} starting from ${nextDueStr}`);
                                     // Simple shift lookup - get next working day >= nextDueStr
                                     const shiftRes = await query(
-                                        `SELECT date FROM work_schedules 
+                                        `SELECT TO_CHAR(date, 'YYYY-MM-DD') as date
+                                         FROM work_schedules 
                                          WHERE club_id = $1 AND user_id = $2 AND date >= $3
                                          ORDER BY date ASC LIMIT 1`,
                                         [clubId, assignedUserId, nextDueStr]
                                     );
                                     if (shiftRes.rowCount && shiftRes.rowCount > 0) {
-                                        const shiftDate = shiftRes.rows[0].date;
-                                        finalDate = shiftDate instanceof Date ? formatLocalDate(shiftDate) : String(shiftDate);
+                                        finalDate = String(shiftRes.rows[0].date);
                                         console.log(`[Maintenance] Found shift: ${finalDate}`);
                                     } else {
                                         console.log(`[Maintenance] No shift found, keeping ${finalDate}`);

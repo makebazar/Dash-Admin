@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/db';
 import { cookies } from 'next/headers';
-import { formatLocalDate } from '@/lib/utils';
+import { formatDateKeyInTimezone } from '@/lib/utils';
 
 // GET /api/clubs/[clubId]/equipment/[equipmentId] - Get single equipment
 export async function GET(
@@ -246,7 +246,13 @@ export async function PATCH(
 
             // 3. If no active task exists, trigger generation for this specific equipment
             if (activeTaskCheck.rowCount === 0) {
-                const today = formatLocalDate(new Date());
+                const clubRes = await query(
+                    `SELECT COALESCE(timezone, 'Europe/Moscow') as timezone
+                     FROM clubs
+                     WHERE id = $1`,
+                    [clubId]
+                );
+                const today = formatDateKeyInTimezone(new Date(), clubRes.rows[0]?.timezone || 'Europe/Moscow');
                 try {
                     // We call the internal maintenance generation logic via a fetch to our own API
                     // This ensures the "Smart Horizon" logic is applied

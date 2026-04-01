@@ -2,13 +2,7 @@ import { NextResponse } from 'next/server';
 import { query } from '@/db';
 import { cookies } from 'next/headers';
 import { calculateMaintenanceQualityMetrics } from '@/lib/maintenance-kpi-quality';
-
-const formatLocalDate = (value: Date) => {
-    const year = value.getFullYear();
-    const month = String(value.getMonth() + 1).padStart(2, '0');
-    const day = String(value.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-};
+import { formatDateKeyInTimezone, formatLocalDate } from '@/lib/utils';
 
 // GET - List maintenance tasks
 export async function GET(
@@ -47,6 +41,14 @@ export async function GET(
         if ((accessCheck.rowCount || 0) === 0) {
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
+
+        const clubRes = await query(
+            `SELECT COALESCE(timezone, 'Europe/Moscow') as timezone
+             FROM clubs
+             WHERE id = $1`,
+            [clubId]
+        );
+        const clubTimezone = clubRes.rows[0]?.timezone || 'Europe/Moscow';
 
         // Determine if we should use DISTINCT ON
         // We usually use it for the "Smart Horizon" view to show one task per equipment
@@ -212,7 +214,7 @@ export async function GET(
         const result = await query(finalSql, queryParams);
 
         // Get stats
-        const todayStr = formatLocalDate(new Date());
+        const todayStr = formatDateKeyInTimezone(new Date(), clubTimezone);
         const statsConditions = [`e.club_id = $1`];
         const statsParams: any[] = [clubId, todayStr, dateFrom || null, dateTo || null];
         let statsParamIndex = 5;
@@ -363,16 +365,15 @@ export async function POST(
         let scheduleMap: Record<string, string[]> | null = null;
         try {
             const scheduleRes = await query(
-                `SELECT user_id, date FROM work_schedules WHERE club_id = $1 AND date >= $2 AND date <= $3`,
+                `SELECT user_id, TO_CHAR(date, 'YYYY-MM-DD') as date
+                 FROM work_schedules
+                 WHERE club_id = $1 AND date >= $2 AND date <= $3`,
                 [clubId, date_from, date_to]
             );
             const map: Record<string, string[]> = {};
             scheduleRes.rows.forEach((row: any) => {
                 if (!map[row.user_id]) map[row.user_id] = [];
-                // Date handling
-                const d = row.date;
-                const dStr = d instanceof Date ? formatLocalDate(d) : String(d);
-                map[row.user_id].push(dStr);
+                map[row.user_id].push(String(row.date));
             });
             Object.keys(map).forEach(key => map[key].sort());
             scheduleMap = map;

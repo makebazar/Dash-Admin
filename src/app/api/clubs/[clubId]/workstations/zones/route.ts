@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/db';
 import { cookies } from 'next/headers';
-import { formatLocalDate } from '@/lib/utils';
+import { formatDateKeyInTimezone } from '@/lib/utils';
 
 export async function PATCH(
     request: Request,
@@ -67,7 +67,13 @@ export async function PATCH(
 
                 // 3. Trigger generation for equipment that doesn't have active tasks
                 if (assignedUserId) {
-                    const today = formatLocalDate(new Date());
+                    const clubRes = await query(
+                        `SELECT COALESCE(timezone, 'Europe/Moscow') as timezone
+                         FROM clubs
+                         WHERE id = $1`,
+                        [clubId]
+                    );
+                    const today = formatDateKeyInTimezone(new Date(), clubRes.rows[0]?.timezone || 'Europe/Moscow');
                     try {
                         await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/clubs/${clubId}/equipment/maintenance`, {
                             method: 'POST',

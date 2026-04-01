@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { query } from '@/db';
 import { cookies } from 'next/headers';
 import { calculateMaintenanceOverduePenalty } from '@/lib/maintenance-penalties';
-import { formatLocalDate } from '@/lib/utils';
+import { formatDateKeyInTimezone, parseDateKey } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
 
@@ -147,14 +147,22 @@ export async function POST(
         
         const equipment = equipmentRes.rows[0];
         
+        const clubRes = await query(
+            `SELECT COALESCE(timezone, 'Europe/Moscow') as timezone
+             FROM clubs
+             WHERE id = $1`,
+            [clubId]
+        );
+        const clubTimezone = clubRes.rows[0]?.timezone || 'Europe/Moscow';
+
         // 4. Create next task if interval is set
         if (equipment && equipment.maintenance_enabled !== false) {
              const rawInterval = equipment.cleaning_interval_days;
              const intervalDays = Math.max(1, rawInterval || 30);
              
-             const nextDueDate = new Date();
+             const nextDueDate = parseDateKey(formatDateKeyInTimezone(new Date(), clubTimezone));
              nextDueDate.setDate(nextDueDate.getDate() + intervalDays);
-             const nextDueDateStr = formatLocalDate(nextDueDate);
+             const nextDueDateStr = formatDateKeyInTimezone(nextDueDate, clubTimezone);
              
              // Find shift for assigned user if any AND user is active
              let finalDate = nextDueDateStr;
@@ -172,15 +180,14 @@ export async function POST(
                  if (isActive) {
                      // Simple shift lookup - get next working day >= nextDueDateStr
                      const shiftRes = await query(
-                         `SELECT date FROM work_schedules 
+                         `SELECT TO_CHAR(date, 'YYYY-MM-DD') as date
+                          FROM work_schedules 
                           WHERE club_id = $1 AND user_id = $2 AND date >= $3
                           ORDER BY date ASC LIMIT 1`,
                          [clubId, assignedUserId, nextDueDateStr]
                      );
                      if (shiftRes.rowCount && shiftRes.rowCount > 0) {
-                         // Ensure we have a string YYYY-MM-DD
-                         const d = shiftRes.rows[0].date;
-                         finalDate = d instanceof Date ? formatLocalDate(d) : d;
+                         finalDate = String(shiftRes.rows[0].date);
                      }
                  }
              }

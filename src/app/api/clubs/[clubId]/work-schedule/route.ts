@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/db';
 import { cookies } from 'next/headers';
-import { formatLocalDate } from '@/lib/utils';
+import { formatDateKeyInTimezone, formatLocalDate, parseDateKey } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
 
@@ -79,14 +79,15 @@ export async function GET(
         }
 
         // Get club settings safely
-        let clubSettings = { day_start_hour: 9, night_start_hour: 21 };
+        let clubSettings = { day_start_hour: 9, night_start_hour: 21, timezone: 'Europe/Moscow' };
         try {
             const clubRes = await query(`SELECT * FROM clubs WHERE id = $1`, [clubId]);
             if (clubRes.rows[0]) {
                 const row = clubRes.rows[0];
                 clubSettings = {
                     day_start_hour: row.day_start_hour ?? 9,
-                    night_start_hour: row.night_start_hour ?? 21
+                    night_start_hour: row.night_start_hour ?? 21,
+                    timezone: row.timezone || 'Europe/Moscow'
                 };
             }
         } catch (e: any) {
@@ -176,6 +177,14 @@ export async function PATCH(
         const ownerCheck = await query(`SELECT 1 FROM clubs WHERE id = $1 AND owner_id = $2`, [clubId, adminId]);
         if ((ownerCheck.rowCount || 0) === 0) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
+        const clubRes = await query(
+            `SELECT COALESCE(timezone, 'Europe/Moscow') as timezone
+             FROM clubs
+             WHERE id = $1`,
+            [clubId]
+        );
+        const clubTimezone = clubRes.rows[0]?.timezone || 'Europe/Moscow';
+
         if (shiftType === null) {
             await query(`DELETE FROM work_schedules WHERE club_id = $1 AND user_id = $2 AND date = $3`, [clubId, userId, date]);
             
@@ -192,22 +201,21 @@ export async function PATCH(
 
             if (affectedTasks.rowCount && affectedTasks.rowCount > 0) {
                 // 2. Find next available shift for this user starting from tomorrow relative to the deleted date
-                const deletedDate = new Date(date);
+                const deletedDate = parseDateKey(date);
                 const nextDay = new Date(deletedDate);
                 nextDay.setDate(nextDay.getDate() + 1);
-                const nextDayStr = formatLocalDate(nextDay);
+                const nextDayStr = formatDateKeyInTimezone(nextDay, clubTimezone);
 
                 const nextShiftRes = await query(
-                    `SELECT date FROM work_schedules 
+                    `SELECT TO_CHAR(date, 'YYYY-MM-DD') as date
+                     FROM work_schedules 
                      WHERE club_id = $1 AND user_id = $2 AND date >= $3
                      ORDER BY date ASC LIMIT 1`,
                     [clubId, userId, nextDayStr]
                 );
 
                 if (nextShiftRes.rowCount && nextShiftRes.rowCount > 0) {
-                    // Found a new date, move tasks there
-                    const newDate = nextShiftRes.rows[0].date;
-                    const newDateStr = newDate instanceof Date ? formatLocalDate(newDate) : newDate;
+                    const newDateStr = String(nextShiftRes.rows[0].date);
                     
                     const taskIds = affectedTasks.rows.map((t: any) => t.id);
                     
