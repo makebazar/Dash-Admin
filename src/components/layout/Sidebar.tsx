@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { Building2, LayoutDashboard, Settings, LogOut, User } from "lucide-react"
+import { Building2, Headphones, LayoutDashboard, LogOut, Settings, User } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useEffect, useState } from "react"
 
@@ -93,6 +93,14 @@ export function SidebarContent({ clubs, hasEmployeeClubs, handleLogout, onLinkCl
                     </Link>
                 )}
                 
+                <Link
+                    href="/support"
+                    onClick={onLinkClick}
+                    className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+                >
+                    <Headphones className="h-4 w-4" />
+                    Поддержка
+                </Link>
                 <Link
                     href="/settings"
                     onClick={onLinkClick}

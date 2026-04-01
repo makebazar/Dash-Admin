@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { useRouter, usePathname } from "next/navigation"
 import Link from "next/link"
-import { LayoutDashboard, Database, CreditCard, Users, ShieldAlert, Briefcase, ArrowLeftCircle } from "lucide-react"
+import { LayoutDashboard, Database, CreditCard, Users, ShieldAlert, Briefcase, ArrowLeftCircle, Headphones } from "lucide-react"
 
 export default function SuperAdminLayout({ children }: { children: React.ReactNode }) {
     const router = useRouter()
@@ -74,6 +74,7 @@ export default function SuperAdminLayout({ children }: { children: React.ReactNo
                     <NavLink href="/super-admin/roles" icon={<Briefcase />} label="Должности" active={pathname === '/super-admin/roles'} />
                     <NavLink href="/super-admin/users" icon={<Users />} label="Пользователи" active={pathname === '/super-admin/users'} />
                     <NavLink href="/super-admin/subscriptions" icon={<CreditCard />} label="Подписки" active={pathname === '/super-admin/subscriptions'} />
+                    <NavLink href="/super-admin/support" icon={<Headphones />} label="Поддержка" active={pathname === '/super-admin/support'} />
                 </nav>
             </aside>
 

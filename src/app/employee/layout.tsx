@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import Link from "next/link"
-import { Building2, LogOut, User, LayoutDashboard, Calendar, Brush, Clock, Menu, X, Crown, ClipboardCheck, Monitor, BookOpen } from "lucide-react"
+import { Building2, LogOut, User, LayoutDashboard, Calendar, Brush, Clock, Menu, X, Crown, ClipboardCheck, Monitor, BookOpen, Headphones } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 
@@ -112,6 +112,12 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
                                 </Button>
                             </Link>
                         )}
+                        <Link href="/support">
+                            <Button variant="ghost" className="text-slate-500 hover:text-blue-600 hover:bg-blue-50 flex items-center gap-2">
+                                <Headphones className="h-4 w-4" />
+                                <span className="hidden sm:inline">Поддержка</span>
+                            </Button>
+                        </Link>
                         <Button 
                             variant="ghost" 
                             onClick={handleLogout}

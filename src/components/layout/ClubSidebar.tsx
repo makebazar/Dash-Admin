@@ -22,7 +22,8 @@ import {
     Shield,
     Loader2,
     MessageSquare,
-    BookOpen
+    BookOpen,
+    Headphones
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -194,6 +195,17 @@ export function ClubSidebarContent({ club, clubId, onLinkClick }: ClubSidebarCon
                                 </nav>
                             </>
                         )}
+
+                        <div className="mt-6 border-t border-border pt-4">
+                            <Link
+                                href="/support"
+                                onClick={onLinkClick}
+                                className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+                            >
+                                <Headphones className="h-4 w-4" />
+                                Поддержка
+                            </Link>
+                        </div>
                     </>
                 )}
             </div>

@@ -377,18 +377,21 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
 
     const stats = data.stats || { total_employees: 0, total_accrued: 0, total_paid: 0, pending_payment: 0 };
     const monthNames = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
-    const now = new Date();
-    const isFuturePeriod = selectedYear > now.getFullYear() || (selectedYear === now.getFullYear() && selectedMonth > now.getMonth() + 1);
 
     return (
-        <div className="space-y-6 p-4 md:p-8">
+        <div className="space-y-5 p-4 md:space-y-6 md:p-8">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-                    <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Зарплаты</h1>
-                    <div className="flex items-center gap-2 bg-muted/50 p-1 rounded-lg self-start">
-                        <Button variant="ghost" size="icon" onClick={() => navigateMonth(-1)} className="h-8 w-8"><ChevronLeft className="h-4 w-4" /></Button>
-                        <div className="text-sm md:text-lg font-medium min-w-[120px] md:min-w-[160px] text-center">{monthNames[selectedMonth - 1]} {selectedYear}</div>
-                        <Button variant="ghost" size="icon" onClick={() => navigateMonth(1)} className="h-8 w-8"><ChevronRight className="h-4 w-4" /></Button>
+                <div className="flex flex-col gap-4">
+                    <div className="space-y-1">
+                        <h1 className="text-[2rem] font-semibold tracking-[-0.04em] text-slate-900 md:text-3xl md:font-bold md:tracking-tight">Зарплаты</h1>
+                        <p className="text-[15px] text-muted-foreground md:text-sm">Начисления, выплаты и остатки по сотрудникам</p>
+                    </div>
+                    <div className="flex w-full items-center justify-between gap-2 rounded-2xl border bg-muted/40 p-1.5 md:w-auto md:gap-2 md:rounded-lg md:p-1">
+                        <Button variant="ghost" size="icon" onClick={() => navigateMonth(-1)} className="h-10 w-10 rounded-xl md:h-8 md:w-8 md:rounded-md"><ChevronLeft className="h-4 w-4" /></Button>
+                        <div className="min-w-0 flex-1 text-center text-xl font-semibold tracking-[-0.03em] text-slate-900 md:min-w-[160px] md:flex-none md:text-lg md:font-medium md:tracking-normal">
+                            {monthNames[selectedMonth - 1]} <span className="text-muted-foreground">{selectedYear}</span>
+                        </div>
+                        <Button variant="ghost" size="icon" onClick={() => navigateMonth(1)} className="h-10 w-10 rounded-xl md:h-8 md:w-8 md:rounded-md"><ChevronRight className="h-4 w-4" /></Button>
                     </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -401,41 +404,41 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                 </div>
             </div>
 
-            <div className="grid gap-3 md:gap-6 grid-cols-2 lg:grid-cols-4">
-                <Card className="shadow-sm border-slate-100">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 md:pb-2 p-3 md:p-6">
-                        <CardTitle className="text-[10px] md:text-sm font-medium text-muted-foreground uppercase tracking-wider">Сотрудники</CardTitle>
-                        <div className="rounded-lg bg-primary/10 p-1.5 md:p-2"><Users className="h-3 w-3 md:h-4 md:w-4 text-primary" /></div>
+            <div className="grid grid-cols-2 gap-3 md:gap-6 lg:grid-cols-4">
+                <Card className="rounded-2xl border-slate-100 shadow-sm">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 pb-1 md:p-6 md:pb-2">
+                        <CardTitle className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground md:text-sm md:tracking-wider">Сотрудники</CardTitle>
+                        <div className="rounded-lg bg-primary/10 p-1.5 md:p-2"><Users className="h-3.5 w-3.5 text-primary md:h-4 md:w-4" /></div>
                     </CardHeader>
                     <CardContent className="p-3 md:p-6 pt-0 md:pt-0">
-                        <div className="text-lg md:text-2xl font-bold tracking-tight">{stats.total_employees}</div>
+                        <div className="text-2xl font-semibold tracking-[-0.03em] text-slate-900 md:text-2xl md:font-bold md:tracking-tight">{stats.total_employees}</div>
                     </CardContent>
                 </Card>
-                <Card className="shadow-sm border-slate-100">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 md:pb-2 p-3 md:p-6">
-                        <CardTitle className="text-[10px] md:text-sm font-medium text-muted-foreground uppercase tracking-wider">Начислено</CardTitle>
-                        <div className="rounded-lg bg-primary/10 p-1.5 md:p-2"><DollarSign className="h-3 w-3 md:h-4 md:w-4 text-primary" /></div>
+                <Card className="rounded-2xl border-slate-100 shadow-sm">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 pb-1 md:p-6 md:pb-2">
+                        <CardTitle className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground md:text-sm md:tracking-wider">Начислено</CardTitle>
+                        <div className="rounded-lg bg-primary/10 p-1.5 md:p-2"><DollarSign className="h-3.5 w-3.5 text-primary md:h-4 md:w-4" /></div>
                     </CardHeader>
                     <CardContent className="p-3 md:p-6 pt-0 md:pt-0">
-                        <div className="text-lg md:text-2xl font-bold tracking-tight">{formatCurrency(stats.total_accrued)}</div>
+                        <div className="text-xl font-semibold tracking-[-0.03em] text-slate-900 md:text-2xl md:font-bold md:tracking-tight">{formatCurrency(stats.total_accrued)}</div>
                     </CardContent>
                 </Card>
-                <Card className="shadow-sm border-slate-100">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 md:pb-2 p-3 md:p-6">
-                        <CardTitle className="text-[10px] md:text-sm font-medium text-muted-foreground uppercase tracking-wider">Выплачено</CardTitle>
-                        <div className="rounded-lg bg-primary/10 p-1.5 md:p-2"><CheckCircle className="h-3 w-3 md:h-4 md:w-4 text-primary" /></div>
+                <Card className="rounded-2xl border-slate-100 shadow-sm">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 pb-1 md:p-6 md:pb-2">
+                        <CardTitle className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground md:text-sm md:tracking-wider">Выплачено</CardTitle>
+                        <div className="rounded-lg bg-primary/10 p-1.5 md:p-2"><CheckCircle className="h-3.5 w-3.5 text-primary md:h-4 md:w-4" /></div>
                     </CardHeader>
                     <CardContent className="p-3 md:p-6 pt-0 md:pt-0">
-                        <div className="text-lg md:text-2xl font-bold tracking-tight">{formatCurrency(stats.total_paid)}</div>
+                        <div className="text-xl font-semibold tracking-[-0.03em] text-slate-900 md:text-2xl md:font-bold md:tracking-tight">{formatCurrency(stats.total_paid)}</div>
                     </CardContent>
                 </Card>
-                <Card className="shadow-sm border-slate-100">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 md:pb-2 p-3 md:p-6">
-                        <CardTitle className="text-[10px] md:text-sm font-medium text-muted-foreground uppercase tracking-wider">К выплате</CardTitle>
-                        <div className="rounded-lg bg-primary/10 p-1.5 md:p-2"><Clock className="h-3 w-3 md:h-4 md:w-4 text-primary" /></div>
+                <Card className="rounded-2xl border-slate-100 shadow-sm">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 pb-1 md:p-6 md:pb-2">
+                        <CardTitle className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground md:text-sm md:tracking-wider">К выплате</CardTitle>
+                        <div className="rounded-lg bg-primary/10 p-1.5 md:p-2"><Clock className="h-3.5 w-3.5 text-primary md:h-4 md:w-4" /></div>
                     </CardHeader>
                     <CardContent className="p-3 md:p-6 pt-0 md:pt-0">
-                        <div className="text-lg md:text-2xl font-bold tracking-tight">{formatCurrency(stats.pending_payment)}</div>
+                        <div className="text-xl font-semibold tracking-[-0.03em] text-slate-900 md:text-2xl md:font-bold md:tracking-tight">{formatCurrency(stats.pending_payment)}</div>
                     </CardContent>
                 </Card>
             </div>
@@ -469,11 +472,11 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
             ) : (
                 <div className="space-y-4">
                     {filteredEmployees.map((employee) => (
-                        <Card key={employee.id} className="transition-all hover:shadow-md border-slate-200/60 overflow-hidden">
+                        <Card key={employee.id} className="overflow-hidden border-slate-200/60 transition-all hover:shadow-md">
                             <CardContent className="p-4 md:p-6">
                                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                                     <div className="flex-1">
-                                        <div className="flex flex-wrap items-center gap-2 mb-4">
+                                        <div className="mb-4 flex flex-wrap items-start gap-2">
                                             <div>
                                                 <h3 className="font-bold text-base md:text-lg text-slate-900">{employee.full_name}</h3>
                                                 <p className="text-xs text-muted-foreground">{employee.role || 'Сотрудник'}</p>
@@ -488,17 +491,17 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                 ) : null}
                                             </div>
                                         </div>
-                                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 md:gap-4 text-xs">
-                                            <div className="bg-slate-50/50 p-2 rounded-lg border border-slate-100/50">
-                                                <p className="text-muted-foreground mb-1 uppercase text-[9px] font-bold tracking-wider">Смены</p>
+                                        <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-2 md:grid-cols-5 md:gap-4">
+                                            <div className="rounded-xl border border-slate-100/60 bg-slate-50/60 p-3">
+                                                <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Смены</p>
                                                 <p className="font-bold text-slate-900">{employee.shifts_count}</p>
                                             </div>
-                                            <div className="bg-slate-50/50 p-2 rounded-lg border border-slate-100/50">
-                                                <p className="text-muted-foreground mb-1 uppercase text-[9px] font-bold tracking-wider">Начислено</p>
+                                            <div className="rounded-xl border border-slate-100/60 bg-slate-50/60 p-3">
+                                                <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Начислено</p>
                                                 <p className="font-bold text-slate-900">{formatCurrency(employee.total_accrued)}</p>
                                             </div>
-                                            <div className="bg-slate-50/50 p-2 rounded-lg border border-slate-100/50">
-                                                <p className="text-muted-foreground mb-1 uppercase text-[9px] font-bold tracking-wider">Выплачено</p>
+                                            <div className="rounded-xl border border-slate-100/60 bg-slate-50/60 p-3">
+                                                <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Выплачено</p>
                                                 <div className="flex flex-col">
                                                     <p className="font-bold text-slate-900">{formatCurrency(employee.total_paid)}</p>
                                                     {employee.total_paid_bonus && employee.total_paid_bonus > 0 ? (
@@ -506,25 +509,25 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                     ) : null}
                                                 </div>
                                             </div>
-                                            <div className="bg-slate-50/50 p-2 rounded-lg border border-slate-100/50">
-                                                <p className="text-muted-foreground mb-1 uppercase text-[9px] font-bold tracking-wider">Остаток</p>
+                                            <div className="rounded-xl border border-slate-100/60 bg-slate-50/60 p-3">
+                                                <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Остаток</p>
                                                 <p className="font-bold text-slate-900">{formatCurrency(employee.balance)}</p>
                                             </div>
                                             {employee.total_bar_purchases && employee.total_bar_purchases > 0 ? (
-                                                <div className="bg-rose-50/30 p-2 rounded-lg border border-rose-100/50">
-                                                    <p className="text-rose-600/70 mb-1 uppercase text-[9px] font-bold tracking-wider">Покупки бара</p>
+                                                <div className="rounded-xl border border-rose-100/60 bg-rose-50/40 p-3">
+                                                    <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-rose-600/70">Покупки бара</p>
                                                     <p className="font-bold text-rose-600">-{formatCurrency(employee.total_bar_purchases)}</p>
                                                 </div>
                                             ) : null}
                                             {employee.has_kpi_feature && (
-                                                <div className="bg-emerald-50/30 p-2 rounded-lg border border-emerald-100/50">
-                                                    <p className="text-emerald-600/70 mb-1 uppercase text-[9px] font-bold tracking-wider">KPI премия</p>
+                                                <div className="rounded-xl border border-emerald-100/60 bg-emerald-50/40 p-3">
+                                                    <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-emerald-600/70">KPI премия</p>
                                                     <p className={`font-bold ${employee.kpi_bonus_amount && employee.kpi_bonus_amount > 0 ? 'text-emerald-600' : ''}`}>{formatCurrency(employee.kpi_bonus_amount || 0)}</p>
                                                 </div>
                                             )}
                                             {employee.has_virtual_balance_feature && (
-                                                <div className="bg-purple-50/30 p-2 rounded-lg border border-purple-100/50">
-                                                    <p className="text-purple-600/70 mb-1 uppercase text-[9px] font-bold tracking-wider">Бонусный баланс</p>
+                                                <div className="rounded-xl border border-purple-100/60 bg-purple-50/40 p-3">
+                                                    <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-purple-600/70">Бонусный баланс</p>
                                                     <p className={`font-bold ${employee.virtual_balance && employee.virtual_balance > 0 ? 'text-purple-600' : ''}`}>{formatCurrency(employee.virtual_balance || 0)}</p>
                                                 </div>
                                             )}

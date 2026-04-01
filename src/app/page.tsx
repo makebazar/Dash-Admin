@@ -44,6 +44,9 @@ export default function LandingPage() {
         </nav>
 
         <div className="flex items-center gap-4">
+          <Link href="/support" className="text-sm font-medium text-gray-400 hover:text-white transition-colors hidden sm:block">
+            Поддержка
+          </Link>
           <Link href="/login" className="text-sm font-medium text-gray-400 hover:text-white transition-colors hidden sm:block">
             Войти
           </Link>
@@ -565,8 +568,21 @@ export default function LandingPage() {
 
       </main>
 
-      <footer className="py-8 px-6 border-t border-white/10 text-center text-gray-600 text-sm">
-        &copy; {new Date().getFullYear()} DashAdmin. Все права защищены.
+      <footer className="border-t border-white/10 px-6 py-8 text-sm text-gray-600">
+        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 text-center md:flex-row md:text-left">
+          <div>&copy; {new Date().getFullYear()} DashAdmin. Все права защищены.</div>
+          <div className="flex items-center gap-4">
+            <Link href="/support" className="transition-colors hover:text-white">
+              Поддержка
+            </Link>
+            <Link href="/privacy" className="transition-colors hover:text-white">
+              Политика конфиденциальности
+            </Link>
+            <Link href="/terms" className="transition-colors hover:text-white">
+              Пользовательское соглашение
+            </Link>
+          </div>
+        </div>
       </footer>
     </div>
   )

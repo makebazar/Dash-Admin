@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Zap, Loader2, ArrowRight } from "lucide-react"
@@ -30,6 +31,7 @@ export default function LoginPage() {
     const [requiresPassword, setRequiresPassword] = useState(false)
     const [isNewUser, setIsNewUser] = useState(false)
     const [isCheckingSession, setIsCheckingSession] = useState(true)
+    const [hasAcceptedLegal, setHasAcceptedLegal] = useState(false)
 
     const routeFromMe = useCallback((data: MeResponse) => {
         const ownedClubs = Array.isArray(data.ownedClubs) ? data.ownedClubs : []
@@ -310,7 +312,32 @@ export default function LoginPage() {
                                 />
                             </div>
 
-                            <Button type="submit" className="w-full bg-white text-black hover:bg-gray-200" disabled={isLoading}>
+                            <div className="rounded-lg border border-white/10 bg-black/30 p-3">
+                                <div className="flex items-start gap-3">
+                                    <Checkbox
+                                        id="legal-consent"
+                                        checked={hasAcceptedLegal}
+                                        onCheckedChange={(checked) => setHasAcceptedLegal(checked === true)}
+                                        className="mt-0.5 border-white/20 data-[state=checked]:border-white data-[state=checked]:bg-white data-[state=checked]:text-black"
+                                    />
+                                    <Label htmlFor="legal-consent" className="text-xs leading-5 text-gray-400">
+                                        Я принимаю{" "}
+                                        <Link href="/terms" className="text-gray-200 transition-colors hover:text-white">
+                                            Пользовательское соглашение
+                                        </Link>
+                                        {" "}и{" "}
+                                        <Link href="/privacy" className="text-gray-200 transition-colors hover:text-white">
+                                            Политику конфиденциальности
+                                        </Link>
+                                    </Label>
+                                </div>
+                            </div>
+
+                            <Button
+                                type="submit"
+                                className="w-full bg-white text-black hover:bg-gray-200"
+                                disabled={isLoading || !hasAcceptedLegal}
+                            >
                                 {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                                 Продолжить <ArrowRight className="ml-2 w-4 h-4" />
                             </Button>
@@ -432,6 +459,17 @@ export default function LoginPage() {
                     )}
                 </CardContent>
             </Card>
+
+            <div className="mt-6 text-center text-xs text-gray-500">
+                Юридические документы:{" "}
+                <Link href="/terms" className="text-gray-300 transition-colors hover:text-white">
+                    Пользовательское соглашение
+                </Link>
+                {" "}и{" "}
+                <Link href="/privacy" className="text-gray-300 transition-colors hover:text-white">
+                    Политика конфиденциальности
+                </Link>
+            </div>
         </div>
     )
 }
