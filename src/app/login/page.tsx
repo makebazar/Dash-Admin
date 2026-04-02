@@ -38,18 +38,8 @@ export default function LoginPage() {
     const [hasAcceptedLegal, setHasAcceptedLegal] = useState(false)
 
     const routeFromMe = useCallback((data: MeResponse) => {
-        if (data.user?.legal_acceptance_required) {
-            router.push('/legal-consent')
-            return
-        }
-
         const ownedClubs = Array.isArray(data.ownedClubs) ? data.ownedClubs : []
         const employeeClubs = Array.isArray(data.employeeClubs) ? data.employeeClubs : []
-
-        if (data.user?.is_super_admin) {
-            router.push('/super-admin/dashboard')
-            return
-        }
 
         const hasManagerClubs = employeeClubs.some(
             (club: any) => club.role === 'Управляющий' || club.role === 'Manager'

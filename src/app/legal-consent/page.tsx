@@ -27,11 +27,6 @@ export default function LegalConsentPage() {
     const [fullName, setFullName] = useState("")
 
     const routeFromMe = useCallback((data: MeResponse) => {
-        if (data.user?.is_super_admin) {
-            router.push('/super-admin/dashboard')
-            return
-        }
-
         const ownedClubs = Array.isArray(data.ownedClubs) ? data.ownedClubs : []
         const employeeClubs = Array.isArray(data.employeeClubs) ? data.employeeClubs : []
         const hasManagerClubs = employeeClubs.some(

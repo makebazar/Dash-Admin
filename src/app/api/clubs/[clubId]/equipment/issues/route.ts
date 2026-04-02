@@ -15,7 +15,9 @@ export async function GET(
 
         const status = searchParams.get('status');
         const equipmentId = searchParams.get('equipment_id');
+        const workstationId = searchParams.get('workstation_id');
         const severity = searchParams.get('severity');
+        const includeStats = searchParams.get('include_stats') !== 'false';
 
         if (!userId) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -69,6 +71,12 @@ export async function GET(
             paramIndex++;
         }
 
+        if (workstationId) {
+            sql += ` AND e.workstation_id = $${paramIndex}`;
+            queryParams.push(workstationId);
+            paramIndex++;
+        }
+
         if (severity) {
             sql += ` AND i.severity = $${paramIndex}`;
             queryParams.push(severity);
@@ -92,22 +100,25 @@ export async function GET(
 
         const result = await query(sql, queryParams);
 
-        // Get stats
-        const statsResult = await query(
-            `SELECT 
-                COUNT(*) FILTER (WHERE status = 'OPEN') as open_count,
-                COUNT(*) FILTER (WHERE status = 'IN_PROGRESS') as in_progress_count,
-                COUNT(*) FILTER (WHERE status = 'RESOLVED') as resolved_count,
-                COUNT(*) FILTER (WHERE status = 'CLOSED') as closed_count
-            FROM equipment_issues i
-            JOIN equipment e ON i.equipment_id = e.id
-            WHERE e.club_id = $1`,
-            [clubId]
-        );
+        const stats = includeStats
+            ? (
+                await query(
+                    `SELECT 
+                        COUNT(*) FILTER (WHERE status = 'OPEN') as open_count,
+                        COUNT(*) FILTER (WHERE status = 'IN_PROGRESS') as in_progress_count,
+                        COUNT(*) FILTER (WHERE status = 'RESOLVED') as resolved_count,
+                        COUNT(*) FILTER (WHERE status = 'CLOSED') as closed_count
+                    FROM equipment_issues i
+                    JOIN equipment e ON i.equipment_id = e.id
+                    WHERE e.club_id = $1`,
+                    [clubId]
+                )
+            ).rows[0]
+            : null;
 
         return NextResponse.json({
             issues: result.rows,
-            stats: statsResult.rows[0],
+            stats,
             total: result.rowCount
         });
     } catch (error) {

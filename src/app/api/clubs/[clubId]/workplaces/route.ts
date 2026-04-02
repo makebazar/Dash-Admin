@@ -1,0 +1,137 @@
+import { NextResponse } from 'next/server'
+import { query } from '@/db'
+import { cookies } from 'next/headers'
+
+export async function GET(
+    request: Request,
+    { params }: { params: Promise<{ clubId: string }> }
+) {
+    try {
+        const userId = (await cookies()).get('session_user_id')?.value
+        const { clubId } = await params
+
+        if (!userId) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+        }
+
+        const accessCheck = await query(
+            `SELECT 1 FROM clubs WHERE id = $1 AND owner_id = $2
+             UNION
+             SELECT 1 FROM club_employees WHERE club_id = $1 AND user_id = $2`,
+            [clubId, userId]
+        )
+
+        if ((accessCheck.rowCount || 0) === 0) {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+        }
+
+        const [workstationsResult, equipmentResult, equipmentTypesResult, employeesResult, zonesResult] = await Promise.all([
+            query(
+                `WITH equipment_counts AS (
+                    SELECT workstation_id, COUNT(*)::int as equipment_count
+                    FROM equipment
+                    WHERE club_id = $1 AND workstation_id IS NOT NULL AND is_active = TRUE
+                    GROUP BY workstation_id
+                )
+                SELECT
+                    w.id,
+                    w.name,
+                    w.zone,
+                    w.assigned_user_id,
+                    u.full_name as assigned_user_name,
+                    COALESCE(ec.equipment_count, 0)::int as equipment_count
+                FROM club_workstations w
+                LEFT JOIN users u ON w.assigned_user_id = u.id
+                LEFT JOIN equipment_counts ec ON ec.workstation_id = w.id
+                WHERE w.club_id = $1
+                ORDER BY w.zone, w.name`,
+                [clubId]
+            ),
+            query(
+                `WITH issue_counts AS (
+                    SELECT equipment_id, COUNT(*)::int as open_issues_count
+                    FROM equipment_issues
+                    WHERE status IN ('OPEN', 'IN_PROGRESS')
+                    GROUP BY equipment_id
+                )
+                SELECT
+                    e.id,
+                    e.name,
+                    e.type,
+                    et.name_ru as type_name,
+                    et.icon as type_icon,
+                    e.identifier,
+                    e.brand,
+                    e.model,
+                    e.workstation_id,
+                    e.is_active,
+                    e.maintenance_enabled,
+                    e.cleaning_interval_days,
+                    e.last_cleaned_at,
+                    e.cpu_thermal_paste_last_changed_at,
+                    e.cpu_thermal_paste_interval_days,
+                    e.cpu_thermal_paste_type,
+                    e.cpu_thermal_paste_note,
+                    e.gpu_thermal_paste_last_changed_at,
+                    e.gpu_thermal_paste_interval_days,
+                    e.gpu_thermal_paste_type,
+                    e.gpu_thermal_paste_note,
+                    e.assigned_user_id,
+                    e.assignment_mode,
+                    COALESCE(ic.open_issues_count, 0)::int as open_issues_count
+                FROM equipment e
+                LEFT JOIN equipment_types et ON et.code = e.type
+                LEFT JOIN issue_counts ic ON ic.equipment_id = e.id
+                WHERE e.club_id = $1
+                ORDER BY e.workstation_id NULLS LAST, e.type, e.name`,
+                [clubId]
+            ),
+            query(
+                `SELECT code, name_ru, icon
+                 FROM equipment_types
+                 ORDER BY name_ru`,
+                []
+            ),
+            query(
+                `SELECT id, full_name
+                 FROM users
+                 WHERE id IN (
+                    SELECT owner_id FROM clubs WHERE id = $1
+                    UNION
+                    SELECT user_id
+                    FROM club_employees
+                    WHERE club_id = $1 AND is_active = TRUE AND dismissed_at IS NULL
+                 )
+                 ORDER BY full_name`,
+                [clubId]
+            ),
+            query(
+                `SELECT 
+                    z.id,
+                    z.name,
+                    z.assigned_user_id,
+                    u.full_name as assigned_user_name,
+                    (SELECT COUNT(*) FROM club_workstations w WHERE w.club_id = z.club_id AND w.zone = z.name) as workstation_count
+                 FROM club_zones z
+                 LEFT JOIN users u ON z.assigned_user_id = u.id
+                 WHERE z.club_id = $1
+                 ORDER BY z.name`,
+                [clubId]
+            )
+        ])
+
+        return NextResponse.json({
+            workstations: workstationsResult.rows,
+            equipment: equipmentResult.rows.map((item: any) => ({
+                ...item,
+                maintenance_enabled: item.maintenance_enabled !== false,
+            })),
+            equipmentTypes: equipmentTypesResult.rows,
+            employees: employeesResult.rows,
+            zones: zonesResult.rows,
+        })
+    } catch (error) {
+        console.error('Get Workplaces Overview Error:', error)
+        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
+    }
+}
