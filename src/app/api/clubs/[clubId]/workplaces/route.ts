@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { query } from '@/db'
 import { cookies } from 'next/headers'
+import { hasColumn } from '@/lib/db-compat'
 
 export async function GET(
     request: Request,
@@ -25,6 +26,8 @@ export async function GET(
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
         }
 
+        const hasIssuesClubIdColumn = await hasColumn('equipment_issues', 'club_id')
+
         const [workstationsResult, equipmentResult, equipmentTypesResult, employeesResult, zonesResult] = await Promise.all([
             query(
                 `WITH equipment_counts AS (
@@ -48,42 +51,82 @@ export async function GET(
                 [clubId]
             ),
             query(
-                `WITH issue_counts AS (
-                    SELECT equipment_id, COUNT(*)::int as open_issues_count
-                    FROM equipment_issues
-                    WHERE status IN ('OPEN', 'IN_PROGRESS')
-                    GROUP BY equipment_id
-                )
-                SELECT
-                    e.id,
-                    e.name,
-                    e.type,
-                    et.name_ru as type_name,
-                    et.icon as type_icon,
-                    e.identifier,
-                    e.brand,
-                    e.model,
-                    e.workstation_id,
-                    e.is_active,
-                    e.maintenance_enabled,
-                    e.cleaning_interval_days,
-                    e.last_cleaned_at,
-                    e.cpu_thermal_paste_last_changed_at,
-                    e.cpu_thermal_paste_interval_days,
-                    e.cpu_thermal_paste_type,
-                    e.cpu_thermal_paste_note,
-                    e.gpu_thermal_paste_last_changed_at,
-                    e.gpu_thermal_paste_interval_days,
-                    e.gpu_thermal_paste_type,
-                    e.gpu_thermal_paste_note,
-                    e.assigned_user_id,
-                    e.assignment_mode,
-                    COALESCE(ic.open_issues_count, 0)::int as open_issues_count
-                FROM equipment e
-                LEFT JOIN equipment_types et ON et.code = e.type
-                LEFT JOIN issue_counts ic ON ic.equipment_id = e.id
-                WHERE e.club_id = $1
-                ORDER BY e.workstation_id NULLS LAST, e.type, e.name`,
+                hasIssuesClubIdColumn
+                    ? `WITH issue_counts AS (
+                        SELECT equipment_id, COUNT(*)::int as open_issues_count
+                        FROM equipment_issues
+                        WHERE club_id = $1
+                          AND status IN ('OPEN', 'IN_PROGRESS')
+                        GROUP BY equipment_id
+                    )
+                    SELECT
+                        e.id,
+                        e.name,
+                        e.type,
+                        et.name_ru as type_name,
+                        et.icon as type_icon,
+                        e.identifier,
+                        e.brand,
+                        e.model,
+                        e.workstation_id,
+                        e.is_active,
+                        e.maintenance_enabled,
+                        e.cleaning_interval_days,
+                        e.last_cleaned_at,
+                        e.cpu_thermal_paste_last_changed_at,
+                        e.cpu_thermal_paste_interval_days,
+                        e.cpu_thermal_paste_type,
+                        e.cpu_thermal_paste_note,
+                        e.gpu_thermal_paste_last_changed_at,
+                        e.gpu_thermal_paste_interval_days,
+                        e.gpu_thermal_paste_type,
+                        e.gpu_thermal_paste_note,
+                        e.assigned_user_id,
+                        e.assignment_mode,
+                        COALESCE(ic.open_issues_count, 0)::int as open_issues_count
+                    FROM equipment e
+                    LEFT JOIN equipment_types et ON et.code = e.type
+                    LEFT JOIN issue_counts ic ON ic.equipment_id = e.id
+                    WHERE e.club_id = $1
+                    ORDER BY e.workstation_id NULLS LAST, e.type, e.name`
+                    : `WITH issue_counts AS (
+                        SELECT i.equipment_id, COUNT(*)::int as open_issues_count
+                        FROM equipment_issues i
+                        JOIN equipment source_equipment ON source_equipment.id = i.equipment_id
+                        WHERE source_equipment.club_id = $1
+                          AND i.status IN ('OPEN', 'IN_PROGRESS')
+                        GROUP BY i.equipment_id
+                    )
+                    SELECT
+                        e.id,
+                        e.name,
+                        e.type,
+                        et.name_ru as type_name,
+                        et.icon as type_icon,
+                        e.identifier,
+                        e.brand,
+                        e.model,
+                        e.workstation_id,
+                        e.is_active,
+                        e.maintenance_enabled,
+                        e.cleaning_interval_days,
+                        e.last_cleaned_at,
+                        e.cpu_thermal_paste_last_changed_at,
+                        e.cpu_thermal_paste_interval_days,
+                        e.cpu_thermal_paste_type,
+                        e.cpu_thermal_paste_note,
+                        e.gpu_thermal_paste_last_changed_at,
+                        e.gpu_thermal_paste_interval_days,
+                        e.gpu_thermal_paste_type,
+                        e.gpu_thermal_paste_note,
+                        e.assigned_user_id,
+                        e.assignment_mode,
+                        COALESCE(ic.open_issues_count, 0)::int as open_issues_count
+                    FROM equipment e
+                    LEFT JOIN equipment_types et ON et.code = e.type
+                    LEFT JOIN issue_counts ic ON ic.equipment_id = e.id
+                    WHERE e.club_id = $1
+                    ORDER BY e.workstation_id NULLS LAST, e.type, e.name`,
                 [clubId]
             ),
             query(
@@ -106,14 +149,21 @@ export async function GET(
                 [clubId]
             ),
             query(
-                `SELECT 
+                `WITH workstation_counts AS (
+                    SELECT zone, COUNT(*)::int as workstation_count
+                    FROM club_workstations
+                    WHERE club_id = $1
+                    GROUP BY zone
+                )
+                SELECT 
                     z.id,
                     z.name,
                     z.assigned_user_id,
                     u.full_name as assigned_user_name,
-                    (SELECT COUNT(*) FROM club_workstations w WHERE w.club_id = z.club_id AND w.zone = z.name) as workstation_count
+                    COALESCE(wc.workstation_count, 0)::int as workstation_count
                  FROM club_zones z
                  LEFT JOIN users u ON z.assigned_user_id = u.id
+                 LEFT JOIN workstation_counts wc ON wc.zone = z.name
                  WHERE z.club_id = $1
                  ORDER BY z.name`,
                 [clubId]

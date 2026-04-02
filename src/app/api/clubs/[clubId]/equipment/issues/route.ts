@@ -35,6 +35,8 @@ export async function GET(
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
+        const hasClubIdColumn = await hasColumn('equipment_issues', 'club_id');
+
         let sql = `
             SELECT 
                 i.*,
@@ -54,7 +56,7 @@ export async function GET(
             LEFT JOIN users ru ON i.reported_by = ru.id
             LEFT JOIN users res ON i.resolved_by = res.id
             LEFT JOIN users au ON i.assigned_to = au.id
-            WHERE e.club_id = $1
+            WHERE ${hasClubIdColumn ? 'i.club_id = $1' : 'e.club_id = $1'}
         `;
         const queryParams: any[] = [clubId];
         let paramIndex = 2;
@@ -103,14 +105,22 @@ export async function GET(
         const stats = includeStats
             ? (
                 await query(
-                    `SELECT 
-                        COUNT(*) FILTER (WHERE status = 'OPEN') as open_count,
-                        COUNT(*) FILTER (WHERE status = 'IN_PROGRESS') as in_progress_count,
-                        COUNT(*) FILTER (WHERE status = 'RESOLVED') as resolved_count,
-                        COUNT(*) FILTER (WHERE status = 'CLOSED') as closed_count
-                    FROM equipment_issues i
-                    JOIN equipment e ON i.equipment_id = e.id
-                    WHERE e.club_id = $1`,
+                    hasClubIdColumn
+                        ? `SELECT 
+                            COUNT(*) FILTER (WHERE status = 'OPEN') as open_count,
+                            COUNT(*) FILTER (WHERE status = 'IN_PROGRESS') as in_progress_count,
+                            COUNT(*) FILTER (WHERE status = 'RESOLVED') as resolved_count,
+                            COUNT(*) FILTER (WHERE status = 'CLOSED') as closed_count
+                        FROM equipment_issues
+                        WHERE club_id = $1`
+                        : `SELECT 
+                            COUNT(*) FILTER (WHERE status = 'OPEN') as open_count,
+                            COUNT(*) FILTER (WHERE status = 'IN_PROGRESS') as in_progress_count,
+                            COUNT(*) FILTER (WHERE status = 'RESOLVED') as resolved_count,
+                            COUNT(*) FILTER (WHERE status = 'CLOSED') as closed_count
+                        FROM equipment_issues i
+                        JOIN equipment e ON i.equipment_id = e.id
+                        WHERE e.club_id = $1`,
                     [clubId]
                 )
             ).rows[0]
