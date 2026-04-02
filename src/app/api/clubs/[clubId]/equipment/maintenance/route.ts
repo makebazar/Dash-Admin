@@ -170,7 +170,10 @@ export async function GET(
         
         if (dateFrom) {
             if (includeOverdue) {
-                sql += ` AND (mt.due_date >= $${paramIndex} OR (mt.status = 'PENDING' AND mt.due_date < $${paramIndex}))`;
+                sql += ` AND (
+                    mt.due_date >= $${paramIndex}
+                    OR (mt.status IN ('PENDING', 'IN_PROGRESS') AND mt.due_date < $${paramIndex})
+                )`;
                 queryParams.push(dateFrom);
                 paramIndex++;
             } else {

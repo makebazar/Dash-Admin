@@ -45,15 +45,18 @@ interface MaintenanceTask {
 
 const normalizeDateKey = (value?: string | null) => {
     if (!value) return ""
-    const match = String(value).match(/^(\d{4}-\d{2}-\d{2})/)
-    return match ? match[1] : String(value)
+    const normalized = String(value).trim()
+    const match = normalized.match(/^(\d{4}-\d{2}-\d{2})/)
+    return match ? match[1] : normalized
 }
+
+const normalizeStatus = (value?: string | null) => String(value || "").trim().toUpperCase()
 
 const normalizeTask = (task: any): MaintenanceTask => ({
     ...task,
     due_date: normalizeDateKey(task?.due_date),
-    status: String(task?.status || "").toUpperCase() as MaintenanceTask["status"],
-    verification_status: task?.verification_status ? String(task.verification_status).toUpperCase() : task?.verification_status
+    status: normalizeStatus(task?.status) as MaintenanceTask["status"],
+    verification_status: task?.verification_status ? normalizeStatus(task.verification_status) : task?.verification_status
 })
 
 export default function EmployeeTasksPage() {
