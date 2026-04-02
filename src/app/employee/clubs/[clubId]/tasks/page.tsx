@@ -43,6 +43,19 @@ interface MaintenanceTask {
     rejection_reason?: string
 }
 
+const normalizeDateKey = (value?: string | null) => {
+    if (!value) return ""
+    const match = String(value).match(/^(\d{4}-\d{2}-\d{2})/)
+    return match ? match[1] : String(value)
+}
+
+const normalizeTask = (task: any): MaintenanceTask => ({
+    ...task,
+    due_date: normalizeDateKey(task?.due_date),
+    status: String(task?.status || "").toUpperCase() as MaintenanceTask["status"],
+    verification_status: task?.verification_status ? String(task.verification_status).toUpperCase() : task?.verification_status
+})
+
 export default function EmployeeTasksPage() {
     const { clubId } = useParams()
     const [clubTimezone, setClubTimezone] = useState('Europe/Moscow')
@@ -109,7 +122,7 @@ export default function EmployeeTasksPage() {
             const freeData = await freeRes.json()
 
             if (assignedRes.ok) {
-                setTasks(assignedData.tasks || [])
+                setTasks(Array.isArray(assignedData.tasks) ? assignedData.tasks.map(normalizeTask) : [])
                 if (assignedData.stats) {
                     setApiStats({
                         overdue_count: parseInt(assignedData.stats.overdue_count || '0'),
@@ -129,7 +142,7 @@ export default function EmployeeTasksPage() {
                     })
                 }
             }
-            if (freeRes.ok) setFreeTasks(freeData.tasks || [])
+            if (freeRes.ok) setFreeTasks(Array.isArray(freeData.tasks) ? freeData.tasks.map(normalizeTask) : [])
         } catch (error) {
             console.error("Error fetching tasks:", error)
         } finally {
