@@ -181,26 +181,26 @@ export async function PATCH(
                             
                             // Find shift for assigned user if any AND user is active
                             let finalDate = nextDueStr;
-                            const assignedUserId = eq.effective_assigned_user_id;
+                            let finalAssignedUserId = eq.effective_assigned_user_id;
                             
-                            if (assignedUserId) {
+                            if (finalAssignedUserId) {
                                 // Check if user is active first
                                 const userActiveRes = await query(
                                     `SELECT is_active FROM club_employees WHERE club_id = $1 AND user_id = $2`,
-                                    [clubId, assignedUserId]
+                                    [clubId, finalAssignedUserId]
                                 );
                                 
                                 const isActive = userActiveRes.rows[0]?.is_active !== false; // Default true if not found? Or false? Usually true if employee exists.
 
                                 if (isActive) {
-                                    console.log(`[Maintenance] Checking shifts for active user ${assignedUserId} starting from ${nextDueStr}`);
+                                    console.log(`[Maintenance] Checking shifts for active user ${finalAssignedUserId} starting from ${nextDueStr}`);
                                     // Simple shift lookup - get next working day >= nextDueStr
                                     const shiftRes = await query(
                                         `SELECT TO_CHAR(date, 'YYYY-MM-DD') as date
                                          FROM work_schedules 
                                          WHERE club_id = $1 AND user_id = $2 AND date >= $3
                                          ORDER BY date ASC LIMIT 1`,
-                                        [clubId, assignedUserId, nextDueStr]
+                                        [clubId, finalAssignedUserId, nextDueStr]
                                     );
                                     if (shiftRes.rowCount && shiftRes.rowCount > 0) {
                                         finalDate = String(shiftRes.rows[0].date);
@@ -209,7 +209,8 @@ export async function PATCH(
                                         console.log(`[Maintenance] No shift found, keeping ${finalDate}`);
                                     }
                                 } else {
-                                    console.log(`[Maintenance] User ${assignedUserId} is inactive, skipping shift check`);
+                                    console.log(`[Maintenance] User ${finalAssignedUserId} is inactive, unassigning next task`);
+                                    finalAssignedUserId = null;
                                 }
                             }
 
@@ -227,7 +228,7 @@ export async function PATCH(
                                  VALUES ($1, $2, $3, $4)
                                  ON CONFLICT DO NOTHING
                                  RETURNING id`,
-                                [task.equipment_id, task.task_type, finalDate, assignedUserId]
+                                [task.equipment_id, task.task_type, finalDate, finalAssignedUserId]
                             );
                             console.log(`[Maintenance] Created task: ${insertRes.rows[0]?.id || 'CONFLICT'}`);
                         }

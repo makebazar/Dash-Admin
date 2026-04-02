@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
+import { getMonthRangeInTimezone } from "@/lib/utils"
 import { SSEProvider } from "@/hooks/usePOSWebSocket"
 import { KpiOverview, ChecklistKpiCard, MaintenanceKpiCard } from "@/components/employee/kpi/KpiOverview"
 import { ShiftClosingWizard } from "./_components/ShiftClosingWizard"
@@ -28,6 +29,7 @@ interface ClubInfo {
     id: number
     name: string
     role: string
+    timezone?: string
     inventory_required: boolean
     inventory_settings?: {
         employee_default_metric_key?: string
@@ -127,13 +129,6 @@ interface RecentShift {
     date: string
     hours: number
     earnings: number
-}
-
-const formatLocalDate = (date: Date) => {
-    const year = date.getFullYear()
-    const month = String(date.getMonth() + 1).padStart(2, '0')
-    const day = String(date.getDate()).padStart(2, '0')
-    return `${year}-${month}-${day}`
 }
 
 export default function EmployeeClubPage({ params }: { params: Promise<{ clubId: string }> }) {
@@ -265,6 +260,9 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
         if (!clubId || employeeClubs.length === 0) return
         const clubInfo = employeeClubs.find((c: ClubInfo) => c.id === parseInt(clubId))
         setClub(clubInfo || null)
+        if (clubInfo) {
+            fetchData(clubId)
+        }
     }, [clubId, employeeClubs])
 
     useEffect(() => {
@@ -375,9 +373,8 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
 
     const fetchData = async (id: string) => {
         try {
-            const now = new Date()
-            const monthStart = formatLocalDate(new Date(now.getFullYear(), now.getMonth(), 1))
-            const monthEnd = formatLocalDate(new Date(now.getFullYear(), now.getMonth() + 1, 0))
+            const clubTimezone = employeeClubs.find((item: ClubInfo) => String(item.id) === id)?.timezone || 'Europe/Moscow'
+            const { firstDay: monthStart, lastDay: monthEnd } = getMonthRangeInTimezone(new Date(), clubTimezone)
 
             await fetch(`/api/clubs/${id}/equipment/maintenance`, {
                 method: "POST",

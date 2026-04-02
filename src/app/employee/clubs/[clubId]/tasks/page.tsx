@@ -20,7 +20,7 @@ import { ru } from "date-fns/locale"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { cn } from "@/lib/utils"
+import { cn, formatDateKeyInTimezone, getMonthRangeInTimezone } from "@/lib/utils"
 import Link from "next/link"
 import { MaintenanceSessionWizard } from "@/app/clubs/[clubId]/equipment/maintenance/MaintenanceSessionWizard"
 import { Input } from "@/components/ui/input"
@@ -45,6 +45,7 @@ interface MaintenanceTask {
 
 export default function EmployeeTasksPage() {
     const { clubId } = useParams()
+    const [clubTimezone, setClubTimezone] = useState('Europe/Moscow')
     const [tasks, setTasks] = useState<MaintenanceTask[]>([])
     const [freeTasks, setFreeTasks] = useState<MaintenanceTask[]>([])
     const [isLoading, setIsLoading] = useState(true)
@@ -73,8 +74,7 @@ export default function EmployeeTasksPage() {
 
     const ensurePlan = useCallback(async (date: Date) => {
         try {
-            const firstDay = format(startOfMonth(date), 'yyyy-MM-dd')
-            const lastDay = format(endOfMonth(date), 'yyyy-MM-dd')
+            const { firstDay, lastDay } = getMonthRangeInTimezone(date, clubTimezone)
             
             // Just ensure we have tasks generated for today/upcoming
             await fetch(`/api/clubs/${clubId}/equipment/maintenance`, {
@@ -89,15 +89,13 @@ export default function EmployeeTasksPage() {
         } catch (error) {
             console.error("Error ensuring plan:", error)
         }
-    }, [clubId])
+    }, [clubId, clubTimezone])
 
     const fetchData = useCallback(async () => {
         setIsLoading(true)
         try {
-            const today = format(new Date(), 'yyyy-MM-dd')
-            const now = new Date()
-            const monthStart = format(startOfMonth(now), 'yyyy-MM-dd')
-            const monthEnd = format(endOfMonth(now), 'yyyy-MM-dd')
+            const today = formatDateKeyInTimezone(new Date(), clubTimezone)
+            const { firstDay: monthStart, lastDay: monthEnd } = getMonthRangeInTimezone(new Date(), clubTimezone)
             
             // Ensure next tasks are generated
             await ensurePlan(new Date())
@@ -140,8 +138,24 @@ export default function EmployeeTasksPage() {
     }, [clubId, ensurePlan])
 
     useEffect(() => {
+        fetch('/api/auth/me')
+            .then(res => res.json())
+            .then(data => {
+                const currentClub = Array.isArray(data.employeeClubs)
+                    ? data.employeeClubs.find((item: any) => String(item.id) === String(clubId))
+                    : null
+                if (currentClub?.timezone) {
+                    setClubTimezone(currentClub.timezone)
+                }
+            })
+            .catch(error => {
+                console.error("Error fetching club timezone:", error)
+            })
+    }, [clubId])
+
+    useEffect(() => {
         fetchData()
-    }, [fetchData])
+    }, [fetchData, clubTimezone])
 
     const handleStartSession = (task: MaintenanceTask) => {
         setSessionTasks([task])
@@ -201,7 +215,7 @@ export default function EmployeeTasksPage() {
 
     const groupedTasks = useMemo(() => {
         const groups: Record<string, MaintenanceTask[]> = {}
-        const todayStr = format(new Date(), 'yyyy-MM-dd')
+        const todayStr = formatDateKeyInTimezone(new Date(), clubTimezone)
         
         tasks.forEach(task => {
             if (filterMode === 'current') {
@@ -240,7 +254,7 @@ export default function EmployeeTasksPage() {
     }, [freeTasks])
 
     const stats = useMemo(() => {
-        const todayKey = format(new Date(), 'yyyy-MM-dd')
+        const todayKey = formatDateKeyInTimezone(new Date(), clubTimezone)
         const total = tasks.length
         const in_progress = tasks.filter(t => t.status === 'IN_PROGRESS').length
         const overdue = tasks.filter(t => t.status === 'PENDING' && t.due_date < todayKey).length
@@ -269,7 +283,7 @@ export default function EmployeeTasksPage() {
     }
 
     const renderTaskCard = (task: MaintenanceTask, isFree: boolean = false, hideLocation: boolean = false) => {
-        const todayStr = format(new Date(), 'yyyy-MM-dd')
+        const todayStr = formatDateKeyInTimezone(new Date(), clubTimezone)
         const isFuture = task.status === 'PENDING' && task.due_date > todayStr
         const isOverdue = task.status === 'PENDING' && task.due_date < todayStr
         const isInProgress = task.status === 'IN_PROGRESS'

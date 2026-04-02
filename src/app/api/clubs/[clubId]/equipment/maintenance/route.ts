@@ -511,8 +511,6 @@ export async function POST(
                 const shiftDate = findNextShiftDate(finalAssignedUserId, nominalDueDate, new Set<string>());
                 if (shiftDate) {
                     finalDueDate = shiftDate;
-                } else {
-                    finalAssignedUserId = null;
                 }
             }
 

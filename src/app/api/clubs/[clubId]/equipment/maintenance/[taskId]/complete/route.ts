@@ -166,13 +166,13 @@ export async function POST(
              
              // Find shift for assigned user if any AND user is active
              let finalDate = nextDueDateStr;
-             const assignedUserId = equipment.effective_assigned_user_id;
+             let finalAssignedUserId = equipment.effective_assigned_user_id;
              
-             if (assignedUserId) {
+             if (finalAssignedUserId) {
                  // Check if user is active first
                  const userActiveRes = await query(
                      `SELECT is_active FROM club_employees WHERE club_id = $1 AND user_id = $2`,
-                     [clubId, assignedUserId]
+                     [clubId, finalAssignedUserId]
                  );
                  
                  const isActive = userActiveRes.rows[0]?.is_active !== false;
@@ -184,11 +184,13 @@ export async function POST(
                           FROM work_schedules 
                           WHERE club_id = $1 AND user_id = $2 AND date >= $3
                           ORDER BY date ASC LIMIT 1`,
-                         [clubId, assignedUserId, nextDueDateStr]
+                         [clubId, finalAssignedUserId, nextDueDateStr]
                      );
                      if (shiftRes.rowCount && shiftRes.rowCount > 0) {
                          finalDate = String(shiftRes.rows[0].date);
                      }
+                 } else {
+                     finalAssignedUserId = null;
                  }
              }
 
@@ -212,7 +214,7 @@ export async function POST(
                      assigned_user_id
                  ) VALUES ($1, 'PENDING', $2, 'CLEANING', $3)
                  ON CONFLICT (equipment_id, due_date, task_type) DO NOTHING`,
-                 [equipmentId, finalDate, assignedUserId]
+                 [equipmentId, finalDate, finalAssignedUserId]
              );
         }
 

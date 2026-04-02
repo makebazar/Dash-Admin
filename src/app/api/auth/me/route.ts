@@ -54,7 +54,7 @@ export async function GET() {
 
         // Get owned clubs
         const ownedClubsResult = await query(
-            `SELECT DISTINCT c.id, c.name, c.created_at, c.inventory_required, c.inventory_settings
+            `SELECT DISTINCT c.id, c.name, c.created_at, c.inventory_required, c.inventory_settings, c.timezone
              FROM clubs c
              LEFT JOIN club_employees ce ON ce.club_id = c.id
              WHERE c.owner_id = $1
@@ -73,12 +73,13 @@ export async function GET() {
             id: row.id,
             name: row.name,
             inventory_required: row.inventory_required,
-            inventory_settings: row.inventory_settings
+            inventory_settings: row.inventory_settings,
+            timezone: row.timezone || 'Europe/Moscow'
         }));
 
         // Get employee clubs with role
         const employeeClubsQuery = `
-            SELECT c.id, c.name, c.inventory_required, c.inventory_settings, ce.role as employee_role, r.name as global_role_name, r.id as global_role_id
+            SELECT c.id, c.name, c.inventory_required, c.inventory_settings, c.timezone, ce.role as employee_role, r.name as global_role_name, r.id as global_role_id
             FROM clubs c
             JOIN club_employees ce ON c.id = ce.club_id
             LEFT JOIN users u ON ce.user_id = u.id
@@ -107,6 +108,7 @@ export async function GET() {
                 name: row.name,
                 inventory_required: row.inventory_required,
                 inventory_settings: row.inventory_settings,
+                timezone: row.timezone || 'Europe/Moscow',
                 role: normalizedRole,
                 role_id: row.global_role_id
             });
@@ -120,6 +122,7 @@ export async function GET() {
                     name: row.name,
                     inventory_required: row.inventory_required,
                     inventory_settings: row.inventory_settings,
+                    timezone: row.timezone || 'Europe/Moscow',
                     role: 'Владелец',
                     is_owner: true
                 });
