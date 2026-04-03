@@ -3700,6 +3700,7 @@ export async function getClubSettings(clubId: string) {
             employee_default_metric_key?: string,
             blind_inventory_enabled?: boolean,
             sales_capture_mode?: 'INVENTORY' | 'SHIFT',
+            inventory_timing?: 'END_SHIFT' | 'START_SHIFT',
             allow_salary_deduction?: boolean,
             employee_discount_percent?: number,
             allow_cost_price_sale?: boolean,
@@ -4198,6 +4199,22 @@ export async function bulkUpdateInventoryItems(items: { id: number, actual_stock
         client.release()
     }
     revalidatePath(`/clubs/${clubId}/inventory`)
+}
+
+export async function getOpenShiftInventory(clubId: string, shiftId: string | number) {
+    await requireClubAccess(clubId)
+    const res = await query(
+        `SELECT id, warehouse_id, started_at
+         FROM warehouse_inventories
+         WHERE club_id = $1
+           AND shift_id = $2
+           AND status = 'OPEN'
+         ORDER BY started_at ASC
+         LIMIT 1`,
+        [clubId, String(shiftId)]
+    )
+
+    return res.rows[0] as { id: number; warehouse_id: number | null; started_at: string } | null
 }
 
 export async function closeInventory(

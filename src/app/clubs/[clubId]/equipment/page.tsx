@@ -1,25 +1,21 @@
 "use client"
 
-import { useEffect, useState, useMemo } from "react"
+import { useEffect, useState } from "react"
 import { useParams } from "next/navigation"
 import {
     Monitor,
     AlertTriangle,
     CheckCircle2,
     Clock,
-    Plus,
     Settings,
+    MapPin,
     LayoutGrid,
     ClipboardList,
     History,
-    ChevronRight,
     ArrowUpRight,
-    Search,
-    CheckSquare,
     Shirt
 } from "lucide-react"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
+import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
@@ -35,7 +31,6 @@ interface EquipmentStats {
 
 export default function EquipmentDashboard() {
     const { clubId } = useParams()
-    const [isLoading, setIsLoading] = useState(true)
     const [stats, setStats] = useState<EquipmentStats>({
         total: 0,
         active_issues: 0,
@@ -64,8 +59,6 @@ export default function EquipmentDashboard() {
             }
         } catch (error) {
             console.error("Error fetching equipment stats:", error)
-        } finally {
-            setIsLoading(false)
         }
     }
 
@@ -106,17 +99,17 @@ export default function EquipmentDashboard() {
             title: "Зоны и места",
             description: "Управление игровыми местами и залами",
             href: `/clubs/${clubId}/equipment/workplaces`,
-            icon: <Settings className="h-6 w-6" />,
+            icon: <MapPin className="h-6 w-6" />,
             color: "text-violet-500",
             bg: "bg-violet-50"
         },
         {
-            title: "Проверка отчетов",
-            description: "Верификация выполненных работ и фотоотчетов",
-            href: `/clubs/${clubId}/checklists`,
-            icon: <CheckSquare className="h-6 w-6" />,
-            color: "text-rose-500",
-            bg: "bg-rose-50"
+            title: "Настройки",
+            description: "Инструкции и параметры модуля оборудования",
+            href: `/clubs/${clubId}/equipment/settings`,
+            icon: <Settings className="h-6 w-6" />,
+            color: "text-slate-500",
+            bg: "bg-slate-50"
         },
         {
             title: "Стирка",
@@ -139,16 +132,9 @@ export default function EquipmentDashboard() {
     return (
         <PageShell maxWidth="7xl">
             <PageHeader
-                title="🖥 Управление оборудованием"
+                title="Управление оборудованием"
                 description="Комплексный контроль техники, периферии и её состояния"
-            >
-                <Link href={`/clubs/${clubId}/equipment/inventory?action=new`}>
-                    <Button className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700">
-                        <Plus className="mr-2 h-4 w-4" />
-                        Добавить технику
-                    </Button>
-                </Link>
-            </PageHeader>
+            />
 
             {/* Stats Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -237,75 +223,6 @@ export default function EquipmentDashboard() {
                 ))}
             </div>
 
-            {/* Bottom Content Area */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                {/* Left: Recent Issues or Critical Alerts */}
-                <Card className="lg:col-span-2 border-none shadow-sm overflow-hidden">
-                    <CardHeader className="bg-slate-50/50">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <CardTitle className="text-lg">Критическое состояние</CardTitle>
-                                <CardDescription>Оборудование требующее немедленного внимания</CardDescription>
-                            </div>
-                            <Link href={`/clubs/${clubId}/equipment/issues`}>
-                                <Button variant="ghost" size="sm" className="text-xs">
-                                    Все проблемы
-                                    <ChevronRight className="ml-1 h-3 w-3" />
-                                </Button>
-                            </Link>
-                        </div>
-                    </CardHeader>
-                    <CardContent className="p-0">
-                        <div className="divide-y divide-slate-100">
-                            {stats.active_issues === 0 ? (
-                                <div className="p-12 text-center">
-                                    <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-green-100 mb-4">
-                                        <CheckCircle2 className="h-6 w-6 text-green-600" />
-                                    </div>
-                                    <h3 className="text-sm font-semibold">Все чисто!</h3>
-                                    <p className="text-xs text-muted-foreground mt-1">На данный момент нет открытых проблем с оборудованием.</p>
-                                </div>
-                            ) : (
-                                <div className="p-8 text-muted-foreground text-center italic text-sm">
-                                    Здесь будет список последних инцидентов...
-                                </div>
-                            )}
-                        </div>
-                    </CardContent>
-                </Card>
-
-                {/* Right: Warranty Sidebar */}
-                <Card className="border-none shadow-sm">
-                    <CardHeader>
-                        <CardTitle className="text-lg flex items-center gap-2">
-                            <ClipboardList className="h-5 w-5 text-indigo-500" />
-                            Гарантии
-                        </CardTitle>
-                        <CardDescription>Ближайшие сроки истечения</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        {stats.expiring_warranty > 0 ? (
-                            <div className="p-4 rounded-xl bg-amber-50 border border-amber-100 flex items-start gap-4">
-                                <div className="p-2 bg-amber-200 rounded-lg text-amber-700">
-                                    <AlertTriangle className="h-4 w-4" />
-                                </div>
-                                <div>
-                                    <p className="text-sm font-bold text-amber-800">{stats.expiring_warranty} девайсов</p>
-                                    <p className="text-xs text-amber-700/80 mt-1">Гарантия истекает в ближайшие 30 дней.</p>
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="p-4 rounded-xl bg-slate-50 text-center">
-                                <p className="text-xs text-muted-foreground">Нет оборудования с истекающей гарантией.</p>
-                            </div>
-                        )}
-
-                        <Button variant="outline" className="w-full text-xs" disabled>
-                            Проверить по реестру
-                        </Button>
-                    </CardContent>
-                </Card>
-            </div>
         </PageShell>
     )
 }

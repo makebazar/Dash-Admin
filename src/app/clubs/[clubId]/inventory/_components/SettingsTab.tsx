@@ -8,9 +8,8 @@ import { useRouter, useSearchParams, useParams } from "next/navigation"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { useTransition, useState, useEffect } from "react"
-import { RefreshCw, ShieldCheck, Wallet, Percent, Tag, Printer, Package, Warehouse as WarehouseIcon } from "lucide-react"
+import { RefreshCw, ShieldCheck, Wallet, Percent, Tag, Package, Warehouse as WarehouseIcon } from "lucide-react"
 import { PriceTagTemplateTab } from "./PriceTagTemplateTab"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
@@ -26,6 +25,7 @@ interface SettingsTabProps {
         employee_default_metric_key?: string,
         blind_inventory_enabled?: boolean,
         sales_capture_mode?: 'INVENTORY' | 'SHIFT',
+        inventory_timing?: 'END_SHIFT' | 'START_SHIFT',
         allow_salary_deduction?: boolean,
         employee_discount_percent?: number,
         allow_cost_price_sale?: boolean,
@@ -283,6 +283,37 @@ export function SettingsTab({ products, categories, warehouses, employees, curre
                                         disabled={isPending}
                                         className="data-[state=checked]:bg-blue-600"
                                     />
+                                </div>
+
+                                <div className="p-6 hover:bg-slate-50/30 transition-colors">
+                                    <div className="space-y-3">
+                                        <div className="space-y-1">
+                                            <Label className="text-sm font-bold text-slate-700">
+                                                Когда проводить обязательную инвентаризацию
+                                            </Label>
+                                            <p className="text-xs text-slate-500 leading-relaxed max-w-[520px]">
+                                                Выбери, в какой момент сотрудник должен пройти обязательную инвентаризацию: перед завершением смены или сразу после её начала.
+                                            </p>
+                                        </div>
+                                        <Select
+                                            value={inventorySettings?.inventory_timing || "END_SHIFT"}
+                                            onValueChange={(val: 'END_SHIFT' | 'START_SHIFT') => handleUpdateSetting('inventory_timing', val)}
+                                            disabled={isPending || !inventoryRequiredValue}
+                                        >
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Выберите момент инвентаризации" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="END_SHIFT">В конце смены</SelectItem>
+                                                <SelectItem value="START_SHIFT">В начале смены</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                        {!inventoryRequiredValue ? (
+                                            <p className="text-[11px] text-amber-600">
+                                                Сначала включи обязательную инвентаризацию, чтобы выбрать момент её проведения.
+                                            </p>
+                                        ) : null}
+                                    </div>
                                 </div>
 
                                 <div className="p-6 hover:bg-slate-50/30 transition-colors">

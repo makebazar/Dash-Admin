@@ -24,6 +24,7 @@ import { EmployeeWriteOffWizard } from "./_components/EmployeeWriteOffWizard"
 import { EmployeeTransferWizard } from "./_components/EmployeeTransferWizard"
 import { EmployeeRequestWizard } from "./_components/EmployeeRequestWizard"
 import { getEmployeeRequests } from "./requests-actions"
+import { getOpenShiftInventory } from "@/app/clubs/[clubId]/inventory/actions"
 
 interface ClubInfo {
     id: number
@@ -35,6 +36,7 @@ interface ClubInfo {
         employee_default_metric_key?: string
         employee_allowed_warehouse_ids?: number[]
         sales_capture_mode?: 'INVENTORY' | 'SHIFT'
+        inventory_timing?: 'END_SHIFT' | 'START_SHIFT'
     }
 }
 
@@ -159,6 +161,8 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
 
     // Report Modal State
     const [isReportModalOpen, setIsReportModalOpen] = useState(false)
+    const [isStartInventoryModalOpen, setIsStartInventoryModalOpen] = useState(false)
+    const [startedShiftId, setStartedShiftId] = useState<string | number | null>(null)
     const [reportTemplate, setReportTemplate] = useState<any>(null)
     const [reportData, setReportData] = useState<Record<string, any>>({})
     
@@ -304,6 +308,34 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
         }
         fetchEvaluationScore()
     }, [clubId, currentUserId])
+
+    useEffect(() => {
+        if (!clubId || !activeShift || !club?.inventory_required) return
+        if ((club.inventory_settings?.inventory_timing || 'END_SHIFT') !== 'START_SHIFT') return
+        if (isStartInventoryModalOpen) return
+
+        let cancelled = false
+
+        const restoreOpenInventory = async () => {
+            try {
+                const openInventory = await getOpenShiftInventory(clubId, activeShift.id)
+                if (!cancelled && openInventory) {
+                    setStartedShiftId(activeShift.id)
+                    setIsStartInventoryModalOpen(true)
+                }
+            } catch (error) {
+                if (!cancelled) {
+                    console.error('Failed to restore open inventory:', error)
+                }
+            }
+        }
+
+        restoreOpenInventory()
+
+        return () => {
+            cancelled = true
+        }
+    }, [activeShift, club?.inventory_required, club?.inventory_settings?.inventory_timing, clubId, isStartInventoryModalOpen])
 
     useEffect(() => {
         if (!clubId || !currentUserId) return
@@ -481,10 +513,18 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                 body: JSON.stringify({ club_id: parseInt(clubId) }),
             })
 
+            const data = await res.json()
+
             if (res.ok) {
+                const inventoryTiming = club?.inventory_settings?.inventory_timing || 'END_SHIFT'
+                const shouldRequireInventoryAtStart = Boolean(club?.inventory_required) && inventoryTiming === 'START_SHIFT'
+
+                if (shouldRequireInventoryAtStart && data.shift_id) {
+                    setStartedShiftId(data.shift_id)
+                    setIsStartInventoryModalOpen(true)
+                }
                 await fetchData(clubId)
             } else {
-                const data = await res.json()
                 alert(data.error || 'Не удалось начать смену')
             }
         } catch (error) {
@@ -493,7 +533,7 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
         } finally {
             setIsActionLoading(false)
         }
-    }, [clubId])
+    }, [club?.inventory_required, club?.inventory_settings?.inventory_timing, clubId])
 
     const handleEndShiftClick = async () => {
         try {
@@ -1252,6 +1292,31 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                         skipInventory={!club.inventory_required}
                         checklistTemplates={checklistTemplates}
                         inventorySettings={club.inventory_settings}
+                    />
+                </SSEProvider>
+            )}
+
+            {startedShiftId && club && (
+                <SSEProvider clubId={clubId} userId={currentUserId}>
+                    <ShiftClosingWizard
+                        isOpen={isStartInventoryModalOpen}
+                        onClose={() => {
+                            setIsStartInventoryModalOpen(false)
+                            setStartedShiftId(null)
+                        }}
+                        onComplete={() => {
+                            setIsStartInventoryModalOpen(false)
+                            setStartedShiftId(null)
+                            fetchData(clubId)
+                        }}
+                        clubId={clubId}
+                        userId={currentUserId}
+                        reportTemplate={reportTemplate}
+                        activeShiftId={startedShiftId}
+                        skipInventory={false}
+                        checklistTemplates={[]}
+                        inventorySettings={club.inventory_settings}
+                        mode="START_SHIFT"
                     />
                 </SSEProvider>
             )}

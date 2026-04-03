@@ -7,22 +7,16 @@ import {
     Monitor,
     Plus,
     Search,
-    Filter,
     MoreVertical,
     Pencil,
     Trash2,
-    ExternalLink,
     AlertCircle,
     CheckCircle2,
-    Clock,
     LayoutGrid,
-    List,
     ChevronLeft,
     Loader2,
-    Calendar,
     Tag,
     Info,
-    Move,
     Wrench,
     Archive,
     History,
@@ -42,7 +36,7 @@ import {
     ChevronDown,
     ChevronRight
 } from "lucide-react"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -61,7 +55,6 @@ import {
     DialogFooter,
     DialogHeader,
     DialogTitle,
-    DialogTrigger,
 } from "@/components/ui/dialog"
 import {
     DropdownMenu,
@@ -84,7 +77,6 @@ import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { cn, formatLocalDate } from "@/lib/utils"
-import { InstructionsTab } from "./InstructionsTab"
 
 // --- Types ---
 
@@ -336,7 +328,7 @@ export default function EquipmentInventory() {
 
         // Filter out empty workstation groups, but keep unassigned if it has items or if we are filtering
         return Object.entries(groups)
-            .filter(([id, group]) => group.items.length > 0)
+            .filter(([, group]) => group.items.length > 0)
             .sort(([idA, groupA], [idB, groupB]) => {
                 if (idA === 'unassigned') return -1
                 if (idB === 'unassigned') return 1
@@ -363,7 +355,7 @@ export default function EquipmentInventory() {
         setExpandedGroups(newSet)
     }
 
-    const toggleGroupSelection = (groupId: string, items: Equipment[]) => {
+    const toggleGroupSelection = (_groupId: string, items: Equipment[]) => {
         const allSelected = items.every(item => selectedIds.has(item.id))
         const newSet = new Set(selectedIds)
         if (allSelected) {
@@ -590,13 +582,7 @@ export default function EquipmentInventory() {
                 </div>
             </div>
 
-            <Tabs defaultValue="list" className="space-y-6">
-                <TabsList>
-                    <TabsTrigger value="list">Список оборудования</TabsTrigger>
-                    <TabsTrigger value="instructions">Инструкции</TabsTrigger>
-                </TabsList>
-
-                <TabsContent value="list" className="space-y-6">
+            <div className="space-y-6">
 
             {/* Dashboard Stats (New) */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -1134,12 +1120,7 @@ export default function EquipmentInventory() {
                 )}
             </Card>
 
-                </TabsContent>
-
-                <TabsContent value="instructions">
-                    <InstructionsTab />
-                </TabsContent>
-            </Tabs>
+            </div>
 
             {/* Create/Edit Dialog with Tabs */}
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>

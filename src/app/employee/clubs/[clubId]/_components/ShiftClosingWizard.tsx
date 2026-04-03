@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useTransition, useEffect, useMemo, useCallback } from "react"
+import { useState, useTransition, useEffect, useMemo, useCallback, useRef } from "react"
+import { createPortal } from "react-dom"
 import { Loader2, ArrowRight, CheckCircle2, AlertTriangle, Package, Camera, Search, Barcode, X, Plus, Trash2, ArrowLeft, RefreshCcw, AlertCircle, DollarSign } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -42,7 +43,9 @@ interface ShiftClosingWizardProps {
         employee_allowed_warehouse_ids?: number[]
         blind_inventory_enabled?: boolean
         sales_capture_mode?: 'INVENTORY' | 'SHIFT'
+        inventory_timing?: 'END_SHIFT' | 'START_SHIFT'
     }
+    mode?: 'END_SHIFT' | 'START_SHIFT'
 }
 
 interface ExtendedInventoryItem extends InventoryItem {
@@ -157,7 +160,8 @@ export function ShiftClosingWizard({
     activeShiftId,
     skipInventory = false,
     checklistTemplates = [],
-    inventorySettings
+    inventorySettings,
+    mode = 'END_SHIFT'
 }: ShiftClosingWizardProps) {
     const [step, setStep] = useState<1 | 2 | 3 | 4>(1)
     const [reportData, setReportData] = useState<any>({})
@@ -172,6 +176,7 @@ export function ShiftClosingWizard({
     const [uploadingState, setUploadingState] = useState<Record<number, boolean>>({})
     const [unaccountedSales, setUnaccountedSales] = useState<{ product_id: number, quantity: number, selling_price: number, cost_price: number, name: string }[]>([])
     const [isUnaccountedDialogOpen, setIsUnaccountedDialogOpen] = useState(false)
+    const [isPortalReady, setIsPortalReady] = useState(false)
     const [selectedUnaccountedProduct, setSelectedUnaccountedProduct] = useState("")
     const [unaccountedQty, setUnaccountedQty] = useState("1")
     const [payoutSuggestion, setPayoutSuggestion] = useState<{ amount: number, isAvailable: boolean } | null>(null)
@@ -184,12 +189,15 @@ export function ShiftClosingWizard({
     const [selectedProductToAdd, setSelectedProductToAdd] = useState("")
     const [searchQuery, setSearchQuery] = useState("")
     const [isRefreshingCatalog, setIsRefreshingCatalog] = useState(false)
+    const autosaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const lastAutosavedSnapshotRef = useRef("")
 
     const salesMode = inventorySettings?.sales_capture_mode ?? 'INVENTORY'
     const isShiftSalesMode = salesMode === 'SHIFT'
-    const inventoryStep = isShiftSalesMode ? 3 : 2
-    const finalizeStep = isShiftSalesMode ? 4 : 3
-    const totalSteps = isShiftSalesMode ? (skipInventory ? 2 : 4) : (skipInventory ? 1 : 3)
+    const isStartShiftMode = mode === 'START_SHIFT'
+    const inventoryStep = isStartShiftMode ? 1 : (isShiftSalesMode ? 3 : 2)
+    const finalizeStep = isStartShiftMode ? 2 : (isShiftSalesMode ? 4 : 3)
+    const totalSteps = isStartShiftMode ? 2 : (isShiftSalesMode ? (skipInventory ? 2 : 4) : (skipInventory ? 1 : 3))
 
     const [shiftReceipts, setShiftReceipts] = useState<ShiftReceipt[]>([])
     const [inventorySummary, setInventorySummary] = useState<InventorySummary | null>(null)
@@ -347,6 +355,11 @@ export function ShiftClosingWizard({
 
     // Lock scroll when open
     useEffect(() => {
+        setIsPortalReady(true)
+        return () => setIsPortalReady(false)
+    }, [])
+
+    useEffect(() => {
         if (isOpen) {
             document.body.style.overflow = 'hidden'
             document.body.style.position = 'fixed'
@@ -396,6 +409,14 @@ export function ShiftClosingWizard({
         }
     }, [isOpen, activeShiftId, persistenceKey])
 
+    useEffect(() => {
+        if (!isOpen || !isStartShiftMode) return
+        const savedState = localStorage.getItem(persistenceKey)
+        if (savedState) return
+        setStep(1)
+        startInventory()
+    }, [isOpen, isStartShiftMode, persistenceKey])
+
     // Save state on changes
     useEffect(() => {
         if (isOpen && activeShiftId) {
@@ -414,6 +435,42 @@ export function ShiftClosingWizard({
             localStorage.setItem(persistenceKey, JSON.stringify(stateToSave))
         }
     }, [step, reportData, inventoryId, inventoryItems, checklistResponses, problematicItems, calculationResult, inventorySummary, unaccountedSales, isOpen, activeShiftId, persistenceKey])
+
+    useEffect(() => {
+        if (!isOpen || !inventoryId || step !== inventoryStep) return
+
+        const snapshot = JSON.stringify(
+            inventoryItems
+                .map(item => ({ id: item.id, actual_stock: item.actual_stock }))
+                .sort((a, b) => a.id - b.id)
+        )
+
+        if (snapshot === lastAutosavedSnapshotRef.current) return
+
+        if (autosaveTimeoutRef.current) {
+            clearTimeout(autosaveTimeoutRef.current)
+        }
+
+        autosaveTimeoutRef.current = setTimeout(() => {
+            const itemsToSave = inventoryItems
+                .map(item => ({ id: item.id, actual_stock: item.actual_stock }))
+
+            startTransition(async () => {
+                try {
+                    await bulkUpdateInventoryItems(itemsToSave, clubId)
+                    lastAutosavedSnapshotRef.current = snapshot
+                } catch (error) {
+                    console.error('Failed to autosave inventory progress:', error)
+                }
+            })
+        }, 500)
+
+        return () => {
+            if (autosaveTimeoutRef.current) {
+                clearTimeout(autosaveTimeoutRef.current)
+            }
+        }
+    }, [clubId, inventoryId, inventoryItems, inventoryStep, isOpen, step])
 
     // Reset state only if NO saved data exists when opening
     useEffect(() => {
@@ -1070,6 +1127,28 @@ export function ShiftClosingWizard({
                     await bulkUpdateInventoryItems(itemsToUpdate, clubId)
                 }
 
+                if (isStartShiftMode) {
+                    const refreshedItems = inventoryId ? await getInventoryItems(inventoryId) : inventoryItems
+                    const mergedItems = refreshedItems.map(item => {
+                        const existing = inventoryItems.find(current => current.id === item.id)
+                        return {
+                            ...item,
+                            actual_stock: existing?.actual_stock ?? item.actual_stock,
+                            is_visible: existing?.is_visible ?? (item.actual_stock !== null),
+                            last_modified: existing?.last_modified
+                        }
+                    })
+                    setInventoryItems(mergedItems)
+                    setInventorySummary(summarizeInventory(mergedItems))
+                    setCalculationResult({
+                        reported: 0,
+                        calculated: 0,
+                        diff: 0
+                    })
+                    setStep(finalizeStep)
+                    return
+                }
+
                 if (isShiftSalesMode) {
                     const refreshedItems = inventoryId ? await getInventoryItems(inventoryId) : inventoryItems
                     const mergedItems = refreshedItems.map(item => {
@@ -1138,7 +1217,9 @@ export function ShiftClosingWizard({
 
         startTransition(async () => {
                 try {
-                    if (isShiftSalesMode) {
+                    if (isStartShiftMode) {
+                        await closeInventory(inventoryId, clubId, 0, [], { salesRecognition: 'NONE' })
+                    } else if (isShiftSalesMode) {
                         await closeInventory(inventoryId, clubId, calculationResult.reported, [], { salesRecognition: 'NONE' })
                     } else {
                         await closeInventory(
@@ -1230,9 +1311,9 @@ export function ShiftClosingWizard({
         }
     }
 
-    if (!isOpen) return null
+    if (!isOpen || !isPortalReady) return null
 
-    return (
+    return createPortal((
         <div className="fixed inset-0 h-[100dvh] bg-slate-950 text-white flex flex-col z-[9999] overflow-hidden overscroll-none">
             {step === inventoryStep && (
                 <BarcodeScanner 
@@ -1246,20 +1327,24 @@ export function ShiftClosingWizard({
                 <div className="space-y-4">
                     <div className="flex items-center justify-between gap-4">
                         <h2 className="text-lg font-bold truncate">
-                            {skipInventory ? "Закрытие смены" : 
+                            {isStartShiftMode ? (
+                                step === 1 ? "Стартовая инвентаризация" : "Подтверждение инвентаризации"
+                            ) : skipInventory ? "Закрытие смены" : 
                              step === 1 ? "Финансовый отчет" :
                              isShiftSalesMode
                                  ? (step === 2 ? "Сверка продаж" : step === 3 ? "Инвентаризация" : "Сверка итогов")
                                  : (step === 2 ? "Инвентаризация" : "Сверка итогов")}
                         </h2>
-                        <Button 
-                            variant="outline" 
-                            size="icon" 
-                            onClick={onClose} 
-                            className="text-slate-400 hover:text-white border-slate-800 hover:bg-slate-800 shrink-0 h-10 w-10 rounded-xl"
-                        >
-                            <X className="h-5 w-5" />
-                        </Button>
+                        {!isStartShiftMode ? (
+                            <Button 
+                                variant="outline" 
+                                size="icon" 
+                                onClick={onClose} 
+                                className="text-slate-400 hover:text-white border-slate-800 hover:bg-slate-800 shrink-0 h-10 w-10 rounded-xl"
+                            >
+                                <X className="h-5 w-5" />
+                            </Button>
+                        ) : null}
                     </div>
                     
                     {/* Lightweight Step Progress Bar */}
@@ -1282,7 +1367,7 @@ export function ShiftClosingWizard({
 
             <main className="flex-1 overflow-y-auto px-4 py-6">
                 {/* STEP 1: REPORT FORM + CHECKLIST */}
-                {step === 1 && (
+                {step === 1 && !isStartShiftMode && (
                     <div className="space-y-6 max-w-2xl mx-auto pb-20">
                         {/* Checklist Section if Required */}
                         {requiredChecklist && (
@@ -1697,17 +1782,29 @@ export function ShiftClosingWizard({
                 {/* SUMMARY */}
                 {step === finalizeStep && calculationResult && (
                     <div className="space-y-6 max-w-2xl mx-auto pb-20">
-                        {/* Reconciliation Summary Header */}
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="bg-slate-900/50 p-4 rounded-2xl border border-slate-800">
-                                <span className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">В кассе (отчет)</span>
-                                <div className="text-xl font-bold mt-1">{calculationResult.reported.toLocaleString()} ₽</div>
+                        {isStartShiftMode ? (
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="bg-slate-900/50 p-4 rounded-2xl border border-slate-800">
+                                    <span className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Проверено товаров</span>
+                                    <div className="text-xl font-bold mt-1">{inventoryItems.filter(item => item.actual_stock !== null).length}</div>
+                                </div>
+                                <div className="bg-slate-900/50 p-4 rounded-2xl border border-slate-800">
+                                    <span className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Расхождений найдено</span>
+                                    <div className="text-xl font-bold mt-1 text-blue-400">{inventorySummary?.discrepancyItems ?? 0}</div>
+                                </div>
                             </div>
-                            <div className="bg-slate-900/50 p-4 rounded-2xl border border-slate-800">
-                                <span className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Расчет (склад)</span>
-                                <div className="text-xl font-bold mt-1 text-blue-400">{calculationResult.calculated.toLocaleString()} ₽</div>
+                        ) : (
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="bg-slate-900/50 p-4 rounded-2xl border border-slate-800">
+                                    <span className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">В кассе (отчет)</span>
+                                    <div className="text-xl font-bold mt-1">{calculationResult.reported.toLocaleString()} ₽</div>
+                                </div>
+                                <div className="bg-slate-900/50 p-4 rounded-2xl border border-slate-800">
+                                    <span className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Расчет (склад)</span>
+                                    <div className="text-xl font-bold mt-1 text-blue-400">{calculationResult.calculated.toLocaleString()} ₽</div>
+                                </div>
                             </div>
-                        </div>
+                        )}
 
                         {/* Status Message */}
                         <div className={`p-4 rounded-2xl border flex items-start gap-4 ${
@@ -1725,7 +1822,11 @@ export function ShiftClosingWizard({
                             <div className="flex-1">
                                 <div className="font-bold flex justify-between items-center">
                                     <span>
-                                        {isShiftSalesMode
+                                        {isStartShiftMode
+                                            ? inventorySummary?.isPerfect === false
+                                                ? "Стартовая инвентаризация завершена с расхождениями"
+                                                : "Стартовая инвентаризация завершена"
+                                            : isShiftSalesMode
                                             ? calculationResult.diff === 0
                                                 ? inventorySummary?.isPerfect === false
                                                     ? "Касса сходится, но по складу есть расхождения"
@@ -1739,10 +1840,18 @@ export function ShiftClosingWizard({
                                                     ? "Обнаружен излишек"
                                                     : "Обнаружена недостача"}
                                     </span>
-                                    <span className="text-xl font-black">{calculationResult.diff > 0 ? '+' : ''}{calculationResult.diff.toLocaleString()} ₽</span>
+                                    <span className="text-xl font-black">
+                                        {isStartShiftMode
+                                            ? `${inventorySummary?.discrepancyQuantity ?? 0} шт.`
+                                            : `${calculationResult.diff > 0 ? '+' : ''}${calculationResult.diff.toLocaleString()} ₽`}
+                                    </span>
                                 </div>
                                 <p className="text-xs opacity-80 mt-1 leading-relaxed">
-                                    {isShiftSalesMode
+                                    {isStartShiftMode
+                                        ? inventorySummary?.isPerfect === false
+                                            ? "На старте смены найдены расхождения по остаткам. Проверь подтверждение перед продолжением работы."
+                                            : "Остатки на старте смены подтверждены. Можно продолжать работу."
+                                        : isShiftSalesMode
                                         ? calculationResult.diff === 0
                                             ? inventorySummary?.isPerfect === false
                                                 ? "По кассе всё сходится, но инвентаризация нашла расхождения по остаткам."
@@ -1906,8 +2015,8 @@ export function ShiftClosingWizard({
                             </div>
                         )}
 
-                        {/* Sales Detail Preview */}
-                        <div className="bg-slate-900/50 rounded-2xl border border-slate-800 overflow-hidden">
+                        {!isStartShiftMode && (
+                            <div className="bg-slate-900/50 rounded-2xl border border-slate-800 overflow-hidden">
                             <div className="px-4 py-3 bg-slate-900 border-b border-slate-800 flex justify-between items-center">
                                 <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Детализация продаж</h4>
                                 {!isShiftSalesMode && (
@@ -1962,10 +2071,11 @@ export function ShiftClosingWizard({
                                     </Table>
                                 )}
                             </div>
-                        </div>
+                            </div>
+                        )}
 
                         {/* Unaccounted Logic (Automatic Supply) Alert - moved below detail */}
-                        {inventoryItems.some(item => (item.expected_stock || 0) === 0 && (item.actual_stock || 0) > 0) && (
+                        {!isStartShiftMode && inventoryItems.some(item => (item.expected_stock || 0) === 0 && (item.actual_stock || 0) > 0) && (
                             <div className="bg-blue-900/20 border border-blue-500/30 p-4 rounded-2xl space-y-3">
                                 <div className="flex items-center gap-2 text-blue-400">
                                     <AlertTriangle className="h-5 w-5" />
@@ -1984,7 +2094,7 @@ export function ShiftClosingWizard({
                             </div>
                         )}
 
-                        {calculationResult.diff !== 0 && (
+                        {!isStartShiftMode && calculationResult.diff !== 0 && (
                             <div className="space-y-3">
                                 <Label className="text-slate-400 text-xs uppercase tracking-wider ml-1">Причина расхождения</Label>
                                 <Input 
@@ -1997,7 +2107,7 @@ export function ShiftClosingWizard({
                         )}
 
                         {/* Payout Suggestion Block */}
-                        {payoutSuggestion && payoutSuggestion.isAvailable && (
+                        {!isStartShiftMode && payoutSuggestion && payoutSuggestion.isAvailable && (
                             <div className="bg-emerald-900/20 border border-emerald-500/30 p-5 rounded-2xl space-y-4">
                                 <div className="flex items-center gap-3 text-emerald-400">
                                     <div className="bg-emerald-500/20 p-2 rounded-xl">
@@ -2050,7 +2160,7 @@ export function ShiftClosingWizard({
             </main>
 
             <footer className="p-4 pb-safe border-t border-slate-800 bg-slate-900/80 backdrop-blur-md sticky bottom-0 z-50">
-                {step === 1 && (
+                {step === 1 && !isStartShiftMode && (
                     <Button onClick={handleStep1Submit} className="w-full h-14 text-lg font-bold bg-purple-600 hover:bg-purple-700 rounded-2xl shadow-lg shadow-purple-900/20">
                         {skipInventory
                             ? "Завершить смену"
@@ -2086,16 +2196,18 @@ export function ShiftClosingWizard({
                             Открыть Сканер
                         </Button>
                         <div className="flex gap-3">
-                            <Button 
-                                variant="outline"
-                                size="icon"
-                                onClick={handleBack}
-                                className="h-14 w-14 border-slate-800 text-slate-400 hover:bg-slate-800 rounded-2xl shrink-0"
-                            >
-                                <ArrowLeft className="h-6 w-6" />
-                            </Button>
+                            {!isStartShiftMode ? (
+                                <Button 
+                                    variant="outline"
+                                    size="icon"
+                                    onClick={handleBack}
+                                    className="h-14 w-14 border-slate-800 text-slate-400 hover:bg-slate-800 rounded-2xl shrink-0"
+                                >
+                                    <ArrowLeft className="h-6 w-6" />
+                                </Button>
+                            ) : null}
                             <Button onClick={handleInventorySubmit} disabled={isPending} className="flex-1 h-14 text-lg font-bold bg-blue-600 hover:bg-blue-700 rounded-2xl shadow-lg shadow-blue-900/20">
-                                Далее
+                                {isStartShiftMode ? "Далее: Подтверждение" : "Далее"}
                                 <ArrowRight className="ml-2 h-5 w-5" />
                             </Button>
                         </div>
@@ -2128,16 +2240,18 @@ export function ShiftClosingWizard({
                 )}
                 {step === finalizeStep && (
                     <div className="flex gap-3">
-                        <Button 
-                            variant="outline"
-                            size="icon"
-                            onClick={handleBack}
-                            className="h-14 w-14 border-slate-800 text-slate-400 hover:bg-slate-800 rounded-2xl shrink-0"
-                        >
-                            <ArrowLeft className="h-6 w-6" />
-                        </Button>
+                        {!isStartShiftMode ? (
+                            <Button 
+                                variant="outline"
+                                size="icon"
+                                onClick={handleBack}
+                                className="h-14 w-14 border-slate-800 text-slate-400 hover:bg-slate-800 rounded-2xl shrink-0"
+                            >
+                                <ArrowLeft className="h-6 w-6" />
+                            </Button>
+                        ) : null}
                         <Button onClick={handleFinalize} disabled={isPending} className="flex-1 h-14 text-lg font-bold bg-green-600 hover:bg-green-700 rounded-2xl shadow-lg shadow-green-900/20">
-                            Подтвердить
+                            {isStartShiftMode ? "Подтвердить инвентаризацию" : "Подтвердить"}
                         </Button>
                     </div>
                 )}
@@ -2208,5 +2322,5 @@ export function ShiftClosingWizard({
                 </DialogContent>
             </Dialog>
         </div>
-    )
+    ), document.body)
 }

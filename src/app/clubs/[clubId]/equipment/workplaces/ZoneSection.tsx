@@ -77,10 +77,10 @@ export default memo(function ZoneSection({
 }: ZoneSectionProps) {
     return (
         <section
-            className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500"
+            className="space-y-4"
             style={{ contentVisibility: "auto", containIntrinsicSize: "900px" }}
         >
-            <div className="group sticky top-0 z-10 flex items-center justify-between border-b bg-background/95 px-2 py-2 backdrop-blur">
+            <div className="group sticky top-0 z-10 flex items-center justify-between border-b bg-background px-2 py-2">
                 <h2 className="flex items-center gap-3 text-lg font-black uppercase tracking-widest text-slate-500">
                     <Layers className="h-5 w-5 text-primary" />
                     {zone}
@@ -105,21 +105,21 @@ export default memo(function ZoneSection({
                         <DeferredViewportItem key={ws.id}>
                             <Card
                                 className={cn(
-                                    "group flex h-full cursor-pointer flex-col overflow-hidden border-slate-200 shadow-sm transition-all hover:border-primary/50",
-                                    wsIssueCount > 0 && "border-orange-200 bg-orange-50/10"
+                                    "group flex h-full cursor-pointer flex-col overflow-hidden border-slate-200 transition-colors hover:border-primary/50",
+                                    wsIssueCount > 0 && "border-orange-200 bg-orange-50/[0.04]"
                                 )}
                                 style={{ contentVisibility: "auto", containIntrinsicSize: "320px" }}
                                 onClick={() => onOpenDetails(ws.id)}
                             >
-                                <CardHeader className="flex flex-row items-center justify-between space-y-0 border-b border-slate-100 bg-slate-50/50 p-4 pb-2">
+                                <CardHeader className="flex flex-row items-center justify-between space-y-0 border-b border-slate-100 bg-slate-50 p-4 pb-2">
                                     <div className="flex items-center gap-3">
                                         <div className={cn(
-                                            "relative flex h-10 w-10 items-center justify-center rounded-xl border bg-white font-bold text-slate-400 shadow-sm",
+                                            "relative flex h-10 w-10 items-center justify-center rounded-xl border bg-white font-bold text-slate-400",
                                             wsIssueCount > 0 && "border-orange-200 text-orange-500"
                                         )}>
                                             {ws.name.replace(/[^0-9]/g, '') || <Monitor className="h-5 w-5" />}
                                             {wsIssueCount > 0 ? (
-                                                <div className="absolute -right-1 -top-1 h-2.5 w-2.5 animate-pulse rounded-full border-2 border-white bg-orange-500" />
+                                                <div className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full border-2 border-white bg-orange-500" />
                                             ) : null}
                                         </div>
                                         <div>
@@ -174,8 +174,8 @@ export default memo(function ZoneSection({
                                                     <div
                                                         key={item.id}
                                                         className={cn(
-                                                            "group/item relative flex items-center justify-between overflow-hidden rounded-lg border border-slate-100 bg-slate-50 p-2 pl-3 transition-all hover:border-primary/20 hover:bg-primary/5",
-                                                            itemIssueCount > 0 && "border-l-[3px] border-l-orange-500 border-orange-200 bg-orange-50/30 pl-2.5"
+                                                            "group/item relative flex items-center justify-between overflow-hidden rounded-lg border border-slate-100 bg-slate-50 p-2 pl-3 transition-colors hover:border-primary/20 hover:bg-primary/5",
+                                                            itemIssueCount > 0 && "border-l-[3px] border-l-orange-500 border-orange-200 bg-orange-50/20 pl-2.5"
                                                         )}
                                                     >
                                                         <div className="relative z-10 flex items-center gap-3 overflow-hidden">
@@ -198,7 +198,7 @@ export default memo(function ZoneSection({
                                                         <Button
                                                             variant="ghost"
                                                             size="icon"
-                                                            className="h-6 w-6 text-slate-400 opacity-0 transition-all hover:bg-rose-50 hover:text-rose-500 group-hover/item:opacity-100"
+                                                            className="h-6 w-6 text-slate-400 opacity-0 transition-opacity hover:bg-rose-50 hover:text-rose-500 group-hover/item:opacity-100"
                                                             title="Убрать с места (на склад)"
                                                             onClick={(e) => { e.stopPropagation(); onUnassignEquipment(item.id) }}
                                                         >
@@ -220,7 +220,7 @@ export default memo(function ZoneSection({
                                     <Button
                                         variant="outline"
                                         size="sm"
-                                        className="h-8 w-full bg-white text-xs shadow-sm transition-all hover:border-primary hover:bg-primary hover:text-primary-foreground"
+                                        className="h-8 w-full bg-white text-xs transition-colors hover:border-primary hover:bg-primary hover:text-primary-foreground"
                                         onClick={(e) => { e.stopPropagation(); onOpenAssignDialog(ws.id) }}
                                     >
                                         <Plus className="mr-1.5 h-3 w-3" /> Добавить оборудование
@@ -234,7 +234,7 @@ export default memo(function ZoneSection({
                 <DeferredViewportItem>
                     <button
                         onClick={() => onCreate(zone)}
-                        className="group flex min-h-[250px] w-full flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-slate-200 text-slate-400 transition-all hover:border-primary/50 hover:bg-primary/5 hover:text-primary"
+                        className="group flex min-h-[250px] w-full flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-slate-200 text-slate-400 transition-colors hover:border-primary/50 hover:bg-primary/5 hover:text-primary"
                     >
                         <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 transition-colors group-hover:bg-primary/10">
                             <Plus className="h-6 w-6" />
