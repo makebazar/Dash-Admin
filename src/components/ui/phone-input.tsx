@@ -15,7 +15,7 @@ export const PhoneInput = React.forwardRef<HTMLInputElement, PhoneInputProps>(
             const digits = input.replace(/\D/g, '')
 
             // Start with +7
-            if (digits.length === 0) return ''
+            if (digits.length === 0) return '+7'
 
             let formatted = '+7'
 

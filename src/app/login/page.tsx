@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Zap, Loader2, ArrowRight } from "lucide-react"
 import { PhoneInput } from "@/components/ui/phone-input"
+import { validatePhone } from "@/lib/phone-utils"
 
 type MeResponse = {
     user?: {
@@ -22,7 +23,7 @@ type MeResponse = {
 
 export default function LoginPage() {
     const router = useRouter()
-    const [step, setStep] = useState<'phone' | 'otp' | 'password-setup' | 'password' | 'name'>('phone')
+    const [step, setStep] = useState<'phone' | 'otp' | 'password-setup' | 'password' | 'name' | 'reset-otp' | 'reset-password'>('phone')
     const [phone, setPhone] = useState('')
     const [code, setCode] = useState('')
     const [password, setPassword] = useState('')
@@ -31,11 +32,18 @@ export default function LoginPage() {
     const [fullName, setFullName] = useState('')
     const [isLoading, setIsLoading] = useState(false)
     const [debugCode, setDebugCode] = useState<string | null>(null)
-    const [userExists, setUserExists] = useState(false)
     const [requiresPassword, setRequiresPassword] = useState(false)
     const [isNewUser, setIsNewUser] = useState(false)
     const [isCheckingSession, setIsCheckingSession] = useState(true)
     const [hasAcceptedLegal, setHasAcceptedLegal] = useState(false)
+
+    const resetTransientFields = useCallback(() => {
+        setCode('')
+        setPassword('')
+        setNewPassword('')
+        setConfirmPassword('')
+        setDebugCode(null)
+    }, [])
 
     const routeFromMe = useCallback((data: MeResponse) => {
         const ownedClubs = Array.isArray(data.ownedClubs) ? data.ownedClubs : []
@@ -84,6 +92,12 @@ export default function LoginPage() {
 
     const handleSendOtp = async (e: React.FormEvent) => {
         e.preventDefault()
+
+        if (!validatePhone(phone)) {
+            alert('Введите номер телефона в формате +7 и 10 цифр номера')
+            return
+        }
+
         setIsLoading(true)
         try {
             const res = await fetch('/api/auth/otp', {
@@ -94,7 +108,6 @@ export default function LoginPage() {
             const data = await res.json()
 
             if (data.success) {
-                setUserExists(data.userExists || false)
                 setRequiresPassword(data.requiresPassword || false)
                 setIsNewUser(!data.userExists)
                 const hasPassword = data.userExists && !data.requiresPassword
@@ -113,6 +126,36 @@ export default function LoginPage() {
         } catch (err) {
             console.error(err)
             alert('Ошибка отправки кода')
+        } finally {
+            setIsLoading(false)
+        }
+    }
+
+    const handleStartPasswordReset = async () => {
+        if (!validatePhone(phone)) {
+            alert('Введите номер телефона в формате +7 и 10 цифр номера')
+            return
+        }
+
+        setIsLoading(true)
+        try {
+            const res = await fetch('/api/auth/password-reset/request', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ phoneNumber: phone }),
+            })
+            const data = await res.json()
+
+            if (data.success) {
+                resetTransientFields()
+                setStep('reset-otp')
+                setDebugCode(data.debugCode || null)
+            } else {
+                alert(data.error || 'Не удалось отправить код для сброса')
+            }
+        } catch (err) {
+            console.error(err)
+            alert('Ошибка отправки кода для сброса')
         } finally {
             setIsLoading(false)
         }
@@ -188,6 +231,17 @@ export default function LoginPage() {
         } finally {
             setIsLoading(false)
         }
+    }
+
+    const handleVerifyResetOtp = async (e: React.FormEvent) => {
+        e.preventDefault()
+
+        if (code.length < 4) {
+            alert('Введите код полностью')
+            return
+        }
+
+        setStep('reset-password')
     }
 
     const handleSaveName = async (e: React.FormEvent) => {
@@ -276,6 +330,50 @@ export default function LoginPage() {
         }
     }
 
+    const handleResetPassword = async (e: React.FormEvent) => {
+        e.preventDefault()
+        setIsLoading(true)
+        try {
+            if (newPassword !== confirmPassword) {
+                alert('Пароли не совпадают')
+                setIsLoading(false)
+                return
+            }
+
+            if (newPassword.length < 6) {
+                alert('Пароль должен быть не менее 6 символов')
+                setIsLoading(false)
+                return
+            }
+
+            const res = await fetch('/api/auth/password-reset/confirm', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    phoneNumber: phone,
+                    code,
+                    password: newPassword,
+                    confirm_password: confirmPassword,
+                }),
+            })
+
+            const data = await res.json()
+
+            if (data.success) {
+                alert('Пароль успешно изменён. Теперь войдите с новым паролем.')
+                resetTransientFields()
+                setStep('password')
+            } else {
+                alert(data.error || 'Ошибка сброса пароля')
+            }
+        } catch (err) {
+            console.error(err)
+            alert('Ошибка сброса пароля')
+        } finally {
+            setIsLoading(false)
+        }
+    }
+
     return (
         <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-4">
             <Link href="/" className="mb-8 flex items-center gap-2">
@@ -292,6 +390,10 @@ export default function LoginPage() {
                             ? 'С возвращением'
                             : step === 'otp'
                                 ? 'Введите код'
+                                : step === 'reset-otp'
+                                    ? 'Сброс пароля'
+                                    : step === 'reset-password'
+                                        ? 'Новый пароль'
                                 : step === 'password-setup'
                                     ? isNewUser
                                         ? 'Придумайте пароль'
@@ -306,6 +408,10 @@ export default function LoginPage() {
                             ? 'Введите номер телефона для входа'
                             : step === 'otp'
                                 ? `Мы отправили код на ${phone}`
+                            : step === 'reset-otp'
+                                ? `Мы отправили код для сброса на ${phone}`
+                                : step === 'reset-password'
+                                    ? 'Введите новый пароль и подтвердите его'
                             : step === 'password-setup'
                                     ? isNewUser
                                         ? 'Создайте пароль для быстрого входа в будущем'
@@ -324,22 +430,23 @@ export default function LoginPage() {
                         </div>
                     ) : (
                     step === 'phone' ? (
-                        <form onSubmit={handleSendOtp} className="space-y-4">
+                        <form onSubmit={handleSendOtp} className="space-y-4" noValidate>
                             <div className="space-y-2">
                                 <Label htmlFor="phone" className="text-gray-300">Номер телефона</Label>
                                 <PhoneInput
                                     id="phone"
-                                    placeholder="+7 (999) 000-00-00"
+                                    placeholder="Введите 10 цифр номера"
                                     value={phone}
                                     onChange={setPhone}
-                                    required
                                     className="bg-black/50 border-white/10 text-white placeholder:text-gray-600 focus-visible:ring-purple-500"
+                                    aria-label="Номер телефона"
                                 />
+                                <p className="text-xs text-gray-500">Введите 10 цифр после +7</p>
                             </div>
 
                             <Button
                                 type="submit"
-                                className="w-full bg-white text-black hover:bg-gray-200"
+                                className="w-full bg-white text-black hover:bg-gray-200 hover:text-black"
                                 disabled={isLoading}
                             >
                                 {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
@@ -360,14 +467,23 @@ export default function LoginPage() {
                                     required
                                 />
                             </div>
-                            <Button type="submit" className="w-full bg-white text-black hover:bg-gray-200" disabled={isLoading}>
+                            <Button type="submit" className="w-full bg-white text-black hover:bg-gray-200 hover:text-black" disabled={isLoading}>
                                 {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                                 Войти
                             </Button>
                             <Button
                                 variant="ghost"
                                 type="button"
-                                className="w-full text-gray-500 hover:text-white"
+                                className="w-full text-gray-400 hover:bg-white hover:text-black"
+                                onClick={handleStartPasswordReset}
+                                disabled={isLoading}
+                            >
+                                Забыли пароль?
+                            </Button>
+                            <Button
+                                variant="ghost"
+                                type="button"
+                                className="w-full text-gray-500 hover:bg-white hover:text-black"
                                 onClick={() => setStep('phone')}
                             >
                                 Изменить номер
@@ -397,17 +513,90 @@ export default function LoginPage() {
                                     required
                                 />
                             </div>
-                            <Button type="submit" className="w-full bg-white text-black hover:bg-gray-200" disabled={isLoading}>
+                            <Button type="submit" className="w-full bg-white text-black hover:bg-gray-200 hover:text-black" disabled={isLoading}>
                                 {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                                 Подтвердить и Войти <ArrowRight className="ml-2 w-4 h-4" />
                             </Button>
                             <Button
                                 variant="ghost"
                                 type="button"
-                                className="w-full text-gray-500 hover:text-white"
+                                className="w-full text-gray-500 hover:bg-white hover:text-black"
                                 onClick={() => setStep('phone')}
                             >
                                 Изменить номер
+                            </Button>
+                        </form>
+                    ) : step === 'reset-otp' ? (
+                        <form onSubmit={handleVerifyResetOtp} className="space-y-4">
+                            {debugCode && (
+                                <div className="p-3 bg-purple-500/20 border border-purple-500/30 rounded text-purple-200 text-sm text-center">
+                                    DEV CODE: <span className="font-bold tracking-widest">{debugCode}</span>
+                                </div>
+                            )}
+                            <div className="space-y-2">
+                                <Label htmlFor="reset-code" className="text-gray-300">Код подтверждения</Label>
+                                <Input
+                                    id="reset-code"
+                                    placeholder="0000"
+                                    value={code}
+                                    onChange={(e) => setCode(e.target.value)}
+                                    className="bg-black/50 border-white/10 text-white placeholder:text-gray-600 focus-visible:ring-purple-500 text-center text-lg tracking-widest"
+                                    maxLength={4}
+                                    required
+                                />
+                            </div>
+                            <Button type="submit" className="w-full bg-white text-black hover:bg-gray-200 hover:text-black" disabled={isLoading}>
+                                Продолжить <ArrowRight className="ml-2 w-4 h-4" />
+                            </Button>
+                            <Button
+                                variant="ghost"
+                                type="button"
+                                className="w-full text-gray-500 hover:bg-white hover:text-black"
+                                onClick={() => {
+                                    resetTransientFields()
+                                    setStep('password')
+                                }}
+                            >
+                                Назад ко входу
+                            </Button>
+                        </form>
+                    ) : step === 'reset-password' ? (
+                        <form onSubmit={handleResetPassword} className="space-y-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="reset-new-password" className="text-gray-300">Новый пароль</Label>
+                                <Input
+                                    id="reset-new-password"
+                                    type="password"
+                                    placeholder="Минимум 6 символов"
+                                    value={newPassword}
+                                    onChange={(e) => setNewPassword(e.target.value)}
+                                    className="bg-black/50 border-white/10 text-white placeholder:text-gray-600 focus-visible:ring-purple-500"
+                                    required
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="reset-confirm-password" className="text-gray-300">Подтверждение пароля</Label>
+                                <Input
+                                    id="reset-confirm-password"
+                                    type="password"
+                                    placeholder="Повторите пароль"
+                                    value={confirmPassword}
+                                    onChange={(e) => setConfirmPassword(e.target.value)}
+                                    className="bg-black/50 border-white/10 text-white placeholder:text-gray-600 focus-visible:ring-purple-500"
+                                    required
+                                />
+                            </div>
+                            <Button type="submit" className="w-full bg-white text-black hover:bg-gray-200 hover:text-black" disabled={isLoading}>
+                                {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                Сбросить пароль <ArrowRight className="ml-2 w-4 h-4" />
+                            </Button>
+                            <Button
+                                variant="ghost"
+                                type="button"
+                                className="w-full text-gray-500 hover:bg-white hover:text-black"
+                                onClick={() => setStep('reset-otp')}
+                            >
+                                Назад к коду
                             </Button>
                         </form>
                     ) : step === 'password-setup' ? (
@@ -458,7 +647,7 @@ export default function LoginPage() {
                                     </div>
                                 </div>
                             ) : null}
-                            <Button type="submit" className="w-full bg-white text-black hover:bg-gray-200" disabled={isLoading}>
+                            <Button type="submit" className="w-full bg-white text-black hover:bg-gray-200 hover:text-black" disabled={isLoading}>
                                 {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                                 Установить пароль <ArrowRight className="ml-2 w-4 h-4" />
                             </Button>
@@ -476,7 +665,7 @@ export default function LoginPage() {
                                     required
                                 />
                             </div>
-                            <Button type="submit" className="w-full bg-white text-black hover:bg-gray-200" disabled={isLoading}>
+                            <Button type="submit" className="w-full bg-white text-black hover:bg-gray-200 hover:text-black" disabled={isLoading}>
                                 {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                                 Продолжить <ArrowRight className="ml-2 w-4 h-4" />
                             </Button>
