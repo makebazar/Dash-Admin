@@ -23,7 +23,7 @@ const sortWorkstationsByZoneAndName = (a: Workstation, b: Workstation) => {
 const getMaintenanceStatus = (item: Equipment): "overdue" | "serviced" | "disabled" | "unknown" => {
     if (item.maintenance_enabled === false) return "disabled"
 
-    const intervalDays = Math.max(1, Number(item.cleaning_interval_days) || 30)
+    const intervalDays = Math.max(1, Number(item.cleaning_interval_override_days ?? item.cleaning_interval_days) || 30)
     if (!item.last_cleaned_at) return "overdue"
 
     const lastCleaned = new Date(item.last_cleaned_at)
@@ -33,6 +33,24 @@ const getMaintenanceStatus = (item: Equipment): "overdue" | "serviced" | "disabl
     dueDate.setDate(dueDate.getDate() + intervalDays)
 
     return dueDate.getTime() < Date.now() ? "overdue" : "serviced"
+}
+
+const getMaintenanceOverdueDays = (item: Equipment): number => {
+    if (item.maintenance_enabled === false) return 0
+
+    const intervalDays = Math.max(1, Number(item.cleaning_interval_override_days ?? item.cleaning_interval_days) || 30)
+    if (!item.last_cleaned_at) return intervalDays
+
+    const lastCleaned = new Date(item.last_cleaned_at)
+    if (Number.isNaN(lastCleaned.getTime())) return 0
+
+    const dueDate = new Date(lastCleaned)
+    dueDate.setDate(dueDate.getDate() + intervalDays)
+
+    const overdueMs = Date.now() - dueDate.getTime()
+    if (overdueMs <= 0) return 0
+
+    return Math.max(1, Math.floor(overdueMs / (1000 * 60 * 60 * 24)))
 }
 
 export default function WorkplacesPage() {
@@ -322,6 +340,19 @@ export default function WorkplacesPage() {
         return map
     }, [equipment])
 
+    const overdueDaysByEquipmentId = useMemo(() => {
+        const map = new Map<string, number>()
+
+        for (const item of equipment) {
+            const overdueDays = getMaintenanceOverdueDays(item)
+            if (overdueDays > 0) {
+                map.set(item.id, overdueDays)
+            }
+        }
+
+        return map
+    }, [equipment])
+
     const overdueMaintenanceCountByWorkstationId = useMemo(() => {
         const map = new Map<string, number>()
 
@@ -508,6 +539,7 @@ export default function WorkplacesPage() {
                 activeIssueCountByWorkstationId={activeIssueCountByWorkstationId}
                 activeIssueCountByEquipmentId={activeIssueCountByEquipmentId}
                 maintenanceStatusByEquipmentId={maintenanceStatusByEquipmentId}
+                overdueDaysByEquipmentId={overdueDaysByEquipmentId}
                 overdueMaintenanceCountByWorkstationId={overdueMaintenanceCountByWorkstationId}
                 servicedMaintenanceCountByWorkstationId={servicedMaintenanceCountByWorkstationId}
                 disabledMaintenanceCountByWorkstationId={disabledMaintenanceCountByWorkstationId}
@@ -534,6 +566,7 @@ export default function WorkplacesPage() {
         handleUnassignEquipment,
         isLoading,
         maintenanceStatusByEquipmentId,
+        overdueDaysByEquipmentId,
         overdueMaintenanceCountByWorkstationId,
         servicedMaintenanceCountByWorkstationId,
         disabledMaintenanceCountByWorkstationId,

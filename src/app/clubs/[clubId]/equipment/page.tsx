@@ -3,14 +3,12 @@
 import { useEffect, useState } from "react"
 import { useParams } from "next/navigation"
 import {
-    Monitor,
     AlertTriangle,
     Clock,
     Settings,
     MapPin,
     LayoutGrid,
     ClipboardList,
-    History,
     ArrowUpRight,
     Shirt
 } from "lucide-react"
@@ -95,14 +93,6 @@ export default function EquipmentDashboard() {
             bg: "bg-green-50"
         },
         {
-            title: "Настройки",
-            description: "Инструкции и параметры модуля оборудования",
-            href: `/clubs/${clubId}/equipment/settings`,
-            icon: <Settings className="h-6 w-6" />,
-            color: "text-slate-500",
-            bg: "bg-slate-50"
-        },
-        {
             title: "Стирка",
             description: "Очередь ковриков на стирку и возврат",
             href: `/clubs/${clubId}/laundry`,
@@ -111,10 +101,10 @@ export default function EquipmentDashboard() {
             bg: "bg-cyan-50"
         },
         {
-            title: "История",
-            description: "Лог перемещений и изменений",
-            href: `/clubs/${clubId}/equipment/history`,
-            icon: <History className="h-6 w-6" />,
+            title: "Настройки",
+            description: "Инструкции и параметры модуля оборудования",
+            href: `/clubs/${clubId}/equipment/settings`,
+            icon: <Settings className="h-6 w-6" />,
             color: "text-slate-500",
             bg: "bg-slate-50"
         }
@@ -127,67 +117,49 @@ export default function EquipmentDashboard() {
                 description="Комплексный контроль техники, периферии и её состояния"
             />
 
-            {/* Stats Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <Card className="border-none shadow-sm bg-gradient-to-br from-white to-slate-50">
-                    <CardContent className="pt-6">
-                        <div className="flex items-center justify-between">
-                            <div className="p-2 bg-blue-100 rounded-lg">
-                                <Monitor className="h-5 w-5 text-blue-600" />
+            {/* Key Signals */}
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <Link href={`/clubs/${clubId}/equipment/issues`}>
+                    <Card className="group h-full cursor-pointer border-none bg-gradient-to-br from-white to-amber-50/50 shadow-sm transition-all hover:shadow-md">
+                        <CardContent className="pt-6">
+                            <div className="flex items-center justify-between">
+                                <div className="rounded-lg bg-amber-100 p-2">
+                                    <AlertTriangle className="h-5 w-5 text-amber-600" />
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    {stats.active_issues > 0 ? <Badge className="bg-amber-500 hover:bg-amber-500">Активно</Badge> : null}
+                                    <ArrowUpRight className="h-4 w-4 text-muted-foreground opacity-0 transition-all group-hover:opacity-100" />
+                                </div>
                             </div>
-                            <Badge variant="outline" className="text-[10px] font-bold uppercase tracking-wider">Всего</Badge>
-                        </div>
-                        <div className="mt-4">
-                            <p className="text-3xl font-bold">{stats.total}</p>
-                            <p className="text-xs text-muted-foreground mt-1">единиц оборудования</p>
-                        </div>
-                    </CardContent>
-                </Card>
+                            <div className="mt-4">
+                                <p className="text-3xl font-bold">{stats.active_issues}</p>
+                                <p className="mt-1 text-sm font-medium text-slate-900">Открытые инциденты</p>
+                                <p className="mt-1 text-xs text-muted-foreground">Переход в раздел поломок, ремонтов и назначений</p>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </Link>
 
-                <Card className="border-none shadow-sm bg-gradient-to-br from-white to-slate-50">
-                    <CardContent className="pt-6">
-                        <div className="flex items-center justify-between">
-                            <div className="p-2 bg-amber-100 rounded-lg">
-                                <AlertTriangle className="h-5 w-5 text-amber-600" />
+                <Link href={`/clubs/${clubId}/equipment/maintenance`}>
+                    <Card className="group h-full cursor-pointer border-none bg-gradient-to-br from-white to-rose-50/40 shadow-sm transition-all hover:shadow-md">
+                        <CardContent className="pt-6">
+                            <div className="flex items-center justify-between">
+                                <div className="rounded-lg bg-rose-100 p-2">
+                                    <Clock className="h-5 w-5 text-rose-600" />
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    {stats.overdue_tasks > 0 ? <Badge className="bg-rose-500 hover:bg-rose-500">Просрочено</Badge> : null}
+                                    <ArrowUpRight className="h-4 w-4 text-muted-foreground opacity-0 transition-all group-hover:opacity-100" />
+                                </div>
                             </div>
-                            {stats.active_issues > 0 && <Badge className="bg-amber-500 hover:bg-amber-600">Активно</Badge>}
-                        </div>
-                        <div className="mt-4">
-                            <p className="text-3xl font-bold">{stats.active_issues}</p>
-                            <p className="text-xs text-muted-foreground mt-1">открытых инцидентов</p>
-                        </div>
-                    </CardContent>
-                </Card>
-
-                <Card className="border-none shadow-sm bg-gradient-to-br from-white to-slate-50">
-                    <CardContent className="pt-6">
-                        <div className="flex items-center justify-between">
-                            <div className="p-2 bg-rose-100 rounded-lg">
-                                <Clock className="h-5 w-5 text-rose-600" />
+                            <div className="mt-4">
+                                <p className="text-3xl font-bold">{stats.overdue_tasks}</p>
+                                <p className="mt-1 text-sm font-medium text-slate-900">Просроченное обслуживание</p>
+                                <p className="mt-1 text-xs text-muted-foreground">Переход к задачам чистки и контролю просрочки</p>
                             </div>
-                            {stats.overdue_tasks > 0 && <Badge className="bg-rose-500">Просрочено</Badge>}
-                        </div>
-                        <div className="mt-4">
-                            <p className="text-3xl font-bold">{stats.overdue_tasks}</p>
-                            <p className="text-xs text-muted-foreground mt-1">задач вне графика</p>
-                        </div>
-                    </CardContent>
-                </Card>
-
-                <Card className="border-none shadow-sm bg-gradient-to-br from-white to-slate-50">
-                    <CardContent className="pt-6">
-                        <div className="flex items-center justify-between">
-                            <div className="p-2 bg-indigo-100 rounded-lg">
-                                <Settings className="h-5 w-5 text-indigo-600" />
-                            </div>
-                            {stats.due_today_tasks > 0 && <Badge className="bg-indigo-500">На сегодня</Badge>}
-                        </div>
-                        <div className="mt-4">
-                            <p className="text-3xl font-bold">{stats.due_today_tasks}</p>
-                            <p className="text-xs text-muted-foreground mt-1">чисток запланировано</p>
-                        </div>
-                    </CardContent>
-                </Card>
+                        </CardContent>
+                    </Card>
+                </Link>
             </div>
 
             {/* Quick Actions */}

@@ -59,8 +59,7 @@ export async function GET(
         const effectiveEquipmentAssigneeSql = `
             CASE
                 WHEN e.assignment_mode = 'DIRECT' THEN e.assigned_user_id
-                WHEN e.assignment_mode = 'FREE_POOL' THEN NULL
-                ELSE COALESCE(w.assigned_user_id, z.assigned_user_id)
+                ELSE NULL
             END
         `;
 
@@ -106,18 +105,16 @@ export async function GET(
                 w.id as workstation_id,
                 w.name as workstation_name,
                 w.zone as workstation_zone,
-                COALESCE(u.full_name, eu.full_name, wu.full_name, zu.full_name) as assigned_to_name,
+                COALESCE(u.full_name, eu.full_name) as assigned_to_name,
                 cu.full_name as completed_by_name,
                 cu_v.full_name as verified_by_name
             FROM equipment_maintenance_tasks mt
             JOIN equipment e ON mt.equipment_id = e.id
             LEFT JOIN equipment_types et ON e.type = et.code
             LEFT JOIN club_workstations w ON e.workstation_id = w.id
-            LEFT JOIN club_zones z ON z.club_id = e.club_id AND z.name = w.zone
             LEFT JOIN users u ON mt.assigned_user_id = u.id
             LEFT JOIN users eu ON e.assigned_user_id = eu.id
             LEFT JOIN users wu ON w.assigned_user_id = wu.id
-            LEFT JOIN users zu ON z.assigned_user_id = zu.id
             LEFT JOIN users cu ON mt.completed_by = cu.id
             LEFT JOIN users cu_v ON mt.verified_by = cu_v.id
             WHERE e.club_id = $1 
@@ -294,7 +291,6 @@ export async function GET(
             FROM equipment_maintenance_tasks mt
             JOIN equipment e ON mt.equipment_id = e.id
             LEFT JOIN club_workstations w ON e.workstation_id = w.id
-            LEFT JOIN club_zones z ON z.club_id = e.club_id AND z.name = w.zone
             WHERE ${statsConditions.join(' AND ')}`,
             statsParams
         );
@@ -404,6 +400,30 @@ export async function POST(
             ? `COALESCE(e.cleaning_interval_override_days, e.cleaning_interval_days)`
             : `e.cleaning_interval_days`;
 
+        // Normalize legacy inherited assignments into explicit equipment-level state.
+        await query(
+            `UPDATE equipment e
+             SET assigned_user_id = w.assigned_user_id,
+                 assignment_mode = CASE
+                     WHEN w.assigned_user_id IS NULL THEN 'FREE_POOL'
+                     ELSE 'DIRECT'
+                 END
+             FROM club_workstations w
+             WHERE e.club_id = $1
+               AND e.assignment_mode = 'INHERIT'
+               AND e.workstation_id = w.id`,
+            [clubId]
+        );
+        await query(
+            `UPDATE equipment
+             SET assigned_user_id = NULL,
+                 assignment_mode = 'FREE_POOL'
+             WHERE club_id = $1
+               AND assignment_mode = 'INHERIT'
+               AND workstation_id IS NULL`,
+            [clubId]
+        );
+
         const baseParams = [clubId, task_type];
         let queryStr = `
             SELECT 
@@ -414,8 +434,7 @@ export async function POST(
                 e.workstation_id, 
                 CASE
                     WHEN e.assignment_mode = 'DIRECT' THEN e.assigned_user_id
-                    WHEN e.assignment_mode = 'FREE_POOL' THEN NULL
-                    ELSE COALESCE(w.assigned_user_id, z.assigned_user_id)
+                    ELSE NULL
                 END as assigned_user_id,
                 (
                     SELECT MAX(due_date) 
@@ -424,8 +443,6 @@ export async function POST(
                       AND task_type = $2
                 ) as last_task_due_date
             FROM equipment e
-            LEFT JOIN club_workstations w ON w.id = e.workstation_id
-            LEFT JOIN club_zones z ON z.club_id = e.club_id AND z.name = w.zone
             WHERE e.club_id = $1
               AND ${maintenanceEligibleStatusSql}
               AND (e.maintenance_enabled IS NULL OR e.maintenance_enabled = TRUE)
@@ -453,9 +470,29 @@ export async function POST(
 
         const [activeEmployeesResult, existingActiveTasksResult] = await Promise.all([
             query(
-                `SELECT user_id
-                 FROM club_employees
-                 WHERE club_id = $1 AND is_active = TRUE`,
+                `WITH member_rows AS (
+                    SELECT ce.user_id, ce.role, ce.is_active, ce.dismissed_at, ce.show_in_schedule, 0 as priority
+                    FROM club_employees ce
+                    WHERE ce.club_id = $1
+                    UNION ALL
+                    SELECT c.owner_id as user_id, 'Владелец'::varchar as role, TRUE as is_active, NULL::timestamp as dismissed_at, TRUE as show_in_schedule, 1 as priority
+                    FROM clubs c
+                    WHERE c.id = $1
+                 ),
+                 dedup_members AS (
+                    SELECT DISTINCT ON (user_id) user_id, role, is_active, dismissed_at, show_in_schedule
+                    FROM member_rows
+                    ORDER BY user_id, priority DESC
+                 )
+                 SELECT user_id
+                 FROM dedup_members
+                 WHERE is_active = TRUE
+                   AND dismissed_at IS NULL
+                   AND (
+                       show_in_schedule = TRUE
+                       OR LOWER(COALESCE(role, '')) LIKE '%управ%'
+                       OR LOWER(COALESCE(role, '')) LIKE '%manager%'
+                   )`,
                 [clubId]
             ),
             query(

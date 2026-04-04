@@ -1,8 +1,9 @@
 "use client"
 
-import { useEffect, useState, useCallback, useMemo, Fragment, type MouseEvent } from "react"
+import { useEffect, useState, useCallback, useMemo, useRef, Fragment, type MouseEvent } from "react"
 import { useParams, useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
+import * as XLSX from "xlsx"
 import {
     Plus,
     Search,
@@ -14,6 +15,7 @@ import {
     Wrench,
     Archive,
     Download,
+    Upload,
     RefreshCw,
     Box,
     Clock3,
@@ -101,6 +103,54 @@ interface Employee {
     dismissed_at?: string | null
 }
 
+const INVENTORY_IMPORT_COLUMNS = [
+    "ID",
+    "Название",
+    "Тип код",
+    "Тип",
+    "Серийный номер",
+    "Бренд",
+    "Модель",
+    "Зона",
+    "Место",
+    "Статус",
+    "Дата покупки",
+    "Гарантия до",
+    "Интервал чистки (дней)",
+    "Обслуживание включено",
+    "Примечание",
+] as const
+
+const INVENTORY_TEMPLATE_EXAMPLE = {
+    ID: "",
+    "Название": "Игровой ПК #12",
+    "Тип код": "PC",
+    "Тип": "Компьютер",
+    "Серийный номер": "INV-0012",
+    "Бренд": "ASUS",
+    "Модель": "ROG Strix",
+    "Зона": "Основной зал",
+    "Место": "PC-12",
+    "Статус": "ACTIVE",
+    "Дата покупки": "2026-01-15",
+    "Гарантия до": "2027-01-15",
+    "Интервал чистки (дней)": 30,
+    "Обслуживание включено": "Да",
+    "Примечание": "Пример строки для импорта",
+}
+
+const INVENTORY_STATUS_IMPORT_MAP: Record<string, EquipmentStatus> = {
+    active: "ACTIVE",
+    "в эксплуатации": "ACTIVE",
+    storage: "STORAGE",
+    "на складе": "STORAGE",
+    repair: "REPAIR",
+    "в ремонте": "REPAIR",
+    written_off: "WRITTEN_OFF",
+    writtenoff: "WRITTEN_OFF",
+    "списано": "WRITTEN_OFF",
+}
+
 export default function EquipmentInventory() {
     const { clubId } = useParams()
     const router = useRouter()
@@ -112,6 +162,9 @@ export default function EquipmentInventory() {
     const [employees, setEmployees] = useState<Employee[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [isSaving, setIsSaving] = useState(false)
+    const [isImporting, setIsImporting] = useState(false)
+    const [isImportExportDialogOpen, setIsImportExportDialogOpen] = useState(false)
+    const importInputRef = useRef<HTMLInputElement | null>(null)
 
     // Pagination (by places)
     const [page, setPage] = useState(1)
@@ -237,6 +290,7 @@ export default function EquipmentInventory() {
     const zones = useMemo(() => {
         return Array.from(new Set(workstations.map(w => w.zone).filter(Boolean))).sort((a, b) => a.localeCompare(b, "ru"))
     }, [workstations])
+    const hasImportLocations = workstations.length > 0 && zones.length > 0
 
     const filteredWorkstations = useMemo(() => {
         if (zoneFilter === "all") return workstations
@@ -388,33 +442,232 @@ export default function EquipmentInventory() {
     }
 
     const handleExport = () => {
-        // Convert equipment to CSV
-        const headers = ["Название", "Тип", "S/N", "Бренд", "Модель", "Локация", "Статус", "Гарантия"]
-        const rows = filteredEquipment.map(e => [
-            e.name,
-            e.type_name || e.type,
-            e.identifier || "-",
-            e.brand || "-",
-            e.model || "-",
-            e.workstation_name || "Склад",
-            EQUIPMENT_STATUS_LABELS[e.status],
-            e.warranty_expires ? new Date(e.warranty_expires).toLocaleDateString("ru-RU") : "-"
-        ])
+        const rows = filteredEquipment.map(item => ({
+            ID: item.id,
+            "Название": item.name,
+            "Тип код": item.type,
+            "Тип": item.type_name || item.type,
+            "Серийный номер": item.identifier || "",
+            "Бренд": item.brand || "",
+            "Модель": item.model || "",
+            "Зона": item.workstation_zone || "",
+            "Место": item.workstation_name || "",
+            "Статус": item.status,
+            "Дата покупки": item.purchase_date || "",
+            "Гарантия до": item.warranty_expires || "",
+            "Интервал чистки (дней)": item.cleaning_interval_days ?? "",
+            "Обслуживание включено": item.maintenance_enabled === false ? "Нет" : "Да",
+            "Примечание": item.notes || "",
+        }))
 
-        const csvContent = [
-            headers.join(","),
-            ...rows.map(r => r.join(","))
-        ].join("\n")
+        const worksheet = XLSX.utils.json_to_sheet(rows, { header: [...INVENTORY_IMPORT_COLUMNS] })
+        const workbook = XLSX.utils.book_new()
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Инвентарь")
+        XLSX.writeFile(workbook, `inventory_export_${formatLocalDate(new Date())}.xlsx`)
+    }
 
-        const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' })
-        const url = URL.createObjectURL(blob)
-        const link = document.createElement("a")
-        link.setAttribute("href", url)
-        link.setAttribute("download", `inventory_export_${formatLocalDate(new Date())}.csv`)
-        link.style.visibility = 'hidden'
-        document.body.appendChild(link)
-        link.click()
-        document.body.removeChild(link)
+    const handleDownloadTemplate = () => {
+        const worksheet = XLSX.utils.json_to_sheet([INVENTORY_TEMPLATE_EXAMPLE], { header: [...INVENTORY_IMPORT_COLUMNS] })
+        const workbook = XLSX.utils.book_new()
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Шаблон")
+        XLSX.writeFile(workbook, "inventory_import_template.xlsx")
+    }
+
+    const parseImportStatus = (value: unknown): EquipmentStatus => {
+        const normalized = String(value || "").trim().toLowerCase()
+        return INVENTORY_STATUS_IMPORT_MAP[normalized] || "STORAGE"
+    }
+
+    const parseImportBoolean = (value: unknown) => {
+        const normalized = String(value || "").trim().toLowerCase()
+        if (!normalized) return true
+        return !["нет", "false", "0", "off", "disabled"].includes(normalized)
+    }
+
+    const normalizeImportDate = (value: unknown) => {
+        const raw = String(value || "").trim()
+        if (!raw) return null
+
+        if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw
+
+        const parsed = new Date(raw)
+        if (Number.isNaN(parsed.getTime())) return null
+
+        const year = parsed.getFullYear()
+        const month = String(parsed.getMonth() + 1).padStart(2, "0")
+        const day = String(parsed.getDate()).padStart(2, "0")
+        return `${year}-${month}-${day}`
+    }
+
+    const handleImportClick = () => {
+        if (!hasImportLocations) {
+            alert("Перед импортом сначала создайте зоны и места в разделе рабочих мест")
+            return
+        }
+        importInputRef.current?.click()
+    }
+
+    const handleImportFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0]
+        if (!file) return
+
+        setIsImporting(true)
+        try {
+            const buffer = await file.arrayBuffer()
+            const workbook = XLSX.read(buffer, { type: "array" })
+            const sheet = workbook.Sheets[workbook.SheetNames[0]]
+            const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" })
+
+            if (rows.length === 0) {
+                alert("Файл пустой")
+                return
+            }
+
+            const typeByCode = new Map(types.map(type => [type.code.trim().toLowerCase(), type.code]))
+            const typeByName = new Map(types.map(type => [type.name_ru.trim().toLowerCase(), type.code]))
+            const workstationByKey = new Map<string, string>()
+            const workstationByName = new Map<string, string>()
+
+            workstations.forEach(workstation => {
+                workstationByName.set(workstation.name.trim().toLowerCase(), workstation.id)
+                workstationByKey.set(`${(workstation.zone || "").trim().toLowerCase()}::${workstation.name.trim().toLowerCase()}`, workstation.id)
+            })
+
+            const existingById = new Map(equipment.map(item => [item.id, item]))
+            const existingByIdentifier = new Map(
+                equipment
+                    .filter(item => item.identifier)
+                    .map(item => [String(item.identifier).trim().toLowerCase(), item])
+            )
+
+            let created = 0
+            let updated = 0
+            let skipped = 0
+            const errors: string[] = []
+
+            for (const [index, row] of rows.entries()) {
+                const rowNumber = index + 2
+                const name = String(row["Название"] || "").trim()
+                const rawTypeCode = String(row["Тип код"] || "").trim().toLowerCase()
+                const rawTypeName = String(row["Тип"] || "").trim().toLowerCase()
+                const identifier = String(row["Серийный номер"] || "").trim()
+                const importId = String(row["ID"] || "").trim()
+                const zone = String(row["Зона"] || "").trim()
+                const workstationName = String(row["Место"] || "").trim()
+
+                if (!name) {
+                    skipped += 1
+                    continue
+                }
+
+                const resolvedType =
+                    typeByCode.get(rawTypeCode) ||
+                    typeByName.get(rawTypeName)
+
+                if (!resolvedType) {
+                    errors.push(`Строка ${rowNumber}: неизвестный тип "${row["Тип код"] || row["Тип"]}"`)
+                    continue
+                }
+
+                let workstationId: string | null | undefined = undefined
+                if (workstationName) {
+                    workstationId =
+                        workstationByKey.get(`${zone.toLowerCase()}::${workstationName.toLowerCase()}`) ||
+                        workstationByName.get(workstationName.toLowerCase()) ||
+                        null
+
+                    if (!workstationId) {
+                        errors.push(`Строка ${rowNumber}: место "${workstationName}" не найдено`)
+                        continue
+                    }
+                } else {
+                    workstationId = null
+                }
+
+                const payload = {
+                    workstation_id: workstationId,
+                    type: resolvedType,
+                    name,
+                    identifier: identifier || null,
+                    brand: String(row["Бренд"] || "").trim() || null,
+                    model: String(row["Модель"] || "").trim() || null,
+                    purchase_date: normalizeImportDate(row["Дата покупки"]),
+                    warranty_expires: normalizeImportDate(row["Гарантия до"]),
+                    cleaning_interval_days: Number(row["Интервал чистки (дней)"] || 0) || undefined,
+                    maintenance_enabled: parseImportBoolean(row["Обслуживание включено"]),
+                    notes: String(row["Примечание"] || "").trim() || null,
+                    status: parseImportStatus(row["Статус"]),
+                }
+
+                const existing =
+                    (importId ? existingById.get(importId) : undefined) ||
+                    (identifier ? existingByIdentifier.get(identifier.toLowerCase()) : undefined)
+
+                const endpoint = existing
+                    ? `/api/clubs/${clubId}/equipment/${existing.id}`
+                    : `/api/clubs/${clubId}/equipment`
+
+                const method = existing ? "PATCH" : "POST"
+                const response = await fetch(endpoint, {
+                    method,
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload),
+                })
+
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}))
+                    errors.push(`Строка ${rowNumber}: ${errorData.error || "не удалось сохранить запись"}`)
+                    continue
+                }
+
+                const persistedEquipment = await response.json().catch(() => null)
+
+                if (!existing && persistedEquipment?.id) {
+                    const patchResponse = await fetch(`/api/clubs/${clubId}/equipment/${persistedEquipment.id}`, {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            cleaning_interval_days: payload.cleaning_interval_days,
+                            maintenance_enabled: payload.maintenance_enabled,
+                        }),
+                    })
+
+                    if (!patchResponse.ok) {
+                        const patchError = await patchResponse.json().catch(() => ({}))
+                        errors.push(`Строка ${rowNumber}: запись создана, но доп. поля не обновлены (${patchError.error || "PATCH error"})`)
+                    }
+                }
+
+                if (existing) {
+                    updated += 1
+                } else {
+                    created += 1
+                }
+            }
+
+            await fetchData()
+
+            const summary = [
+                `Импорт завершен`,
+                `Создано: ${created}`,
+                `Обновлено: ${updated}`,
+                `Пропущено пустых строк: ${skipped}`,
+            ]
+
+            if (errors.length > 0) {
+                summary.push(`Ошибки: ${errors.length}`)
+                summary.push("")
+                summary.push(errors.slice(0, 10).join("\n"))
+            }
+
+            alert(summary.join("\n"))
+        } catch (error) {
+            console.error("Import equipment error:", error)
+            alert("Не удалось импортировать файл")
+        } finally {
+            event.target.value = ""
+            setIsImporting(false)
+        }
     }
 
     const handleBulkRepair = async () => {
@@ -521,24 +774,30 @@ export default function EquipmentInventory() {
     // --- Stats calculation removed (now from server) ---
 
     return (
-        <div className="mx-auto max-w-[1600px] space-y-5 p-4 sm:space-y-6 sm:p-6 lg:p-8">
+        <div className="mx-auto max-w-[1600px] space-y-5 p-4 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:space-y-6 sm:p-6 sm:pb-[calc(6.5rem+env(safe-area-inset-bottom))] md:pb-8 lg:p-8">
             {/* Header & Breadcrumbs */}
             <div className="flex flex-col gap-4">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                    <div className="flex min-w-0 items-center gap-2">
-                         <Link href={`/clubs/${clubId}/equipment`} className="flex items-center text-sm text-muted-foreground hover:text-foreground transition-colors">
-                            <div className="p-2 rounded-full hover:bg-slate-100">
-                                <ChevronLeft className="h-5 w-5" />
-                            </div>
-                        </Link>
-                        <div className="min-w-0">
-                            <h1 className="text-2xl font-bold tracking-tight">Инвентаризация</h1>
-                            <p className="text-sm text-muted-foreground">База данных оборудования и периферии</p>
-                        </div>
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="min-w-0">
+                        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Инвентаризация</h1>
+                        <p className="mt-1 text-sm text-muted-foreground sm:text-base">База данных оборудования и периферии</p>
                     </div>
-                    <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap lg:flex-nowrap">
-                        <Button variant="outline" size="sm" onClick={handleExport} className="w-full sm:w-auto">
-                            <Download className="h-4 w-4 mr-2" /> Экспорт
+                    <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap lg:justify-end">
+                        <Button asChild variant="outline" className="hidden w-full md:inline-flex md:w-auto">
+                            <Link href={`/clubs/${clubId}/equipment`}>
+                                <ChevronLeft className="mr-2 h-4 w-4" />
+                                Назад
+                            </Link>
+                        </Button>
+                        <input
+                            ref={importInputRef}
+                            type="file"
+                            accept=".xlsx,.xls,.csv"
+                            className="hidden"
+                            onChange={handleImportFile}
+                        />
+                        <Button variant="outline" onClick={() => setIsImportExportDialogOpen(true)} className="w-full sm:w-auto">
+                            <Download className="mr-2 h-4 w-4" /> Импорт / Экспорт
                         </Button>
                         <Button onClick={handleCreate} className="w-full bg-primary text-primary-foreground shadow-md hover:bg-primary/90 sm:w-auto">
                             <Plus className="mr-2 h-4 w-4" />
@@ -1150,6 +1409,116 @@ export default function EquipmentInventory() {
             </Card>
 
             </div>
+
+            <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur supports-[backdrop-filter]:bg-background/80 md:hidden">
+                <div className="mx-auto flex max-w-7xl gap-2">
+                    <Button asChild variant="outline" className="h-11 flex-1">
+                        <Link href={`/clubs/${clubId}/equipment`}>
+                            <ChevronLeft className="mr-2 h-4 w-4" />
+                            Назад
+                        </Link>
+                    </Button>
+                </div>
+            </div>
+
+            <Dialog open={isImportExportDialogOpen} onOpenChange={setIsImportExportDialogOpen}>
+                <DialogContent className="sm:max-w-[640px]">
+                    <DialogHeader>
+                        <DialogTitle>Импорт и экспорт инвентаря</DialogTitle>
+                        <DialogDescription>
+                            Загружай шаблон, экспортируй текущую базу и импортируй оборудование из Excel.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="space-y-5 pt-2">
+                        <div className="rounded-xl border bg-slate-50 p-4">
+                            <div className="flex items-start gap-3">
+                                <Info className="mt-0.5 h-5 w-5 shrink-0 text-slate-500" />
+                                <div className="space-y-2 text-sm text-slate-600">
+                                    <p className="font-medium text-slate-900">Как работает импорт</p>
+                                    <p>Сначала создай зоны и места в разделе рабочих мест. Импорт не создаёт локации автоматически.</p>
+                                    <p>Если в файле заполнено поле `Место`, оно должно уже существовать в клубе. Иначе строка попадёт в ошибки.</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {!hasImportLocations ? (
+                            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                                <p className="font-medium">Сначала создай зоны и места</p>
+                                <p className="mt-1 text-amber-800">
+                                    Сейчас импорт заблокирован, потому что в клубе ещё нет подготовленных зон или рабочих мест.
+                                </p>
+                                <div className="mt-3">
+                                    <Button asChild variant="outline" className="bg-white">
+                                        <Link href={`/clubs/${clubId}/equipment/workplaces`}>
+                                            Перейти к рабочим местам
+                                        </Link>
+                                    </Button>
+                                </div>
+                            </div>
+                        ) : null}
+
+                        <div className="grid gap-3 sm:grid-cols-3">
+                            <button
+                                type="button"
+                                onClick={handleDownloadTemplate}
+                                className="rounded-xl border bg-white p-4 text-left shadow-sm transition hover:border-slate-300 hover:shadow-md"
+                            >
+                                <Download className="h-5 w-5 text-slate-700" />
+                                <div className="mt-3 text-sm font-semibold text-slate-900">Скачать шаблон</div>
+                                <div className="mt-1 text-xs text-muted-foreground">
+                                    Пустой `.xlsx` с колонками и примером строки
+                                </div>
+                            </button>
+
+                            <button
+                                type="button"
+                                onClick={handleExport}
+                                className="rounded-xl border bg-white p-4 text-left shadow-sm transition hover:border-slate-300 hover:shadow-md"
+                            >
+                                <Download className="h-5 w-5 text-slate-700" />
+                                <div className="mt-3 text-sm font-semibold text-slate-900">Экспорт XLSX</div>
+                                <div className="mt-1 text-xs text-muted-foreground">
+                                    Выгрузить текущий инвентарь с основными полями
+                                </div>
+                            </button>
+
+                            <button
+                                type="button"
+                                onClick={handleImportClick}
+                                disabled={!hasImportLocations || isImporting}
+                                className={cn(
+                                    "rounded-xl border bg-white p-4 text-left shadow-sm transition",
+                                    hasImportLocations ? "hover:border-slate-300 hover:shadow-md" : "cursor-not-allowed opacity-60"
+                                )}
+                            >
+                                {isImporting ? (
+                                    <Loader2 className="h-5 w-5 animate-spin text-slate-700" />
+                                ) : (
+                                    <Upload className="h-5 w-5 text-slate-700" />
+                                )}
+                                <div className="mt-3 text-sm font-semibold text-slate-900">Импорт файла</div>
+                                <div className="mt-1 text-xs text-muted-foreground">
+                                    Загрузить `.xlsx`, `.xls` или `.csv` и обновить инвентарь
+                                </div>
+                            </button>
+                        </div>
+
+                        <div className="rounded-xl border bg-white p-4">
+                            <p className="text-sm font-medium text-slate-900">Поддерживаемые колонки</p>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                                {INVENTORY_IMPORT_COLUMNS.join(" • ")}
+                            </p>
+                        </div>
+                    </div>
+
+                    <DialogFooter>
+                        <Button type="button" variant="ghost" onClick={() => setIsImportExportDialogOpen(false)}>
+                            Закрыть
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
 
             {/* Create Dialog */}
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>

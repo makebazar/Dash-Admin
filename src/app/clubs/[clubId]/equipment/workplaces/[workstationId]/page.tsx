@@ -15,6 +15,7 @@ import {
     Pencil,
     Plus,
     RefreshCw,
+    Shirt,
     Trash2,
     Wrench,
     X,
@@ -34,8 +35,8 @@ import type { Employee, Equipment, EquipmentType, Workstation } from "../types"
 import AssignEquipmentDialog from "../AssignEquipmentDialog"
 import WorkplaceFormDialog from "../WorkplaceFormDialog"
 
-type HistoryActionType = "MAINTENANCE" | "REWORK" | "MOVE" | "ISSUE"
-type HistoryFilter = "all" | "maintenance" | "move" | "issue"
+type HistoryActionType = "MAINTENANCE" | "REWORK" | "MOVE" | "ISSUE" | "LAUNDRY"
+type HistoryFilter = "all" | "maintenance" | "move" | "issue" | "laundry"
 
 interface HistoryLog {
     id: string
@@ -48,6 +49,25 @@ interface HistoryLog {
     equipment_id: string
     equipment_name: string
     equipment_type: string
+}
+
+interface LaundryHistoryRequest {
+    id: string
+    equipment_id: string
+    equipment_name: string
+    equipment_type: string
+    equipment_type_name: string | null
+    workstation_name: string | null
+    zone_name: string | null
+    requested_by_name: string | null
+    processed_by_name: string | null
+    source: "EMPLOYEE_SERVICE" | "INSPECTION_CENTER"
+    status: "NEW" | "SENT_TO_LAUNDRY" | "READY_FOR_RETURN" | "RETURNED" | "CANCELLED"
+    title: string
+    description: string | null
+    photos: string[] | null
+    created_at: string
+    completed_at: string | null
 }
 
 interface ThermalMaintenanceCardProps {
@@ -376,7 +396,9 @@ export default function WorkstationDetailsPage() {
 
         setIsHistoryLoading(true)
         try {
-            const historyResults = await Promise.all(
+            const equipmentIds = new Set(attachedEquipment.map(item => item.id))
+            const [historyResults, activeLaundryRes, historyLaundryRes] = await Promise.all([
+                Promise.all(
                 attachedEquipment.map(async (item) => {
                     const res = await fetch(`/api/clubs/${clubId}/equipment/${item.id}/history`, { cache: "no-store" })
                     const data = await res.json().catch(() => [])
@@ -388,10 +410,44 @@ export default function WorkstationDetailsPage() {
                         equipment_type: item.type_name || item.type,
                     }))
                 })
-            )
+                ),
+                fetch(`/api/clubs/${clubId}/laundry?status=active`, { cache: "no-store" }),
+                fetch(`/api/clubs/${clubId}/laundry?status=history`, { cache: "no-store" })
+            ])
+
+            const activeLaundry = await activeLaundryRes.json().catch(() => [])
+            const historyLaundry = await historyLaundryRes.json().catch(() => [])
+            const laundryRequests = [...(Array.isArray(activeLaundry) ? activeLaundry : []), ...(Array.isArray(historyLaundry) ? historyLaundry : [])]
+                .filter((item: LaundryHistoryRequest) => equipmentIds.has(item.equipment_id))
+
+            const laundryLogs: HistoryLog[] = laundryRequests.map((item) => {
+                const statusLabel =
+                    item.status === "NEW" ? "Новая заявка" :
+                    item.status === "SENT_TO_LAUNDRY" ? "Передано в стирку" :
+                    item.status === "READY_FOR_RETURN" ? "Готово к возврату" :
+                    item.status === "RETURNED" ? "Возвращено" :
+                    "Отменено"
+
+                const eventDate = item.completed_at || item.created_at
+                const actorName = item.processed_by_name || item.requested_by_name || null
+                const details = [item.title, item.description].filter(Boolean).join("\n")
+
+                return {
+                    id: `laundry-${item.id}`,
+                    action_type: "LAUNDRY",
+                    action: `Стирка: ${statusLabel}`,
+                    date: eventDate,
+                    user_name: actorName,
+                    details: details || null,
+                    photos: item.photos || undefined,
+                    equipment_id: item.equipment_id,
+                    equipment_name: item.equipment_name,
+                    equipment_type: item.equipment_type_name || item.equipment_type,
+                }
+            })
 
             setHistory(
-                historyResults
+                [...historyResults.flat(), ...laundryLogs]
                     .flat()
                     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
             )
@@ -432,6 +488,9 @@ export default function WorkstationDetailsPage() {
             }
             if (historyFilter === "move") {
                 return log.action_type === "MOVE"
+            }
+            if (historyFilter === "laundry") {
+                return log.action_type === "LAUNDRY"
             }
             return log.action_type === "ISSUE"
         })
@@ -826,6 +885,16 @@ export default function WorkstationDetailsPage() {
                 badgeClassName: "border-amber-200 bg-amber-50 text-amber-700",
                 title: `Отправлено на доработку: ${getMaintenanceActionLabel(log.action)}`,
                 description: log.details?.trim() || "Задача возвращена на доработку без указанного комментария.",
+            }
+        }
+
+        if (log.action_type === "LAUNDRY") {
+            return {
+                icon: <Shirt className="h-4 w-4" />,
+                badgeLabel: "Стирка",
+                badgeClassName: "border-sky-200 bg-sky-50 text-sky-700",
+                title: log.action,
+                description: log.details?.trim() || "Событие по стирке зафиксировано без дополнительного описания.",
             }
         }
 
@@ -1323,6 +1392,7 @@ export default function WorkstationDetailsPage() {
                                         { label: "Обслуживание", value: "maintenance" },
                                         { label: "Перемещения", value: "move" },
                                         { label: "Инциденты", value: "issue" },
+                                        { label: "Стирка", value: "laundry" },
                                     ].map((filterOption) => (
                                         <Button
                                             key={filterOption.value}

@@ -112,8 +112,8 @@ export default function LaundryPage() {
                 title="Стирка"
                 description="Очередь ковриков, которые попали на обработку из обслуживания и центра проверок"
             >
-                <Link href={`/clubs/${clubId}/equipment/maintenance`}>
-                    <Button variant="outline">
+                <Link href={`/clubs/${clubId}/equipment`}>
+                    <Button variant="outline" className="hidden md:inline-flex">
                         <ArrowLeft className="mr-2 h-4 w-4" />
                         Назад
                     </Button>
@@ -295,6 +295,17 @@ export default function LaundryPage() {
                     ))}
                 </div>
             )}
+
+            <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur supports-[backdrop-filter]:bg-background/80 md:hidden">
+                <div className="mx-auto flex max-w-7xl gap-2">
+                    <Button asChild variant="outline" className="h-11 flex-1">
+                        <Link href={`/clubs/${clubId}/equipment`}>
+                            <ArrowLeft className="mr-2 h-4 w-4" />
+                            Назад
+                        </Link>
+                    </Button>
+                </div>
+            </div>
         </PageShell>
     )
 }

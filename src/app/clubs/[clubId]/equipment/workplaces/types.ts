@@ -62,6 +62,7 @@ export interface ZoneSectionProps {
     activeIssueCountByWorkstationId: Map<string, number>
     activeIssueCountByEquipmentId: Map<string, number>
     maintenanceStatusByEquipmentId: Map<string, "overdue" | "serviced" | "disabled" | "unknown">
+    overdueDaysByEquipmentId: Map<string, number>
     overdueMaintenanceCountByWorkstationId: Map<string, number>
     servicedMaintenanceCountByWorkstationId: Map<string, number>
     disabledMaintenanceCountByWorkstationId: Map<string, number>

@@ -67,6 +67,7 @@ export default memo(function ZoneSection({
     activeIssueCountByWorkstationId,
     activeIssueCountByEquipmentId,
     maintenanceStatusByEquipmentId,
+    overdueDaysByEquipmentId,
     overdueMaintenanceCountByWorkstationId,
     servicedMaintenanceCountByWorkstationId,
     disabledMaintenanceCountByWorkstationId,
@@ -189,11 +190,6 @@ export default memo(function ZoneSection({
                                                     </span>
                                                 </div>
                                                 <div className="flex flex-wrap items-center gap-1.5">
-                                                    {wsOverdueMaintenanceCount > 0 ? (
-                                                        <span className="text-[10px] font-medium text-rose-700">
-                                                            ТО просрочено: {wsOverdueMaintenanceCount}
-                                                        </span>
-                                                    ) : null}
                                                     {wsOverdueMaintenanceCount === 0 && wsServicedMaintenanceCount > 0 ? (
                                                         <span className="text-[10px] font-medium text-emerald-700">
                                                             Обслужено: {wsServicedMaintenanceCount}
@@ -224,6 +220,7 @@ export default memo(function ZoneSection({
                                             {sortedEquipment.map(item => {
                                                 const itemIssueCount = activeIssueCountByEquipmentId.get(item.id) ?? 0
                                                 const maintenanceStatus = maintenanceStatusByEquipmentId.get(item.id) ?? "unknown"
+                                                const overdueDays = overdueDaysByEquipmentId.get(item.id) ?? 0
 
                                                 return (
                                                     <div
@@ -255,7 +252,7 @@ export default memo(function ZoneSection({
                                                                 ) : null}
                                                                 {itemIssueCount === 0 && maintenanceStatus === "overdue" ? (
                                                                     <span className="text-[10px] font-medium text-rose-700">
-                                                                        • ТО просрочено
+                                                                        • ТО просрочено{overdueDays > 0 ? ` на ${overdueDays} дн.` : ""}
                                                                     </span>
                                                                 ) : null}
                                                                 {itemIssueCount === 0 && maintenanceStatus === "serviced" ? (

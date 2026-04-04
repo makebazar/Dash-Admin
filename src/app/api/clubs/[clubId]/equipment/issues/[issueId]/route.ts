@@ -1,6 +1,69 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/db';
 import { cookies } from 'next/headers';
+import { hasColumn } from '@/lib/db-compat';
+
+// GET - Get single issue details
+export async function GET(
+    request: Request,
+    { params }: { params: Promise<{ clubId: string; issueId: string }> }
+) {
+    try {
+        const userId = (await cookies()).get('session_user_id')?.value;
+        const { clubId, issueId } = await params;
+
+        if (!userId) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
+        const accessCheck = await query(
+            `SELECT 1 FROM clubs WHERE id = $1 AND owner_id = $2
+             UNION
+             SELECT 1 FROM club_employees WHERE club_id = $1 AND user_id = $2`,
+            [clubId, userId]
+        );
+
+        if ((accessCheck.rowCount || 0) === 0) {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+
+        const hasClubIdColumn = await hasColumn('equipment_issues', 'club_id');
+        const result = await query(
+            `SELECT 
+                i.*,
+                e.name as equipment_name,
+                e.type as equipment_type,
+                e.identifier as equipment_identifier,
+                et.name_ru as equipment_type_name,
+                w.name as workstation_name,
+                w.zone as workstation_zone,
+                ru.full_name as reported_by_name,
+                res.full_name as resolved_by_name,
+                au.full_name as assigned_to_name,
+                mt.photos as source_photos
+            FROM equipment_issues i
+            JOIN equipment e ON i.equipment_id = e.id
+            LEFT JOIN equipment_types et ON e.type = et.code
+            LEFT JOIN club_workstations w ON e.workstation_id = w.id
+            LEFT JOIN equipment_maintenance_tasks mt ON mt.id = i.maintenance_task_id
+            LEFT JOIN users ru ON i.reported_by = ru.id
+            LEFT JOIN users res ON i.resolved_by = res.id
+            LEFT JOIN users au ON i.assigned_to = au.id
+            WHERE i.id = $1 AND ${hasClubIdColumn ? 'i.club_id = $2' : 'e.club_id = $2'}
+            LIMIT 1`,
+            [issueId, clubId]
+        );
+
+        if ((result.rowCount || 0) === 0) {
+            return NextResponse.json({ error: 'Issue not found' }, { status: 404 });
+        }
+
+        return NextResponse.json(result.rows[0]);
+    } catch (error) {
+        console.error('Get Issue Error:', error);
+        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    }
+}
 
 // PATCH - Update issue status
 export async function PATCH(

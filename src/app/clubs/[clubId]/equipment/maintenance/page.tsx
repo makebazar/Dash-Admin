@@ -3,13 +3,12 @@
 import { useEffect, useState, useCallback, useMemo } from "react"
 import { useParams } from "next/navigation"
 import {
-    Monitor,
     Calendar,
     ChevronLeft,
     ChevronRight,
     UserPlus,
+    RefreshCw,
     Loader2,
-    Plus,
     Shirt,
     Search
 } from "lucide-react"
@@ -59,6 +58,10 @@ interface MaintenanceTask {
 interface Employee {
     id: string
     full_name: string
+    role?: string | null
+    is_active?: boolean
+    dismissed_at?: string | null
+    show_in_schedule?: boolean
 }
 
 interface EquipmentListItem {
@@ -189,11 +192,38 @@ export default function MaintenanceSchedule() {
     const [searchQuery, setSearchQuery] = useState("")
     const [expandedZones, setExpandedZones] = useState<Set<string>>(new Set())
     const [expandedPlaces, setExpandedPlaces] = useState<Set<string>>(new Set())
+    const [editingEquipmentKey, setEditingEquipmentKey] = useState<string | null>(null)
 
     const monthNames = useMemo(() => [
         "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
         "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"
     ], [])
+
+    const assignableEmployees = useMemo(() => {
+        const isManagerRole = (employee: Employee) => {
+            const role = String(employee.role || "").toLowerCase()
+            return role.includes("управ") || role.includes("manager")
+        }
+
+        const isActiveEmployee = (employee: Employee) => employee.is_active !== false && !employee.dismissed_at
+        const isScheduledEmployee = (employee: Employee) => isActiveEmployee(employee) && employee.show_in_schedule !== false
+
+        return employees.filter(employee => isScheduledEmployee(employee) || (isManagerRole(employee) && isActiveEmployee(employee)))
+    }, [employees])
+
+    const getEmployeeRoleBadgeClass = (employee: Employee) => {
+        const role = String(employee.role || "").toLowerCase()
+
+        if (role.includes("управ") || role.includes("manager")) {
+            return "bg-violet-50 text-violet-700 border-violet-200"
+        }
+
+        if (employee.show_in_schedule !== false) {
+            return "bg-emerald-50 text-emerald-700 border-emerald-200"
+        }
+
+        return "bg-slate-100 text-slate-700 border-slate-200"
+    }
 
     const ensurePlan = useCallback(async (firstDay: string, lastDay: string) => {
         setIsGenerating(true)
@@ -253,10 +283,8 @@ export default function MaintenanceSchedule() {
     }
 
     const handleAssignEquipment = async (equipmentId: string, value: string) => {
-        const assignmentMode =
-            value === "inherit" ? "INHERIT" :
-            value === "free_pool" ? "FREE_POOL" :
-            "DIRECT"
+        setEditingEquipmentKey(null)
+        const assignmentMode = value === "free_pool" ? "FREE_POOL" : "DIRECT"
 
         const assignedUserId = assignmentMode === "DIRECT" ? value : null
         const assignedToName = assignedUserId
@@ -269,8 +297,8 @@ export default function MaintenanceSchedule() {
                     ...task,
                     equipment_assignment_mode: assignmentMode,
                     equipment_assigned_user_id: assignedUserId,
-                    assigned_user_id: assignmentMode === "DIRECT" ? assignedUserId : (assignmentMode === "FREE_POOL" ? null : task.workstation_assigned_user_id || null),
-                    assigned_to_name: assignmentMode === "DIRECT" ? assignedToName : (assignmentMode === "FREE_POOL" ? null : task.workstation_assigned_to_name || null)
+                    assigned_user_id: assignedUserId,
+                    assigned_to_name: assignedToName
                 }
                 : task
         )))
@@ -700,20 +728,18 @@ export default function MaintenanceSchedule() {
 
     const toggleZone = (zoneKey: string) => {
         setExpandedZones(prev => {
-            const next = new Set(prev)
-            if (next.has(zoneKey)) next.delete(zoneKey)
-            else next.add(zoneKey)
-            return next
+            if (prev.has(zoneKey)) {
+                setExpandedPlaces(new Set())
+                return new Set()
+            }
+            setExpandedPlaces(new Set())
+            return new Set([zoneKey])
         })
     }
 
     const togglePlace = (placeKey: string) => {
-        setExpandedPlaces(prev => {
-            const next = new Set(prev)
-            if (next.has(placeKey)) next.delete(placeKey)
-            else next.add(placeKey)
-            return next
-        })
+        setExpandedPlaces(prev => (prev.has(placeKey) ? new Set() : new Set([placeKey])))
+        setEditingEquipmentKey(null)
     }
 
     const handleAssignPlace = async (workstationId: string | null, userId: string) => {
@@ -723,6 +749,8 @@ export default function MaintenanceSchedule() {
         const assignedToName = assignedUserId
             ? employees.find(employee => employee.id === assignedUserId)?.full_name || null
             : null
+        const nextAssignmentMode = assignedUserId ? "DIRECT" : "FREE_POOL"
+        const workstationEquipment = equipment.filter(item => item.workstation_id === workstationId)
 
         setTasks(prev => prev.map(task => (
             task.workstation_id === workstationId
@@ -730,16 +758,10 @@ export default function MaintenanceSchedule() {
                     ...task,
                     workstation_assigned_user_id: assignedUserId,
                     workstation_assigned_to_name: assignedToName,
-                    assigned_user_id: task.equipment_assignment_mode === "DIRECT"
-                        ? task.equipment_assigned_user_id || null
-                        : task.equipment_assignment_mode === "FREE_POOL"
-                            ? null
-                            : assignedUserId,
-                    assigned_to_name: task.equipment_assignment_mode === "DIRECT"
-                        ? task.assigned_to_name
-                        : task.equipment_assignment_mode === "FREE_POOL"
-                            ? null
-                            : assignedToName
+                    equipment_assignment_mode: nextAssignmentMode,
+                    equipment_assigned_user_id: assignedUserId,
+                    assigned_user_id: assignedUserId,
+                    assigned_to_name: assignedToName
                 }
                 : task
         )))
@@ -749,7 +771,10 @@ export default function MaintenanceSchedule() {
                 ? {
                     ...item,
                     workstation_assigned_user_id: assignedUserId,
-                    workstation_assigned_to_name: assignedToName
+                    workstation_assigned_to_name: assignedToName,
+                    assignment_mode: nextAssignmentMode,
+                    assigned_user_id: assignedUserId,
+                    assigned_to_name: assignedToName
                 }
                 : item
         )))
@@ -760,6 +785,20 @@ export default function MaintenanceSchedule() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ assigned_user_id: assignedUserId, free_pool: assignedUserId === null })
             })
+
+            await Promise.all(
+                workstationEquipment.map(item =>
+                    fetch(`/api/clubs/${clubId}/equipment/${item.id}`, {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            assignment_mode: nextAssignmentMode,
+                            assigned_user_id: assignedUserId,
+                            maintenance_enabled: true
+                        })
+                    })
+                )
+            )
             fetchData()
         } catch (error) {
             console.error("Error assigning place owner:", error)
@@ -768,7 +807,16 @@ export default function MaintenanceSchedule() {
     }
 
     const getDeviceAssignmentMeta = (device: DeviceGroup, place: PlaceGroup) => {
-        if (device.assignmentMode === "FREE_POOL") {
+        const resolvedAssignedUserId =
+            device.assignmentMode === "DIRECT"
+                ? device.assignedUserId
+                : device.effectiveAssignedUserId
+        const resolvedAssignedToName =
+            device.assignmentMode === "DIRECT"
+                ? device.assignedToName
+                : device.effectiveAssignedToName
+
+        if (!resolvedAssignedUserId) {
             return {
                 selectValue: "free_pool",
                 badgeLabel: "без ответственного",
@@ -777,29 +825,20 @@ export default function MaintenanceSchedule() {
             }
         }
 
-        if (device.assignmentMode === "INHERIT") {
+        if (place.assignedUserId && resolvedAssignedUserId && place.assignedUserId !== resolvedAssignedUserId) {
             return {
-                selectValue: "inherit",
-                badgeLabel: "как у места",
-                badgeClass: "bg-indigo-50 text-indigo-700 border-indigo-200",
-                ownerLabel: place.assignedToName || "Свободный пул"
-            }
-        }
-
-        if (place.assignedUserId && device.assignedUserId && place.assignedUserId !== device.assignedUserId) {
-            return {
-                selectValue: device.assignedUserId,
+                selectValue: resolvedAssignedUserId,
                 badgeLabel: "свой ответственный",
                 badgeClass: "bg-amber-50 text-amber-700 border-amber-200",
-                ownerLabel: device.assignedToName || "Свободный пул"
+                ownerLabel: resolvedAssignedToName || "Свободный пул"
             }
         }
 
         return {
-            selectValue: device.assignedUserId || "free_pool",
+            selectValue: resolvedAssignedUserId || "free_pool",
             badgeLabel: "ответственный задан",
             badgeClass: "bg-emerald-50 text-emerald-700 border-emerald-200",
-            ownerLabel: device.assignedToName || "Свободный пул"
+            ownerLabel: resolvedAssignedToName || "Свободный пул"
         }
     }
 
@@ -868,44 +907,52 @@ export default function MaintenanceSchedule() {
     }
 
     return (
-        <div className="p-6 space-y-4 max-w-7xl mx-auto">
-            <div className="flex flex-col gap-3">
-                <Link href={`/clubs/${clubId}/equipment`} className="flex items-center text-sm text-muted-foreground hover:text-foreground">
-                    <ChevronLeft className="h-4 w-4 mr-1" />
-                    К обзору
-                </Link>
+        <div className="mx-auto max-w-[1600px] space-y-6 p-4 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:space-y-8 sm:p-6 sm:pb-[calc(6.5rem+env(safe-area-inset-bottom))] md:pb-8 lg:p-8">
+            <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="min-w-0">
+                        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Обслуживание</h1>
+                        <p className="mt-1 text-sm text-muted-foreground sm:text-base">График чистки, исполнители и контроль просроченных задач по оборудованию</p>
+                    </div>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap lg:justify-end">
+                        <Button asChild variant="outline" className="hidden w-full md:inline-flex md:w-auto">
+                            <Link href={`/clubs/${clubId}/equipment`}>
+                                <ChevronLeft className="mr-2 h-4 w-4" />
+                                Назад
+                            </Link>
+                        </Button>
+                        <Button asChild variant="outline" className="w-full sm:w-auto">
+                            <Link href={`/clubs/${clubId}/laundry`}>
+                                <Shirt className="mr-2 h-4 w-4" />
+                                Стирка
+                            </Link>
+                        </Button>
+                        <Button
+                            onClick={handleGenerateTasks}
+                            disabled={isGenerating}
+                            className="w-full bg-primary text-primary-foreground shadow-md hover:bg-primary/90 sm:w-auto"
+                        >
+                            {isGenerating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                            Пересчитать
+                        </Button>
+                    </div>
+                </div>
+            </div>
 
-                <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-3">
-                    <h1 className="text-2xl font-bold tracking-tight">🧹 График обслуживания</h1>
-
-                    <div className="flex flex-wrap items-center gap-3">
-                        <div className="relative">
-                            <Search className="h-4 w-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+            <Card className="border-none shadow-sm">
+                <CardContent className="space-y-4 p-4">
+                    <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-center">
+                        <div className="relative w-full">
+                            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                             <Input
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                                 placeholder="Поиск по месту, зоне, устройству"
-                                className="pl-9 rounded-xl h-9 w-[260px]"
+                                className="border-slate-200 bg-slate-50 pl-9"
                             />
                         </div>
 
-                        <Link href={`/clubs/${clubId}/laundry`}>
-                            <Button variant="outline" className="rounded-xl h-9">
-                                <Shirt className="mr-2 h-4 w-4" />
-                                Стирка
-                            </Button>
-                        </Link>
-
-                        <Button
-                            onClick={handleGenerateTasks}
-                            disabled={isGenerating}
-                            className="rounded-xl bg-indigo-600 hover:bg-indigo-700 h-9"
-                        >
-                            {isGenerating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
-                            Пересчитать
-                        </Button>
-
-                        <div className="flex items-center bg-white border border-slate-200 rounded-xl px-2 py-1 shadow-sm">
+                        <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-2 py-0.5 shadow-sm">
                             <Button
                                 variant="ghost"
                                 size="icon"
@@ -921,7 +968,7 @@ export default function MaintenanceSchedule() {
                             >
                                 <ChevronLeft className="h-4 w-4" />
                             </Button>
-                            <div className="px-3 text-sm font-bold min-w-[150px] text-center">
+                            <div className="px-3 py-1 text-sm font-bold text-center min-w-[150px]">
                                 {monthNames[selectedMonth - 1]} {selectedYear}
                             </div>
                             <Button
@@ -941,97 +988,80 @@ export default function MaintenanceSchedule() {
                             </Button>
                         </div>
                     </div>
-                </div>
-            </div>
 
-            <div className="grid gap-3 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.9fr)]">
-                <Card className="shadow-none">
-                    <CardContent className="p-4">
-                        <div className="flex items-start justify-between gap-4">
-                            <div>
-                                <div className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground">Сводка по чистке</div>
-                                <div className="mt-1 text-sm text-muted-foreground">Текущий месяц и просрочка одним блоком</div>
+                    <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
+                        {summaryItems.map(item => (
+                            <div key={item.label} className={cn("rounded-xl border px-3 py-2", item.tone)}>
+                                <div className="text-[10px] uppercase tracking-widest font-bold opacity-70">{item.label}</div>
+                                <div className="mt-1 text-xl font-bold leading-none">{item.value}</div>
                             </div>
-                            <div className="text-right">
-                                <div className="text-2xl font-bold">{stats.open}</div>
-                                <div className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground">Активно</div>
-                            </div>
+                        ))}
+                    </div>
+                </CardContent>
+            </Card>
+
+            <Card className="border-none shadow-sm">
+                <CardContent className="p-4">
+                    <div className="flex items-start justify-between gap-4">
+                        <div>
+                            <div className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground">Сотрудники</div>
+                            <div className="mt-1 text-sm text-muted-foreground">Распределение мест и оборудования по чистке</div>
                         </div>
-
-                        <div className="mt-4 grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
-                            {summaryItems.map(item => (
-                                <div key={item.label} className={cn("rounded-xl border px-3 py-2", item.tone)}>
-                                    <div className="text-[10px] uppercase tracking-widest font-bold opacity-70">{item.label}</div>
-                                    <div className="mt-1 text-xl font-bold leading-none">{item.value}</div>
-                                </div>
-                            ))}
+                        <div className="text-right">
+                            <div className="text-2xl font-bold">{employeeDistribution.length}</div>
+                            <div className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground">Назначено</div>
                         </div>
-                    </CardContent>
-                </Card>
+                    </div>
 
-                <Card className="shadow-none">
-                    <CardContent className="p-4">
-                        <div className="flex items-start justify-between gap-4">
-                            <div>
-                                <div className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground">Сотрудники</div>
-                                <div className="mt-1 text-sm text-muted-foreground">Распределение мест и оборудования по чистке</div>
-                            </div>
-                            <div className="text-right">
-                                <div className="text-2xl font-bold">{employeeDistribution.length}</div>
-                                <div className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground">Назначено</div>
-                            </div>
-                        </div>
-
-                        <div className="mt-4 space-y-2">
-                            {employeeDistribution.length > 0 ? (
-                                employeeDistribution.map(employee => (
-                                    <div key={employee.id} className="rounded-xl border bg-slate-50/70 px-3 py-2">
-                                        <div className="flex items-center justify-between gap-3">
-                                            <div className="min-w-0">
-                                                <div className="truncate text-sm font-semibold">{employee.fullName}</div>
-                                                <div className="text-xs text-muted-foreground">
-                                                    {employee.placesCount} мест · {employee.devicesCount} оборудований
-                                                </div>
-                                            </div>
-                                            <div className="flex items-center gap-1.5 shrink-0">
-                                                <Badge className="h-6 bg-indigo-50 text-indigo-700 hover:bg-indigo-50">
-                                                    {employee.placesCount} мест
-                                                </Badge>
-                                                <Badge className="h-6 bg-sky-50 text-sky-700 hover:bg-sky-50">
-                                                    {employee.devicesCount} оборуд.
-                                                </Badge>
+                    <div className="mt-4 space-y-2">
+                        {employeeDistribution.length > 0 ? (
+                            employeeDistribution.map(employee => (
+                                <div key={employee.id} className="rounded-xl border bg-slate-50/70 px-3 py-2">
+                                    <div className="flex items-center justify-between gap-3">
+                                        <div className="min-w-0">
+                                            <div className="truncate text-sm font-semibold">{employee.fullName}</div>
+                                            <div className="text-xs text-muted-foreground">
+                                                {employee.placesCount} мест · {employee.devicesCount} оборудований
                                             </div>
                                         </div>
-                                    </div>
-                                ))
-                            ) : (
-                                <div className="rounded-xl border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
-                                    Нет назначений по текущему фильтру
-                                </div>
-                            )}
-
-                            <div className="rounded-xl border border-dashed bg-slate-50/40 px-3 py-2">
-                                <div className="flex items-center justify-between gap-3">
-                                    <div className="min-w-0">
-                                        <div className="truncate text-sm font-semibold text-slate-700">Свободный пул</div>
-                                        <div className="text-xs text-muted-foreground">
-                                            {freePoolDistribution.placesCount} мест · {freePoolDistribution.devicesCount} оборудований
-                                                </div>
-                                            </div>
-                                            <div className="flex items-center gap-1.5 shrink-0">
-                                                <Badge className="h-6 bg-slate-100 text-slate-700 hover:bg-slate-100">
-                                                    {freePoolDistribution.placesCount} мест
-                                                </Badge>
-                                                <Badge className="h-6 bg-slate-200 text-slate-800 hover:bg-slate-200">
-                                                    {freePoolDistribution.devicesCount} оборуд.
-                                                </Badge>
-                                            </div>
+                                        <div className="flex items-center gap-1.5 shrink-0">
+                                            <Badge className="h-6 bg-indigo-50 text-indigo-700 hover:bg-indigo-50">
+                                                {employee.placesCount} мест
+                                            </Badge>
+                                            <Badge className="h-6 bg-sky-50 text-sky-700 hover:bg-sky-50">
+                                                {employee.devicesCount} оборуд.
+                                            </Badge>
                                         </div>
                                     </div>
+                                </div>
+                            ))
+                        ) : (
+                            <div className="rounded-xl border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
+                                Нет назначений по текущему фильтру
+                            </div>
+                        )}
+
+                        <div className="rounded-xl border border-dashed bg-slate-50/40 px-3 py-2">
+                            <div className="flex items-center justify-between gap-3">
+                                <div className="min-w-0">
+                                    <div className="truncate text-sm font-semibold text-slate-700">Свободный пул</div>
+                                    <div className="text-xs text-muted-foreground">
+                                        {freePoolDistribution.placesCount} мест · {freePoolDistribution.devicesCount} оборудований
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                    <Badge className="h-6 bg-slate-100 text-slate-700 hover:bg-slate-100">
+                                        {freePoolDistribution.placesCount} мест
+                                    </Badge>
+                                    <Badge className="h-6 bg-slate-200 text-slate-800 hover:bg-slate-200">
+                                        {freePoolDistribution.devicesCount} оборуд.
+                                    </Badge>
+                                </div>
+                            </div>
                         </div>
-                    </CardContent>
-                </Card>
-            </div>
+                    </div>
+                </CardContent>
+            </Card>
 
             {isLoading ? (
                 <Card className="shadow-none">
@@ -1107,13 +1137,13 @@ export default function MaintenanceSchedule() {
                                             const hasVisibleDevices = place.devices.length > 0
 
                                             return (
-                                                <div key={place.key} className="rounded-xl border overflow-hidden">
+                                                <div key={place.key} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                                                     <button
                                                         type="button"
                                                         onClick={() => hasVisibleDevices && togglePlace(place.key)}
                                                         className={cn(
-                                                            "w-full px-3 py-3 text-left",
-                                                            hasVisibleDevices ? "bg-white" : "bg-slate-50/50"
+                                                            "w-full px-4 py-3 text-left transition-colors",
+                                                            hasVisibleDevices ? "bg-slate-50/80 hover:bg-slate-50" : "bg-slate-50/50"
                                                         )}
                                                     >
                                                         <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
@@ -1124,7 +1154,7 @@ export default function MaintenanceSchedule() {
                                                                     !hasVisibleDevices && "opacity-30"
                                                                 )} />
                                                                 <div>
-                                                                    <div className="font-medium text-sm">{place.name}</div>
+                                                                    <div className="text-base font-semibold text-slate-900">{place.name}</div>
                                                                     <div className="text-xs text-muted-foreground">{place.zone}</div>
                                                                 </div>
                                                             </div>
@@ -1139,26 +1169,40 @@ export default function MaintenanceSchedule() {
                                                         </div>
                                                     </button>
 
-                                                    <div className="border-t px-3 py-2 bg-white/80">
-                                                        <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
-                                                            <div className="text-xs text-muted-foreground">
-                                                                Ответственный за место
+                                                    <div className="border-t border-slate-100 bg-white px-4 py-3">
+                                                        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+                                                            <div>
+                                                                <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+                                                                    Ответственный за место
+                                                                </div>
+                                                                <div className="mt-1 text-xs text-muted-foreground">
+                                                                    Назначение на месте автоматически применяется ко всему оборудованию
+                                                                </div>
                                                             </div>
-                                                            <div className="w-full xl:w-[220px]">
+                                                            <div className="w-full xl:w-[260px]">
                                                                 <Select
                                                                     value={place.assignedUserId || "unassigned"}
                                                                     onValueChange={(value) => handleAssignPlace(place.workstationId, value)}
                                                                 >
-                                                                    <SelectTrigger className="h-8 text-xs bg-white border-dashed">
+                                                                    <SelectTrigger className="h-10 rounded-xl border-slate-200 bg-slate-50 text-sm">
                                                                         <div className="flex items-center gap-2">
                                                                             <UserPlus className="h-3 w-3 text-muted-foreground" />
                                                                             <SelectValue placeholder="Назначить" />
                                                                         </div>
                                                                     </SelectTrigger>
                                                                     <SelectContent>
-                                                                        <SelectItem value="unassigned">🤝 Свободный пул</SelectItem>
-                                                                        {employees.map(employee => (
-                                                                            <SelectItem key={employee.id} value={employee.id}>{employee.full_name}</SelectItem>
+                                                                        <SelectItem value="unassigned">Свободный пул</SelectItem>
+                                                                        {assignableEmployees.map(employee => (
+                                                                            <SelectItem key={employee.id} value={employee.id}>
+                                                                                <div className="flex min-w-0 w-full items-center gap-2 pr-6">
+                                                                                    <span className="truncate">{employee.full_name}</span>
+                                                                                    {employee.role ? (
+                                                                                        <span className={cn("ml-auto shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-medium", getEmployeeRoleBadgeClass(employee))}>
+                                                                                            {employee.role}
+                                                                                        </span>
+                                                                                    ) : null}
+                                                                                </div>
+                                                                            </SelectItem>
                                                                         ))}
                                                                     </SelectContent>
                                                                 </Select>
@@ -1167,70 +1211,106 @@ export default function MaintenanceSchedule() {
                                                     </div>
 
                                                     {isPlaceOpen && hasVisibleDevices && (
-                                                        <div className="border-t bg-slate-50/30 p-2.5 space-y-2">
+                                                        <div className="border-t border-slate-100 bg-slate-50/60 p-3 space-y-3">
                                                             {place.devices.map(device => {
                                                                 const assignmentMeta = getDeviceAssignmentMeta(device, place)
                                                                 const statusMeta = getDeviceStatusMeta(device)
+                                                                const isEditingEquipment = editingEquipmentKey === device.key
 
                                                                 return (
-                                                                    <div key={device.key} className="rounded-xl border bg-white overflow-hidden">
-                                                                        <div className="px-3 py-2.5 text-left">
-                                                                            <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
-                                                                                <div className="flex items-center gap-2.5">
-                                                                                    <div className="h-8 w-8 rounded-xl border bg-slate-50 text-slate-500 flex items-center justify-center shrink-0">
-                                                                                        <Monitor className="h-4 w-4" />
-                                                                                    </div>
-                                                                                    <div>
+                                                                    <div key={device.key} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition-shadow hover:shadow-md">
+                                                                        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_260px] xl:items-start">
+                                                                            <div className="min-w-0">
+                                                                                <div className="flex items-start gap-3">
+                                                                                    <div className="min-w-0">
                                                                                         <div className="flex flex-wrap items-center gap-2">
-                                                                                            <div className="font-medium text-sm">{device.equipmentName}</div>
-                                                                                            <Badge variant="outline" className={cn("h-5 px-1.5 text-[10px]", assignmentMeta.badgeClass)}>
+                                                                                            <div className="text-base font-semibold text-slate-900">{device.equipmentName}</div>
+                                                                                            <Badge variant="outline" className={cn("h-5 rounded-full px-2 text-[10px]", assignmentMeta.badgeClass)}>
                                                                                                 {assignmentMeta.badgeLabel}
                                                                                             </Badge>
-                                                                                            <Badge variant="outline" className={cn("h-5 px-1.5 text-[10px]", statusMeta.badgeClass)}>
+                                                                                            <Badge variant="outline" className={cn("h-5 rounded-full px-2 text-[10px]", statusMeta.badgeClass)}>
                                                                                                 {statusMeta.label}
                                                                                             </Badge>
                                                                                         </div>
-                                                                                        <div className="text-xs text-muted-foreground">{device.equipmentTypeName}</div>
+                                                                                        <div className="mt-0.5 text-sm text-muted-foreground">{device.equipmentTypeName}</div>
+                                                                                        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                                                                                            <span>Последняя: {device.lastCleanedAt ? new Date(device.lastCleanedAt).toLocaleDateString("ru-RU") : "—"}</span>
+                                                                                            <span className={cn("font-medium", statusMeta.detailClass)}>{statusMeta.detail}</span>
+                                                                                        </div>
                                                                                     </div>
                                                                                 </div>
-
-                                                                                <div className="flex flex-wrap gap-1.5">
-                                                                                    {device.future > 0 && <Badge className="h-6 bg-slate-100 text-slate-700 hover:bg-slate-100">{device.future} позже</Badge>}
-                                                                                </div>
                                                                             </div>
 
-                                                                            <div className="mt-2 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
-                                                                                <span>Последняя: {device.lastCleanedAt ? new Date(device.lastCleanedAt).toLocaleDateString("ru-RU") : "—"}</span>
-                                                                                <span>Ответственный: {assignmentMeta.ownerLabel}</span>
-                                                                                <span className={statusMeta.detailClass}>{statusMeta.detail}</span>
-                                                                            </div>
-                                                                        </div>
-
-                                                                        <div className="border-t px-3 py-2 bg-white/80">
-                                                                            <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
-                                                                                <div className="text-xs text-muted-foreground">
-                                                                                    Ответственный за оборудование
-                                                                                </div>
-                                                                                <div className="w-full xl:w-[220px]">
-                                                                                    <Select
-                                                                                        value={assignmentMeta.selectValue}
-                                                                                        onValueChange={(value) => handleAssignEquipment(device.equipmentId, value)}
-                                                                                    >
-                                                                                        <SelectTrigger className="h-8 text-xs bg-white border-dashed">
-                                                                                            <div className="flex items-center gap-2">
-                                                                                                <UserPlus className="h-3 w-3 text-muted-foreground" />
-                                                                                                <SelectValue placeholder="Назначить" />
+                                                                            <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-2.5">
+                                                                                {isEditingEquipment ? (
+                                                                                    <div className="space-y-2">
+                                                                                        <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400">
+                                                                                            Ответственный за оборудование
+                                                                                        </div>
+                                                                                        <div className="w-full">
+                                                                                            <Select
+                                                                                                value={assignmentMeta.selectValue}
+                                                                                                onValueChange={(value) => handleAssignEquipment(device.equipmentId, value)}
+                                                                                            >
+                                                                                                <SelectTrigger className="h-9 rounded-lg border-slate-200 bg-white text-sm">
+                                                                                                    <div className="flex items-center gap-2">
+                                                                                                        <UserPlus className="h-3 w-3 text-muted-foreground" />
+                                                                                                        <SelectValue placeholder="Назначить" />
+                                                                                                    </div>
+                                                                                                </SelectTrigger>
+                                                                                                <SelectContent>
+                                                                                                    <SelectItem value="free_pool">Свободный пул</SelectItem>
+                                                                                                    {assignableEmployees.map(employee => (
+                                                                                                        <SelectItem key={employee.id} value={employee.id}>
+                                                                                                            <div className="flex min-w-0 w-full items-center gap-2 pr-6">
+                                                                                                                <span className="truncate">{employee.full_name}</span>
+                                                                                                                {employee.role ? (
+                                                                                                                    <span className={cn("ml-auto shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-medium", getEmployeeRoleBadgeClass(employee))}>
+                                                                                                                        {employee.role}
+                                                                                                                    </span>
+                                                                                                                ) : null}
+                                                                                                            </div>
+                                                                                                        </SelectItem>
+                                                                                                    ))}
+                                                                                                </SelectContent>
+                                                                                            </Select>
+                                                                                        </div>
+                                                                                        <Button
+                                                                                            type="button"
+                                                                                            variant="ghost"
+                                                                                            size="sm"
+                                                                                            className="h-7 w-full text-xs text-muted-foreground"
+                                                                                            onClick={() => setEditingEquipmentKey(null)}
+                                                                                        >
+                                                                                            Отмена
+                                                                                        </Button>
+                                                                                    </div>
+                                                                                ) : (
+                                                                                    <div className="space-y-2">
+                                                                                        <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400">
+                                                                                            Ответственный за оборудование
+                                                                                        </div>
+                                                                                        <div className="flex items-center justify-between gap-2">
+                                                                                            <div className="flex min-w-0 items-center gap-2">
+                                                                                                <span className="truncate text-sm font-semibold text-slate-700">{assignmentMeta.ownerLabel}</span>
+                                                                                                {device.future > 0 ? (
+                                                                                                    <Badge className="h-5 rounded-full bg-slate-200 px-2 text-[10px] text-slate-700 hover:bg-slate-200">
+                                                                                                        {device.future} позже
+                                                                                                    </Badge>
+                                                                                                ) : null}
                                                                                             </div>
-                                                                                        </SelectTrigger>
-                                                                                        <SelectContent>
-                                                                                            <SelectItem value="inherit">↩️ От места</SelectItem>
-                                                                                            <SelectItem value="free_pool">🤝 Свободный пул</SelectItem>
-                                                                                            {employees.map(employee => (
-                                                                                                <SelectItem key={employee.id} value={employee.id}>{employee.full_name}</SelectItem>
-                                                                                            ))}
-                                                                                        </SelectContent>
-                                                                                    </Select>
-                                                                                </div>
+                                                                                            <Button
+                                                                                                type="button"
+                                                                                                variant="outline"
+                                                                                                size="sm"
+                                                                                                className="h-7 rounded-lg border-slate-200 bg-white px-2.5 text-xs"
+                                                                                                onClick={() => setEditingEquipmentKey(device.key)}
+                                                                                            >
+                                                                                                Изменить
+                                                                                            </Button>
+                                                                                        </div>
+                                                                                    </div>
+                                                                                )}
                                                                             </div>
                                                                         </div>
                                                                     </div>
@@ -1248,6 +1328,17 @@ export default function MaintenanceSchedule() {
                     })}
                 </div>
             )}
+
+            <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur supports-[backdrop-filter]:bg-background/80 md:hidden">
+                <div className="mx-auto flex max-w-7xl gap-2">
+                    <Button asChild variant="outline" className="h-11 flex-1">
+                        <Link href={`/clubs/${clubId}/equipment`}>
+                            <ChevronLeft className="mr-2 h-4 w-4" />
+                            Назад
+                        </Link>
+                    </Button>
+                </div>
+            </div>
         </div>
     )
 }

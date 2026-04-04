@@ -68,16 +68,17 @@ export async function PATCH(
 
         if (body.assigned_user_id !== undefined || body.free_pool !== undefined) {
             const assignedUserId = body.assigned_user_id === '' ? null : (body.assigned_user_id || null);
-            const freePool = !!body.free_pool;
             
             // Update equipment
             await query(
                 `UPDATE equipment
-                 SET assigned_user_id = NULL,
-                     assignment_mode = 'INHERIT',
-                     maintenance_enabled = CASE WHEN $2::boolean THEN TRUE ELSE (CASE WHEN $1::uuid IS NULL THEN FALSE ELSE TRUE END) END
-                 WHERE workstation_id = $3`,
-                [assignedUserId, freePool, workstationId]
+                 SET assigned_user_id = $1::uuid,
+                     assignment_mode = CASE
+                        WHEN $1::uuid IS NULL THEN 'FREE_POOL'
+                        ELSE 'DIRECT'
+                     END
+                 WHERE workstation_id = $2`,
+                [assignedUserId, workstationId]
             );
 
             // Propagate to PENDING maintenance tasks

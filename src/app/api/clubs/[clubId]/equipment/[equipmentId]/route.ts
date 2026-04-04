@@ -179,35 +179,27 @@ export async function PATCH(
 
         const newWorkstationId = body.workstation_id;
 
-        if (body.assignment_mode === 'INHERIT' || body.assignment_mode === 'FREE_POOL') {
+        if (body.assignment_mode === 'INHERIT') {
+            body.assignment_mode = body.assigned_user_id ? 'DIRECT' : 'FREE_POOL';
+        }
+
+        if (body.assignment_mode === 'FREE_POOL') {
             body.assigned_user_id = null;
             if (body.maintenance_enabled === undefined) {
                 body.maintenance_enabled = true;
             }
         } else if (body.assignment_mode === 'DIRECT' && body.assigned_user_id) {
             body.maintenance_enabled = true;
+        } else if (body.assignment_mode === 'DIRECT' && !body.assigned_user_id) {
+            body.assignment_mode = 'FREE_POOL';
+            body.assigned_user_id = null;
+            if (body.maintenance_enabled === undefined) {
+                body.maintenance_enabled = true;
+            }
         } else if (body.assigned_user_id !== undefined && body.assignment_mode === undefined) {
             body.assignment_mode = body.assigned_user_id ? 'DIRECT' : 'FREE_POOL';
             if (body.maintenance_enabled === undefined) {
                 body.maintenance_enabled = true;
-            }
-        }
-
-        if (newWorkstationId !== undefined && body.assigned_user_id === undefined && newWorkstationId) {
-            const inheritedAssignee = await query(
-                `SELECT COALESCE(w.assigned_user_id, z.assigned_user_id) AS assigned_user_id
-                 FROM club_workstations w
-                 LEFT JOIN club_zones z ON z.club_id = w.club_id AND z.name = w.zone
-                 WHERE w.id = $1 AND w.club_id = $2
-                 LIMIT 1`,
-                [newWorkstationId, clubId]
-            );
-
-            if ((inheritedAssignee.rowCount || 0) > 0) {
-                body.assigned_user_id = inheritedAssignee.rows[0].assigned_user_id ?? null;
-                if (body.maintenance_enabled === undefined) {
-                    body.maintenance_enabled = !!body.assigned_user_id;
-                }
             }
         }
 
@@ -266,12 +258,9 @@ export async function PATCH(
         const effectiveAssigneeResult = await query(
             `SELECT CASE
                         WHEN e.assignment_mode = 'DIRECT' THEN e.assigned_user_id
-                        WHEN e.assignment_mode = 'FREE_POOL' THEN NULL
-                        ELSE COALESCE(w.assigned_user_id, z.assigned_user_id)
+                        ELSE NULL
                     END as effective_assigned_user_id
              FROM equipment e
-             LEFT JOIN club_workstations w ON w.id = e.workstation_id
-             LEFT JOIN club_zones z ON z.club_id = e.club_id AND z.name = w.zone
              WHERE e.id = $1 AND e.club_id = $2`,
             [equipmentId, clubId]
         );

@@ -135,18 +135,38 @@ export async function POST(
             ? `COALESCE(e.cleaning_interval_override_days, e.cleaning_interval_days)`
             : `e.cleaning_interval_days`;
 
+        await query(
+            `UPDATE equipment e
+             SET assigned_user_id = w.assigned_user_id,
+                 assignment_mode = CASE
+                     WHEN w.assigned_user_id IS NULL THEN 'FREE_POOL'
+                     ELSE 'DIRECT'
+                 END
+             FROM club_workstations w
+             WHERE e.id = $1
+               AND e.assignment_mode = 'INHERIT'
+               AND e.workstation_id = w.id`,
+            [equipmentId]
+        );
+        await query(
+            `UPDATE equipment
+             SET assigned_user_id = NULL,
+                 assignment_mode = 'FREE_POOL'
+             WHERE id = $1
+               AND assignment_mode = 'INHERIT'
+               AND workstation_id IS NULL`,
+            [equipmentId]
+        );
+
         const equipmentRes = await query(
             `SELECT 
                 ${effectiveCleaningIntervalSql} as cleaning_interval_days,
                 e.maintenance_enabled,
                 CASE
                     WHEN e.assignment_mode = 'DIRECT' THEN e.assigned_user_id
-                    WHEN e.assignment_mode = 'FREE_POOL' THEN NULL
-                    ELSE COALESCE(w.assigned_user_id, z.assigned_user_id)
+                    ELSE NULL
                 END as effective_assigned_user_id
              FROM equipment e
-             LEFT JOIN club_workstations w ON w.id = e.workstation_id
-             LEFT JOIN club_zones z ON z.club_id = e.club_id AND z.name = w.zone
              WHERE e.id = $1`,
             [equipmentId]
         );
@@ -175,13 +195,36 @@ export async function POST(
              let finalAssignedUserId = equipment.effective_assigned_user_id;
              
              if (finalAssignedUserId) {
-                 // Check if user is active first
+                 // Keep next task only on users that are valid for maintenance assignment.
                  const userActiveRes = await query(
-                     `SELECT is_active FROM club_employees WHERE club_id = $1 AND user_id = $2`,
+                     `WITH member_rows AS (
+                         SELECT ce.user_id, ce.role, ce.is_active, ce.dismissed_at, ce.show_in_schedule, 0 as priority
+                         FROM club_employees ce
+                         WHERE ce.club_id = $1
+                         UNION ALL
+                         SELECT c.owner_id as user_id, 'Владелец'::varchar as role, TRUE as is_active, NULL::timestamp as dismissed_at, TRUE as show_in_schedule, 1 as priority
+                         FROM clubs c
+                         WHERE c.id = $1
+                      ),
+                      dedup_members AS (
+                         SELECT DISTINCT ON (user_id) user_id, role, is_active, dismissed_at, show_in_schedule
+                         FROM member_rows
+                         ORDER BY user_id, priority DESC
+                      )
+                      SELECT 1
+                      FROM dedup_members
+                      WHERE user_id = $2
+                        AND is_active = TRUE
+                        AND dismissed_at IS NULL
+                        AND (
+                            show_in_schedule = TRUE
+                            OR LOWER(COALESCE(role, '')) LIKE '%управ%'
+                            OR LOWER(COALESCE(role, '')) LIKE '%manager%'
+                        )
+                      LIMIT 1`,
                      [clubId, finalAssignedUserId]
                  );
-                 
-                 const isActive = userActiveRes.rows[0]?.is_active !== false;
+                 const isActive = (userActiveRes.rowCount || 0) > 0;
 
                  if (isActive) {
                      // Simple shift lookup - get next working day >= nextDueDateStr
