@@ -40,7 +40,7 @@ CREATE TABLE IF NOT EXISTS equipment (
     workstation_id UUID REFERENCES club_workstations(id) ON DELETE SET NULL,
     
     -- Identification
-    type TEXT NOT NULL DEFAULT 'OTHER',
+    type TEXT NOT NULL DEFAULT 'CHAIR',
     name TEXT NOT NULL,
     identifier TEXT,           -- IMEI, serial number, inventory number
     brand TEXT,
@@ -64,7 +64,7 @@ CREATE TABLE IF NOT EXISTS equipment (
 );
 
 -- Equipment type enum values reference:
--- PC, MONITOR, KEYBOARD, MOUSE, MOUSEPAD, HEADSET, CONSOLE, GAMEPAD, VR_HEADSET, CONTROLLER, TV, OTHER
+-- PC, MONITOR, KEYBOARD, MOUSE, MOUSEPAD, HEADSET, CONSOLE, GAMEPAD, VR_HEADSET, CONTROLLER, TV, CHAIR
 
 CREATE INDEX IF NOT EXISTS idx_equipment_club ON equipment(club_id);
 CREATE INDEX IF NOT EXISTS idx_equipment_workstation ON equipment(workstation_id);
@@ -218,7 +218,7 @@ VALUES
     ('GAMEPAD', 'Gamepad', 'Геймпад', 3, 'gamepad', 8),
     ('VR_HEADSET', 'VR Headset', 'VR шлем', 1, 'glasses', 9),
     ('TV', 'TV/Display', 'Телевизор/Дисплей', 14, 'tv', 10),
-    ('OTHER', 'Other', 'Другое', 30, 'box', 99)
+    ('CHAIR', 'Chair', 'Кресло', 30, 'armchair', 11)
 ON CONFLICT (code) DO UPDATE SET
     name = EXCLUDED.name,
     name_ru = EXCLUDED.name_ru,

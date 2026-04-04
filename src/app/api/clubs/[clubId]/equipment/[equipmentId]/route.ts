@@ -2,6 +2,13 @@ import { NextResponse } from 'next/server';
 import { query } from '@/db';
 import { cookies } from 'next/headers';
 import { formatDateKeyInTimezone } from '@/lib/utils';
+import { hasColumn } from '@/lib/db-compat';
+import {
+    deriveEquipmentStatus,
+    participatesInCleaningSchedule,
+    normalizeEquipmentRecord,
+    resolveEquipmentStateForPersistence,
+} from '@/lib/equipment-status';
 
 // GET /api/clubs/[clubId]/equipment/[equipmentId] - Get single equipment
 export async function GET(
@@ -28,9 +35,17 @@ export async function GET(
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
+        const hasEquipmentStatusColumn = await hasColumn('equipment', 'status');
+        const equipmentStatusSql = hasEquipmentStatusColumn
+            ? `COALESCE(e.status, CASE WHEN e.is_active = FALSE THEN 'WRITTEN_OFF' WHEN e.workstation_id IS NULL THEN 'STORAGE' ELSE 'ACTIVE' END)`
+            : `CASE WHEN e.is_active = FALSE THEN 'WRITTEN_OFF' WHEN e.workstation_id IS NULL THEN 'STORAGE' ELSE 'ACTIVE' END`;
+        const equipmentActiveSql = `CASE WHEN ${equipmentStatusSql} = 'WRITTEN_OFF' THEN FALSE ELSE TRUE END`;
+
         const result = await query(
             `SELECT 
                 e.*,
+                ${equipmentStatusSql} as status,
+                ${equipmentActiveSql} as is_active,
                 w.name as workstation_name,
                 w.zone as workstation_zone,
                 et.name_ru as type_name,
@@ -84,7 +99,7 @@ export async function GET(
         );
 
         return NextResponse.json({
-            ...result.rows[0],
+            ...normalizeEquipmentRecord(result.rows[0]),
             issues: issuesResult.rows,
             maintenance_tasks: tasksResult.rows,
             movement_history: movesResult.rows
@@ -119,9 +134,11 @@ export async function PATCH(
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
+        const hasEquipmentStatusColumn = await hasColumn('equipment', 'status');
+
         // Get current equipment state for movement tracking
         const currentEquipment = await query(
-            `SELECT workstation_id, assignment_mode FROM equipment WHERE id = $1 AND club_id = $2`,
+            `SELECT workstation_id, assignment_mode, is_active${hasEquipmentStatusColumn ? ', status' : ''} FROM equipment WHERE id = $1 AND club_id = $2`,
             [equipmentId, clubId]
         );
 
@@ -130,6 +147,36 @@ export async function PATCH(
         }
 
         const currentWorkstationId = currentEquipment.rows[0].workstation_id;
+        const currentStatus = deriveEquipmentStatus({
+            status: currentEquipment.rows[0].status,
+            is_active: currentEquipment.rows[0].is_active,
+            workstation_id: currentWorkstationId,
+        });
+        const hasStateMutationRequest =
+            body.status !== undefined ||
+            body.is_active !== undefined ||
+            body.workstation_id !== undefined;
+
+        if (hasStateMutationRequest) {
+            const resolvedState = resolveEquipmentStateForPersistence({
+                currentStatus,
+                currentIsActive: currentEquipment.rows[0].is_active,
+                currentWorkstationId,
+                requestedStatus: body.status,
+                requestedIsActive: body.is_active,
+                requestedWorkstationId: body.workstation_id,
+                hasRequestedStatus: body.status !== undefined,
+                hasRequestedIsActive: body.is_active !== undefined,
+                hasRequestedWorkstation: body.workstation_id !== undefined,
+            });
+
+            body.status = resolvedState.status;
+            body.is_active = resolvedState.is_active;
+            if (body.workstation_id !== undefined || resolvedState.workstation_id !== currentWorkstationId) {
+                body.workstation_id = resolvedState.workstation_id;
+            }
+        }
+
         const newWorkstationId = body.workstation_id;
 
         if (body.assignment_mode === 'INHERIT' || body.assignment_mode === 'FREE_POOL') {
@@ -172,7 +219,7 @@ export async function PATCH(
         const allowedFields = [
             'workstation_id', 'type', 'name', 'identifier', 'brand', 'model',
             'purchase_date', 'warranty_expires', 'receipt_url',
-            'cleaning_interval_days', 'last_cleaned_at', 'is_active', 'notes',
+            'last_cleaned_at', 'cleaning_interval_days', 'cleaning_interval_override_days', 'is_active', 'notes',
             'thermal_paste_last_changed_at', 'thermal_paste_interval_days',
             'thermal_paste_type', 'thermal_paste_note', 'maintenance_enabled',
             'assigned_user_id', 'assignment_mode',
@@ -181,6 +228,10 @@ export async function PATCH(
             'gpu_thermal_paste_last_changed_at', 'gpu_thermal_paste_interval_days',
             'gpu_thermal_paste_type', 'gpu_thermal_paste_note'
         ];
+
+        if (hasEquipmentStatusColumn) {
+            allowedFields.push('status');
+        }
 
         // Logic: if assigned_user_id is set to a user or mode explicitly changes, maintenance must be enabled
         if ((body.assigned_user_id && body.assigned_user_id !== '') || body.assignment_mode) {
@@ -209,7 +260,8 @@ export async function PATCH(
             values
         );
 
-        const updatedEquipment = result.rows[0];
+        const updatedEquipment = normalizeEquipmentRecord(result.rows[0]);
+        const schedulesCleaning = participatesInCleaningSchedule(updatedEquipment.status);
 
         const effectiveAssigneeResult = await query(
             `SELECT CASE
@@ -226,8 +278,23 @@ export async function PATCH(
 
         const effectiveAssignedUserId = effectiveAssigneeResult.rows[0]?.effective_assigned_user_id || null;
 
-        // SYNC & AUTO-GENERATE: If maintenance is enabled and effective user is set, ensure task exists
-        if (updatedEquipment.maintenance_enabled && effectiveAssignedUserId) {
+        if (!schedulesCleaning || !updatedEquipment.maintenance_enabled) {
+            await query(
+                `UPDATE equipment_maintenance_tasks
+                 SET status = 'SKIPPED',
+                     notes = CASE
+                         WHEN notes IS NULL OR notes = '' THEN $1
+                         WHEN POSITION($1 IN notes) > 0 THEN notes
+                         ELSE notes || E'\n' || $1
+                     END
+                 WHERE equipment_id = $2
+                   AND status = 'PENDING'`,
+                [
+                    `Автоматически пропущено: статус оборудования "${updatedEquipment.status}" не участвует в графике чисток.`,
+                    equipmentId
+                ]
+            );
+        } else if (effectiveAssignedUserId) {
             // 1. First, update existing PENDING tasks
             await query(
                 `UPDATE equipment_maintenance_tasks 
@@ -291,7 +358,7 @@ export async function PATCH(
             );
         }
 
-        return NextResponse.json(result.rows[0]);
+        return NextResponse.json(updatedEquipment);
     } catch (error) {
         console.error('Update Equipment Error:', error);
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });

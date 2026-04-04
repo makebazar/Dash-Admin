@@ -3874,17 +3874,17 @@ export async function createInventory(clubId: string, userId: string, targetMetr
         const params: any[] = [clubId]
         
         if (targetWarehouseId) {
-            // Specific Warehouse Snapshot
-            // Include ONLY products with stock > 0 in this warehouse
+            // Specific warehouse snapshot.
+            // Include all active club products, even with zero stock, so new clubs
+            // can search and count positions immediately after setup.
             query = `
                 SELECT p.id,
                        COALESCE(ws.quantity, 0) as current_stock,
                        p.cost_price,
                        p.selling_price
                 FROM warehouse_products p
-                INNER JOIN warehouse_stock ws ON p.id = ws.product_id AND ws.warehouse_id = $2
+                LEFT JOIN warehouse_stock ws ON p.id = ws.product_id AND ws.warehouse_id = $2
                 WHERE p.club_id = $1 AND p.is_active = true
-                  AND ws.quantity > 0
             `
             params.push(targetWarehouseId)
             
@@ -3893,8 +3893,8 @@ export async function createInventory(clubId: string, userId: string, targetMetr
                 params.push(categoryId)
             }
         } else {
-            // Aggregate Snapshot (Sum of all warehouses)
-            // Include ONLY products with total stock > 0
+            // Aggregate snapshot across all warehouses.
+            // Include all active club products, even when total stock is zero.
             query = `
                 SELECT p.id,
                        COALESCE((SELECT SUM(quantity) FROM warehouse_stock WHERE product_id = p.id), 0) as current_stock,
@@ -3902,7 +3902,6 @@ export async function createInventory(clubId: string, userId: string, targetMetr
                        p.selling_price
                 FROM warehouse_products p
                 WHERE p.club_id = $1 AND p.is_active = true
-                  AND (SELECT SUM(quantity) FROM warehouse_stock WHERE product_id = p.id) > 0
             `
 
             if (categoryId) {

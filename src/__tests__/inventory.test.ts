@@ -341,6 +341,36 @@ describe("Warehouse System Logic", () => {
         expect(client.query).toHaveBeenCalledWith("COMMIT")
     })
 
+    it("creates inventory with zero-stock products for new clubs", async () => {
+        const client = createMockClient((sql) => {
+            if (sql.includes("WHERE club_id = $1 AND status = 'OPEN'")) return { rowCount: 0, rows: [] }
+            if (sql.includes("INSERT INTO warehouse_inventories")) return { rows: [{ id: 45 }] }
+            if (sql.includes("FROM warehouse_products p")) {
+                return {
+                    rows: [
+                        { id: 1, current_stock: 0, cost_price: 50, selling_price: 100 },
+                        { id: 2, current_stock: 3, cost_price: 30, selling_price: 70 },
+                    ],
+                }
+            }
+            return { rows: [], rowCount: 1 }
+        })
+        vi.mocked(getClient).mockResolvedValue(client as any)
+
+        const invId = await createInventory(clubId, userId, null, null, 2, null)
+
+        expect(invId).toBe(45)
+        expect(client.query).toHaveBeenCalledWith(
+            expect.stringContaining("INSERT INTO warehouse_inventory_items"),
+            [45, 1, 0, 50, 100]
+        )
+        expect(client.query).toHaveBeenCalledWith(
+            expect.stringContaining("INSERT INTO warehouse_inventory_items"),
+            [45, 2, 3, 30, 70]
+        )
+        expect(client.query).toHaveBeenCalledWith("COMMIT")
+    })
+
     it("blocks creating a second open revision inventory", async () => {
         const client = createMockClient((sql) => {
             if (sql.includes("WHERE club_id = $1 AND status = 'OPEN'")) {

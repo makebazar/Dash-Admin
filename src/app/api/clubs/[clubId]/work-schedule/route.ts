@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/db';
 import { cookies } from 'next/headers';
+import { hasColumn } from '@/lib/db-compat';
 import { formatDateKeyInTimezone, formatLocalDate, parseDateKey } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
@@ -258,8 +259,13 @@ export async function PATCH(
             // 1. Tasks already assigned to this user that are scheduled for the FUTURE
             // 2. Tasks already assigned to this user that are scheduled for a day where they DON'T have a shift
             // 3. Tasks currently UNASSIGNED but where this user is the responsible person for the equipment
+            const hasCleaningIntervalOverrideColumn = await hasColumn('equipment', 'cleaning_interval_override_days');
+            const effectiveCleaningIntervalSql = hasCleaningIntervalOverrideColumn
+                ? `COALESCE(e.cleaning_interval_override_days, e.cleaning_interval_days)`
+                : `e.cleaning_interval_days`;
+
             const candidateTasks = await query(
-                `SELECT t.id, t.equipment_id, t.due_date, e.cleaning_interval_days, e.last_cleaned_at, t.assigned_user_id
+                `SELECT t.id, t.equipment_id, t.due_date, ${effectiveCleaningIntervalSql} as cleaning_interval_days, e.last_cleaned_at, t.assigned_user_id
                  FROM equipment_maintenance_tasks t
                  JOIN equipment e ON t.equipment_id = e.id
                  WHERE (t.assigned_user_id = $1 OR (t.assigned_user_id IS NULL AND e.assigned_user_id = $1))

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/db';
 import { cookies } from 'next/headers';
+import { hasColumn } from '@/lib/db-compat';
 import { calculateMaintenanceOverduePenalty } from '@/lib/maintenance-penalties';
 import { formatDateKeyInTimezone, parseDateKey } from '@/lib/utils';
 
@@ -129,9 +130,14 @@ export async function POST(
         );
 
         // 3. Get equipment details for next task scheduling
+        const hasCleaningIntervalOverrideColumn = await hasColumn('equipment', 'cleaning_interval_override_days');
+        const effectiveCleaningIntervalSql = hasCleaningIntervalOverrideColumn
+            ? `COALESCE(e.cleaning_interval_override_days, e.cleaning_interval_days)`
+            : `e.cleaning_interval_days`;
+
         const equipmentRes = await query(
             `SELECT 
-                e.cleaning_interval_days,
+                ${effectiveCleaningIntervalSql} as cleaning_interval_days,
                 e.maintenance_enabled,
                 CASE
                     WHEN e.assignment_mode = 'DIRECT' THEN e.assigned_user_id

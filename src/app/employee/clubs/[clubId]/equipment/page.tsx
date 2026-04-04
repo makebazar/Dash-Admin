@@ -3,28 +3,14 @@
 import { useEffect, useState, useCallback, useMemo } from "react"
 import { useParams } from "next/navigation"
 import {
-    LayoutGrid,
-    ChevronLeft,
     Loader2,
     MapPin,
     Monitor,
     Layers,
-    User,
-    MousePointer2,
-    Keyboard,
-    Headphones,
-    Gamepad2,
-    Gamepad,
-    Tv,
-    Glasses,
-    Square,
-    Sofa,
-    Wrench,
     ArrowRightLeft,
     Warehouse,
     AlertCircle,
     AlertTriangle,
-    Flag,
     ArrowRight
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardFooter } from "@/components/ui/card"
@@ -50,7 +36,7 @@ import {
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
-import Link from "next/link"
+import { renderEquipmentIcon } from "@/lib/equipment-icons"
 
 // --- Types ---
 
@@ -68,6 +54,7 @@ interface Equipment {
     name: string
     type: string
     type_name: string
+    type_icon?: string | null
     brand: string | null
     model: string | null
     workstation_id: string | null
@@ -150,21 +137,7 @@ export default function EmployeeEquipmentPage() {
 
     // --- Helpers ---
 
-    const getEquipmentIcon = (type: string) => {
-        switch(type) {
-            case 'PC': return <Monitor className="h-4 w-4" />
-            case 'MOUSE': return <MousePointer2 className="h-4 w-4" />
-            case 'KEYBOARD': return <Keyboard className="h-4 w-4" />
-            case 'HEADSET': return <Headphones className="h-4 w-4" />
-            case 'CONSOLE': return <Gamepad2 className="h-4 w-4" />
-            case 'GAMEPAD': return <Gamepad className="h-4 w-4" />
-            case 'TV': return <Tv className="h-4 w-4" />
-            case 'VR_HEADSET': return <Glasses className="h-4 w-4" />
-            case 'MOUSEPAD': return <Square className="h-4 w-4" />
-            case 'CHAIR': return <Sofa className="h-4 w-4" />
-            default: return <Wrench className="h-4 w-4" />
-        }
-    }
+    const getEquipmentIcon = (type: string, typeIcon?: string | null) => renderEquipmentIcon(type, typeIcon, "h-4 w-4")
 
     // --- Actions ---
 
@@ -363,7 +336,7 @@ export default function EmployeeEquipmentPage() {
                                                         {wsEquipment.slice(0, 3).map(item => (
                                                             <div key={item.id} className="flex items-center gap-3 p-2 rounded-lg bg-slate-50 border border-slate-100">
                                                                 <div className="h-6 w-6 rounded bg-white border flex items-center justify-center text-slate-500 shrink-0">
-                                                                    {getEquipmentIcon(item.type)}
+                                                                    {getEquipmentIcon(item.type, item.type_icon)}
                                                                 </div>
                                                                 <div className="min-w-0">
                                                                     <p className="text-xs font-semibold truncate text-slate-700">{item.name}</p>
@@ -417,7 +390,7 @@ export default function EmployeeEquipmentPage() {
                                 <div key={item.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl border border-slate-200 bg-white shadow-sm gap-4">
                                     <div className="flex items-center gap-4 overflow-hidden">
                                         <div className="h-12 w-12 rounded-xl bg-slate-50 border flex items-center justify-center text-slate-500 shrink-0">
-                                            {getEquipmentIcon(item.type)}
+                                            {getEquipmentIcon(item.type, item.type_icon)}
                                         </div>
                                         <div className="min-w-0">
                                             <p className="font-bold text-base truncate">{item.name}</p>
@@ -545,7 +518,6 @@ export default function EmployeeEquipmentPage() {
                                     </SelectContent>
                                 </Select>
                                 {targetWorkstationId && (() => {
-                                    const targetWs = workstations.find(w => w.id === targetWorkstationId)
                                     // Check if target has equipment of same type
                                     const targetHasSameType = equipment.some(e => 
                                         e.workstation_id === targetWorkstationId && 

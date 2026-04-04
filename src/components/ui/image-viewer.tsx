@@ -2,7 +2,8 @@
 "use client"
 
 import * as React from "react"
-import { X, ZoomIn, ZoomOut, RotateCw, RotateCcw, Maximize2, ChevronLeft, ChevronRight } from "lucide-react"
+import { createPortal } from "react-dom"
+import { X, ZoomIn, ZoomOut, RotateCw, RotateCcw, ChevronLeft, ChevronRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
@@ -24,26 +25,16 @@ export function ImageViewer({ src, alt, isOpen, onClose, images, onNext, onPrev,
     const [position, setPosition] = React.useState({ x: 0, y: 0 })
     const [isDragging, setIsDragging] = React.useState(false)
     const [startPos, setStartPos] = React.useState({ x: 0, y: 0 })
+    const [mounted, setMounted] = React.useState(false)
 
     // Determine navigation availability
     const showPrev = hasPrev || (images && images.indexOf(src) > 0)
     const showNext = hasNext || (images && images.indexOf(src) < images.length - 1)
 
-    // Internal handlers for array-based navigation
-    const handleNext = () => {
-        if (onNext) {
-            onNext()
-        } else if (images) {
-            const currentIndex = images.indexOf(src)
-            if (currentIndex < images.length - 1) {
-                // We rely on the parent updating the 'src' prop, but we can't trigger it directly without a callback that accepts the new src
-                // So we assume the parent handles logic via onNext, OR we need a way to notify parent.
-                // Since the current interface is controlled, we really need the parent to handle the state change.
-                // If onNext is provided, we use it. If not, this internal logic won't work unless we change the component to be uncontrolled or accept onIndexChange.
-                // For now, let's assume onNext/onPrev are passed if navigation is desired.
-            }
-        }
-    }
+    React.useEffect(() => {
+        setMounted(true)
+        return () => setMounted(false)
+    }, [])
 
     React.useEffect(() => {
         if (isOpen) {
@@ -79,18 +70,12 @@ export function ImageViewer({ src, alt, isOpen, onClose, images, onNext, onPrev,
         return () => window.removeEventListener('keydown', handleKeyDown)
     }, [isOpen, showNext, showPrev, onNext, onPrev, onClose])
 
-    if (!isOpen) return null
+    if (!isOpen || !mounted) return null
 
     const handleZoomIn = () => setScale(prev => Math.min(prev + 0.5, 5))
     const handleZoomOut = () => setScale(prev => Math.max(prev - 0.5, 0.5))
     const handleRotateCw = () => setRotation(prev => prev + 90)
     const handleRotateCcw = () => setRotation(prev => prev - 90)
-    const handleReset = () => {
-        setScale(1)
-        setRotation(0)
-        setPosition({ x: 0, y: 0 })
-    }
-
     const handleMouseDown = (e: React.MouseEvent) => {
         if (scale > 1) {
             setIsDragging(true)
@@ -111,29 +96,33 @@ export function ImageViewer({ src, alt, isOpen, onClose, images, onNext, onPrev,
         setIsDragging(false)
     }
 
-    return (
+    return createPortal(
         <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/90 backdrop-blur-sm animate-in fade-in duration-200" onClick={onClose}>
             {/* Toolbar - Top */}
             <div className="absolute top-4 left-1/2 -translate-x-1/2 flex items-center gap-2 p-2 bg-black/50 rounded-full backdrop-blur-md border border-white/10 z-[151] max-w-[90vw] overflow-x-auto no-scrollbar" onClick={e => e.stopPropagation()}>
-                <Button variant="ghost" size="icon" onClick={handleZoomOut} className="text-white hover:bg-white/20 h-8 w-8 shrink-0">
+                <Button type="button" variant="ghost" size="icon" onClick={handleZoomOut} className="text-white hover:bg-white/20 h-8 w-8 shrink-0">
                     <ZoomOut className="h-4 w-4" />
                 </Button>
                 <span className="text-xs text-white/70 w-12 text-center shrink-0">{Math.round(scale * 100)}%</span>
-                <Button variant="ghost" size="icon" onClick={handleZoomIn} className="text-white hover:bg-white/20 h-8 w-8 shrink-0">
+                <Button type="button" variant="ghost" size="icon" onClick={handleZoomIn} className="text-white hover:bg-white/20 h-8 w-8 shrink-0">
                     <ZoomIn className="h-4 w-4" />
                 </Button>
                 <div className="w-px h-4 bg-white/20 mx-1 shrink-0" />
-                <Button variant="ghost" size="icon" onClick={handleRotateCcw} className="text-white hover:bg-white/20 h-8 w-8 shrink-0">
+                <Button type="button" variant="ghost" size="icon" onClick={handleRotateCcw} className="text-white hover:bg-white/20 h-8 w-8 shrink-0">
                     <RotateCcw className="h-4 w-4" />
                 </Button>
-                <Button variant="ghost" size="icon" onClick={handleRotateCw} className="text-white hover:bg-white/20 h-8 w-8 shrink-0">
+                <Button type="button" variant="ghost" size="icon" onClick={handleRotateCw} className="text-white hover:bg-white/20 h-8 w-8 shrink-0">
                     <RotateCw className="h-4 w-4" />
                 </Button>
                 <div className="w-px h-4 bg-white/20 mx-1 shrink-0" />
                 <Button 
+                    type="button"
                     variant="ghost" 
                     size="icon" 
-                    onClick={onClose} 
+                    onClick={(e) => {
+                        e.stopPropagation()
+                        onClose()
+                    }} 
                     className="text-white hover:bg-white/20 h-8 w-8 shrink-0"
                 >
                     <X className="h-4 w-4" />
@@ -143,6 +132,7 @@ export function ImageViewer({ src, alt, isOpen, onClose, images, onNext, onPrev,
             {/* Navigation Buttons - Mobile Bottom / Desktop Sides */}
             <div className="absolute bottom-8 left-0 right-0 flex justify-center gap-8 z-[151] md:hidden pointer-events-none">
                 <Button 
+                    type="button"
                     variant="ghost" 
                     size="icon" 
                     disabled={!showPrev}
@@ -155,6 +145,7 @@ export function ImageViewer({ src, alt, isOpen, onClose, images, onNext, onPrev,
                     <ChevronLeft className="h-6 w-6" />
                 </Button>
                 <Button 
+                    type="button"
                     variant="ghost" 
                     size="icon" 
                     disabled={!showNext}
@@ -171,6 +162,7 @@ export function ImageViewer({ src, alt, isOpen, onClose, images, onNext, onPrev,
             {/* Desktop Navigation */}
             {showPrev && onPrev && (
                 <Button 
+                    type="button"
                     variant="ghost" 
                     size="icon" 
                     onClick={(e) => { e.stopPropagation(); onPrev() }} 
@@ -182,6 +174,7 @@ export function ImageViewer({ src, alt, isOpen, onClose, images, onNext, onPrev,
             
             {showNext && onNext && (
                 <Button 
+                    type="button"
                     variant="ghost" 
                     size="icon" 
                     onClick={(e) => { e.stopPropagation(); onNext() }} 
@@ -214,5 +207,7 @@ export function ImageViewer({ src, alt, isOpen, onClose, images, onNext, onPrev,
                 />
             </div>
         </div>
+        ,
+        document.body
     )
 }

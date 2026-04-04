@@ -1,12 +1,10 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useParams } from "next/navigation"
 import {
     Loader2,
-    Save,
-    Clock,
-    RefreshCw
+    Save
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -19,8 +17,8 @@ import {
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Switch } from "@/components/ui/switch"
-import "quill/dist/quill.snow.css"
+import { RichTextEditor } from "@/components/ui/rich-text-editor"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 interface EquipmentType {
     code: string
@@ -44,87 +42,41 @@ export function InstructionsTab() {
     const [isSaving, setIsSaving] = useState(false)
     const [content, setContent] = useState("")
     const [interval, setInterval] = useState<number>(30)
-    const [applyToExisting, setApplyToExisting] = useState(false)
-    const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
-    const editorRef = useRef<HTMLDivElement | null>(null)
-    const quillRef = useRef<any>(null)
-    const isSyncingRef = useRef(false)
-    const [isEditorReady, setIsEditorReady] = useState(false)
 
     useEffect(() => {
         fetchData()
     }, [clubId])
 
-    // Load content when selected type changes
     useEffect(() => {
         if (selectedType) {
             const savedInstr = instructions[selectedType]
-            const nextContent = savedInstr?.instructions || ""
-            setContent(nextContent)
-            if (quillRef.current) {
-                isSyncingRef.current = true
-                quillRef.current.root.innerHTML = nextContent
-                isSyncingRef.current = false
-            }
+            setContent(savedInstr?.instructions || "")
             setInterval(savedInstr?.default_interval_days || 30)
-            setHasUnsavedChanges(false)
-            setApplyToExisting(false)
         }
     }, [selectedType, instructions])
 
-    useEffect(() => {
-        if (!editorRef.current) return
-        if (quillRef.current) return
+    const selectedInstruction = useMemo(
+        () => (selectedType ? instructions[selectedType] : undefined),
+        [instructions, selectedType]
+    )
 
-        let destroyed = false
+    const savedContent = selectedInstruction?.instructions || ""
+    const savedInterval = selectedInstruction?.default_interval_days || 30
+    const hasUnsavedChanges = content !== savedContent || interval !== savedInterval
+    const selectedTypeMeta = equipmentTypes.find(type => type.code === selectedType)
 
-        ;(async () => {
-            try {
-                const { default: Quill } = await import("quill")
-                if (destroyed) return
-
-                const q = new Quill(editorRef.current!, {
-                    theme: "snow",
-                    modules: {
-                        toolbar: [
-                            [{ header: [1, 2, 3, false] }],
-                            ["bold", "italic", "underline", "strike"],
-                            [{ list: "ordered" }, { list: "bullet" }],
-                            ["link"],
-                            ["clean"]
-                        ]
-                    }
-                })
-
-                quillRef.current = q
-                isSyncingRef.current = true
-                q.root.innerHTML = content || ""
-                isSyncingRef.current = false
-
-                q.on("text-change", () => {
-                    if (isSyncingRef.current) return
-                    const html = q.root.innerHTML
-                    setContent(html)
-                    setHasUnsavedChanges(true)
-                })
-
-                setIsEditorReady(true)
-            } catch (e) {
-                console.error("Failed to init editor:", e)
-            }
-        })()
-
-        return () => {
-            destroyed = true
-            quillRef.current = null
-            setIsEditorReady(false)
+    const handleSelectType = (typeCode: string) => {
+        if (typeCode === selectedType) return
+        if (hasUnsavedChanges && !confirm("У вас есть несохраненные изменения. Продолжить?")) {
+            return
         }
-    }, [content])
+        setSelectedType(typeCode)
+    }
 
     const fetchData = async () => {
         try {
             const [typesRes, instrRes] = await Promise.all([
-                fetch('/api/equipment-types'),
+                fetch(`/api/equipment-types?clubId=${clubId}`),
                 fetch(`/api/clubs/${clubId}/equipment-instructions`)
             ])
 
@@ -162,20 +114,16 @@ export function InstructionsTab() {
                 body: JSON.stringify({
                     equipment_type_code: selectedType,
                     instructions: content,
-                    default_interval_days: interval,
-                    apply_to_existing: applyToExisting
+                    default_interval_days: interval
                 })
             })
 
             if (res.ok) {
                 const updatedInstr = await res.json()
-                // Update local state
                 setInstructions(prev => ({
                     ...prev,
                     [selectedType]: updatedInstr
                 }))
-                setHasUnsavedChanges(false)
-                setApplyToExisting(false)
                 alert("Настройки сохранены")
             } else {
                 alert("Ошибка при сохранении")
@@ -193,116 +141,119 @@ export function InstructionsTab() {
     }
 
     return (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-            <Card className="md:col-span-1 h-fit bg-white border-none shadow-sm">
-                <CardHeader>
-                    <CardTitle className="text-lg">Типы оборудования</CardTitle>
-                    <CardDescription>Выберите тип для настройки</CardDescription>
+        <div className="space-y-4 md:space-y-6">
+            <Card className="overflow-hidden border-none shadow-sm">
+                <CardHeader className="gap-5 border-b px-4 py-4 md:px-6 md:py-5">
+                    <div className="flex items-start justify-between gap-4">
+                        <div className="min-w-0">
+                            <CardTitle className="text-xl tracking-tight text-slate-950 md:text-2xl">
+                                Настройки обслуживания
+                            </CardTitle>
+                            <CardDescription className="mt-1 text-sm">
+                                Интервал и инструкция для выбранного типа оборудования.
+                            </CardDescription>
+                        </div>
+
+                        <Button
+                            onClick={handleSave}
+                            disabled={isSaving || !hasUnsavedChanges}
+                            className={cn(
+                                "hidden md:inline-flex h-10 shrink-0 rounded-xl px-4",
+                                hasUnsavedChanges && "bg-green-600 hover:bg-green-700"
+                            )}
+                        >
+                            {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                            {hasUnsavedChanges ? "Сохранить изменения" : "Сохранено"}
+                        </Button>
+                    </div>
+
+                    <div className="grid gap-4 lg:grid-cols-[minmax(320px,1fr)_180px] lg:items-end">
+                        <div className="space-y-2">
+                            <Label htmlFor="equipment-type" className="text-sm font-medium">Тип оборудования</Label>
+                            <Select value={selectedType} onValueChange={handleSelectType}>
+                                <SelectTrigger id="equipment-type" className="h-11 rounded-xl bg-white px-4 text-base">
+                                    <SelectValue placeholder="Выберите тип оборудования" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {equipmentTypes.map(type => (
+                                        <SelectItem key={type.code} value={type.code}>
+                                            {type.name_ru}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label htmlFor="default-interval" className="text-sm font-medium">Интервал</Label>
+                            <div className="flex h-11 w-fit items-center overflow-hidden rounded-xl border bg-white">
+                                <Input
+                                    id="default-interval"
+                                    type="number"
+                                    min="1"
+                                    max="365"
+                                    value={interval}
+                                    onChange={(e) => setInterval(parseInt(e.target.value, 10) || 30)}
+                                    className="h-full w-20 border-0 bg-transparent px-3 text-center text-lg font-semibold tabular-nums shadow-none focus-visible:ring-0"
+                                />
+                                <div className="flex h-full items-center border-l bg-slate-50 px-3 text-sm text-muted-foreground">
+                                    дней
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </CardHeader>
-                <CardContent className="p-2">
-                    <div className="flex flex-col gap-1">
-                        {equipmentTypes.map(type => (
-                            <Button
-                                key={type.code}
-                                variant={selectedType === type.code ? "secondary" : "ghost"}
-                                className={cn(
-                                    "justify-start w-full text-sm",
-                                    selectedType === type.code ? "bg-slate-100 font-medium" : "hover:bg-slate-50"
-                                )}
-                                onClick={() => {
-                                    if (hasUnsavedChanges && !confirm("У вас есть несохраненные изменения. Продолжить?")) {
-                                        return
-                                    }
-                                    setSelectedType(type.code)
-                                }}
-                            >
-                                <span className="mr-2 opacity-70 w-4">{instructions[type.code] ? "📝" : "📄"}</span>
-                                {type.name_ru}
-                            </Button>
-                        ))}
+
+                <CardContent className="grid gap-4 p-4 md:p-6 xl:grid-cols-[minmax(0,1fr)]">
+                    <div className="space-y-3">
+                        <div>
+                            <div className="text-lg font-semibold text-slate-950">Инструкция для персонала</div>
+                            <div className="mt-1 text-sm text-muted-foreground">
+                                Пошаговый регламент, критерии проверки и любые важные детали для {selectedTypeMeta?.name_ru || "выбранного типа"}.
+                            </div>
+                        </div>
+
+                        <RichTextEditor
+                            value={content}
+                            onChange={setContent}
+                            placeholder="Опиши порядок действий, критерии проверки, фото-примеры и важные замечания для сотрудников."
+                            className="min-h-[360px] md:min-h-[420px]"
+                        />
+
+                        <div className="flex flex-col gap-2 px-1 text-[11px] text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+                            <span>Поддерживаются заголовки, списки, ссылки, изображения, акценты и цветовые выделения.</span>
+                            {hasUnsavedChanges && <span className="font-medium text-amber-600">Есть несохранённые изменения</span>}
+                        </div>
                     </div>
                 </CardContent>
             </Card>
 
-            <Card className="md:col-span-3 bg-white border-none shadow-sm">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-                    <div className="space-y-1">
-                        <CardTitle>Редактор инструкций и регламентов</CardTitle>
-                        <CardDescription>
-                            Настройка процесса обслуживания для <span className="font-medium text-foreground">{equipmentTypes.find(t => t.code === selectedType)?.name_ru}</span>
-                        </CardDescription>
+            <div className="sticky bottom-4 z-20 md:hidden">
+                <div className="rounded-2xl border bg-white/95 p-3 shadow-lg backdrop-blur">
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                            <div className="truncate text-sm font-semibold text-slate-900">{selectedTypeMeta?.name_ru}</div>
+                            <div className="text-[11px] text-muted-foreground">{interval} дн. · единый стандарт типа</div>
+                        </div>
+                        {hasUnsavedChanges && (
+                            <span className="shrink-0 rounded-full bg-amber-50 px-2 py-1 text-[10px] font-semibold text-amber-700">
+                                Не сохранено
+                            </span>
+                        )}
                     </div>
-                    <Button onClick={handleSave} disabled={isSaving || !hasUnsavedChanges} className={cn(hasUnsavedChanges && "bg-green-600 hover:bg-green-700")}>
+                    <Button
+                        onClick={handleSave}
+                        disabled={isSaving || !hasUnsavedChanges}
+                        className={cn(
+                            "h-11 w-full rounded-xl",
+                            hasUnsavedChanges && "bg-green-600 hover:bg-green-700"
+                        )}
+                    >
                         {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
                         {hasUnsavedChanges ? "Сохранить изменения" : "Сохранено"}
                     </Button>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                    {/* Settings Panel */}
-                    <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 space-y-4">
-                        <div className="flex items-center gap-2 mb-2">
-                            <Clock className="h-4 w-4 text-indigo-500" />
-                            <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wide">Периодичность обслуживания</h3>
-                        </div>
-                        
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div className="space-y-2">
-                                <Label className="text-xs">Интервал чистки (дней)</Label>
-                                <div className="flex items-center gap-2">
-                                    <Input 
-                                        type="number" 
-                                        min="1" 
-                                        max="365"
-                                        className="w-24 bg-white" 
-                                        value={interval}
-                                        onChange={(e) => {
-                                            setInterval(parseInt(e.target.value) || 30)
-                                            setHasUnsavedChanges(true)
-                                        }}
-                                    />
-                                    <span className="text-sm text-muted-foreground">дней</span>
-                                </div>
-                                <p className="text-[10px] text-muted-foreground">Как часто нужно обслуживать этот тип устройств</p>
-                            </div>
-
-                            <div className="space-y-2">
-                                <Label className="text-xs">Применить ко всем устройствам</Label>
-                                <div className="flex items-center gap-3 p-2 bg-white rounded-lg border border-slate-200">
-                                    <Switch 
-                                        checked={applyToExisting}
-                                        onCheckedChange={(checked) => {
-                                            setApplyToExisting(checked)
-                                            setHasUnsavedChanges(true)
-                                        }}
-                                    />
-                                    <div className="flex flex-col">
-                                        <span className="text-sm font-medium">Обновить существующие</span>
-                                        <span className="text-[10px] text-muted-foreground">Перезаписать интервалы у всех {equipmentTypes.find(t => t.code === selectedType)?.name_ru}</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                             <Label className="text-sm font-bold text-slate-700 uppercase tracking-wide">Инструкция для персонала</Label>
-                        </div>
-                        <div className="h-[500px] flex flex-col">
-                            <div className="flex-1 w-full rounded-md border bg-white overflow-hidden">
-                                {!isEditorReady && (
-                                    <div className="p-4 text-sm text-slate-500">Загрузка редактора...</div>
-                                )}
-                                <div ref={editorRef} className="h-full" />
-                            </div>
-                            <div className="mt-2 text-[10px] text-muted-foreground flex justify-between px-1">
-                                <span>Поддержка форматирования включена</span>
-                                {hasUnsavedChanges && <span className="text-amber-600 font-medium">Есть несохраненные изменения</span>}
-                            </div>
-                        </div>
-                    </div>
-                </CardContent>
-            </Card>
+                </div>
+            </div>
         </div>
     )
 }

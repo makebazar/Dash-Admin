@@ -2,6 +2,13 @@ import { NextResponse } from 'next/server';
 import { query } from '@/db';
 import { cookies } from 'next/headers';
 import { ensureOwnerSubscriptionActive } from '@/lib/club-subscription-guard';
+import { hasColumn } from '@/lib/db-compat';
+import {
+    DEFAULT_EQUIPMENT_STATUS,
+    normalizeEquipmentRecord,
+    isEquipmentStatus,
+    resolveEquipmentStateForPersistence,
+} from '@/lib/equipment-status';
 
 // GET /api/clubs/[clubId]/equipment - List all equipment
 export async function GET(
@@ -44,15 +51,23 @@ export async function GET(
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
+        const hasEquipmentStatusColumn = await hasColumn('equipment', 'status');
+        const equipmentStatusSql = hasEquipmentStatusColumn
+            ? `COALESCE(e.status, CASE WHEN e.is_active = FALSE THEN 'WRITTEN_OFF' WHEN e.workstation_id IS NULL THEN 'STORAGE' ELSE 'ACTIVE' END)`
+            : `CASE WHEN e.is_active = FALSE THEN 'WRITTEN_OFF' WHEN e.workstation_id IS NULL THEN 'STORAGE' ELSE 'ACTIVE' END`;
+        const equipmentActiveSql = `CASE WHEN ${equipmentStatusSql} = 'WRITTEN_OFF' THEN FALSE ELSE TRUE END`;
+
         let whereConditions = [`e.club_id = $1`];
         const queryParams: any[] = [clubId];
         let paramIndex = 2;
 
         const normalizedStatus = status === 'inactive' ? 'written_off' : status;
-        const hasExplicitStatusFilter = normalizedStatus === 'active' || normalizedStatus === 'written_off';
+        const normalizedStatusKey = normalizedStatus?.toUpperCase();
+        const hasLifecycleStatusFilter = isEquipmentStatus(normalizedStatusKey);
+        const hasLegacyStatusFilter = normalizedStatus === 'active' || normalizedStatus === 'written_off';
 
-        if (!hasExplicitStatusFilter && !includeInactive) {
-            whereConditions.push(`e.is_active = TRUE`);
+        if (!hasLifecycleStatusFilter && !hasLegacyStatusFilter && !includeInactive) {
+            whereConditions.push(`${equipmentActiveSql} = TRUE`);
         }
 
         if (workstationId) {
@@ -77,15 +92,23 @@ export async function GET(
             paramIndex++;
         }
 
-        if (hasExplicitStatusFilter) {
+        if (hasLifecycleStatusFilter) {
+            whereConditions.push(`${equipmentStatusSql} = $${paramIndex}`);
+            queryParams.push(normalizedStatusKey);
+            paramIndex++;
+        } else if (hasLegacyStatusFilter) {
             if (normalizedStatus === 'active') {
-                whereConditions.push(`e.is_active = TRUE`);
+                whereConditions.push(`${equipmentActiveSql} = TRUE`);
             } else if (normalizedStatus === 'written_off') {
-                whereConditions.push(`e.is_active = FALSE`);
+                whereConditions.push(`${equipmentActiveSql} = FALSE`);
             }
         }
 
         const whereClause = whereConditions.join(' AND ');
+        const hasCleaningIntervalOverrideColumn = await hasColumn('equipment', 'cleaning_interval_override_days');
+        const effectiveCleaningIntervalSql = hasCleaningIntervalOverrideColumn
+            ? `COALESCE(e.cleaning_interval_override_days, e.cleaning_interval_days)`
+            : `e.cleaning_interval_days`;
 
         // Optimized query: Use a JOIN instead of a subquery per row for counts
         // Also limit fields to what's needed for the list view to reduce payload size
@@ -98,7 +121,11 @@ export async function GET(
             )
             SELECT 
                 e.id, e.club_id, e.workstation_id, e.type, e.name, e.identifier, e.brand, e.model,
-                e.purchase_date, e.warranty_expires, e.last_cleaned_at, e.is_active, e.cleaning_interval_days,
+                e.purchase_date, e.warranty_expires, e.last_cleaned_at,
+                ${equipmentActiveSql} as is_active,
+                ${equipmentStatusSql} as status,
+                ${effectiveCleaningIntervalSql} as cleaning_interval_days,
+                ${hasCleaningIntervalOverrideColumn ? 'e.cleaning_interval_override_days' : 'NULL::integer as cleaning_interval_override_days'},
                 e.thermal_paste_last_changed_at, e.thermal_paste_interval_days, e.thermal_paste_type, e.thermal_paste_note,
                 e.cpu_thermal_paste_last_changed_at, e.cpu_thermal_paste_interval_days, e.cpu_thermal_paste_type, e.cpu_thermal_paste_note,
                 e.gpu_thermal_paste_last_changed_at, e.gpu_thermal_paste_interval_days, e.gpu_thermal_paste_type, e.gpu_thermal_paste_note,
@@ -141,7 +168,7 @@ export async function GET(
         console.log(`[PERF] GET /api/clubs/${clubId}/equipment: ${duration}ms, total: ${total}, count: ${result.rowCount}`);
 
         return NextResponse.json({
-            equipment: result.rows,
+            equipment: result.rows.map((row: any) => normalizeEquipmentRecord(row)),
             total,
             limit,
             offset,
@@ -180,7 +207,6 @@ export async function POST(
             purchase_date,
             warranty_expires,
             receipt_url,
-            cleaning_interval_days,
             notes
         } = body;
 
@@ -188,48 +214,92 @@ export async function POST(
             return NextResponse.json({ error: 'Name and type are required' }, { status: 400 });
         }
 
-        // Get default cleaning interval from equipment_types if not provided
-        let intervalDays = cleaning_interval_days;
-        if (!intervalDays) {
-            const typeResult = await query(
-                `SELECT default_cleaning_interval FROM equipment_types WHERE code = $1`,
-                [type]
-            );
-            intervalDays = typeResult.rows[0]?.default_cleaning_interval || 30;
+        const clubInstructionResult = await query(
+            `SELECT default_interval_days
+             FROM club_equipment_instructions
+             WHERE club_id = $1 AND equipment_type_code = $2
+             LIMIT 1`,
+            [clubId, type]
+        );
+
+        const typeResult = await query(
+            `SELECT default_cleaning_interval FROM equipment_types WHERE code = $1`,
+            [type]
+        );
+
+        const intervalDays =
+            clubInstructionResult.rows[0]?.default_interval_days ||
+            typeResult.rows[0]?.default_cleaning_interval ||
+            30;
+
+        const hasEquipmentStatusColumn = await hasColumn('equipment', 'status');
+        const resolvedState = resolveEquipmentStateForPersistence({
+            currentStatus: DEFAULT_EQUIPMENT_STATUS,
+            currentIsActive: true,
+            currentWorkstationId: null,
+            requestedStatus: body.status,
+            requestedIsActive: body.is_active,
+            requestedWorkstationId: workstation_id || null,
+            hasRequestedStatus: body.status !== undefined,
+            hasRequestedIsActive: body.is_active !== undefined,
+            hasRequestedWorkstation: workstation_id !== undefined,
+        });
+
+        const insertColumns = [
+            'club_id',
+            'workstation_id',
+            'type',
+            'name',
+            'identifier',
+            'brand',
+            'model',
+            'purchase_date',
+            'warranty_expires',
+            'receipt_url',
+            'cleaning_interval_days',
+            'notes',
+            'is_active',
+        ];
+        const insertValues = [
+            clubId,
+            resolvedState.workstation_id,
+            type,
+            name,
+            identifier || null,
+            brand || null,
+            model || null,
+            purchase_date || null,
+            warranty_expires || null,
+            receipt_url || null,
+            intervalDays,
+            notes || null,
+            resolvedState.is_active,
+        ];
+
+        if (hasEquipmentStatusColumn) {
+            insertColumns.push('status');
+            insertValues.push(resolvedState.status || DEFAULT_EQUIPMENT_STATUS);
         }
 
+        const placeholders = insertColumns.map((_, index) => `$${index + 1}`).join(', ');
+
         const result = await query(
-            `INSERT INTO equipment (
-                club_id, workstation_id, type, name, identifier, brand, model,
-                purchase_date, warranty_expires, receipt_url, cleaning_interval_days, notes
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-            RETURNING *`,
-            [
-                clubId,
-                workstation_id || null,
-                type,
-                name,
-                identifier || null,
-                brand || null,
-                model || null,
-                purchase_date || null,
-                warranty_expires || null,
-                receipt_url || null,
-                intervalDays,
-                notes || null
-            ]
+            `INSERT INTO equipment (${insertColumns.join(', ')})
+             VALUES (${placeholders})
+             RETURNING *`,
+            insertValues
         );
 
         // If workstation changed, record the move
-        if (workstation_id) {
+        if (resolvedState.workstation_id) {
             await query(
                 `INSERT INTO equipment_moves (equipment_id, from_workstation_id, to_workstation_id, moved_by, reason)
                  VALUES ($1, NULL, $2, $3, 'Initial assignment')`,
-                [result.rows[0].id, workstation_id, userId]
+                [result.rows[0].id, resolvedState.workstation_id, userId]
             );
         }
 
-        return NextResponse.json(result.rows[0], { status: 201 });
+        return NextResponse.json(normalizeEquipmentRecord(result.rows[0]), { status: 201 });
     } catch (error) {
         console.error('Create Equipment Error:', error);
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });

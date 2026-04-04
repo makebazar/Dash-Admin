@@ -1,4 +1,4 @@
-import type { ReactNode } from "react"
+import type { EquipmentStatus } from "@/lib/equipment-status"
 
 export interface Workstation {
     id: string
@@ -20,8 +20,10 @@ export interface Equipment {
     model: string | null
     workstation_id: string | null
     is_active: boolean
+    status: EquipmentStatus
     maintenance_enabled: boolean
     cleaning_interval_days?: number
+    cleaning_interval_override_days?: number | null
     last_cleaned_at?: string | null
     thermal_paste_last_changed_at?: string | null
     thermal_paste_interval_days?: number | null
@@ -44,6 +46,7 @@ export interface EquipmentType {
     code: string
     name_ru: string
     icon: string
+    default_cleaning_interval?: number | null
 }
 
 export interface Employee {
@@ -54,15 +57,23 @@ export interface Employee {
 export interface ZoneSectionProps {
     zone: string
     workstations: Workstation[]
+    zoneAssignedUserName?: string | null
     equipmentByWorkstationId: Map<string, Equipment[]>
     activeIssueCountByWorkstationId: Map<string, number>
     activeIssueCountByEquipmentId: Map<string, number>
+    maintenanceStatusByEquipmentId: Map<string, "overdue" | "serviced" | "disabled" | "unknown">
+    overdueMaintenanceCountByWorkstationId: Map<string, number>
+    servicedMaintenanceCountByWorkstationId: Map<string, number>
+    disabledMaintenanceCountByWorkstationId: Map<string, number>
     zoneIssuesCount: number
+    zoneRepairCount: number
+    zoneEmptyCount: number
+    zoneUnassignedCount: number
+    zoneOverdueMaintenanceCount: number
+    zoneServicedMaintenanceCount: number
+    zoneDisabledMaintenanceCount: number
     onOpenDetails: (wsId: string) => void
-    onEdit: (ws: Workstation) => void
-    onDelete: (wsId: string) => void
     onOpenAssignDialog: (wsId: string) => void
     onCreate: (zone?: string) => void
     onUnassignEquipment: (equipmentId: string) => void
-    renderEquipmentIcon: (type: string) => ReactNode
 }

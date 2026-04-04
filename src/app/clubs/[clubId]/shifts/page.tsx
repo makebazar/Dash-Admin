@@ -25,17 +25,6 @@ const formatDisplayDate = (value: string) => {
     return formatted.slice(0, 10);
 };
 
-// Manual mask for DD.MM.YYYY, HH:mm
-const formatDisplayDateTime = (value: string) => {
-    const digits = value.replace(/\D/g, "");
-    let formatted = digits;
-    if (digits.length > 2) formatted = `${digits.slice(0, 2)}.${digits.slice(2)}`;
-    if (digits.length > 4) formatted = `${digits.slice(0, 2)}.${digits.slice(2, 4)}.${digits.slice(4)}`;
-    if (digits.length > 8) formatted = `${digits.slice(0, 2)}.${digits.slice(2, 4)}.${digits.slice(4, 8)}, ${digits.slice(8)}`;
-    if (digits.length > 10) formatted = `${digits.slice(0, 2)}.${digits.slice(2, 4)}.${digits.slice(4, 8)}, ${digits.slice(8, 10)}:${digits.slice(10, 12)}`;
-    return formatted.slice(0, 17);
-};
-
 // Helper to convert DD.MM.YYYY to YYYY-MM-DD
 const dateToInternal = (displayStr: string) => {
     if (!displayStr || displayStr.length < 10) return ''
@@ -52,25 +41,214 @@ const dateToDisplay = (internalStr: string) => {
     return `${d}.${m}.${y}`
 }
 
-// Helper to convert DD.MM.YYYY, HH:mm to YYYY-MM-DDTHH:mm
-const dateTimeToInternal = (displayStr: string) => {
-    if (!displayStr || displayStr.length < 17) return ''
-    const [datePart, timePart] = displayStr.split(', ')
-    if (!datePart || !timePart) return ''
-    const internalDate = dateToInternal(datePart)
-    if (!internalDate) return ''
-    return `${internalDate}T${timePart}`
+const DATE_TIME_MASK_TEMPLATE = "__.__.____, __:__"
+const DATE_TIME_EDITABLE_POSITIONS = [0, 1, 3, 4, 6, 7, 8, 9, 12, 13, 15, 16] as const
+const DATE_TIME_COMPLETE_REGEX = /^(\d{2})\.(\d{2})\.(\d{4}), (\d{2}):(\d{2})$/
+
+const buildMaskedDateTimeDisplay = (digits: string[]) => {
+    const chars = DATE_TIME_MASK_TEMPLATE.split("")
+    let hasAnyDigits = false
+
+    DATE_TIME_EDITABLE_POSITIONS.forEach((pos, index) => {
+        const digit = digits[index] && /\d/.test(digits[index]) ? digits[index] : "_"
+        if (digit !== "_") hasAnyDigits = true
+        chars[pos] = digit
+    })
+
+    return hasAnyDigits ? chars.join("") : ""
 }
 
-// Helper to convert YYYY-MM-DDTHH:mm to DD.MM.YYYY, HH:mm
-const dateTimeToDisplay = (internalStr: string) => {
-    if (!internalStr) return ''
-    const [datePart, timePart] = internalStr.split('T')
-    if (!datePart || !timePart) return ''
-    const displayDate = dateToDisplay(datePart)
-    return `${displayDate}, ${timePart.slice(0, 5)}`
+const extractMaskedDateTimeDigits = (display: string) =>
+    DATE_TIME_EDITABLE_POSITIONS.map((pos) => {
+        const char = display[pos] || "_"
+        return /\d/.test(char) ? char : "_"
+    })
+
+const displayToLocalDateTime = (display: string) => {
+    const match = display.match(DATE_TIME_COMPLETE_REGEX)
+    if (!match) return ""
+
+    const [, dd, mm, yyyy, hh, min] = match
+    const day = Number(dd)
+    const month = Number(mm)
+    const year = Number(yyyy)
+    const hours = Number(hh)
+    const minutes = Number(min)
+
+    if (month < 1 || month > 12 || day < 1 || hours > 23 || minutes > 59) return ""
+
+    const parsed = new Date(`${yyyy}-${mm}-${dd}T${hh}:${min}:00`)
+    if (Number.isNaN(parsed.getTime())) return ""
+    if (
+        parsed.getFullYear() !== year ||
+        parsed.getMonth() + 1 !== month ||
+        parsed.getDate() !== day ||
+        parsed.getHours() !== hours ||
+        parsed.getMinutes() !== minutes
+    ) {
+        return ""
+    }
+
+    return `${yyyy}-${mm}-${dd}T${hh}:${min}`
 }
 
+const localDateTimeToDisplay = (value: string) => {
+    if (!value) return ""
+    const [datePart, timePart] = value.split("T")
+    if (!datePart || !timePart) return ""
+    const [year, month, day] = datePart.split("-")
+    if (!year || !month || !day) return ""
+    return `${day}.${month}.${year}, ${timePart.slice(0, 5)}`
+}
+
+type MaskedDateTimeInputProps = Omit<React.ComponentProps<typeof Input>, "value" | "onChange"> & {
+    value: string
+    onValueChange: (displayValue: string, internalValue: string) => void
+}
+
+function MaskedDateTimeInput({ value, onValueChange, className, placeholder = "ДД.ММ.ГГГГ, ЧЧ:ММ", ...props }: MaskedDateTimeInputProps) {
+    const inputRef = useRef<HTMLInputElement>(null)
+
+    const setCaretToSlot = useCallback((slot: number) => {
+        const safeSlot = Math.max(0, Math.min(slot, DATE_TIME_EDITABLE_POSITIONS.length - 1))
+        const caretPos = DATE_TIME_EDITABLE_POSITIONS[safeSlot]
+        requestAnimationFrame(() => {
+            inputRef.current?.setSelectionRange(caretPos, caretPos)
+        })
+    }, [])
+
+    const setCaretToPosition = useCallback((position: number) => {
+        requestAnimationFrame(() => {
+            inputRef.current?.setSelectionRange(position, position)
+        })
+    }, [])
+
+    const findSlotAtOrAfter = useCallback((position: number) => {
+        return DATE_TIME_EDITABLE_POSITIONS.findIndex((pos) => pos >= position)
+    }, [])
+
+    const findSlotAtOrBefore = useCallback((position: number) => {
+        for (let i = DATE_TIME_EDITABLE_POSITIONS.length - 1; i >= 0; i -= 1) {
+            if (DATE_TIME_EDITABLE_POSITIONS[i] <= position) return i
+        }
+        return -1
+    }, [])
+
+    const commitDigits = useCallback((digits: string[], nextCaretSlot?: number) => {
+        const nextDisplay = buildMaskedDateTimeDisplay(digits)
+        onValueChange(nextDisplay, displayToLocalDateTime(nextDisplay))
+        if (typeof nextCaretSlot === "number") {
+            setCaretToSlot(nextCaretSlot)
+        }
+    }, [onValueChange, setCaretToSlot])
+
+    const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+        const currentValue = value || ""
+        const digits = extractMaskedDateTimeDigits(currentValue)
+        const selectionStart = e.currentTarget.selectionStart ?? 0
+
+        if (/^\d$/.test(e.key)) {
+            e.preventDefault()
+            const slot = findSlotAtOrAfter(selectionStart)
+            if (slot === -1) return
+            digits[slot] = e.key
+            commitDigits(digits, Math.min(slot + 1, DATE_TIME_EDITABLE_POSITIONS.length - 1))
+            return
+        }
+
+        if (e.key === "Backspace") {
+            e.preventDefault()
+            const slot = findSlotAtOrBefore(Math.max(selectionStart - 1, 0))
+            if (slot === -1) return
+            digits[slot] = "_"
+            commitDigits(digits, slot)
+            return
+        }
+
+        if (e.key === "Delete") {
+            e.preventDefault()
+            const slot = findSlotAtOrAfter(selectionStart)
+            if (slot === -1) return
+            digits[slot] = "_"
+            commitDigits(digits, slot)
+            return
+        }
+
+        if (e.key === "ArrowLeft") {
+            e.preventDefault()
+            const slot = findSlotAtOrBefore(Math.max(selectionStart - 1, 0))
+            if (slot === -1) {
+                setCaretToPosition(0)
+            } else {
+                setCaretToSlot(slot)
+            }
+            return
+        }
+
+        if (e.key === "ArrowRight") {
+            e.preventDefault()
+            const slot = findSlotAtOrAfter(selectionStart + 1)
+            if (slot === -1) {
+                setCaretToPosition(DATE_TIME_MASK_TEMPLATE.length)
+            } else {
+                setCaretToSlot(slot)
+            }
+            return
+        }
+
+        if (e.key === "Home") {
+            e.preventDefault()
+            setCaretToPosition(0)
+            return
+        }
+
+        if (e.key === "End") {
+            e.preventDefault()
+            setCaretToPosition(DATE_TIME_MASK_TEMPLATE.length)
+        }
+    }, [commitDigits, findSlotAtOrAfter, findSlotAtOrBefore, setCaretToPosition, setCaretToSlot, value])
+
+    const handlePaste = useCallback((e: React.ClipboardEvent<HTMLInputElement>) => {
+        e.preventDefault()
+        const pastedDigits = e.clipboardData.getData("text").replace(/\D/g, "")
+        if (!pastedDigits) return
+
+        const digits = extractMaskedDateTimeDigits(value || "")
+        const selectionStart = e.currentTarget.selectionStart ?? 0
+        let slot = findSlotAtOrAfter(selectionStart)
+        if (slot === -1) slot = 0
+
+        for (const digit of pastedDigits) {
+            if (slot >= digits.length) break
+            digits[slot] = digit
+            slot += 1
+        }
+
+        commitDigits(digits, Math.min(slot, DATE_TIME_EDITABLE_POSITIONS.length - 1))
+    }, [commitDigits, findSlotAtOrAfter, value])
+
+    const handleFocus = useCallback((e: React.FocusEvent<HTMLInputElement>) => {
+        if (!e.currentTarget.value) {
+            setCaretToPosition(0)
+        }
+    }, [setCaretToPosition])
+
+    return (
+        <Input
+            {...props}
+            ref={inputRef}
+            value={value}
+            onChange={() => {}}
+            onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
+            onFocus={handleFocus}
+            inputMode="numeric"
+            autoComplete="off"
+            placeholder={placeholder}
+            className={className}
+        />
+    )
+}
 
 interface Shift {
     id: string
@@ -118,6 +296,8 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
     const [editComment, setEditComment] = useState('')
     const [editCheckIn, setEditCheckIn] = useState('')
     const [editCheckOut, setEditCheckOut] = useState('')
+    const [editCheckInDisplay, setEditCheckInDisplay] = useState('')
+    const [editCheckOutDisplay, setEditCheckOutDisplay] = useState('')
     const [editCustomFields, setEditCustomFields] = useState<Record<string, any>>({})
     const [editOwnerNotes, setEditOwnerNotes] = useState('')
     const [clubTimezone, setClubTimezone] = useState('Europe/Moscow')
@@ -128,6 +308,8 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
     const [newShiftEmployee, setNewShiftEmployee] = useState('')
     const [newShiftCheckIn, setNewShiftCheckIn] = useState('')
     const [newShiftCheckOut, setNewShiftCheckOut] = useState('')
+    const [newShiftCheckInDisplay, setNewShiftCheckInDisplay] = useState('')
+    const [newShiftCheckOutDisplay, setNewShiftCheckOutDisplay] = useState('')
     const [newShiftCashIncome, setNewShiftCashIncome] = useState('')
     const [newShiftCardIncome, setNewShiftCardIncome] = useState('')
     const [newShiftExpenses, setNewShiftExpenses] = useState('')
@@ -332,14 +514,18 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
     }, [clubTimezone])
 
     const openEditModal = (shift: Shift) => {
+        const nextCheckIn = formatForInput(shift.check_in)
+        const nextCheckOut = formatForInput(shift.check_out)
         setEditingShift(shift)
         setEditCashIncome(String(shift.cash_income || 0))
         setEditCardIncome(String(shift.card_income || 0))
         setEditExpenses(String(shift.expenses || 0))
         setEditComment(shift.report_comment || '')
         setEditOwnerNotes(shift.owner_notes || '')
-        setEditCheckIn(formatForInput(shift.check_in))
-        setEditCheckOut(formatForInput(shift.check_out))
+        setEditCheckIn(nextCheckIn)
+        setEditCheckOut(nextCheckOut)
+        setEditCheckInDisplay(localDateTimeToDisplay(nextCheckIn))
+        setEditCheckOutDisplay(localDateTimeToDisplay(nextCheckOut))
         setEditShiftType(shift.shift_type || 'DAY')
         setEditCustomFields(shift.report_data || {})
     }
@@ -378,6 +564,14 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
 
     const handleSaveEdit = async () => {
         if (!editingShift) return
+        if (editCheckInDisplay && !editCheckIn) {
+            alert('Заполните дату начала полностью и корректно')
+            return
+        }
+        if (editCheckOutDisplay && !editCheckOut) {
+            alert('Заполните дату окончания полностью и корректно')
+            return
+        }
         
         if (!validateTimes(editCheckIn, editCheckOut)) return
 
@@ -520,6 +714,8 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
         setNewShiftEmployee('')
         setNewShiftCheckIn('')
         setNewShiftCheckOut('')
+        setNewShiftCheckInDisplay('')
+        setNewShiftCheckOutDisplay('')
         setNewShiftCashIncome('')
         setNewShiftCardIncome('')
         setNewShiftExpenses('')
@@ -531,6 +727,14 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
     const handleCreateShift = async () => {
         if (!newShiftEmployee || !newShiftCheckIn) {
             alert('Выберите сотрудника и укажите время начала')
+            return
+        }
+        if (newShiftCheckInDisplay && !newShiftCheckIn) {
+            alert('Заполните дату начала полностью и корректно')
+            return
+        }
+        if (newShiftCheckOutDisplay && !newShiftCheckOut) {
+            alert('Заполните дату окончания полностью и корректно')
             return
         }
         
@@ -2074,24 +2278,22 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                                     <div className="grid grid-cols-2 gap-4">
                                         <div className="space-y-2">
                                             <Label className="text-xs text-muted-foreground uppercase">Начало</Label>
-                                            <Input
-                                                placeholder="ДД.ММ.ГГГГ, ЧЧ:ММ"
-                                                value={dateTimeToDisplay(editCheckIn)}
-                                                onChange={(e) => {
-                                                    const formatted = formatDisplayDateTime(e.target.value);
-                                                    setEditCheckIn(dateTimeToInternal(formatted));
+                                            <MaskedDateTimeInput
+                                                value={editCheckInDisplay}
+                                                onValueChange={(displayValue, internalValue) => {
+                                                    setEditCheckInDisplay(displayValue)
+                                                    setEditCheckIn(internalValue)
                                                 }}
                                                 className="bg-background"
                                             />
                                         </div>
                                         <div className="space-y-2">
                                             <Label className="text-xs text-muted-foreground uppercase">Конец</Label>
-                                            <Input
-                                                placeholder="ДД.ММ.ГГГГ, ЧЧ:ММ"
-                                                value={dateTimeToDisplay(editCheckOut)}
-                                                onChange={(e) => {
-                                                    const formatted = formatDisplayDateTime(e.target.value);
-                                                    setEditCheckOut(dateTimeToInternal(formatted));
+                                            <MaskedDateTimeInput
+                                                value={editCheckOutDisplay}
+                                                onValueChange={(displayValue, internalValue) => {
+                                                    setEditCheckOutDisplay(displayValue)
+                                                    setEditCheckOut(internalValue)
                                                 }}
                                                 className="bg-background"
                                             />
@@ -2290,24 +2492,22 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-2">
                                     <Label className="text-sm">Начало *</Label>
-                                    <Input
-                                        placeholder="ДД.ММ.ГГГГ, ЧЧ:ММ"
-                                        value={dateTimeToDisplay(newShiftCheckIn)}
-                                        onChange={(e) => {
-                                            const formatted = formatDisplayDateTime(e.target.value);
-                                            setNewShiftCheckIn(dateTimeToInternal(formatted));
+                                    <MaskedDateTimeInput
+                                        value={newShiftCheckInDisplay}
+                                        onValueChange={(displayValue, internalValue) => {
+                                            setNewShiftCheckInDisplay(displayValue)
+                                            setNewShiftCheckIn(internalValue)
                                         }}
                                         className="bg-background"
                                     />
                                 </div>
                                 <div className="space-y-2">
                                     <Label className="text-sm">Конец</Label>
-                                    <Input
-                                        placeholder="ДД.ММ.ГГГГ, ЧЧ:ММ"
-                                        value={dateTimeToDisplay(newShiftCheckOut)}
-                                        onChange={(e) => {
-                                            const formatted = formatDisplayDateTime(e.target.value);
-                                            setNewShiftCheckOut(dateTimeToInternal(formatted));
+                                    <MaskedDateTimeInput
+                                        value={newShiftCheckOutDisplay}
+                                        onValueChange={(displayValue, internalValue) => {
+                                            setNewShiftCheckOutDisplay(displayValue)
+                                            setNewShiftCheckOut(internalValue)
                                         }}
                                         className="bg-background"
                                     />

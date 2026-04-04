@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/db';
 import { cookies } from 'next/headers';
+import { hasColumn } from '@/lib/db-compat';
 
 export async function GET(
-    request: Request,
+    _request: Request,
     { params }: { params: Promise<{ clubId: string; equipmentId: string }> }
 ) {
     try {
@@ -36,6 +37,9 @@ export async function GET(
             return NextResponse.json({ error: 'Equipment not found' }, { status: 404 });
         }
 
+        const hasMaintenancePhotos = await hasColumn('equipment_maintenance_tasks', 'photos');
+        const hasIssueResolutionPhotos = await hasColumn('equipment_issues', 'resolution_photos');
+
         // Combine maintenance tasks and moves
         const historyQuery = `
             (
@@ -45,9 +49,25 @@ export async function GET(
                     task_type as action, 
                     completed_at as date, 
                     (SELECT full_name FROM users WHERE id = completed_by) as user_name,
-                    notes as details
+                    notes as details,
+                    ${hasMaintenancePhotos ? `COALESCE(photos, ARRAY[]::text[])` : `ARRAY[]::text[]`} as photos
                 FROM equipment_maintenance_tasks
                 WHERE equipment_id = $1 AND status = 'COMPLETED'
+            )
+            UNION ALL
+            (
+                SELECT
+                    id,
+                    'REWORK' as action_type,
+                    task_type as action,
+                    verified_at as date,
+                    (SELECT full_name FROM users WHERE id = verified_by) as user_name,
+                    rejection_reason as details,
+                    ARRAY[]::text[] as photos
+                FROM equipment_maintenance_tasks
+                WHERE equipment_id = $1
+                  AND verification_status = 'REJECTED'
+                  AND verified_at IS NOT NULL
             )
             UNION ALL
             (
@@ -57,7 +77,8 @@ export async function GET(
                     'Перемещение' as action, 
                     moved_at as date, 
                     (SELECT full_name FROM users WHERE id = moved_by) as user_name,
-                    reason as details
+                    reason as details,
+                    ARRAY[]::text[] as photos
                 FROM equipment_moves
                 WHERE equipment_id = $1
             )
@@ -69,7 +90,8 @@ export async function GET(
                     'Инцидент: ' || title as action, 
                     created_at as date, 
                     (SELECT full_name FROM users WHERE id = reported_by) as user_name,
-                    description as details
+                    description as details,
+                    ${hasIssueResolutionPhotos ? `COALESCE(resolution_photos, ARRAY[]::text[])` : `ARRAY[]::text[]`} as photos
                 FROM equipment_issues
                 WHERE equipment_id = $1
             )

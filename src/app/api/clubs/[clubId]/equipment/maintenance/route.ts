@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { query } from '@/db';
 import { cookies } from 'next/headers';
 import { calculateMaintenanceQualityMetrics } from '@/lib/maintenance-kpi-quality';
+import { hasColumn } from '@/lib/db-compat';
 import { formatDateKeyInTimezone, formatLocalDate } from '@/lib/utils';
 
 // GET - List maintenance tasks
@@ -394,12 +395,21 @@ export async function POST(
             return null;
         };
 
+        const hasEquipmentStatusColumn = await hasColumn('equipment', 'status');
+        const hasCleaningIntervalOverrideColumn = await hasColumn('equipment', 'cleaning_interval_override_days');
+        const maintenanceEligibleStatusSql = hasEquipmentStatusColumn
+            ? `COALESCE(e.status, CASE WHEN e.is_active = FALSE THEN 'WRITTEN_OFF' WHEN e.workstation_id IS NULL THEN 'STORAGE' ELSE 'ACTIVE' END) = 'ACTIVE'`
+            : `e.is_active = TRUE AND e.workstation_id IS NOT NULL`;
+        const effectiveCleaningIntervalSql = hasCleaningIntervalOverrideColumn
+            ? `COALESCE(e.cleaning_interval_override_days, e.cleaning_interval_days)`
+            : `e.cleaning_interval_days`;
+
         const baseParams = [clubId, task_type];
         let queryStr = `
             SELECT 
                 e.id, 
                 e.name, 
-                e.cleaning_interval_days, 
+                ${effectiveCleaningIntervalSql} as cleaning_interval_days,
                 e.last_cleaned_at, 
                 e.workstation_id, 
                 CASE
@@ -417,7 +427,7 @@ export async function POST(
             LEFT JOIN club_workstations w ON w.id = e.workstation_id
             LEFT JOIN club_zones z ON z.club_id = e.club_id AND z.name = w.zone
             WHERE e.club_id = $1
-              AND e.is_active = TRUE
+              AND ${maintenanceEligibleStatusSql}
               AND (e.maintenance_enabled IS NULL OR e.maintenance_enabled = TRUE)
         `;
         

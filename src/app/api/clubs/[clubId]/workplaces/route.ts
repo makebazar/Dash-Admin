@@ -2,9 +2,10 @@ import { NextResponse } from 'next/server'
 import { query } from '@/db'
 import { cookies } from 'next/headers'
 import { hasColumn } from '@/lib/db-compat'
+import { normalizeEquipmentRecord } from '@/lib/equipment-status'
 
 export async function GET(
-    request: Request,
+    _request: Request,
     { params }: { params: Promise<{ clubId: string }> }
 ) {
     try {
@@ -27,13 +28,25 @@ export async function GET(
         }
 
         const hasIssuesClubIdColumn = await hasColumn('equipment_issues', 'club_id')
+        const hasClubEquipmentTypes = await hasColumn('equipment_types', 'club_id')
+        const hasEquipmentStatusColumn = await hasColumn('equipment', 'status')
+        const hasCleaningIntervalOverrideColumn = await hasColumn('equipment', 'cleaning_interval_override_days')
+        const equipmentStatusSql = hasEquipmentStatusColumn
+            ? `COALESCE(e.status, CASE WHEN e.is_active = FALSE THEN 'WRITTEN_OFF' WHEN e.workstation_id IS NULL THEN 'STORAGE' ELSE 'ACTIVE' END)`
+            : `CASE WHEN e.is_active = FALSE THEN 'WRITTEN_OFF' WHEN e.workstation_id IS NULL THEN 'STORAGE' ELSE 'ACTIVE' END`
+        const equipmentActiveSql = `CASE WHEN ${equipmentStatusSql} = 'WRITTEN_OFF' THEN FALSE ELSE TRUE END`
+        const effectiveCleaningIntervalSql = hasCleaningIntervalOverrideColumn
+            ? `COALESCE(e.cleaning_interval_override_days, e.cleaning_interval_days)`
+            : `e.cleaning_interval_days`
 
         const [workstationsResult, equipmentResult, equipmentTypesResult, employeesResult, zonesResult] = await Promise.all([
             query(
                 `WITH equipment_counts AS (
                     SELECT workstation_id, COUNT(*)::int as equipment_count
                     FROM equipment
-                    WHERE club_id = $1 AND workstation_id IS NOT NULL AND is_active = TRUE
+                    WHERE club_id = $1 AND workstation_id IS NOT NULL AND ${hasEquipmentStatusColumn
+                        ? `COALESCE(status, CASE WHEN is_active = FALSE THEN 'WRITTEN_OFF' WHEN workstation_id IS NULL THEN 'STORAGE' ELSE 'ACTIVE' END) != 'WRITTEN_OFF'`
+                        : `is_active = TRUE`}
                     GROUP BY workstation_id
                 )
                 SELECT
@@ -69,9 +82,11 @@ export async function GET(
                         e.brand,
                         e.model,
                         e.workstation_id,
-                        e.is_active,
+                        ${equipmentActiveSql} as is_active,
+                        ${equipmentStatusSql} as status,
                         e.maintenance_enabled,
-                        e.cleaning_interval_days,
+                        ${effectiveCleaningIntervalSql} as cleaning_interval_days,
+                        ${hasCleaningIntervalOverrideColumn ? 'e.cleaning_interval_override_days' : 'NULL::integer as cleaning_interval_override_days'},
                         e.last_cleaned_at,
                         e.cpu_thermal_paste_last_changed_at,
                         e.cpu_thermal_paste_interval_days,
@@ -107,9 +122,11 @@ export async function GET(
                         e.brand,
                         e.model,
                         e.workstation_id,
-                        e.is_active,
+                        ${equipmentActiveSql} as is_active,
+                        ${equipmentStatusSql} as status,
                         e.maintenance_enabled,
-                        e.cleaning_interval_days,
+                        ${effectiveCleaningIntervalSql} as cleaning_interval_days,
+                        ${hasCleaningIntervalOverrideColumn ? 'e.cleaning_interval_override_days' : 'NULL::integer as cleaning_interval_override_days'},
                         e.last_cleaned_at,
                         e.cpu_thermal_paste_last_changed_at,
                         e.cpu_thermal_paste_interval_days,
@@ -130,10 +147,19 @@ export async function GET(
                 [clubId]
             ),
             query(
-                `SELECT code, name_ru, icon
-                 FROM equipment_types
-                 ORDER BY name_ru`,
-                []
+                hasClubEquipmentTypes
+                    ? `SELECT code, name_ru, icon
+                       FROM equipment_types
+                       WHERE is_active = TRUE
+                         AND (club_id IS NULL OR club_id = $1)
+                       ORDER BY
+                         CASE WHEN club_id = $1 THEN 0 ELSE 1 END,
+                         sort_order,
+                         name_ru`
+                    : `SELECT code, name_ru, icon
+                       FROM equipment_types
+                       ORDER BY name_ru`,
+                hasClubEquipmentTypes ? [clubId] : []
             ),
             query(
                 `SELECT id, full_name
@@ -173,7 +199,7 @@ export async function GET(
         return NextResponse.json({
             workstations: workstationsResult.rows,
             equipment: equipmentResult.rows.map((item: any) => ({
-                ...item,
+                ...normalizeEquipmentRecord(item),
                 maintenance_enabled: item.maintenance_enabled !== false,
             })),
             equipmentTypes: equipmentTypesResult.rows,

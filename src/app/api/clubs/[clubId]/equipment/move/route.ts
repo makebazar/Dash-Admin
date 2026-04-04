@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/db';
 import { cookies } from 'next/headers';
+import { hasColumn } from '@/lib/db-compat';
+import { resolveEquipmentStateForPersistence } from '@/lib/equipment-status';
 
 // POST - Move equipment or Swap
 export async function POST(
@@ -35,9 +37,11 @@ export async function POST(
             return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
         }
 
+        const hasEquipmentStatusColumn = await hasColumn('equipment', 'status');
+
         // Get current state of the equipment being moved
         const sourceEqRes = await query(
-            `SELECT id, workstation_id, type FROM equipment WHERE id = $1 AND club_id = $2`,
+            `SELECT id, workstation_id, type, is_active${hasEquipmentStatusColumn ? ', status' : ''} FROM equipment WHERE id = $1 AND club_id = $2`,
             [equipment_id, clubId]
         );
 
@@ -57,62 +61,97 @@ export async function POST(
         await query('BEGIN');
 
         try {
+            const buildUpdateSql = (resolvedState: { workstation_id: string | null; is_active: boolean; status: string }) => {
+                if (hasEquipmentStatusColumn) {
+                    return {
+                        sql: `UPDATE equipment SET workstation_id = $1, is_active = $2, status = $3 WHERE id = $4`,
+                        params: [resolvedState.workstation_id, resolvedState.is_active, resolvedState.status, null as unknown as string],
+                    };
+                }
+
+                return {
+                    sql: `UPDATE equipment SET workstation_id = $1, is_active = $2 WHERE id = $3`,
+                    params: [resolvedState.workstation_id, resolvedState.is_active, null as unknown as string],
+                };
+            };
+
             // Check if target is occupied by same type
-            let targetOccupantId = null;
+            let targetOccupant = null;
             if (targetWorkstationId) {
                 const targetOccupantRes = await query(
-                    `SELECT id FROM equipment 
+                    `SELECT id, workstation_id, is_active${hasEquipmentStatusColumn ? ', status' : ''} FROM equipment 
                      WHERE workstation_id = $1 AND type = $2 AND id != $3
                      LIMIT 1`,
                     [targetWorkstationId, sourceEq.type, equipment_id]
                 );
                 if ((targetOccupantRes.rowCount || 0) > 0) {
-                    targetOccupantId = targetOccupantRes.rows[0].id;
+                    targetOccupant = targetOccupantRes.rows[0];
                 }
             }
 
             // ACTION 1: SWAP
-            if (action === 'SWAP' && targetOccupantId) {
+            if (action === 'SWAP' && targetOccupant) {
+                const targetResolvedState = resolveEquipmentStateForPersistence({
+                    currentStatus: targetOccupant.status,
+                    currentIsActive: targetOccupant.is_active,
+                    currentWorkstationId: targetOccupant.workstation_id,
+                    requestedWorkstationId: sourceWorkstationId,
+                    hasRequestedWorkstation: true,
+                });
+                const targetUpdate = buildUpdateSql(targetResolvedState);
+                targetUpdate.params[targetUpdate.params.length - 1] = targetOccupant.id;
+
                 // Move Target -> Source
-                await query(
-                    `UPDATE equipment SET workstation_id = $1 WHERE id = $2`,
-                    [sourceWorkstationId, targetOccupantId]
-                );
+                await query(targetUpdate.sql, targetUpdate.params);
                 
                 // Log movement for Target device
                 await query(
                     `INSERT INTO equipment_moves (equipment_id, from_workstation_id, to_workstation_id, moved_by, reason)
                      VALUES ($1, $2, $3, $4, $5)`,
-                    [targetOccupantId, targetWorkstationId, sourceWorkstationId, userId, `SWAP with ${equipment_id}. ${reason || ''} ${comment ? `(${comment})` : ''}`]
+                    [targetOccupant.id, targetWorkstationId, targetResolvedState.workstation_id, userId, `SWAP with ${equipment_id}. ${reason || ''} ${comment ? `(${comment})` : ''}`]
                 );
             }
             // ACTION 2: REPLACE (Move target to warehouse)
-            else if (action === 'REPLACE' && targetOccupantId) {
+            else if (action === 'REPLACE' && targetOccupant) {
+                const targetResolvedState = resolveEquipmentStateForPersistence({
+                    currentStatus: targetOccupant.status,
+                    currentIsActive: targetOccupant.is_active,
+                    currentWorkstationId: targetOccupant.workstation_id,
+                    requestedWorkstationId: null,
+                    hasRequestedWorkstation: true,
+                });
+                const targetUpdate = buildUpdateSql(targetResolvedState);
+                targetUpdate.params[targetUpdate.params.length - 1] = targetOccupant.id;
+
                 // Move Target -> Warehouse (NULL)
-                await query(
-                    `UPDATE equipment SET workstation_id = NULL WHERE id = $1`,
-                    [targetOccupantId]
-                );
+                await query(targetUpdate.sql, targetUpdate.params);
 
                 // Log movement for Target device
                 await query(
                     `INSERT INTO equipment_moves (equipment_id, from_workstation_id, to_workstation_id, moved_by, reason)
                      VALUES ($1, $2, NULL, $3, $4)`,
-                    [targetOccupantId, targetWorkstationId, userId, `DISPLACED by ${equipment_id}`]
+                    [targetOccupant.id, targetWorkstationId, userId, `DISPLACED by ${equipment_id}`]
                 );
             }
 
+            const sourceResolvedState = resolveEquipmentStateForPersistence({
+                currentStatus: sourceEq.status,
+                currentIsActive: sourceEq.is_active,
+                currentWorkstationId: sourceEq.workstation_id,
+                requestedWorkstationId: targetWorkstationId,
+                hasRequestedWorkstation: true,
+            });
+            const sourceUpdate = buildUpdateSql(sourceResolvedState);
+            sourceUpdate.params[sourceUpdate.params.length - 1] = equipment_id;
+
             // MOVE PRIMARY DEVICE (Source -> Target)
-            await query(
-                `UPDATE equipment SET workstation_id = $1 WHERE id = $2`,
-                [targetWorkstationId, equipment_id]
-            );
+            await query(sourceUpdate.sql, sourceUpdate.params);
 
             // Log movement for Source device
             await query(
                 `INSERT INTO equipment_moves (equipment_id, from_workstation_id, to_workstation_id, moved_by, reason)
                  VALUES ($1, $2, $3, $4, $5)`,
-                [equipment_id, sourceWorkstationId, targetWorkstationId, userId, reason + (comment ? `. Comment: ${comment}` : '')]
+                [equipment_id, sourceWorkstationId, sourceResolvedState.workstation_id, userId, reason + (comment ? `. Comment: ${comment}` : '')]
             );
 
             await query('COMMIT');

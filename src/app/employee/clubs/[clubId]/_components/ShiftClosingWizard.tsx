@@ -1592,7 +1592,7 @@ export function ShiftClosingWizard({
                 )}
 
                 {/* STEP 2 (SHIFT MODE): RECONCILIATION */}
-                {isShiftSalesMode && step === 2 && (
+                {!isStartShiftMode && isShiftSalesMode && step === 2 && (
                     <div className="space-y-6 max-w-2xl mx-auto pb-20">
                         <div className="grid grid-cols-2 gap-4">
                             <div className="bg-slate-900/50 p-4 rounded-2xl border border-slate-800">
@@ -2170,7 +2170,7 @@ export function ShiftClosingWizard({
                         <ArrowRight className="ml-2 h-5 w-5" />
                     </Button>
                 )}
-                {step === 2 && isShiftSalesMode && (
+                {step === 2 && isShiftSalesMode && !isStartShiftMode && (
                     <div className="flex gap-3">
                         <Button 
                             variant="outline"

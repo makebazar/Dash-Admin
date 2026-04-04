@@ -192,7 +192,8 @@ export function MaintenanceSessionWizard({ isOpen, onClose, tasks, onComplete }:
 
     if (!isOpen || !currentTask) return null
 
-    const instructionContent = instructions[currentTask.equipment_type] || "Инструкция отсутствует."
+    const instructionContent = instructions[currentTask.equipment_type] || ""
+    const hasInstruction = instructionContent.trim().length > 0
     const isLaundryEquipment = isLaundryEquipmentType(currentTask.equipment_type)
     const hasReport = reportMode === "ISSUE" || reportMode === "LAUNDRY"
     const isLaundryReport = reportMode === "LAUNDRY"
@@ -244,9 +245,16 @@ export function MaintenanceSessionWizard({ isOpen, onClose, tasks, onComplete }:
                                 </div>
                             ) : (
                                 <div className="text-slate-700 leading-relaxed space-y-4">
-                                    <div className="p-6 bg-slate-50 rounded-2xl border border-slate-100 text-sm whitespace-pre-wrap font-medium">
-                                        {instructionContent}
-                                    </div>
+                                    {hasInstruction ? (
+                                        <div
+                                            className="equipment-instruction-content p-6 bg-slate-50 rounded-2xl border border-slate-100 text-sm"
+                                            dangerouslySetInnerHTML={{ __html: instructionContent }}
+                                        />
+                                    ) : (
+                                        <div className="p-6 bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-sm text-slate-500 font-medium">
+                                            Инструкция отсутствует.
+                                        </div>
+                                    )}
                                     
                                     <div className="p-4 rounded-xl bg-indigo-50/50 border border-indigo-100/50 flex gap-3 items-start mt-8">
                                         <div className="h-5 w-5 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center shrink-0 mt-0.5">
@@ -418,6 +426,41 @@ export function MaintenanceSessionWizard({ isOpen, onClose, tasks, onComplete }:
                         </Button>
                     </div>
                 </div>
+                <style jsx global>{`
+                    .equipment-instruction-content h1 { font-size: 1.75rem; font-weight: 700; margin-bottom: 1rem; line-height: 1.2; }
+                    .equipment-instruction-content h2 { font-size: 1.375rem; font-weight: 700; margin-top: 1.75rem; margin-bottom: 0.75rem; line-height: 1.3; }
+                    .equipment-instruction-content h3 { font-size: 1.125rem; font-weight: 600; margin-top: 1.25rem; margin-bottom: 0.5rem; line-height: 1.35; }
+                    .equipment-instruction-content p { margin-bottom: 0.875rem; line-height: 1.65; }
+                    .equipment-instruction-content ul,
+                    .equipment-instruction-content ol { margin: 0 0 1rem 1.25rem; }
+                    .equipment-instruction-content li { margin-bottom: 0.5rem; }
+                    .equipment-instruction-content a { color: #4f46e5; text-decoration: underline; }
+                    .equipment-instruction-content img { max-width: 100%; height: auto; border-radius: 0.75rem; margin: 1rem auto; }
+                    .equipment-instruction-content blockquote {
+                        margin: 1rem 0;
+                        padding-left: 1rem;
+                        border-left: 3px solid #cbd5e1;
+                        color: #475569;
+                    }
+                    .equipment-instruction-content pre {
+                        margin: 1rem 0;
+                        padding: 1rem;
+                        overflow-x: auto;
+                        border-radius: 0.75rem;
+                        background: #0f172a;
+                        color: #e2e8f0;
+                    }
+                    .equipment-instruction-content code {
+                        padding: 0.125rem 0.375rem;
+                        border-radius: 0.375rem;
+                        background: rgba(15, 23, 42, 0.06);
+                        font-size: 0.875em;
+                    }
+                    .equipment-instruction-content pre code {
+                        padding: 0;
+                        background: transparent;
+                    }
+                `}</style>
             </DialogContent>
         </Dialog>
     )

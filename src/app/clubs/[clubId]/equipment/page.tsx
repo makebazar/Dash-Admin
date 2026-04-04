@@ -5,7 +5,6 @@ import { useParams } from "next/navigation"
 import {
     Monitor,
     AlertTriangle,
-    CheckCircle2,
     Clock,
     Settings,
     MapPin,
@@ -64,6 +63,14 @@ export default function EquipmentDashboard() {
 
     const quickActions = [
         {
+            title: "Рабочие места",
+            description: "Обзор зон, мест и подключенного оборудования",
+            href: `/clubs/${clubId}/equipment/workplaces`,
+            icon: <MapPin className="h-6 w-6" />,
+            color: "text-violet-500",
+            bg: "bg-violet-50"
+        },
+        {
             title: "Инвентаризация",
             description: "Список всего оборудования и периферии",
             href: `/clubs/${clubId}/equipment/inventory`,
@@ -80,28 +87,12 @@ export default function EquipmentDashboard() {
             bg: "bg-amber-50"
         },
         {
-            title: "Мои задачи",
-            description: "Список ваших задач на сегодня",
-            href: `/clubs/${clubId}/equipment/my-tasks`,
-            icon: <CheckCircle2 className="h-6 w-6" />,
-            color: "text-indigo-500",
-            bg: "bg-indigo-50"
-        },
-        {
             title: "График чистки",
             description: "Планирование и регламентные работы",
             href: `/clubs/${clubId}/equipment/maintenance`,
             icon: <ClipboardList className="h-6 w-6" />,
             color: "text-green-500",
             bg: "bg-green-50"
-        },
-        {
-            title: "Зоны и места",
-            description: "Управление игровыми местами и залами",
-            href: `/clubs/${clubId}/equipment/workplaces`,
-            icon: <MapPin className="h-6 w-6" />,
-            color: "text-violet-500",
-            bg: "bg-violet-50"
         },
         {
             title: "Настройки",

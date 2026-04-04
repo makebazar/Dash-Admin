@@ -1289,7 +1289,10 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                         userId={currentUserId}
                         reportTemplate={reportTemplate}
                         activeShiftId={activeShift.id}
-                        skipInventory={!club.inventory_required}
+                        skipInventory={
+                            !club.inventory_required ||
+                            (club.inventory_settings?.inventory_timing || 'END_SHIFT') === 'START_SHIFT'
+                        }
                         checklistTemplates={checklistTemplates}
                         inventorySettings={club.inventory_settings}
                     />

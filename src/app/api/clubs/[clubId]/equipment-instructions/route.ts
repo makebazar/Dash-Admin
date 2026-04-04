@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/db';
 import { cookies } from 'next/headers';
+import { hasColumn } from '@/lib/db-compat';
 
 export const dynamic = 'force-dynamic';
 
@@ -81,7 +82,7 @@ export async function POST(
         // Check for admin role if not owner (simplified check, assume any employee with access can edit for now, or check specific roles)
         // For now, allow any authorized employee to edit instructions to keep it simple as requested "we (admins) write"
 
-        const { equipment_type_code, instructions, default_interval_days, apply_to_existing } = body;
+        const { equipment_type_code, instructions, default_interval_days } = body;
 
         if (!equipment_type_code) {
             return NextResponse.json({ error: 'Equipment type code is required' }, { status: 400 });
@@ -100,12 +101,17 @@ export async function POST(
             [clubId, equipment_type_code, instructions, userId, default_interval_days || null]
         );
 
-        // Apply interval to existing equipment if requested
-        if (apply_to_existing && default_interval_days) {
+        // Sync the effective base interval only for equipment without a custom override.
+        if (default_interval_days) {
+            const hasOverrideColumn = await hasColumn('equipment', 'cleaning_interval_override_days');
             await query(
-                `UPDATE equipment 
-                 SET cleaning_interval_days = $1 
-                 WHERE club_id = $2 AND type = $3`,
+                hasOverrideColumn
+                    ? `UPDATE equipment
+                       SET cleaning_interval_days = $1
+                       WHERE club_id = $2 AND type = $3 AND cleaning_interval_override_days IS NULL`
+                    : `UPDATE equipment
+                       SET cleaning_interval_days = $1
+                       WHERE club_id = $2 AND type = $3`,
                 [default_interval_days, clubId, equipment_type_code]
             );
         }

@@ -1,88 +1,87 @@
 "use client"
 
 import Link from "next/link"
-import { useParams } from "next/navigation"
-import { ChevronLeft, FileText, Settings2, Wrench } from "lucide-react"
+import { useParams, useSearchParams } from "next/navigation"
+import { ArrowLeft, FileText, MapPin, Settings2 } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { PageShell } from "@/components/layout/PageShell"
+import { Button } from "@/components/ui/button"
+import { PageHeader, PageShell } from "@/components/layout/PageShell"
 import { InstructionsTab } from "../inventory/InstructionsTab"
+import { EquipmentTypesTab } from "./EquipmentTypesTab"
+import { ZonesSettingsTab } from "./ZonesSettingsTab"
 
 export default function EquipmentSettingsPage() {
     const { clubId } = useParams()
+    const searchParams = useSearchParams()
+    const initialTab = searchParams.get("tab") === "zones"
+        ? "zones"
+        : searchParams.get("tab") === "types"
+            ? "types"
+            : searchParams.get("tab") === "other"
+                ? "other"
+                : "standards"
 
     return (
         <PageShell maxWidth="7xl">
             <div className="space-y-6">
-                <div className="flex items-center gap-3">
-                    <Link href={`/clubs/${clubId}/equipment`} className="flex items-center text-sm text-muted-foreground hover:text-foreground transition-colors">
-                        <div className="rounded-full p-2 hover:bg-slate-100">
-                            <ChevronLeft className="h-5 w-5" />
-                        </div>
-                    </Link>
-                    <div>
-                        <h1 className="text-2xl font-bold tracking-tight">Настройки оборудования</h1>
-                        <p className="text-sm text-muted-foreground">Инструкции, регламенты и будущие параметры модуля оборудования</p>
-                    </div>
-                </div>
+                <PageHeader
+                    title="Настройки оборудования"
+                    description="Стандарты обслуживания и другие параметры модуля оборудования."
+                >
+                    <Button asChild variant="outline" className="h-10">
+                        <Link href={`/clubs/${clubId}/equipment`}>
+                            <ArrowLeft className="mr-2 h-4 w-4" />
+                            Назад
+                        </Link>
+                    </Button>
+                </PageHeader>
 
-                <Tabs defaultValue="instructions" className="space-y-6">
-                    <TabsList>
-                        <TabsTrigger value="instructions">Инструкции</TabsTrigger>
-                        <TabsTrigger value="other">Другие настройки</TabsTrigger>
+                <Tabs defaultValue={initialTab} className="space-y-6">
+                    <TabsList className="h-auto w-full justify-start overflow-x-auto rounded-xl border bg-white p-1">
+                        <TabsTrigger value="standards" className="gap-2 rounded-lg px-4 py-2 text-sm">
+                            <FileText className="h-4 w-4" />
+                            Стандарты
+                        </TabsTrigger>
+                        <TabsTrigger value="zones" className="gap-2 rounded-lg px-4 py-2 text-sm">
+                            <MapPin className="h-4 w-4" />
+                            Зоны
+                        </TabsTrigger>
+                        <TabsTrigger value="types" className="gap-2 rounded-lg px-4 py-2 text-sm">
+                            <Settings2 className="h-4 w-4" />
+                            Типы оборудования
+                        </TabsTrigger>
+                        <TabsTrigger value="other" className="gap-2 rounded-lg px-4 py-2 text-sm">
+                            <Settings2 className="h-4 w-4" />
+                            Другие настройки
+                        </TabsTrigger>
                     </TabsList>
 
-                    <TabsContent value="instructions" className="space-y-6">
-                        <Card className="border-none shadow-sm bg-gradient-to-br from-white to-slate-50">
-                            <CardHeader>
-                                <CardTitle className="flex items-center gap-2 text-lg">
-                                    <FileText className="h-5 w-5 text-violet-500" />
-                                    Инструкции для персонала
-                                </CardTitle>
-                                <CardDescription>
-                                    Настрой регламенты обслуживания и базовые интервалы по типам оборудования.
-                                </CardDescription>
-                            </CardHeader>
-                        </Card>
+                    <TabsContent value="standards" className="mt-0 space-y-6">
                         <InstructionsTab />
                     </TabsContent>
 
-                    <TabsContent value="other" className="space-y-6">
-                        <div className="grid gap-6 lg:grid-cols-2">
-                            <Card className="border-none shadow-sm">
-                                <CardHeader>
-                                    <CardTitle className="flex items-center gap-2 text-lg">
-                                        <Settings2 className="h-5 w-5 text-slate-600" />
-                                        Общие настройки
-                                    </CardTitle>
-                                    <CardDescription>
-                                        Здесь будут жить дополнительные параметры оборудования.
-                                    </CardDescription>
-                                </CardHeader>
-                                <CardContent className="space-y-3 text-sm text-muted-foreground">
-                                    <p>Подходит для будущих настроек статусов, правил списания, гарантий и поведения модулей.</p>
-                                    <p>Сейчас раздел подготовлен как логичное место для дальнейшего расширения.</p>
-                                </CardContent>
-                            </Card>
+                    <TabsContent value="zones" className="mt-0 space-y-6">
+                        <ZonesSettingsTab clubId={clubId as string} />
+                    </TabsContent>
 
-                            <Card className="border-none shadow-sm">
-                                <CardHeader>
-                                    <CardTitle className="flex items-center gap-2 text-lg">
-                                        <Wrench className="h-5 w-5 text-indigo-500" />
-                                        Что можно добавить дальше
-                                    </CardTitle>
-                                    <CardDescription>
-                                        Заготовка под следующие настройки модуля.
-                                    </CardDescription>
-                                </CardHeader>
-                                <CardContent className="space-y-2 text-sm text-muted-foreground">
-                                    <p>• Правила обслуживания по зонам</p>
-                                    <p>• Глобальные интервалы чистки</p>
-                                    <p>• Настройки гарантий и уведомлений</p>
-                                    <p>• Категории и шаблоны действий</p>
-                                </CardContent>
-                            </Card>
-                        </div>
+                    <TabsContent value="types" className="mt-0 space-y-6">
+                        <EquipmentTypesTab />
+                    </TabsContent>
+
+                    <TabsContent value="other" className="mt-0">
+                        <Card className="border-dashed shadow-sm">
+                            <CardHeader>
+                                <CardTitle>Другие настройки оборудования</CardTitle>
+                                <CardDescription>
+                                    Здесь будет место для следующих параметров модуля.
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-2 text-sm text-muted-foreground">
+                                <p>Пока дополнительных настроек нет.</p>
+                                <p>Следующие логичные кандидаты: правила списания, гарантия, уведомления и автоматизация обслуживания.</p>
+                            </CardContent>
+                        </Card>
                     </TabsContent>
                 </Tabs>
             </div>

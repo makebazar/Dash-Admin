@@ -3,17 +3,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import dynamic from "next/dynamic"
 import Link from "next/link"
-import { useParams } from "next/navigation"
-import { ChevronLeft, Gamepad, Gamepad2, Glasses, MapPin, Monitor, MousePointer2, Headphones, Keyboard, Plus, Sofa, Square, Tv, Wrench } from "lucide-react"
-import { Badge } from "@/components/ui/badge"
+import { useParams, useRouter } from "next/navigation"
+import { AlertTriangle, ChevronLeft, Loader2, MapPin, Plus, Settings2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { ManageZonesDialog } from "./ManageZonesDialog"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import ZoneSection from "./ZoneSection"
-import type { Employee, Equipment, EquipmentType, Workstation } from "./types"
+import type { Equipment, EquipmentType, Workstation } from "./types"
+import { renderEquipmentIcon } from "@/lib/equipment-icons"
 
 const AssignEquipmentDialog = dynamic(() => import("./AssignEquipmentDialog"), { ssr: false })
 const WorkplaceFormDialog = dynamic(() => import("./WorkplaceFormDialog"), { ssr: false })
-const WorkstationDetailsDialog = dynamic(() => import("./WorkstationDetailsDialog"), { ssr: false })
 
 const sortWorkstationsByZoneAndName = (a: Workstation, b: Workstation) => {
     const zoneCompare = a.zone.localeCompare(b.zone, "ru", { sensitivity: "base" })
@@ -21,12 +20,27 @@ const sortWorkstationsByZoneAndName = (a: Workstation, b: Workstation) => {
     return a.name.localeCompare(b.name, "ru", { numeric: true, sensitivity: "base" })
 }
 
+const getMaintenanceStatus = (item: Equipment): "overdue" | "serviced" | "disabled" | "unknown" => {
+    if (item.maintenance_enabled === false) return "disabled"
+
+    const intervalDays = Math.max(1, Number(item.cleaning_interval_days) || 30)
+    if (!item.last_cleaned_at) return "overdue"
+
+    const lastCleaned = new Date(item.last_cleaned_at)
+    if (Number.isNaN(lastCleaned.getTime())) return "unknown"
+
+    const dueDate = new Date(lastCleaned)
+    dueDate.setDate(dueDate.getDate() + intervalDays)
+
+    return dueDate.getTime() < Date.now() ? "overdue" : "serviced"
+}
+
 export default function WorkplacesPage() {
     const { clubId } = useParams()
+    const router = useRouter()
     const [workstations, setWorkstations] = useState<Workstation[]>([])
     const [equipment, setEquipment] = useState<Equipment[]>([])
     const [equipmentTypes, setEquipmentTypes] = useState<EquipmentType[]>([])
-    const [employees, setEmployees] = useState<Employee[]>([])
     const [zoneList, setZoneList] = useState<any[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [isSaving, setIsSaving] = useState(false)
@@ -38,12 +52,8 @@ export default function WorkplacesPage() {
     const [isAssignDialogOpen, setIsAssignDialogOpen] = useState(false)
     const [selectedWorkstationId, setSelectedWorkstationId] = useState<string | null>(null)
 
-    const [isDetailsOpen, setIsDetailsOpen] = useState(false)
-    const [detailsWorkstationId, setDetailsWorkstationId] = useState<string | null>(null)
-    const [savingIntervalId, setSavingIntervalId] = useState<string | null>(null)
-    const [savingCpuThermalId, setSavingCpuThermalId] = useState<string | null>(null)
-    const [savingGpuThermalId, setSavingGpuThermalId] = useState<string | null>(null)
-    const [isAssigningWorkstationId, setIsAssigningWorkstationId] = useState<string | null>(null)
+    const [pendingUnassignEquipmentId, setPendingUnassignEquipmentId] = useState<string | null>(null)
+    const [isUnassigningEquipmentId, setIsUnassigningEquipmentId] = useState<string | null>(null)
 
     const fetchData = useCallback(async () => {
         setIsLoading(true)
@@ -58,7 +68,6 @@ export default function WorkplacesPage() {
             setWorkstations(data.workstations || [])
             setEquipment(data.equipment || [])
             setEquipmentTypes(data.equipmentTypes || [])
-            setEmployees(data.employees || [])
             setZoneList(data.zones || [])
         } catch (error) {
             console.error("Error fetching workplaces:", error)
@@ -77,23 +86,11 @@ export default function WorkplacesPage() {
         return Array.from(new Set([...fromList, ...fromWorkstations])).sort()
     }, [zoneList, workstations])
 
-    const employeeNameById = useMemo(() => {
-        return new Map(employees.map(employee => [employee.id, employee.full_name]))
-    }, [employees])
-
     const mergeEquipmentState = useCallback((equipmentId: string, patch: Partial<Equipment>) => {
         setEquipment(prev => prev.map(item => (
             item.id === equipmentId
                 ? { ...item, ...patch }
                 : item
-        )))
-    }, [])
-
-    const mergeWorkstationState = useCallback((workstationId: string, patch: Partial<Workstation>) => {
-        setWorkstations(prev => prev.map(workstation => (
-            workstation.id === workstationId
-                ? { ...workstation, ...patch }
-                : workstation
         )))
     }, [])
 
@@ -131,12 +128,6 @@ export default function WorkplacesPage() {
         })
         setIsDialogOpen(true)
     }, [zones])
-
-    const handleEdit = useCallback((ws: Workstation) => {
-        setCreateZoneLocked(null)
-        setEditingWorkplace(ws)
-        setIsDialogOpen(true)
-    }, [])
 
     const handleSave = async (draft: Partial<Workstation>) => {
         if (!draft?.name || !draft?.zone) return
@@ -182,34 +173,18 @@ export default function WorkplacesPage() {
         }
     }
 
-    const handleDelete = useCallback(async (id: string) => {
-        const ws = workstations.find(w => w.id === id)
-        if (ws && ws.equipment_count && ws.equipment_count > 0) {
-            alert("Нельзя удалить рабочее место, к которому привязано оборудование. Сначала переместите оборудование на склад.")
-            return
-        }
-
-        if (!confirm("Вы уверены, что хотите удалить это рабочее место?")) return
-
-        try {
-            const res = await fetch(`/api/clubs/${clubId}/workstations/${id}`, {
-                method: "DELETE"
-            })
-            if (res.ok) {
-                setWorkstations(prev => prev.filter(workstation => workstation.id !== id))
-                if (detailsWorkstationId === id) {
-                    setIsDetailsOpen(false)
-                    setDetailsWorkstationId(null)
-                }
-            }
-        } catch (error) {
-            console.error("Error deleting workplace:", error)
-        }
-    }, [clubId, detailsWorkstationId, workstations])
-
     const equipmentById = useMemo(() => {
         return new Map(equipment.map(item => [item.id, item]))
     }, [equipment])
+
+    const pendingUnassignEquipment = useMemo(() => {
+        return pendingUnassignEquipmentId ? (equipmentById.get(pendingUnassignEquipmentId) ?? null) : null
+    }, [equipmentById, pendingUnassignEquipmentId])
+
+    const pendingUnassignWorkstationName = useMemo(() => {
+        if (!pendingUnassignEquipment?.workstation_id) return null
+        return workstations.find(item => item.id === pendingUnassignEquipment.workstation_id)?.name ?? null
+    }, [pendingUnassignEquipment?.workstation_id, workstations])
 
     const handleOpenAssignDialog = useCallback((wsId: string) => {
         setSelectedWorkstationId(wsId)
@@ -227,6 +202,10 @@ export default function WorkplacesPage() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ workstation_id: selectedWorkstationId })
             })
+            if (!res.ok) {
+                const data = await res.json().catch(() => null)
+                throw new Error(data?.error || "Не удалось назначить оборудование")
+            }
             if (res.ok) {
                 const updatedEquipment = await res.json()
                 mergeEquipmentState(equipmentId, {
@@ -240,49 +219,43 @@ export default function WorkplacesPage() {
         }
     }, [clubId, equipmentById, mergeEquipmentState, selectedWorkstationId, syncWorkstationEquipmentCounts])
 
-    const handleUnassignEquipment = useCallback(async (equipmentId: string) => {
-        const previousWorkstationId = equipmentById.get(equipmentId)?.workstation_id ?? null
+    const handleUnassignEquipment = useCallback((equipmentId: string) => {
+        setPendingUnassignEquipmentId(equipmentId)
+    }, [])
 
+    const confirmUnassignEquipment = useCallback(async () => {
+        if (!pendingUnassignEquipmentId) return
+
+        const equipmentItem = equipmentById.get(pendingUnassignEquipmentId)
+        const previousWorkstationId = equipmentItem?.workstation_id ?? null
+
+        setIsUnassigningEquipmentId(pendingUnassignEquipmentId)
         try {
-            const res = await fetch(`/api/clubs/${clubId}/equipment/${equipmentId}`, {
+            const res = await fetch(`/api/clubs/${clubId}/equipment/${pendingUnassignEquipmentId}`, {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ workstation_id: null })
             })
-            if (res.ok) {
-                const updatedEquipment = await res.json()
-                mergeEquipmentState(equipmentId, {
-                    ...updatedEquipment,
-                    maintenance_enabled: updatedEquipment.maintenance_enabled !== false
-                })
-                syncWorkstationEquipmentCounts(previousWorkstationId, updatedEquipment.workstation_id ?? null)
+
+            if (!res.ok) {
+                const data = await res.json().catch(() => null)
+                throw new Error(data?.error || "Не удалось снять оборудование с места")
             }
+
+            const updatedEquipment = await res.json()
+            mergeEquipmentState(pendingUnassignEquipmentId, {
+                ...updatedEquipment,
+                maintenance_enabled: updatedEquipment.maintenance_enabled !== false
+            })
+            syncWorkstationEquipmentCounts(previousWorkstationId, updatedEquipment.workstation_id ?? null)
+            setPendingUnassignEquipmentId(null)
         } catch (error) {
             console.error("Error unassigning equipment:", error)
+            alert(error instanceof Error ? error.message : "Ошибка снятия оборудования с места")
+        } finally {
+            setIsUnassigningEquipmentId(null)
         }
-    }, [clubId, equipmentById, mergeEquipmentState, syncWorkstationEquipmentCounts])
-
-    const handleToggleMaintenance = useCallback(async (equipmentId: string, enabled: boolean) => {
-        try {
-            const res = await fetch(`/api/clubs/${clubId}/equipment/${equipmentId}`, {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ 
-                    maintenance_enabled: enabled,
-                    assigned_user_id: enabled ? undefined : null
-                })
-            })
-            if (res.ok) {
-                const updatedEquipment = await res.json()
-                mergeEquipmentState(equipmentId, {
-                    ...updatedEquipment,
-                    maintenance_enabled: updatedEquipment.maintenance_enabled !== false
-                })
-            }
-        } catch (error) {
-            console.error("Error toggling maintenance:", error)
-        }
-    }, [clubId, mergeEquipmentState])
+    }, [clubId, equipmentById, mergeEquipmentState, pendingUnassignEquipmentId, syncWorkstationEquipmentCounts])
 
     const equipmentByWorkstationId = useMemo(() => {
         const map = new Map<string, Equipment[]>()
@@ -308,6 +281,10 @@ export default function WorkplacesPage() {
 
         return map
     }, [workstations])
+
+    const zoneMetaByName = useMemo(() => {
+        return new Map(zoneList.map(zone => [zone.name, zone]))
+    }, [zoneList])
 
     const activeIssueCountByEquipmentId = useMemo(() => {
         const map = new Map<string, number>()
@@ -335,6 +312,55 @@ export default function WorkplacesPage() {
         return map
     }, [activeIssueCountByEquipmentId, equipmentByWorkstationId])
 
+    const maintenanceStatusByEquipmentId = useMemo(() => {
+        const map = new Map<string, "overdue" | "serviced" | "disabled" | "unknown">()
+
+        for (const item of equipment) {
+            map.set(item.id, getMaintenanceStatus(item))
+        }
+
+        return map
+    }, [equipment])
+
+    const overdueMaintenanceCountByWorkstationId = useMemo(() => {
+        const map = new Map<string, number>()
+
+        equipmentByWorkstationId.forEach((items, workstationId) => {
+            const overdueCount = items.filter(item => maintenanceStatusByEquipmentId.get(item.id) === "overdue").length
+            if (overdueCount > 0) {
+                map.set(workstationId, overdueCount)
+            }
+        })
+
+        return map
+    }, [equipmentByWorkstationId, maintenanceStatusByEquipmentId])
+
+    const servicedMaintenanceCountByWorkstationId = useMemo(() => {
+        const map = new Map<string, number>()
+
+        equipmentByWorkstationId.forEach((items, workstationId) => {
+            const servicedCount = items.filter(item => maintenanceStatusByEquipmentId.get(item.id) === "serviced").length
+            if (servicedCount > 0) {
+                map.set(workstationId, servicedCount)
+            }
+        })
+
+        return map
+    }, [equipmentByWorkstationId, maintenanceStatusByEquipmentId])
+
+    const disabledMaintenanceCountByWorkstationId = useMemo(() => {
+        const map = new Map<string, number>()
+
+        equipmentByWorkstationId.forEach((items, workstationId) => {
+            const disabledCount = items.filter(item => maintenanceStatusByEquipmentId.get(item.id) === "disabled").length
+            if (disabledCount > 0) {
+                map.set(workstationId, disabledCount)
+            }
+        })
+
+        return map
+    }, [equipmentByWorkstationId, maintenanceStatusByEquipmentId])
+
     const zoneIssueCountByName = useMemo(() => {
         const map = new Map<string, number>()
 
@@ -352,159 +378,109 @@ export default function WorkplacesPage() {
         return map
     }, [activeIssueCountByWorkstationId, workstationsByZone, zones])
 
+    const zoneRepairCountByName = useMemo(() => {
+        const map = new Map<string, number>()
+
+        for (const zone of zones) {
+            const repairCount = (workstationsByZone.get(zone) ?? []).reduce((total, workstation) => {
+                const hasRepairEquipment = (equipmentByWorkstationId.get(workstation.id) ?? []).some(item => item.status === "REPAIR")
+                return total + (hasRepairEquipment ? 1 : 0)
+            }, 0)
+
+            if (repairCount > 0) {
+                map.set(zone, repairCount)
+            }
+        }
+
+        return map
+    }, [equipmentByWorkstationId, workstationsByZone, zones])
+
+    const zoneEmptyCountByName = useMemo(() => {
+        const map = new Map<string, number>()
+
+        for (const zone of zones) {
+            const emptyCount = (workstationsByZone.get(zone) ?? []).filter(workstation => (workstation.equipment_count ?? 0) === 0).length
+            if (emptyCount > 0) {
+                map.set(zone, emptyCount)
+            }
+        }
+
+        return map
+    }, [workstationsByZone, zones])
+
+    const zoneUnassignedCountByName = useMemo(() => {
+        const map = new Map<string, number>()
+
+        for (const zone of zones) {
+            const withoutResponsible = (workstationsByZone.get(zone) ?? []).filter(workstation => !workstation.assigned_user_id).length
+            if (withoutResponsible > 0) {
+                map.set(zone, withoutResponsible)
+            }
+        }
+
+        return map
+    }, [workstationsByZone, zones])
+
+    const zoneOverdueMaintenanceCountByName = useMemo(() => {
+        const map = new Map<string, number>()
+
+        for (const zone of zones) {
+            const overdueCount = (workstationsByZone.get(zone) ?? []).reduce(
+                (total, workstation) => total + (overdueMaintenanceCountByWorkstationId.get(workstation.id) ?? 0),
+                0
+            )
+
+            if (overdueCount > 0) {
+                map.set(zone, overdueCount)
+            }
+        }
+
+        return map
+    }, [overdueMaintenanceCountByWorkstationId, workstationsByZone, zones])
+
+    const zoneServicedMaintenanceCountByName = useMemo(() => {
+        const map = new Map<string, number>()
+
+        for (const zone of zones) {
+            const servicedCount = (workstationsByZone.get(zone) ?? []).reduce(
+                (total, workstation) => total + (servicedMaintenanceCountByWorkstationId.get(workstation.id) ?? 0),
+                0
+            )
+
+            if (servicedCount > 0) {
+                map.set(zone, servicedCount)
+            }
+        }
+
+        return map
+    }, [servicedMaintenanceCountByWorkstationId, workstationsByZone, zones])
+
+    const zoneDisabledMaintenanceCountByName = useMemo(() => {
+        const map = new Map<string, number>()
+
+        for (const zone of zones) {
+            const disabledCount = (workstationsByZone.get(zone) ?? []).reduce(
+                (total, workstation) => total + (disabledMaintenanceCountByWorkstationId.get(workstation.id) ?? 0),
+                0
+            )
+
+            if (disabledCount > 0) {
+                map.set(zone, disabledCount)
+            }
+        }
+
+        return map
+    }, [disabledMaintenanceCountByWorkstationId, workstationsByZone, zones])
+
+    const selectedWorkstation = useMemo(() => {
+        return workstations.find(w => w.id === selectedWorkstationId) || null
+    }, [workstations, selectedWorkstationId])
+
+    const getEquipmentIcon = useCallback((type: string) => renderEquipmentIcon(type, null, "h-4 w-4"), [])
+
     const handleOpenDetails = useCallback((wsId: string) => {
-        setDetailsWorkstationId(wsId)
-        setIsDetailsOpen(true)
-    }, [])
-
-    const handleSaveInterval = useCallback(async (equipmentId: string, payload: { intervalDays: number; lastCleanedAt: string | null }) => {
-        const value = payload.intervalDays
-        if (!value || value < 1) return
-
-        setSavingIntervalId(equipmentId)
-        try {
-            const res = await fetch(`/api/clubs/${clubId}/equipment/${equipmentId}`, {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ 
-                    cleaning_interval_days: value,
-                    last_cleaned_at: payload.lastCleanedAt
-                })
-            })
-            if (res.ok) {
-                const updatedEquipment = await res.json()
-                mergeEquipmentState(equipmentId, updatedEquipment)
-            }
-        } catch (error) {
-            console.error("Error updating interval:", error)
-        } finally {
-            setSavingIntervalId(null)
-        }
-    }, [clubId, mergeEquipmentState])
-
-    const handleCpuThermalSave = useCallback(async (equipmentId: string, payload: { changedAt: string | null; intervalDays: number | null; type: string | null; note: string | null }) => {
-        const intervalValue = payload.intervalDays
-        if (intervalValue !== null && intervalValue < 1) return
-
-        setSavingCpuThermalId(equipmentId)
-        try {
-            const res = await fetch(`/api/clubs/${clubId}/equipment/${equipmentId}`, {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    cpu_thermal_paste_last_changed_at: payload.changedAt,
-                    cpu_thermal_paste_interval_days: intervalValue,
-                    cpu_thermal_paste_type: payload.type,
-                    cpu_thermal_paste_note: payload.note
-                })
-            })
-            if (res.ok) {
-                const updatedEquipment = await res.json()
-                mergeEquipmentState(equipmentId, updatedEquipment)
-            }
-        } catch (error) {
-            console.error("Error updating CPU maintenance:", error)
-        } finally {
-            setSavingCpuThermalId(null)
-        }
-    }, [clubId, mergeEquipmentState])
-
-    const handleGpuThermalSave = useCallback(async (equipmentId: string, payload: { changedAt: string | null; intervalDays: number | null; type: string | null; note: string | null }) => {
-        const intervalValue = payload.intervalDays
-        if (intervalValue !== null && intervalValue < 1) return
-
-        setSavingGpuThermalId(equipmentId)
-        try {
-            const res = await fetch(`/api/clubs/${clubId}/equipment/${equipmentId}`, {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    gpu_thermal_paste_last_changed_at: payload.changedAt,
-                    gpu_thermal_paste_interval_days: intervalValue,
-                    gpu_thermal_paste_type: payload.type,
-                    gpu_thermal_paste_note: payload.note
-                })
-            })
-            if (res.ok) {
-                const updatedEquipment = await res.json()
-                mergeEquipmentState(equipmentId, updatedEquipment)
-            }
-        } catch (error) {
-            console.error("Error updating GPU maintenance:", error)
-        } finally {
-            setSavingGpuThermalId(null)
-        }
-    }, [clubId, mergeEquipmentState])
-
-    const handleAssignWorkstation = useCallback(async (userId: string | null) => {
-        if (!detailsWorkstationId) return
-
-        setIsAssigningWorkstationId(detailsWorkstationId)
-        try {
-            const res = await fetch(`/api/clubs/${clubId}/workstations/${detailsWorkstationId}`, {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ assigned_user_id: userId })
-            })
-            
-            if (res.ok) {
-                const updatedWorkstation = await res.json()
-                mergeWorkstationState(detailsWorkstationId, {
-                    ...updatedWorkstation,
-                    assigned_user_name: userId ? (employeeNameById.get(userId) ?? null) : null
-                })
-                setEquipment(prev => prev.map(item => (
-                    item.workstation_id === detailsWorkstationId
-                        ? {
-                            ...item,
-                            assigned_user_id: null,
-                            assignment_mode: 'INHERIT',
-                            maintenance_enabled: userId ? true : false
-                        }
-                        : item
-                )))
-            }
-        } catch (error) {
-            console.error("Error assigning workstation:", error)
-        } finally {
-            setIsAssigningWorkstationId(null)
-        }
-    }, [clubId, detailsWorkstationId, employeeNameById, mergeWorkstationState])
-
-    const activeWorkstation = useMemo(() => {
-        return workstations.find(w => w.id === detailsWorkstationId) || null
-    }, [workstations, detailsWorkstationId])
-
-    const activeEquipment = useMemo(() => {
-        if (!detailsWorkstationId) return []
-        return equipmentByWorkstationId.get(detailsWorkstationId) ?? []
-    }, [detailsWorkstationId, equipmentByWorkstationId])
-
-    const getEquipmentIcon = useCallback((type: string) => {
-        switch(type) {
-            case 'PC': return <Monitor className="h-4 w-4" />
-            case 'MOUSE': return <MousePointer2 className="h-4 w-4" />
-            case 'KEYBOARD': return <Keyboard className="h-4 w-4" />
-            case 'HEADSET': return <Headphones className="h-4 w-4" />
-            case 'CONSOLE': return <Gamepad2 className="h-4 w-4" />
-            case 'GAMEPAD': return <Gamepad className="h-4 w-4" />
-            case 'TV': return <Tv className="h-4 w-4" />
-            case 'VR_HEADSET': return <Glasses className="h-4 w-4" />
-            case 'MOUSEPAD': return <Square className="h-4 w-4" />
-            case 'CHAIR': return <Sofa className="h-4 w-4" />
-            default: return <Wrench className="h-4 w-4" />
-        }
-    }, [])
-
-    const getIssueStatusBadge = useCallback((status: string) => {
-        switch (status) {
-            case 'OPEN': return <Badge variant="secondary" className="bg-slate-200 text-slate-700 hover:bg-slate-300">Открыто</Badge>
-            case 'IN_PROGRESS': return <Badge className="bg-blue-500 hover:bg-blue-600">В работе</Badge>
-            case 'RESOLVED': return <Badge className="bg-green-500 hover:bg-green-600">Решено</Badge>
-            case 'CLOSED': return <Badge variant="outline" className="text-slate-500 border-slate-300">Закрыто</Badge>
-            default: return null
-        }
-    }, [])
+        router.push(`/clubs/${clubId}/equipment/workplaces/${wsId}`)
+    }, [clubId, router])
 
     const zonesContent = useMemo(() => {
         if (zones.length === 0 && !isLoading) {
@@ -514,8 +490,10 @@ export default function WorkplacesPage() {
                         <MapPin className="h-10 w-10 text-slate-300" />
                     </div>
                     <h3 className="text-lg font-bold">Зоны не созданы</h3>
-                    <p className="text-sm text-muted-foreground mb-6">Создайте первое рабочее место, чтобы организовать пространство клуба</p>
-                    <Button onClick={() => handleCreate()} variant="outline">Создать первое место</Button>
+                    <p className="text-sm text-muted-foreground mb-6">Сначала настройте зоны клуба, после этого можно будет создавать рабочие места.</p>
+                    <Button asChild variant="outline">
+                        <Link href={`/clubs/${clubId}/equipment/settings?tab=zones`}>Перейти к зонам</Link>
+                    </Button>
                 </div>
             )
         }
@@ -525,57 +503,75 @@ export default function WorkplacesPage() {
                 key={zone}
                 zone={zone}
                 workstations={workstationsByZone.get(zone) ?? []}
+                zoneAssignedUserName={zoneMetaByName.get(zone)?.assigned_user_name ?? null}
                 equipmentByWorkstationId={equipmentByWorkstationId}
                 activeIssueCountByWorkstationId={activeIssueCountByWorkstationId}
                 activeIssueCountByEquipmentId={activeIssueCountByEquipmentId}
+                maintenanceStatusByEquipmentId={maintenanceStatusByEquipmentId}
+                overdueMaintenanceCountByWorkstationId={overdueMaintenanceCountByWorkstationId}
+                servicedMaintenanceCountByWorkstationId={servicedMaintenanceCountByWorkstationId}
+                disabledMaintenanceCountByWorkstationId={disabledMaintenanceCountByWorkstationId}
                 zoneIssuesCount={zoneIssueCountByName.get(zone) ?? 0}
+                zoneRepairCount={zoneRepairCountByName.get(zone) ?? 0}
+                zoneEmptyCount={zoneEmptyCountByName.get(zone) ?? 0}
+                zoneUnassignedCount={zoneUnassignedCountByName.get(zone) ?? 0}
+                zoneOverdueMaintenanceCount={zoneOverdueMaintenanceCountByName.get(zone) ?? 0}
+                zoneServicedMaintenanceCount={zoneServicedMaintenanceCountByName.get(zone) ?? 0}
+                zoneDisabledMaintenanceCount={zoneDisabledMaintenanceCountByName.get(zone) ?? 0}
                 onOpenDetails={handleOpenDetails}
-                onEdit={handleEdit}
-                onDelete={handleDelete}
                 onOpenAssignDialog={handleOpenAssignDialog}
                 onCreate={handleCreate}
                 onUnassignEquipment={handleUnassignEquipment}
-                renderEquipmentIcon={getEquipmentIcon}
             />
         ))
     }, [
         activeIssueCountByEquipmentId,
         activeIssueCountByWorkstationId,
         equipmentByWorkstationId,
-        getEquipmentIcon,
         handleCreate,
-        handleDelete,
-        handleEdit,
         handleOpenAssignDialog,
         handleOpenDetails,
         handleUnassignEquipment,
         isLoading,
+        maintenanceStatusByEquipmentId,
+        overdueMaintenanceCountByWorkstationId,
+        servicedMaintenanceCountByWorkstationId,
+        disabledMaintenanceCountByWorkstationId,
+        zoneEmptyCountByName,
+        zoneDisabledMaintenanceCountByName,
+        zoneOverdueMaintenanceCountByName,
         workstationsByZone,
         zoneIssueCountByName,
-        zones
+        zoneMetaByName,
+        zoneRepairCountByName,
+        zoneServicedMaintenanceCountByName,
+        zoneUnassignedCountByName,
+        zones,
+        clubId
     ])
 
     return (
-        <div className="p-8 space-y-8 max-w-[1600px] mx-auto">
+        <div className="mx-auto max-w-[1600px] space-y-6 p-4 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:space-y-8 sm:p-6 sm:pb-[calc(6.5rem+env(safe-area-inset-bottom))] md:pb-8 lg:p-8">
             <div className="flex flex-col gap-4">
-                <Link href={`/clubs/${clubId}/equipment`} className="flex items-center text-sm text-muted-foreground hover:text-foreground transition-colors">
-                    <div className="p-2 rounded-full hover:bg-slate-100">
-                        <ChevronLeft className="h-5 w-5" />
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="min-w-0">
+                        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Рабочие места</h1>
+                        <p className="mt-1 text-sm text-muted-foreground sm:text-base">Обзор зон, мест и подключенного оборудования</p>
                     </div>
-                </Link>
-                <div className="flex items-center justify-between">
-                    <div>
-                        <h1 className="text-3xl font-bold tracking-tight">🗺 Управление местами</h1>
-                        <p className="text-muted-foreground mt-1">Визуальная схема рабочих мест и подключенного оборудования</p>
-                    </div>
-                    <div className="flex gap-2">
-                        <ManageZonesDialog
-                            clubId={clubId as string}
-                            zones={zoneList}
-                            employees={employees}
-                            onZonesChange={fetchData}
-                        />
-                        <Button onClick={() => handleCreate()} className="bg-primary shadow-md hover:bg-primary/90">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap lg:justify-end">
+                        <Button asChild variant="outline" className="hidden w-full md:inline-flex md:w-auto">
+                            <Link href={`/clubs/${clubId}/equipment`}>
+                                <ChevronLeft className="mr-2 h-4 w-4" />
+                                Назад
+                            </Link>
+                        </Button>
+                        <Button asChild variant="outline" className="w-full sm:w-auto">
+                            <Link href={`/clubs/${clubId}/equipment/settings?tab=zones`}>
+                                <Settings2 className="mr-2 h-4 w-4" />
+                                Настройки зон
+                            </Link>
+                        </Button>
+                        <Button onClick={() => handleCreate()} disabled={zones.length === 0} className="w-full bg-primary shadow-md hover:bg-primary/90 disabled:opacity-60 sm:w-auto">
                             <Plus className="mr-2 h-4 w-4" />
                             Создать место
                         </Button>
@@ -587,35 +583,8 @@ export default function WorkplacesPage() {
                 {zonesContent}
             </div>
 
-            {isDetailsOpen && activeWorkstation ? (
-                <WorkstationDetailsDialog
-                    open={isDetailsOpen}
-                    onOpenChange={(open) => {
-                        setIsDetailsOpen(open)
-                        if (!open) setDetailsWorkstationId(null)
-                    }}
-                    clubId={clubId as string}
-                    workstation={activeWorkstation}
-                    equipment={activeEquipment}
-                    employees={employees}
-                    equipmentById={equipmentById}
-                    isAssigningWorkstationId={isAssigningWorkstationId}
-                    isSavingIntervalId={savingIntervalId}
-                    isSavingCpuThermalId={savingCpuThermalId}
-                    isSavingGpuThermalId={savingGpuThermalId}
-                    onAssignWorkstation={handleAssignWorkstation}
-                    onOpenAssignDialog={handleOpenAssignDialog}
-                    onUnassignEquipment={handleUnassignEquipment}
-                    onToggleMaintenance={handleToggleMaintenance}
-                    onSaveInterval={handleSaveInterval}
-                    onSaveCpuThermal={handleCpuThermalSave}
-                    onSaveGpuThermal={handleGpuThermalSave}
-                    renderEquipmentIcon={getEquipmentIcon}
-                    renderIssueStatusBadge={getIssueStatusBadge}
-                />
-            ) : null}
-
             <WorkplaceFormDialog
+                clubId={clubId as string}
                 open={isDialogOpen}
                 onOpenChange={(open) => {
                     if (!open) closeWorkplaceDialog()
@@ -632,9 +601,66 @@ export default function WorkplacesPage() {
                 onOpenChange={setIsAssignDialogOpen}
                 equipment={equipment}
                 equipmentTypes={equipmentTypes}
+                workstationName={selectedWorkstation?.name ?? null}
                 onAssignEquipment={handleAssignEquipment}
                 renderEquipmentIcon={getEquipmentIcon}
             />
+
+            <Dialog open={Boolean(pendingUnassignEquipmentId)} onOpenChange={(open) => {
+                if (!open && !isUnassigningEquipmentId) {
+                    setPendingUnassignEquipmentId(null)
+                }
+            }}>
+                <DialogContent className="[&>button]:hidden sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <AlertTriangle className="h-5 w-5 text-amber-500" />
+                            Убрать оборудование с места?
+                        </DialogTitle>
+                        <DialogDescription className="space-y-2 text-left">
+                            <span className="block">
+                                Оборудование <span className="font-medium text-slate-900">"{pendingUnassignEquipment?.name || "Без названия"}"</span>
+                                {pendingUnassignWorkstationName ? (
+                                    <> будет снято с места <span className="font-medium text-slate-900">"{pendingUnassignWorkstationName}"</span>.</>
+                                ) : (
+                                    <> будет отвязано от текущего места.</>
+                                )}
+                            </span>
+                            <span className="block">
+                                После подтверждения устройство автоматически переместится на склад и исчезнет из комплектации этого места.
+                            </span>
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter className="gap-2">
+                        <Button
+                            variant="outline"
+                            onClick={() => setPendingUnassignEquipmentId(null)}
+                            disabled={Boolean(isUnassigningEquipmentId)}
+                        >
+                            Отмена
+                        </Button>
+                        <Button
+                            variant="destructive"
+                            onClick={confirmUnassignEquipment}
+                            disabled={Boolean(isUnassigningEquipmentId)}
+                        >
+                            {isUnassigningEquipmentId ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                            Подтвердить
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur supports-[backdrop-filter]:bg-background/80 md:hidden">
+                <div className="mx-auto flex max-w-7xl gap-2">
+                    <Button asChild variant="outline" className="h-11 flex-1">
+                        <Link href={`/clubs/${clubId}/equipment`}>
+                            <ChevronLeft className="mr-2 h-4 w-4" />
+                            Назад
+                        </Link>
+                    </Button>
+                </div>
+            </div>
         </div>
     )
 }
