@@ -18,9 +18,25 @@ if (!process.env.DATABASE_URL) {
     process.exit(1);
 }
 
-const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-});
+function buildPoolConfig(connectionString) {
+    const url = new URL(connectionString);
+    const config = {
+        host: url.hostname,
+        port: Number(url.port || 5432),
+        user: decodeURIComponent(url.username),
+        password: decodeURIComponent(url.password),
+        database: url.pathname.replace(/^\//, ''),
+    };
+
+    const sslMode = url.searchParams.get('sslmode');
+    if (sslMode && sslMode !== 'disable') {
+        config.ssl = { rejectUnauthorized: false };
+    }
+
+    return config;
+}
+
+const pool = new Pool(buildPoolConfig(process.env.DATABASE_URL));
 
 async function run() {
     try {

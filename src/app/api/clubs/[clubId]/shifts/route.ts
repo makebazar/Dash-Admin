@@ -46,6 +46,9 @@ export async function GET(
                 s.expenses,
                 s.report_comment,
                 s.report_data,
+                s.has_owner_corrections,
+                s.owner_correction_changes,
+                s.owner_notes,
                 s.status,
                 s.shift_type
              FROM shifts s

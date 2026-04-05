@@ -4,6 +4,132 @@ import { cookies } from 'next/headers';
 import { calculateSalary } from '@/lib/salary-calculator';
 import { ensureOwnerSubscriptionActive } from '@/lib/club-subscription-guard';
 
+type OwnerCorrectionChange = {
+    field: string;
+    label: string;
+    before: any;
+    after: any;
+};
+
+const SHIFT_CHANGE_LABELS: Record<string, string> = {
+    check_in: 'Начало смены',
+    check_out: 'Окончание смены',
+    total_hours: 'Часы',
+    cash_income: 'Наличные',
+    card_income: 'Безнал',
+    expenses: 'Расходы',
+    report_comment: 'Комментарий сотрудника',
+    shift_type: 'Тип смены',
+};
+
+const REPORT_DATA_LABELS: Record<string, string> = {
+    cash_income: 'Наличные',
+    card_income: 'Безнал',
+    expenses_cash: 'Расходы',
+    shift_comment: 'Комментарий сотрудника',
+    expenses: 'Расходы',
+};
+
+function normalizeForComparison(value: any): any {
+    if (value === undefined || value === null) return null;
+    if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (trimmed === '') return '';
+
+        const date = new Date(trimmed);
+        if (!Number.isNaN(date.getTime()) && (trimmed.includes('T') || trimmed.includes('-') || trimmed.includes(':'))) {
+            return date.toISOString();
+        }
+
+        const numericValue = Number(trimmed);
+        if (!Number.isNaN(numericValue)) {
+            return numericValue;
+        }
+
+        return trimmed;
+    }
+    if (typeof value === 'number') {
+        return Number.isFinite(value) ? value : null;
+    }
+    if (typeof value === 'boolean') {
+        return value;
+    }
+    if (Array.isArray(value)) {
+        return value.map((item) => normalizeForComparison(item));
+    }
+    if (typeof value === 'object') {
+        return Object.keys(value)
+            .sort()
+            .reduce<Record<string, any>>((acc, key) => {
+                acc[key] = normalizeForComparison(value[key]);
+                return acc;
+            }, {});
+    }
+    return value;
+}
+
+function areValuesEqual(before: any, after: any) {
+    return JSON.stringify(normalizeForComparison(before)) === JSON.stringify(normalizeForComparison(after));
+}
+
+function getReportDataLabel(metricKey: string, reportFieldLabels: Record<string, string>) {
+    return reportFieldLabels[metricKey] || REPORT_DATA_LABELS[metricKey] || metricKey;
+}
+
+function buildOwnerCorrectionChanges(
+    currentShift: any,
+    body: any,
+    calculatedExpenses: any,
+    reportFieldLabels: Record<string, string>
+): OwnerCorrectionChange[] {
+    const changes: OwnerCorrectionChange[] = [];
+
+    const appendChange = (field: string, label: string, before: any, after: any) => {
+        if (!areValuesEqual(before, after)) {
+            changes.push({ field, label, before, after });
+        }
+    };
+
+    const comparableFields = [
+        { field: 'check_in', nextValue: body.check_in },
+        { field: 'check_out', nextValue: body.check_out },
+        { field: 'total_hours', nextValue: body.total_hours },
+        { field: 'cash_income', nextValue: body.cash_income },
+        { field: 'card_income', nextValue: body.card_income },
+        { field: 'expenses', nextValue: calculatedExpenses },
+        { field: 'report_comment', nextValue: body.report_comment },
+        { field: 'shift_type', nextValue: body.shift_type },
+    ];
+
+    comparableFields.forEach(({ field, nextValue }) => {
+        if (nextValue === undefined) return;
+        appendChange(field, SHIFT_CHANGE_LABELS[field] || field, currentShift[field], nextValue);
+    });
+
+    if (body.report_data !== undefined) {
+        const currentReportData = currentShift.report_data || {};
+        const nextReportData = body.report_data || {};
+        const reportKeys = new Set([
+            ...Object.keys(currentReportData),
+            ...Object.keys(nextReportData),
+        ]);
+
+        Array.from(reportKeys)
+            .filter((key) => !key.startsWith('_'))
+            .sort()
+            .forEach((key) => {
+                appendChange(
+                    `report_data.${key}`,
+                    getReportDataLabel(key, reportFieldLabels),
+                    currentReportData[key],
+                    nextReportData[key]
+                );
+            });
+    }
+
+    return changes;
+}
+
 // Helper function to create finance transactions from shift
 async function createFinanceTransactionsFromShift(
     shiftId: string,
@@ -326,7 +452,8 @@ export async function PATCH(
 
         // Fetch current shift data to merge with updates for calculation
         const currentShiftRes = await query(
-            `SELECT user_id, total_hours, cash_income, card_income, expenses, report_data, check_in, shift_type, status 
+            `SELECT user_id, total_hours, cash_income, card_income, expenses, report_data, report_comment,
+                    check_in, check_out, shift_type, status, verified_by, owner_correction_changes
              FROM shifts WHERE id = $1`,
             [shiftId]
         );
@@ -336,6 +463,28 @@ export async function PATCH(
         }
 
         const currentShift = currentShiftRes.rows[0];
+        let reportFieldLabels: Record<string, string> = {};
+
+        if (body.report_data !== undefined) {
+            const reportTemplateRes = await query(
+                `SELECT schema
+                 FROM club_report_templates
+                 WHERE club_id = $1 AND is_active = true
+                 ORDER BY created_at DESC
+                 LIMIT 1`,
+                [clubId]
+            );
+
+            const schema = reportTemplateRes.rows[0]?.schema;
+            if (Array.isArray(schema)) {
+                reportFieldLabels = schema.reduce<Record<string, string>>((acc, field: any) => {
+                    if (field?.metric_key) {
+                        acc[field.metric_key] = field.custom_label || field.label || field.metric_key;
+                    }
+                    return acc;
+                }, {});
+            }
+        }
 
         // Helper to sum numeric values from report data (handles numbers, strings, and expense arrays)
         const sumMetric = (val: any) => {
@@ -363,6 +512,13 @@ export async function PATCH(
             check_in: body.check_in !== undefined ? body.check_in : currentShift.check_in,
             shift_type: body.shift_type !== undefined ? body.shift_type : currentShift.shift_type
         };
+
+        const ownerCorrectionChanges = buildOwnerCorrectionChanges(
+            currentShift,
+            body,
+            calculatedExpenses,
+            reportFieldLabels
+        );
 
         // Calculate Salary
         let calculatedSalary = null;
@@ -479,11 +635,11 @@ export async function PATCH(
 
         // Handle owner corrections flag
         if (currentShift.status === 'CLOSED' && body.status !== 'VERIFIED') {
-            // If owner is editing a CLOSED shift (not verifying it), mark has_owner_corrections
-            if (body.cash_income !== undefined || body.card_income !== undefined ||
-                body.expenses !== undefined || body.report_data !== undefined) {
+            if (ownerCorrectionChanges.length > 0) {
                 updates.push(`has_owner_corrections = $${paramIndex++}`);
                 values.push(true);
+                updates.push(`owner_correction_changes = $${paramIndex++}`);
+                values.push(JSON.stringify(ownerCorrectionChanges));
             }
         }
 

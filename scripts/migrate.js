@@ -9,6 +9,24 @@ const dotenv = require('dotenv')
 dotenv.config({ path: path.join(process.cwd(), '.env.local') })
 dotenv.config({ path: path.join(process.cwd(), '.env') })
 
+function buildPoolConfig(connectionString) {
+  const url = new URL(connectionString)
+  const config = {
+    host: url.hostname,
+    port: Number(url.port || 5432),
+    user: decodeURIComponent(url.username),
+    password: decodeURIComponent(url.password),
+    database: url.pathname.replace(/^\//, ''),
+  }
+
+  const sslMode = url.searchParams.get('sslmode')
+  if (sslMode && sslMode !== 'disable') {
+    config.ssl = { rejectUnauthorized: false }
+  }
+
+  return config
+}
+
 function readSql(filePath) {
   return fs.readFileSync(filePath, 'utf8')
 }
@@ -69,7 +87,7 @@ async function migrate() {
     process.exit(1)
   }
 
-  const pool = new Pool({ connectionString: process.env.DATABASE_URL })
+  const pool = new Pool(buildPoolConfig(process.env.DATABASE_URL))
   try {
     const mode = await getMigrationTableMode(pool)
 
@@ -183,4 +201,3 @@ migrate().catch((err) => {
   console.error('❌ Critical migration error:', err.message)
   process.exit(1)
 })
-

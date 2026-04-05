@@ -46,9 +46,10 @@ interface RichTextEditorProps {
     onChange: (content: string) => void;
     placeholder?: string;
     className?: string;
+    compactToolbar?: boolean;
 }
 
-export function RichTextEditor({ value, onChange, placeholder, className }: RichTextEditorProps) {
+export function RichTextEditor({ value, onChange, placeholder, className, compactToolbar = false }: RichTextEditorProps) {
     const [mounted, setMounted] = useState(false);
     const textPalette = ["#0f172a", "#334155", "#2563eb", "#16a34a", "#ca8a04", "#dc2626", "#9333ea"];
     const highlightPalette = ["#fef08a", "#bfdbfe", "#bbf7d0", "#fecaca", "#e9d5ff", "#fed7aa"];
@@ -157,8 +158,20 @@ export function RichTextEditor({ value, onChange, placeholder, className }: Rich
 
     return (
         <div className={cn("relative w-full", className)}>
-            <div className="sticky top-0 z-20 mb-4 rounded-lg border bg-white/95 backdrop-blur p-2">
-                <div className="flex flex-wrap items-center gap-1">
+            <div
+                className={cn(
+                    "sticky top-0 z-20 mb-4 rounded-lg border bg-white/95 backdrop-blur",
+                    compactToolbar ? "px-2 py-2" : "p-2"
+                )}
+            >
+                <div
+                    className={cn(
+                        "flex items-center gap-1",
+                        compactToolbar
+                            ? "flex-nowrap overflow-x-auto whitespace-nowrap scrollbar-none [-ms-overflow-style:none] [scrollbar-width:none]"
+                            : "flex-wrap"
+                    )}
+                >
                     <Button type="button" variant="ghost" size="sm" onClick={() => editor.chain().focus().setParagraph().run()} className={cn("h-8 w-8 p-0", editor.isActive("paragraph") && "bg-slate-100")} title="Текст"><Pilcrow className="h-4 w-4" /></Button>
                     <Button type="button" variant="ghost" size="sm" onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()} className={cn("h-8 w-8 p-0", editor.isActive("heading", { level: 1 }) && "bg-slate-100")} title="H1"><Heading1 className="h-4 w-4" /></Button>
                     <Button type="button" variant="ghost" size="sm" onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} className={cn("h-8 w-8 p-0", editor.isActive("heading", { level: 2 }) && "bg-slate-100")} title="H2"><Heading2 className="h-4 w-4" /></Button>
@@ -215,7 +228,7 @@ export function RichTextEditor({ value, onChange, placeholder, className }: Rich
                     <Button type="button" variant="ghost" size="sm" onClick={setLink} className={cn("h-8 w-8 p-0", editor.isActive("link") && "bg-slate-100")} title="Ссылка"><LinkIcon className="h-4 w-4" /></Button>
                     <Button type="button" variant="ghost" size="sm" onClick={() => editor.chain().focus().unsetLink().run()} className="h-8 w-8 p-0" title="Убрать ссылку"><Unlink className="h-4 w-4" /></Button>
                     <Button type="button" variant="ghost" size="sm" onClick={addImage} className="h-8 w-8 p-0" title="Изображение"><ImageIcon className="h-4 w-4" /></Button>
-                    <div className="ml-auto flex items-center gap-1">
+                    <div className={cn("flex items-center gap-1", compactToolbar ? "pl-1" : "ml-auto")}>
                         <Button type="button" variant="ghost" size="sm" onClick={() => editor.chain().focus().undo().run()} disabled={!editor.can().chain().focus().undo().run()} className="h-8 w-8 p-0" title="Отменить"><Undo className="h-4 w-4" /></Button>
                         <Button type="button" variant="ghost" size="sm" onClick={() => editor.chain().focus().redo().run()} disabled={!editor.can().chain().focus().redo().run()} className="h-8 w-8 p-0" title="Повторить"><Redo className="h-4 w-4" /></Button>
                     </div>
@@ -242,7 +255,7 @@ export function RichTextEditor({ value, onChange, placeholder, className }: Rich
                 </div>
             </BubbleMenu>
 
-            <div className="rounded-lg border bg-white px-6">
+            <div className={cn("rounded-lg border bg-white", compactToolbar ? "px-4 md:px-6" : "px-6")}>
                 <EditorContent editor={editor} />
             </div>
 

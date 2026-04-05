@@ -12,33 +12,213 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Loader2, Clock, DollarSign, FileText, Eye, TrendingUp, Wallet, Edit, CheckCircle, CalendarDays, Sun, Moon, Trash2, ArrowUpDown, ChevronLeft, ChevronRight, RefreshCw, CheckSquare, Wrench, Package } from "lucide-react"
+import { Loader2, Clock, DollarSign, FileText, TrendingUp, Wallet, Edit, CheckCircle, CalendarDays, Sun, Moon, Trash2, ArrowUpDown, ChevronRight, RefreshCw, AlertTriangle } from "lucide-react"
 import { ShiftExcelImport } from "@/components/payroll/ShiftExcelImport"
 import { cn } from "@/lib/utils"
+import { useRouter } from "next/navigation"
 
-// Manual mask for DD.MM.YYYY
-const formatDisplayDate = (value: string) => {
-    const digits = value.replace(/\D/g, "");
-    let formatted = digits;
-    if (digits.length > 2) formatted = `${digits.slice(0, 2)}.${digits.slice(2)}`;
-    if (digits.length > 4) formatted = `${digits.slice(0, 2)}.${digits.slice(2, 4)}.${digits.slice(4, 8)}`;
-    return formatted.slice(0, 10);
-};
+const DATE_MASK_TEMPLATE = "__.__.____"
+const DATE_EDITABLE_POSITIONS = [0, 1, 3, 4, 6, 7, 8, 9] as const
+const DATE_COMPLETE_REGEX = /^(\d{2})\.(\d{2})\.(\d{4})$/
 
-// Helper to convert DD.MM.YYYY to YYYY-MM-DD
-const dateToInternal = (displayStr: string) => {
-    if (!displayStr || displayStr.length < 10) return ''
-    const [d, m, y] = displayStr.split('.')
-    return `${y}-${m}-${d}`
+const buildMaskedDateDisplay = (digits: string[]) => {
+    const chars = DATE_MASK_TEMPLATE.split("")
+    let hasAnyDigits = false
+
+    DATE_EDITABLE_POSITIONS.forEach((pos, index) => {
+        const digit = digits[index] && /\d/.test(digits[index]) ? digits[index] : "_"
+        if (digit !== "_") hasAnyDigits = true
+        chars[pos] = digit
+    })
+
+    return hasAnyDigits ? chars.join("") : ""
 }
 
-// Helper to convert YYYY-MM-DD to DD.MM.YYYY
+const extractMaskedDateDigits = (display: string) =>
+    DATE_EDITABLE_POSITIONS.map((pos) => {
+        const char = display[pos] || "_"
+        return /\d/.test(char) ? char : "_"
+    })
+
+const dateToInternal = (displayStr: string) => {
+    const match = displayStr.match(DATE_COMPLETE_REGEX)
+    if (!match) return ""
+
+    const [, dd, mm, yyyy] = match
+    const day = Number(dd)
+    const month = Number(mm)
+    const year = Number(yyyy)
+
+    if (month < 1 || month > 12 || day < 1) return ""
+
+    const parsed = new Date(`${yyyy}-${mm}-${dd}T00:00:00`)
+    if (Number.isNaN(parsed.getTime())) return ""
+    if (
+        parsed.getFullYear() !== year ||
+        parsed.getMonth() + 1 !== month ||
+        parsed.getDate() !== day
+    ) {
+        return ""
+    }
+
+    return `${yyyy}-${mm}-${dd}`
+}
+
 const dateToDisplay = (internalStr: string) => {
     if (!internalStr) return ''
     const parts = internalStr.split('-')
     if (parts.length !== 3) return ''
     const [y, m, d] = parts
     return `${d}.${m}.${y}`
+}
+
+type MaskedDateInputProps = Omit<React.ComponentProps<typeof Input>, "value" | "onChange"> & {
+    value: string
+    onValueChange: (displayValue: string, internalValue: string) => void
+}
+
+function MaskedDateInput({ value, onValueChange, className, placeholder = "ДД.ММ.ГГГГ", ...props }: MaskedDateInputProps) {
+    const inputRef = useRef<HTMLInputElement>(null)
+
+    const setCaretToSlot = useCallback((slot: number) => {
+        const safeSlot = Math.max(0, Math.min(slot, DATE_EDITABLE_POSITIONS.length - 1))
+        const caretPos = DATE_EDITABLE_POSITIONS[safeSlot]
+        requestAnimationFrame(() => {
+            inputRef.current?.setSelectionRange(caretPos, caretPos)
+        })
+    }, [])
+
+    const setCaretToPosition = useCallback((position: number) => {
+        requestAnimationFrame(() => {
+            inputRef.current?.setSelectionRange(position, position)
+        })
+    }, [])
+
+    const findSlotAtOrAfter = useCallback((position: number) => {
+        return DATE_EDITABLE_POSITIONS.findIndex((pos) => pos >= position)
+    }, [])
+
+    const findSlotAtOrBefore = useCallback((position: number) => {
+        for (let i = DATE_EDITABLE_POSITIONS.length - 1; i >= 0; i -= 1) {
+            if (DATE_EDITABLE_POSITIONS[i] <= position) return i
+        }
+        return -1
+    }, [])
+
+    const commitDigits = useCallback((digits: string[], nextCaretSlot?: number) => {
+        const nextDisplay = buildMaskedDateDisplay(digits)
+        onValueChange(nextDisplay, dateToInternal(nextDisplay))
+        if (typeof nextCaretSlot === "number") {
+            setCaretToSlot(nextCaretSlot)
+        }
+    }, [onValueChange, setCaretToSlot])
+
+    const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+        const currentValue = value || ""
+        const digits = extractMaskedDateDigits(currentValue)
+        const selectionStart = e.currentTarget.selectionStart ?? 0
+
+        if (/^\d$/.test(e.key)) {
+            e.preventDefault()
+            const slot = findSlotAtOrAfter(selectionStart)
+            if (slot === -1) return
+            digits[slot] = e.key
+            commitDigits(digits, Math.min(slot + 1, DATE_EDITABLE_POSITIONS.length - 1))
+            return
+        }
+
+        if (e.key === "Backspace") {
+            e.preventDefault()
+            const slot = findSlotAtOrBefore(Math.max(selectionStart - 1, 0))
+            if (slot === -1) return
+            digits[slot] = "_"
+            commitDigits(digits, slot)
+            return
+        }
+
+        if (e.key === "Delete") {
+            e.preventDefault()
+            const slot = findSlotAtOrAfter(selectionStart)
+            if (slot === -1) return
+            digits[slot] = "_"
+            commitDigits(digits, slot)
+            return
+        }
+
+        if (e.key === "ArrowLeft") {
+            e.preventDefault()
+            const slot = findSlotAtOrBefore(Math.max(selectionStart - 1, 0))
+            if (slot === -1) {
+                setCaretToPosition(0)
+            } else {
+                setCaretToSlot(slot)
+            }
+            return
+        }
+
+        if (e.key === "ArrowRight") {
+            e.preventDefault()
+            const slot = findSlotAtOrAfter(selectionStart + 1)
+            if (slot === -1) {
+                setCaretToPosition(DATE_MASK_TEMPLATE.length)
+            } else {
+                setCaretToSlot(slot)
+            }
+            return
+        }
+
+        if (e.key === "Home") {
+            e.preventDefault()
+            setCaretToPosition(0)
+            return
+        }
+
+        if (e.key === "End") {
+            e.preventDefault()
+            setCaretToPosition(DATE_MASK_TEMPLATE.length)
+        }
+    }, [commitDigits, findSlotAtOrAfter, findSlotAtOrBefore, setCaretToPosition, setCaretToSlot, value])
+
+    const handlePaste = useCallback((e: React.ClipboardEvent<HTMLInputElement>) => {
+        e.preventDefault()
+        const pastedDigits = e.clipboardData.getData("text").replace(/\D/g, "")
+        if (!pastedDigits) return
+
+        const digits = extractMaskedDateDigits(value || "")
+        const selectionStart = e.currentTarget.selectionStart ?? 0
+        let slot = findSlotAtOrAfter(selectionStart)
+        if (slot === -1) slot = 0
+
+        for (const digit of pastedDigits) {
+            if (slot >= digits.length) break
+            digits[slot] = digit
+            slot += 1
+        }
+
+        commitDigits(digits, Math.min(slot, DATE_EDITABLE_POSITIONS.length - 1))
+    }, [commitDigits, findSlotAtOrAfter, value])
+
+    const handleFocus = useCallback((e: React.FocusEvent<HTMLInputElement>) => {
+        if (!e.currentTarget.value) {
+            setCaretToPosition(0)
+        }
+    }, [setCaretToPosition])
+
+    return (
+        <Input
+            {...props}
+            ref={inputRef}
+            value={value}
+            onChange={() => {}}
+            onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
+            onFocus={handleFocus}
+            inputMode="numeric"
+            autoComplete="off"
+            placeholder={placeholder}
+            className={className}
+        />
+    )
 }
 
 const DATE_TIME_MASK_TEMPLATE = "__.__.____, __:__"
@@ -90,15 +270,6 @@ const displayToLocalDateTime = (display: string) => {
     }
 
     return `${yyyy}-${mm}-${dd}T${hh}:${min}`
-}
-
-const localDateTimeToDisplay = (value: string) => {
-    if (!value) return ""
-    const [datePart, timePart] = value.split("T")
-    if (!datePart || !timePart) return ""
-    const [year, month, day] = datePart.split("-")
-    if (!year || !month || !day) return ""
-    return `${day}.${month}.${year}, ${timePart.slice(0, 5)}`
 }
 
 type MaskedDateTimeInputProps = Omit<React.ComponentProps<typeof Input>, "value" | "onChange"> & {
@@ -280,12 +451,13 @@ interface ShiftDetails {
 }
 
 export default function ShiftsPage({ params }: { params: Promise<{ clubId: string }> }) {
+    const router = useRouter()
     const [clubId, setClubId] = useState('')
     const [shifts, setShifts] = useState<Shift[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [selectedShift, setSelectedShift] = useState<Shift | null>(null)
-    const [selectedShiftDetails, setSelectedShiftDetails] = useState<ShiftDetails | null>(null)
-    const [isLoadingDetails, setIsLoadingDetails] = useState(false)
+    const [selectedShiftDetails] = useState<ShiftDetails | null>(null)
+    const [isLoadingDetails] = useState(false)
     const [editingShift, setEditingShift] = useState<Shift | null>(null)
     const [isSaving, setIsSaving] = useState(false)
 
@@ -320,6 +492,8 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
     // Date filter state
     const [filterStartDate, setFilterStartDate] = useState('')
     const [filterEndDate, setFilterEndDate] = useState('')
+    const [filterStartDateDisplay, setFilterStartDateDisplay] = useState('')
+    const [filterEndDateDisplay, setFilterEndDateDisplay] = useState('')
     const [filterEmployee, setFilterEmployee] = useState('')
     const [selectedMonth, setSelectedMonth] = useState<string>('0')
     const [editShiftType, setEditShiftType] = useState<'DAY' | 'NIGHT'>('DAY')
@@ -456,6 +630,8 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
         setSelectedMonth(String(monthOffset))
         setFilterStartDate(startStr)
         setFilterEndDate(endStr)
+        setFilterStartDateDisplay(dateToDisplay(startStr))
+        setFilterEndDateDisplay(dateToDisplay(endStr))
         
         setSortBy('check_in')
         setSortOrder('desc')
@@ -487,47 +663,6 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
         console.log(`[Filters] Clearing filters and resetting to current month`)
         setSelectedMonth('0')
         handleMonthSelect(0)
-    }
-
-    const getMonthName = (offset: number) => {
-        const date = new Date()
-        date.setDate(1)
-        date.setMonth(date.getMonth() + offset)
-        return date.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })
-    }
-
-    const formatForInput = useCallback((dateStr: string | null) => {
-        if (!dateStr) return ''
-        const d = new Date(dateStr)
-        const formatter = new Intl.DateTimeFormat('en-CA', {
-            timeZone: clubTimezone,
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: false
-        })
-        const parts = formatter.formatToParts(d)
-        const getPart = (type: string) => parts.find(p => p.type === type)?.value
-        return `${getPart('year')}-${getPart('month')}-${getPart('day')}T${getPart('hour')}:${getPart('minute')}`
-    }, [clubTimezone])
-
-    const openEditModal = (shift: Shift) => {
-        const nextCheckIn = formatForInput(shift.check_in)
-        const nextCheckOut = formatForInput(shift.check_out)
-        setEditingShift(shift)
-        setEditCashIncome(String(shift.cash_income || 0))
-        setEditCardIncome(String(shift.card_income || 0))
-        setEditExpenses(String(shift.expenses || 0))
-        setEditComment(shift.report_comment || '')
-        setEditOwnerNotes(shift.owner_notes || '')
-        setEditCheckIn(nextCheckIn)
-        setEditCheckOut(nextCheckOut)
-        setEditCheckInDisplay(localDateTimeToDisplay(nextCheckIn))
-        setEditCheckOutDisplay(localDateTimeToDisplay(nextCheckOut))
-        setEditShiftType(shift.shift_type || 'DAY')
-        setEditCustomFields(shift.report_data || {})
     }
 
     // Convert datetime-local value (User's Wall Clock in Club TZ) to UTC ISO string
@@ -646,67 +781,6 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
             alert('Ошибка удаления')
         } finally {
             setIsSaving(false)
-        }
-    }
-
-    const handleViewShift = async (shift: Shift) => {
-        setSelectedShift(shift)
-        setIsLoadingDetails(true)
-        setSelectedShiftDetails(null)
-        try {
-            const res = await fetch(`/api/clubs/${clubId}/shifts/${shift.id}`)
-            if (res.ok) {
-                const data = await res.json()
-                setSelectedShiftDetails(data)
-            }
-        } catch (e) {
-            console.error(e)
-        } finally {
-            setIsLoadingDetails(false)
-        }
-    }
-
-    const handleVerify = async (shift: Shift) => {
-        try {
-            const res = await fetch(`/api/clubs/${clubId}/shifts/${shift.id}`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ status: 'VERIFIED' })
-            })
-
-            if (res.ok) {
-                fetchShifts(clubId, filterStartDate, filterEndDate)
-            } else {
-                const data = await res.json()
-                alert(data.error || 'Ошибка')
-            }
-        } catch (error) {
-            console.error('Error:', error)
-            alert('Ошибка подтверждения')
-        }
-    }
-
-    const handleUnverify = async (shift: Shift) => {
-        if (!confirm('Отменить подтверждение смены? Транзакции будут удалены из финансов.')) {
-            return
-        }
-
-        try {
-            const res = await fetch(`/api/clubs/${clubId}/shifts/${shift.id}`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ status: 'CLOSED' })
-            })
-
-            if (res.ok) {
-                fetchShifts(clubId, filterStartDate, filterEndDate)
-            } else {
-                const data = await res.json()
-                alert(data.error || 'Ошибка')
-            }
-        } catch (error) {
-            console.error('Error:', error)
-            alert('Ошибка отмены подтверждения')
         }
     }
 
@@ -867,11 +941,14 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
         if (shift.status === 'VERIFIED') {
             if (shift.has_owner_corrections) {
                 return (
-                    <div className="flex items-center gap-2">
-                        <Badge className="bg-orange-500/10 text-orange-500 border-orange-500/20">
-                            ⚠️ Проверена с замечаниями
-                        </Badge>
-                    </div>
+                    <Badge
+                        className="bg-orange-500/10 text-orange-500 border-orange-500/20"
+                        aria-label="Подтверждена, есть правки"
+                        title="Подтверждена, есть правки"
+                    >
+                        <AlertTriangle className="mr-1 h-3.5 w-3.5" />
+                        Подтверждена
+                    </Badge>
                 )
             }
             return <Badge className="bg-green-500/10 text-green-500 border-green-500/20">✓ Подтверждена</Badge>
@@ -1100,21 +1177,19 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                     </div>
 
                     <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center lg:w-auto lg:flex-nowrap">
-                        <Input
-                            placeholder="ДД.ММ.ГГГГ"
-                            value={dateToDisplay(filterStartDate)}
-                            onChange={(e) => {
-                                const formatted = formatDisplayDate(e.target.value);
-                                setFilterStartDate(dateToInternal(formatted));
+                        <MaskedDateInput
+                            value={filterStartDateDisplay}
+                            onValueChange={(displayValue, internalValue) => {
+                                setFilterStartDateDisplay(displayValue)
+                                setFilterStartDate(internalValue)
                             }}
                             className="w-full sm:w-[116px]"
                         />
-                        <Input
-                            placeholder="ДД.ММ.ГГГГ"
-                            value={dateToDisplay(filterEndDate)}
-                            onChange={(e) => {
-                                const formatted = formatDisplayDate(e.target.value);
-                                setFilterEndDate(dateToInternal(formatted));
+                        <MaskedDateInput
+                            value={filterEndDateDisplay}
+                            onValueChange={(displayValue, internalValue) => {
+                                setFilterEndDateDisplay(displayValue)
+                                setFilterEndDate(internalValue)
                             }}
                             className="w-full sm:w-[116px]"
                         />
@@ -1325,12 +1400,12 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
         </div>
 
         {/* Shifts Table */}
-            <Card>
-                <CardHeader>
+            <Card className="border-0 bg-transparent shadow-none md:border md:bg-card md:shadow-sm">
+                <CardHeader className="px-0 pt-0 md:px-6 md:pt-6">
                     <CardTitle>История смен</CardTitle>
                     <CardDescription>Смены за выбранный период</CardDescription>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="px-0 pb-0 md:px-6 md:pb-6">
                     <div className="md:hidden space-y-3">
                         {sortedShifts.length === 0 ? (
                             <div className="text-center text-muted-foreground py-12">
@@ -1346,8 +1421,7 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                                 return (
                                 <div
                                     key={shift.id}
-                                    className="rounded-lg border bg-background p-3 active:bg-muted/30 cursor-pointer"
-                                    onClick={() => handleViewShift(shift)}
+                                    className="rounded-lg border bg-background p-3"
                                 >
                                     <div className="flex items-start justify-between gap-3">
                                         <div className="min-w-0">
@@ -1366,11 +1440,6 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                                                         <Sun className="h-3.5 w-3.5" />
                                                         День
                                                     </span>
-                                                )}
-                                                {shift.has_owner_corrections && (
-                                                    <Badge variant="secondary" className="text-[10px] h-5 px-2">
-                                                        Правки
-                                                    </Badge>
                                                 )}
                                             </div>
                                             <div className="text-sm text-foreground font-semibold truncate mt-1">
@@ -1412,85 +1481,37 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                                                     : '-'}
                                             </div>
                                         </div>
+                                        {reportFields.map((field: any) => {
+                                            const raw = shift.report_data?.[field.metric_key]
+                                            const parsed = parseFloat(String(raw))
+                                            const value = Array.isArray(raw)
+                                                ? formatMoney(getMetricValue(shift, field.metric_key))
+                                                : raw === null || raw === undefined || raw === ''
+                                                    ? '-'
+                                                    : (!Number.isNaN(parsed) ? formatMoney(parsed) : String(raw))
+
+                                            return (
+                                                <div key={field.metric_key} className="rounded-md border border-border/50 bg-background/60 p-2">
+                                                    <div className="text-[10px] uppercase tracking-wide text-muted-foreground truncate">
+                                                        {field.custom_label}
+                                                    </div>
+                                                    <div className="text-sm font-medium tabular-nums">{value}</div>
+                                                </div>
+                                            )
+                                        })}
                                     </div>
 
-                                    {reportFields.length > 0 && (
-                                        <details className="mt-3" open={reportFields.length <= 4}>
-                                            <summary className="text-xs text-muted-foreground select-none cursor-pointer">
-                                                Показатели ({reportFields.length})
-                                            </summary>
-                                            <div className="mt-2 grid grid-cols-2 gap-2">
-                                                {reportFields.map((field: any) => {
-                                                    const raw = shift.report_data?.[field.metric_key]
-                                                    const parsed = parseFloat(String(raw))
-                                                    const value = raw === null || raw === undefined || raw === ''
-                                                        ? '-'
-                                                        : (!Number.isNaN(parsed) ? formatMoney(parsed) : String(raw))
-                                                    return (
-                                                        <div key={field.metric_key} className="rounded-md bg-muted/20 p-2">
-                                                            <div className="text-[10px] uppercase tracking-wide text-muted-foreground truncate">
-                                                                {field.custom_label}
-                                                            </div>
-                                                            <div className="text-sm font-medium tabular-nums">{value}</div>
-                                                        </div>
-                                                    )
-                                                })}
-                                            </div>
-                                        </details>
-                                    )}
-
-                                    <div className="mt-3 flex items-center justify-end gap-1">
+                                    <div className="mt-3 flex items-center gap-2">
                                         <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className="h-9 w-9"
+                                            variant="outline"
+                                            size="sm"
+                                            className="h-9 flex-1 px-4"
                                             onClick={(e) => {
                                                 e.stopPropagation()
-                                                openEditModal(shift)
+                                                router.push(`/clubs/${clubId}/shifts/${shift.id}`)
                                             }}
-                                            title="Редактировать"
                                         >
-                                            <Edit className="h-4 w-4" />
-                                        </Button>
-                                        {shift.check_out && shift.status !== 'VERIFIED' && (
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                className="h-9 w-9"
-                                                onClick={(e) => {
-                                                    e.stopPropagation()
-                                                    handleVerify(shift)
-                                                }}
-                                                title="Подтвердить"
-                                            >
-                                                <CheckCircle className="h-4 w-4" />
-                                            </Button>
-                                        )}
-                                        {shift.status === 'VERIFIED' && (
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                className="h-9 w-9"
-                                                onClick={(e) => {
-                                                    e.stopPropagation()
-                                                    handleUnverify(shift)
-                                                }}
-                                                title="Отменить подтверждение"
-                                            >
-                                                <span className="text-xs font-bold">↩</span>
-                                            </Button>
-                                        )}
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className="h-9 w-9"
-                                            onClick={(e) => {
-                                                e.stopPropagation()
-                                                handleViewShift(shift)
-                                            }}
-                                            title="Открыть"
-                                        >
-                                            <Eye className="h-4 w-4" />
+                                            Открыть
                                         </Button>
                                     </div>
                                 </div>
@@ -1572,13 +1593,12 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                                     <TableHead key={field.metric_key} className="text-right min-w-[100px]">{field.custom_label}</TableHead>
                                 ))}
                                 <TableHead>Статус</TableHead>
-                                <TableHead className="text-right">Действия</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {sortedShifts.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={10 + reportFields.length} className="text-center text-muted-foreground py-12">
+                                    <TableCell colSpan={9 + reportFields.length} className="text-center text-muted-foreground py-12">
                                         <div className="flex flex-col items-center gap-2">
                                             <Clock className="h-8 w-8 opacity-30" />
                                             <p>Смен пока нет</p>
@@ -1591,11 +1611,9 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                                 return (
                                 <TableRow 
                                     key={shift.id} 
-                                    className="hover:bg-muted/50 cursor-pointer group"
-                                    onClick={(e) => {
-                                        // Don't open if clicking on action buttons
-                                        if ((e.target as HTMLElement).closest('button')) return;
-                                        handleViewShift(shift);
+                                    className="hover:bg-muted/50 cursor-pointer"
+                                    onClick={() => {
+                                        router.push(`/clubs/${clubId}/shifts/${shift.id}`);
                                     }}
                                 >
                                     <TableCell className={cn(
@@ -1641,50 +1659,6 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                                     ))}
                                     <TableCell className="whitespace-nowrap">
                                         {getStatusBadge(shift)}
-                                    </TableCell>
-                                    <TableCell className="whitespace-nowrap">
-                                        <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                className="h-8 w-8 hover:bg-blue-500/10 hover:text-blue-500"
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    openEditModal(shift);
-                                                }}
-                                                title="Редактировать"
-                                            >
-                                                <Edit className="h-4 w-4" />
-                                            </Button>
-                                            {shift.check_out && shift.status !== 'VERIFIED' && (
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    className="h-8 w-8 hover:bg-green-500/10 hover:text-green-500"
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        handleVerify(shift);
-                                                    }}
-                                                    title="Подтвердить"
-                                                >
-                                                    <CheckCircle className="h-4 w-4" />
-                                                </Button>
-                                            )}
-                                            {shift.status === 'VERIFIED' && (
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    className="h-8 w-8 hover:bg-red-500/10 hover:text-red-500"
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        handleUnverify(shift);
-                                                    }}
-                                                    title="Отменить подтверждение"
-                                                >
-                                                    <span className="text-xs font-bold">↩</span>
-                                                </Button>
-                                            )}
-                                        </div>
                                     </TableCell>
                                 </TableRow>
                                 )

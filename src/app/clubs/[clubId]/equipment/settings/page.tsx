@@ -26,7 +26,7 @@ export default function EquipmentSettingsPage() {
                     title="Настройки оборудования"
                     description="Стандарты обслуживания и другие параметры модуля оборудования."
                 >
-                    <Button asChild variant="outline" className="h-10">
+                    <Button asChild variant="outline" className="hidden h-10 md:inline-flex">
                         <Link href={`/clubs/${clubId}/equipment`}>
                             <ArrowLeft className="mr-2 h-4 w-4" />
                             Назад
@@ -62,6 +62,17 @@ export default function EquipmentSettingsPage() {
                         <EquipmentTypesTab />
                     </TabsContent>
                 </Tabs>
+
+                <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur supports-[backdrop-filter]:bg-background/80 md:hidden">
+                    <div className="mx-auto flex max-w-7xl">
+                        <Button asChild variant="outline" className="h-11 w-full justify-center">
+                            <Link href={`/clubs/${clubId}/equipment`}>
+                                <ArrowLeft className="mr-2 h-4 w-4" />
+                                Назад
+                            </Link>
+                        </Button>
+                    </div>
+                </div>
             </div>
         </PageShell>
     )

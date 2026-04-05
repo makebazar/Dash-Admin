@@ -2,6 +2,7 @@ import { Pool } from 'pg';
 import dotenv from 'dotenv';
 import path from 'path';
 import fs from 'fs';
+import type { PoolConfig } from 'pg';
 
 // Explicitly load .env first, then .env.local (higher priority)
 // This matches Next.js behavior
@@ -24,8 +25,26 @@ declare global {
     var db_pool: Pool | undefined;
 }
 
+function buildPoolConfig(connectionString: string): PoolConfig {
+    const url = new URL(connectionString);
+    const config: PoolConfig = {
+        host: url.hostname,
+        port: Number(url.port || 5432),
+        user: decodeURIComponent(url.username),
+        password: decodeURIComponent(url.password),
+        database: url.pathname.replace(/^\//, ''),
+    };
+
+    const sslMode = url.searchParams.get('sslmode');
+    if (sslMode && sslMode !== 'disable') {
+        config.ssl = { rejectUnauthorized: false };
+    }
+
+    return config;
+}
+
 const pool = global.db_pool || new Pool({
-    connectionString: process.env.DATABASE_URL,
+    ...buildPoolConfig(process.env.DATABASE_URL || ''),
     max: 20,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 60000, // Увеличил до 60 секунд

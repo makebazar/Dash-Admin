@@ -3,12 +3,12 @@
 import { useEffect, useState, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Loader2, History, Camera, CheckCircle, XCircle, BarChart3, Filter, Monitor, CheckCircle2, Eye, User, Layers, Calendar, ChevronDown, ChevronUp, Trash2, RotateCcw, ChevronLeft, ChevronRight } from "lucide-react"
+import { Loader2, History, Camera, CheckCircle, XCircle, Filter, Monitor, CheckCircle2, Eye, User, Layers, Calendar, ChevronDown, ChevronUp, Trash2, RotateCcw, ChevronLeft, ChevronRight } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -77,6 +77,38 @@ interface VerificationTask {
     laundry_status?: string | null
 }
 
+interface ShiftReviewItem {
+    id: string
+    user_id: string
+    employee_name: string
+    check_in: string
+    check_out: string | null
+    total_hours: number | string | null
+    cash_income: number | string | null
+    card_income: number | string | null
+    expenses: number | string | null
+    report_comment: string | null
+    report_data?: Record<string, any> | null
+    has_owner_corrections?: boolean
+    owner_correction_changes?: OwnerCorrectionChange[] | null
+    owner_notes?: string | null
+    status: string
+    shift_type: string | null
+}
+
+interface OwnerCorrectionChange {
+    field: string
+    label: string
+    before: any
+    after: any
+}
+
+interface ShiftReportField {
+    metric_key: string
+    custom_label: string
+    field_type: 'INCOME' | 'EXPENSE' | 'EXPENSE_LIST' | 'OTHER'
+}
+
 const getTaskTypeLabel = (type: string) => {
     switch (type) {
         case 'CLEANING': return 'ЧИСТКА';
@@ -131,6 +163,12 @@ export default function ChecklistsPage({ params, searchParams }: { params: Promi
     const [filterMonth, setFilterMonth] = useState<string>(() => format(new Date(), 'yyyy-MM'))
     const [equipmentTab, setEquipmentTab] = useState<'active' | 'history'>('active')
     const [checklistsTab, setChecklistsTab] = useState<'active' | 'history'>('active')
+    const [shifts, setShifts] = useState<ShiftReviewItem[]>([])
+    const [isShiftsLoading, setIsShiftsLoading] = useState(true)
+    const [isSubmittingShift, setIsSubmittingShift] = useState<string | null>(null)
+    const [shiftsTab, setShiftsTab] = useState<'active' | 'history'>('active')
+    const [filterShiftMonth, setFilterShiftMonth] = useState<string>(() => format(new Date(), 'yyyy-MM'))
+    const [shiftReportFields, setShiftReportFields] = useState<ShiftReportField[]>([])
     
     // Checklist Filters
     const [filterChecklistEmployee, setFilterChecklistEmployee] = useState<string>("all")
@@ -147,7 +185,9 @@ export default function ChecklistsPage({ params, searchParams }: { params: Promi
             fetchTasks(p.clubId, equipmentTab)
             fetchChecklists(p.clubId, checklistsTab)
             
-            if (sp.tab) {
+            fetchShiftsForReview(p.clubId)
+
+            if (sp.tab === 'equipment' || sp.tab === 'checklists' || sp.tab === 'shifts') {
                 setActiveTab(sp.tab)
             }
         })
@@ -210,6 +250,68 @@ export default function ChecklistsPage({ params, searchParams }: { params: Promi
             fetchChecklists(clubId, checklistsTab)
         }
     }, [checklistsTab, clubId])
+
+    const fetchShiftsForReview = async (id: string) => {
+        setIsShiftsLoading(true)
+        try {
+            const res = await fetch(`/api/clubs/${id}/shifts`)
+            const data = await res.json()
+            if (res.ok && Array.isArray(data?.shifts)) {
+                setShifts(data.shifts)
+            }
+        } catch (error) {
+            console.error("Error fetching shifts:", error)
+        } finally {
+            setIsShiftsLoading(false)
+        }
+    }
+
+    const fetchShiftReportTemplate = async (id: string) => {
+        try {
+            const res = await fetch(`/api/clubs/${id}/settings/reports`)
+            const data = await res.json()
+            if (res.ok && data.currentTemplate) {
+                const standardKeys = ['cash_income', 'card_income', 'expenses_cash', 'shift_comment', 'expenses']
+                const customFields = data.currentTemplate.schema.filter((field: ShiftReportField) =>
+                    !standardKeys.includes(field.metric_key) &&
+                    !standardKeys.some(key => field.metric_key.includes(key))
+                )
+                setShiftReportFields(customFields)
+            }
+        } catch (error) {
+            console.error("Error fetching shift report template:", error)
+        }
+    }
+
+    useEffect(() => {
+        if (clubId) {
+            fetchShiftsForReview(clubId)
+            fetchShiftReportTemplate(clubId)
+        }
+    }, [clubId])
+
+    const handleVerifyShiftForReview = async (shift: ShiftReviewItem) => {
+        setIsSubmittingShift(shift.id)
+        try {
+            const res = await fetch(`/api/clubs/${clubId}/shifts/${shift.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: 'VERIFIED' })
+            })
+
+            if (res.ok) {
+                await fetchShiftsForReview(clubId)
+            } else {
+                const data = await res.json()
+                alert(data.error || 'Ошибка подтверждения смены')
+            }
+        } catch (error) {
+            console.error("Error verifying shift:", error)
+            alert('Ошибка подтверждения смены')
+        } finally {
+            setIsSubmittingShift(null)
+        }
+    }
 
     // --- Checklists Handlers ---
 
@@ -603,6 +705,133 @@ export default function ChecklistsPage({ params, searchParams }: { params: Promi
         }
     }, [checklistMonths, filterChecklistMonth, checklistsTab])
 
+    const filteredShifts = useMemo(() => {
+        return shifts.filter((shift) => {
+            const isIncoming = Boolean(shift.check_out) && shift.status !== 'VERIFIED'
+            const isHistoryItem = shift.status === 'VERIFIED'
+
+            if (shiftsTab === 'active' && !isIncoming) return false
+            if (shiftsTab === 'history' && !isHistoryItem) return false
+
+            if (filterShiftMonth !== 'all') {
+                const monthKey = format(new Date(shift.check_in), 'yyyy-MM')
+                if (monthKey !== filterShiftMonth) return false
+            }
+
+            return true
+        })
+    }, [shifts, shiftsTab, filterShiftMonth])
+
+    const pendingShifts = useMemo(() => {
+        return shifts.filter((shift) => {
+            if (!shift.check_out || shift.status === 'VERIFIED') return false
+            if (filterShiftMonth !== 'all') {
+                const monthKey = format(new Date(shift.check_in), 'yyyy-MM')
+                if (monthKey !== filterShiftMonth) return false
+            }
+            return true
+        }).length
+    }, [shifts, filterShiftMonth])
+
+    const getShiftMetricValue = (shift: ShiftReviewItem, field: string) => {
+        if (field === 'expenses' || field === 'cash_income' || field === 'card_income') {
+            const keyMap: Record<string, string> = {
+                expenses: 'expenses_cash',
+                cash_income: 'cash_income',
+                card_income: 'card_income',
+            }
+
+            const reportKey = keyMap[field]
+            const reportVal = shift.report_data?.[reportKey]
+
+            if (reportVal !== undefined) {
+                if (Array.isArray(reportVal)) {
+                    return reportVal.reduce((sum, item: any) => sum + (Number(item.amount) || 0), 0)
+                }
+                return parseFloat(String(reportVal)) || 0
+            }
+
+            return Number((shift as any)[field]) || 0
+        }
+
+        const val = shift.report_data?.[field]
+        if (Array.isArray(val)) {
+            return val.reduce((sum, item: any) => sum + (Number(item.amount) || 0), 0)
+        }
+        return parseFloat(String(val)) || 0
+    }
+
+    const formatShiftMoney = (amount: number | string | any[] | null | undefined) => {
+        if (amount === null || amount === undefined) return '0 ₽'
+
+        let num: number
+        if (Array.isArray(amount)) {
+            num = amount.reduce((sum, item: any) => sum + (Number(item.amount) || 0), 0)
+        } else {
+            num = typeof amount === 'string' ? parseFloat(amount) : Number(amount)
+        }
+
+        if (Number.isNaN(num) || num === 0) return '0 ₽'
+        return `${num.toLocaleString('ru-RU', { maximumFractionDigits: 0 })} ₽`
+    }
+
+    const formatShiftCorrectionValue = (change: OwnerCorrectionChange, value: any) => {
+        if (value === null || value === undefined || value === '') return '—'
+
+        if (change.field === 'check_in' || change.field === 'check_out') {
+            return format(new Date(value), 'dd.MM.yyyy HH:mm', { locale: ru })
+        }
+
+        if (change.field === 'shift_type') {
+            return value === 'NIGHT' ? 'Ночная' : value === 'DAY' ? 'Дневная' : String(value)
+        }
+
+        if (change.field === 'total_hours') {
+            const numericValue = Number(value)
+            return Number.isNaN(numericValue) ? String(value) : `${numericValue.toFixed(1)} ч`
+        }
+
+        if (change.field === 'cash_income' || change.field === 'card_income' || change.field === 'expenses') {
+            return formatShiftMoney(value)
+        }
+
+        if (Array.isArray(value)) {
+            const total = value.reduce((sum, item: any) => sum + (Number(item?.amount) || 0), 0)
+            const details = value
+                .map((item: any) => item?.comment ? `${item.amount} ₽ (${item.comment})` : `${item?.amount ?? 0} ₽`)
+                .join(', ')
+            return details ? `${formatShiftMoney(total)}: ${details}` : formatShiftMoney(total)
+        }
+
+        if (typeof value === 'object') {
+            return JSON.stringify(value)
+        }
+
+        return String(value)
+    }
+
+    const shiftMonths = useMemo(() => {
+        const months = Array.from(new Set(
+            shifts
+                .map((shift) => format(new Date(shift.check_in), 'yyyy-MM'))
+        ))
+
+        const currentMonth = format(new Date(), 'yyyy-MM')
+        if (!months.includes(currentMonth)) {
+            months.push(currentMonth)
+        }
+
+        return months.sort((a, b) => b.localeCompare(a))
+    }, [shifts])
+
+    const currentShiftMonthIndex = shiftMonths.indexOf(filterShiftMonth)
+
+    useEffect(() => {
+        if (shiftsTab === 'history' && shiftMonths.length > 0 && !shiftMonths.includes(filterShiftMonth)) {
+            setFilterShiftMonth(shiftMonths[0])
+        }
+    }, [shiftMonths, filterShiftMonth, shiftsTab])
+
     return (
         <PageShell maxWidth="6xl">
             <PageHeader 
@@ -614,18 +843,16 @@ export default function ChecklistsPage({ params, searchParams }: { params: Promi
                 <div className="border-b mb-6 overflow-x-auto">
                     <TabsList className="bg-transparent h-auto p-0 space-x-6 min-w-max">
                         <TabsTrigger value="equipment" variant="underline" className="pb-3 rounded-none">
-                            <Monitor className="h-4 w-4 mr-2" />
                             Оборудование
                             {pendingTasks > 0 && <Badge variant="secondary" className="ml-2 h-5 px-1.5 bg-slate-100">{pendingTasks}</Badge>}
                         </TabsTrigger>
                         <TabsTrigger value="checklists" variant="underline" className="pb-3 rounded-none">
-                            <History className="h-4 w-4 mr-2" />
                             Чеклист
                             {pendingEvaluations > 0 && <Badge variant="secondary" className="ml-2 h-5 px-1.5 bg-slate-100">{pendingEvaluations}</Badge>}
                         </TabsTrigger>
-                        <TabsTrigger value="stats" variant="underline" className="pb-3 rounded-none">
-                            <BarChart3 className="h-4 w-4 mr-2" />
-                            Статистика
+                        <TabsTrigger value="shifts" variant="underline" className="pb-3 rounded-none">
+                            Смены
+                            {pendingShifts > 0 && <Badge variant="secondary" className="ml-2 h-5 px-1.5 bg-slate-100">{pendingShifts}</Badge>}
                         </TabsTrigger>
                     </TabsList>
                 </div>
@@ -974,7 +1201,7 @@ export default function ChecklistsPage({ params, searchParams }: { params: Promi
                                                                                     <Button 
                                                                                         className="w-full sm:flex-1 bg-green-600 hover:bg-green-700 text-white shadow-sm h-12 md:h-9 font-semibold" 
                                                                                         onClick={() => handleVerifyTask(task, 'APPROVE')}
-                                                                                        disabled={isSubmittingTask}
+                                                                                        disabled={isSubmittingTask || Boolean(comment.trim())}
                                                                                     >
                                                                                         Одобрить
                                                                                     </Button>
@@ -1001,6 +1228,242 @@ export default function ChecklistsPage({ params, searchParams }: { params: Promi
                                             </div>
                                         </div>
                                     ))}
+                                </div>
+                            )}
+                        </div>
+                    </TabsContent>
+
+                    <TabsContent value="shifts">
+                        <div className="space-y-6">
+                            <Tabs value={shiftsTab} onValueChange={(v) => setShiftsTab(v as 'active' | 'history')} className="w-full">
+                                <TabsList className="w-full sm:w-auto grid grid-cols-2">
+                                    <TabsTrigger value="active">Входящие</TabsTrigger>
+                                    <TabsTrigger value="history">История</TabsTrigger>
+                                </TabsList>
+                            </Tabs>
+
+                            <PageToolbar>
+                                <ToolbarGroup className="w-full sm:w-auto">
+                                    <div className="flex w-full">
+                                        <div className="flex items-center justify-between rounded-md bg-muted/50 px-3 h-9 border border-transparent w-full sm:w-[280px]">
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-7 w-7"
+                                                onClick={() => {
+                                                    const nextIndex = currentShiftMonthIndex + 1
+                                                    if (nextIndex < shiftMonths.length) {
+                                                        setFilterShiftMonth(shiftMonths[nextIndex])
+                                                    }
+                                                }}
+                                                disabled={currentShiftMonthIndex === -1 || currentShiftMonthIndex >= shiftMonths.length - 1}
+                                            >
+                                                <ChevronLeft className="h-4 w-4" />
+                                            </Button>
+                                            <div className="flex items-center gap-2">
+                                                <Calendar className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                                <span className="text-sm font-medium truncate">
+                                                    {format(new Date(`${filterShiftMonth}-01`), 'MMMM yyyy', { locale: ru })}
+                                                </span>
+                                            </div>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-7 w-7"
+                                                onClick={() => {
+                                                    const nextIndex = currentShiftMonthIndex - 1
+                                                    if (nextIndex >= 0) {
+                                                        setFilterShiftMonth(shiftMonths[nextIndex])
+                                                    }
+                                                }}
+                                                disabled={currentShiftMonthIndex <= 0}
+                                            >
+                                                <ChevronRight className="h-4 w-4" />
+                                            </Button>
+                                        </div>
+                                    </div>
+                                </ToolbarGroup>
+                                <ToolbarGroup align="end" className="gap-2">
+                                    <div className="text-sm text-muted-foreground">
+                                        Показано: <span className="font-medium text-foreground">{filteredShifts.length}</span> смен
+                                    </div>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() => fetchShiftsForReview(clubId)}
+                                        disabled={isShiftsLoading}
+                                        className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                                    >
+                                        <RotateCcw className={cn("h-4 w-4", isShiftsLoading && "animate-spin")} />
+                                    </Button>
+                                </ToolbarGroup>
+                            </PageToolbar>
+
+                            {isShiftsLoading ? (
+                                <div className="flex justify-center py-12"><Loader2 className="animate-spin text-muted-foreground" /></div>
+                            ) : filteredShifts.length === 0 ? (
+                                <div className="text-center py-12 text-muted-foreground bg-muted/10 rounded-xl border border-dashed">
+                                    <CheckCircle2 className="mx-auto h-12 w-12 text-green-500 mb-4 opacity-50" />
+                                    <h3 className="text-lg font-medium text-foreground">
+                                        {shiftsTab === 'active' ? 'Нет смен на подтверждение' : 'Нет подтвержденных смен'}
+                                    </h3>
+                                    <p>
+                                        {shiftsTab === 'active'
+                                            ? 'Все закрытые смены уже подтверждены или еще не завершены.'
+                                            : 'В выбранном месяце пока нет подтвержденных смен.'}
+                                    </p>
+                                </div>
+                            ) : (
+                                <div className="space-y-3 pb-24">
+                                    {filteredShifts.map((shift) => {
+                                        const cashIncome = getShiftMetricValue(shift, 'cash_income')
+                                        const cardIncome = getShiftMetricValue(shift, 'card_income')
+                                        const expenses = getShiftMetricValue(shift, 'expenses')
+                                        const customIncome = shiftReportFields
+                                            .filter((field) => field.field_type === 'INCOME')
+                                            .reduce((sum, field) => sum + getShiftMetricValue(shift, field.metric_key), 0)
+                                        const totalIncome = cashIncome + cardIncome + customIncome
+
+                                        return (
+                                            <Card key={shift.id} className="shadow-sm">
+                                                <CardContent className="p-4 sm:p-5">
+                                                    <div className="space-y-4">
+                                                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                                            <div className="min-w-0 flex-1">
+                                                                <div className="flex items-center gap-2 flex-wrap">
+                                                                    <span className="font-semibold text-base">{shift.employee_name}</span>
+                                                                    <Badge variant="outline" className="text-xs">
+                                                                        {shift.shift_type === 'NIGHT' ? 'Ночная' : 'Дневная'}
+                                                                    </Badge>
+                                                                    {shift.status === 'VERIFIED' ? (
+                                                                        <Badge className="bg-green-100 text-green-700 hover:bg-green-100 border-0">Подтверждена</Badge>
+                                                                    ) : (
+                                                                        <Badge variant="outline" className="text-blue-600 border-blue-200 bg-blue-50">Ожидает подтверждения</Badge>
+                                                                    )}
+                                                                    {shift.has_owner_corrections && (
+                                                                        <Badge className="bg-orange-100 text-orange-700 hover:bg-orange-100 border-0">
+                                                                            Есть правки владельца
+                                                                        </Badge>
+                                                                    )}
+                                                                </div>
+                                                                <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
+                                                                    <span>{format(new Date(shift.check_in), 'dd.MM.yyyy', { locale: ru })}</span>
+                                                                    <span>
+                                                                        {format(new Date(shift.check_in), 'HH:mm')} - {shift.check_out ? format(new Date(shift.check_out), 'HH:mm') : '...'}
+                                                                    </span>
+                                                                    <span>{Number(shift.total_hours || 0).toFixed(1)} ч</span>
+                                                                </div>
+                                                            </div>
+                                                            <div className="shrink-0 rounded-lg border bg-muted/20 px-3 py-2 text-right">
+                                                                <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Итого</div>
+                                                                <div className="text-lg font-bold text-green-600 tabular-nums">{formatShiftMoney(totalIncome)}</div>
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+                                                                <div className="rounded-md bg-muted/20 p-2">
+                                                                    <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Наличные</div>
+                                                                    <div className="text-sm font-medium tabular-nums">{formatShiftMoney(cashIncome)}</div>
+                                                                </div>
+                                                                <div className="rounded-md bg-muted/20 p-2">
+                                                                    <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Безнал</div>
+                                                                    <div className="text-sm font-medium tabular-nums">{formatShiftMoney(cardIncome)}</div>
+                                                                </div>
+                                                                <div className="rounded-md bg-muted/20 p-2">
+                                                                    <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Расходы</div>
+                                                                    <div className="text-sm font-medium text-orange-600 tabular-nums">{formatShiftMoney(expenses)}</div>
+                                                                </div>
+                                                                <div className="rounded-md bg-muted/20 p-2">
+                                                                    <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Часы</div>
+                                                                    <div className="text-sm font-medium tabular-nums">
+                                                                        {shift.total_hours && !Number.isNaN(Number(shift.total_hours))
+                                                                            ? `${Number(shift.total_hours).toFixed(1)}ч`
+                                                                            : '-'}
+                                                                    </div>
+                                                                </div>
+                                                                {shiftReportFields.map((field) => {
+                                                                    const raw = shift.report_data?.[field.metric_key]
+                                                                    const parsed = parseFloat(String(raw))
+                                                                    const value = raw === null || raw === undefined || raw === ''
+                                                                        ? '-'
+                                                                        : (!Number.isNaN(parsed) ? formatShiftMoney(parsed) : String(raw))
+
+                                                                    return (
+                                                                        <div key={field.metric_key} className="rounded-md bg-muted/20 p-2">
+                                                                            <div className="text-[10px] uppercase tracking-wide text-muted-foreground truncate">
+                                                                                {field.custom_label}
+                                                                            </div>
+                                                                            <div className="text-sm font-medium tabular-nums">{value}</div>
+                                                                        </div>
+                                                                    )
+                                                                })}
+                                                            </div>
+
+                                                        {shift.report_comment && (
+                                                                <div className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-600 border">
+                                                                    {shift.report_comment}
+                                                                </div>
+                                                            )}
+                                                            {shift.owner_notes && (
+                                                                <div className="rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-sm text-orange-800">
+                                                                    <span className="font-medium">Заметка владельца:</span> {shift.owner_notes}
+                                                                </div>
+                                                            )}
+                                                            {shift.has_owner_corrections && (
+                                                                shift.owner_correction_changes && shift.owner_correction_changes.length > 0 ? (
+                                                                    <div className="rounded-lg border border-orange-200 bg-orange-50 px-3 py-3 text-sm text-orange-900">
+                                                                        <div className="mb-2 font-medium">Правки владельца</div>
+                                                                        <div className="space-y-2">
+                                                                            {shift.owner_correction_changes.slice(0, 3).map((change, index) => (
+                                                                                <div key={`${change.field}-${index}`} className="rounded-md bg-white/80 px-2.5 py-2">
+                                                                                    <div className="text-xs font-medium uppercase tracking-wide text-orange-700">{change.label}</div>
+                                                                                    <div className="mt-1 text-xs text-muted-foreground">
+                                                                                        Было: <span className="text-foreground">{formatShiftCorrectionValue(change, change.before)}</span>
+                                                                                    </div>
+                                                                                    <div className="mt-0.5 text-xs text-muted-foreground">
+                                                                                        Стало: <span className="text-foreground">{formatShiftCorrectionValue(change, change.after)}</span>
+                                                                                    </div>
+                                                                                </div>
+                                                                            ))}
+                                                                        </div>
+                                                                        {shift.owner_correction_changes.length > 3 && (
+                                                                            <div className="mt-2 text-xs text-orange-700">
+                                                                                И еще {shift.owner_correction_changes.length - 3} правки в карточке смены
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                ) : (
+                                                                    <div className="rounded-lg border border-dashed border-orange-200 bg-orange-50 px-3 py-2 text-sm text-orange-800">
+                                                                        Детализация правок для этой смены не сохранена, потому что она была изменена до добавления diff.
+                                                                    </div>
+                                                                )
+                                                            )}
+
+                                                        <div className="flex flex-col-reverse gap-2 border-t pt-4 sm:flex-row sm:justify-end">
+                                                            <Button
+                                                                variant="outline"
+                                                                className="w-full sm:w-auto sm:min-w-[170px]"
+                                                                onClick={() => router.push(`/clubs/${clubId}/shifts/${shift.id}?from=reviews`)}
+                                                            >
+                                                                <Eye className="mr-2 h-4 w-4" />
+                                                                Открыть смену
+                                                            </Button>
+                                                            {shift.status !== 'VERIFIED' && (
+                                                                <Button
+                                                                    className="w-full bg-green-600 text-white hover:bg-green-700 sm:w-auto sm:min-w-[170px]"
+                                                                    onClick={() => handleVerifyShiftForReview(shift)}
+                                                                    disabled={isSubmittingShift === shift.id}
+                                                                >
+                                                                    {isSubmittingShift === shift.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-2 h-4 w-4" />}
+                                                                    Подтвердить
+                                                                </Button>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </CardContent>
+                                            </Card>
+                                        )
+                                    })}
                                 </div>
                             )}
                         </div>
@@ -1202,67 +1665,6 @@ export default function ChecklistsPage({ params, searchParams }: { params: Promi
                         </div>
                     </TabsContent>
 
-                    <TabsContent value="stats">
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Рейтинг сотрудников</CardTitle>
-                                <CardDescription>Средний балл по результатам всех проверок</CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                {history.length === 0 ? (
-                                    <div className="text-center py-12 text-muted-foreground">
-                                        <BarChart3 className="mx-auto h-12 w-12 opacity-20 mb-4" />
-                                        <p>Недостаточно данных для статистики</p>
-                                    </div>
-                                ) : (
-                                    <Table>
-                                        <TableHeader>
-                                            <TableRow>
-                                                <TableHead>Сотрудник</TableHead>
-                                                <TableHead className="text-right">Проверок</TableHead>
-                                                <TableHead className="text-right">Средний балл</TableHead>
-                                                <TableHead className="text-right">Статус</TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {(() => {
-                                                const stats = history.reduce((acc, curr) => {
-                                                    if (!acc[curr.employee_name]) {
-                                                        acc[curr.employee_name] = { totalPercent: 0, count: 0, name: curr.employee_name };
-                                                    }
-                                                    // Calculate percentage for this evaluation
-                                                    const percent = (curr.total_score / (curr.max_score || 100)) * 100;
-                                                    acc[curr.employee_name].totalPercent += percent;
-                                                    acc[curr.employee_name].count += 1;
-                                                    return acc;
-                                                }, {} as Record<string, { totalPercent: number, count: number, name: string }>);
-
-                                                return Object.values(stats)
-                                                    .sort((a, b) => (b.totalPercent / b.count) - (a.totalPercent / a.count))
-                                                    .map((stat, idx) => {
-                                                        const avg = stat.totalPercent / stat.count;
-                                                        return (
-                                                            <TableRow key={idx}>
-                                                                <TableCell className="font-medium">{stat.name}</TableCell>
-                                                                <TableCell className="text-right">{stat.count}</TableCell>
-                                                                <TableCell className="text-right">
-                                                                    <span className={`font-bold ${avg >= 80 ? 'text-green-600' : avg >= 50 ? 'text-amber-600' : 'text-red-600'}`}>
-                                                                        {Math.round(avg)}%
-                                                                    </span>
-                                                                </TableCell>
-                                                                <TableCell className="text-right">
-                                                                    {avg >= 90 ? '🏆 Отлично' : avg >= 75 ? '✅ Хорошо' : '⚠️ Требует внимания'}
-                                                                </TableCell>
-                                                            </TableRow>
-                                                        );
-                                                    });
-                                            })()}
-                                        </TableBody>
-                                    </Table>
-                                )}
-                            </CardContent>
-                        </Card>
-                    </TabsContent>
                 </Tabs>
 
             <Dialog open={!!deleteChecklistTarget} onOpenChange={(open) => !open && setDeleteChecklistTarget(null)}>
