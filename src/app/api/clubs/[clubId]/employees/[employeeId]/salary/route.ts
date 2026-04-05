@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/db';
 import { cookies } from 'next/headers';
+import { ensureOwnerSubscriptionActive } from '@/lib/club-subscription-guard';
+import { requireClubFullAccess } from '@/lib/club-api-access';
 
 // GET: Get employee's salary assignment
 export async function GET(
@@ -8,22 +10,8 @@ export async function GET(
     { params }: { params: Promise<{ clubId: string; employeeId: string }> }
 ) {
     try {
-        const userId = (await cookies()).get('session_user_id')?.value;
         const { clubId, employeeId } = await params;
-
-        if (!userId) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
-
-        // Check ownership
-        const ownerCheck = await query(
-            `SELECT 1 FROM clubs WHERE id = $1 AND owner_id = $2`,
-            [clubId, userId]
-        );
-
-        if ((ownerCheck.rowCount || 0) === 0) {
-            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-        }
+        await requireClubFullAccess(clubId)
 
         // Get assignment with scheme details
         const result = await query(
@@ -51,6 +39,10 @@ export async function GET(
         });
 
     } catch (error: any) {
+        const status = error?.status
+        if (status) {
+            return NextResponse.json({ error: status === 401 ? 'Unauthorized' : 'Forbidden' }, { status })
+        }
         console.error('Get Employee Salary Error:', error);
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
@@ -70,15 +62,8 @@ export async function POST(
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        // Check ownership
-        const ownerCheck = await query(
-            `SELECT 1 FROM clubs WHERE id = $1 AND owner_id = $2`,
-            [clubId, userId]
-        );
-
-        if ((ownerCheck.rowCount || 0) === 0) {
-            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-        }
+        const guard = await ensureOwnerSubscriptionActive(clubId, userId)
+        if (!guard.ok) return guard.response
 
         const { scheme_id } = body;
 
@@ -113,6 +98,10 @@ export async function POST(
         return NextResponse.json({ success: true });
 
     } catch (error: any) {
+        const status = error?.status
+        if (status) {
+            return NextResponse.json({ error: status === 401 ? 'Unauthorized' : 'Forbidden' }, { status })
+        }
         console.error('Assign Salary Scheme Error:', error);
         return NextResponse.json({ error: error.message }, { status: 500 });
     }

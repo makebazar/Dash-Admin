@@ -3,6 +3,7 @@ import { query } from '@/db';
 import { cookies } from 'next/headers';
 import { calculateSalary } from '@/lib/salary-calculator';
 import { ensureOwnerSubscriptionActive } from '@/lib/club-subscription-guard';
+import { requireClubApiAccess } from '@/lib/club-api-access';
 
 type OwnerCorrectionChange = {
     field: string;
@@ -285,15 +286,8 @@ export async function GET(
     { params }: { params: Promise<{ clubId: string; shiftId: string }> }
 ) {
     try {
-        const userId = (await cookies()).get('session_user_id')?.value;
         const { clubId, shiftId } = await params;
-
-        if (!userId) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
-
-        const guard = await ensureOwnerSubscriptionActive(clubId, userId)
-        if (!guard.ok) return guard.response
+        await requireClubApiAccess(clubId)
 
         const shiftResult = await query(
             `SELECT s.*, u.full_name as employee_name
@@ -428,6 +422,10 @@ export async function GET(
         });
 
     } catch (error: any) {
+        const status = error?.status
+        if (status) {
+            return NextResponse.json({ error: status === 401 ? 'Unauthorized' : 'Forbidden' }, { status })
+        }
         console.error('Get Shift Error:', error);
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
@@ -724,15 +722,8 @@ export async function DELETE(
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        // Check ownership
-        const ownerCheck = await query(
-            `SELECT 1 FROM clubs WHERE id = $1 AND owner_id = $2`,
-            [clubId, userId]
-        );
-
-        if ((ownerCheck.rowCount || 0) === 0) {
-            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-        }
+        const guard = await ensureOwnerSubscriptionActive(clubId, userId)
+        if (!guard.ok) return guard.response
 
         // Delete shift
         const deleteResult = await query(

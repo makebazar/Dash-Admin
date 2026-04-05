@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { query } from '@/db';
 import { cookies } from 'next/headers';
 import { ensureOwnerSubscriptionActive } from '@/lib/club-subscription-guard';
+import { requireClubFullAccess } from '@/lib/club-api-access';
 
 // GET: Get club settings
 export async function GET(
@@ -9,21 +10,16 @@ export async function GET(
     { params }: { params: Promise<{ clubId: string }> }
 ) {
     try {
-        const userId = (await cookies()).get('session_user_id')?.value;
         const { clubId } = await params;
+        await requireClubFullAccess(clubId)
 
-        if (!userId) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
-
-        // Check ownership
         const result = await query(
-            `SELECT id, name, address, timezone, day_start_hour, night_start_hour, inventory_required, inventory_settings FROM clubs WHERE id = $1 AND owner_id = $2`,
-            [clubId, userId]
+            `SELECT id, name, address, timezone, day_start_hour, night_start_hour, inventory_required, inventory_settings FROM clubs WHERE id = $1`,
+            [clubId]
         );
 
         if ((result.rowCount || 0) === 0) {
-            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+            return NextResponse.json({ error: 'Club not found' }, { status: 404 });
         }
 
         // Fetch additional data for settings UI
@@ -37,6 +33,10 @@ export async function GET(
         });
 
     } catch (error: any) {
+        const status = error?.status
+        if (status) {
+            return NextResponse.json({ error: status === 401 ? 'Unauthorized' : 'Forbidden' }, { status })
+        }
         console.error('Get Club Settings Error:', error);
         return NextResponse.json({ error: error.message }, { status: 500 });
     }

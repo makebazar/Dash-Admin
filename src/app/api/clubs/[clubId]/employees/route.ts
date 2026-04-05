@@ -5,6 +5,7 @@ import { normalizePhone } from '@/lib/phone-utils';
 import { canAddMoreEmployeesToClub, resolveSubscriptionState } from '@/lib/subscriptions';
 import { hasColumn } from '@/lib/db-compat';
 import { ensureOwnerSubscriptionActive } from '@/lib/club-subscription-guard';
+import { requireClubFullAccess } from '@/lib/club-api-access';
 
 async function syncOwnersSubscriptionForClub(clubId: string | number) {
     const hasSubscriptionStatus = await hasColumn('users', 'subscription_status');
@@ -61,27 +62,8 @@ export async function GET(
     { params }: { params: Promise<{ clubId: string }> }
 ) {
     try {
-        const userId = (await cookies()).get('session_user_id')?.value;
         const { clubId } = await params;
-
-        if (!userId) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
-
-        const ownerCheck = await query(
-            `SELECT 1
-             FROM clubs c
-             WHERE c.id = $1 AND c.owner_id = $2
-             UNION
-             SELECT 1
-             FROM club_employees ce
-             WHERE ce.club_id = $1 AND ce.user_id = $2 AND ce.role = 'Владелец'`,
-            [clubId, userId]
-        );
-
-        if ((ownerCheck.rowCount ?? 0) === 0) {
-            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-        }
+        await requireClubFullAccess(clubId)
 
         // Get employees with salary scheme assignments
         const result = await query(
@@ -142,7 +124,11 @@ export async function GET(
 
         return NextResponse.json({ employees });
 
-    } catch (error) {
+    } catch (error: any) {
+        const status = error?.status
+        if (status) {
+            return NextResponse.json({ error: status === 401 ? 'Unauthorized' : 'Forbidden' }, { status })
+        }
         console.error('Get Employees Error:', error);
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }

@@ -2,14 +2,15 @@ import { NextResponse } from 'next/server'
 import { query } from '@/db'
 import { hasColumn } from '@/lib/db-compat'
 import { resolveSubscriptionState } from '@/lib/subscriptions'
+import { requireClubFullAccess } from '@/lib/club-api-access'
 
 export async function ensureOwnerSubscriptionActive(clubId: string | number, userId: string) {
-    const ownerCheck = await query(
-        `SELECT 1 FROM clubs WHERE id = $1 AND owner_id = $2`,
-        [clubId, userId]
-    )
-
-    if ((ownerCheck.rowCount || 0) === 0) {
+    try {
+        const access = await requireClubFullAccess(String(clubId))
+        if (access.userId !== userId) {
+            return { ok: false as const, response: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) }
+        }
+    } catch (error: any) {
         return { ok: false as const, response: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) }
     }
 

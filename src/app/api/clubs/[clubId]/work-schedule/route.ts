@@ -3,6 +3,8 @@ import { query } from '@/db';
 import { cookies } from 'next/headers';
 import { hasColumn } from '@/lib/db-compat';
 import { formatDateKeyInTimezone, formatLocalDate, parseDateKey } from '@/lib/utils';
+import { requireClubFullAccess } from '@/lib/club-api-access';
+import { ensureOwnerSubscriptionActive } from '@/lib/club-subscription-guard';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,7 +14,6 @@ export async function GET(
     { params }: { params: Promise<{ clubId: string }> }
 ) {
     try {
-        const userId = (await cookies()).get('session_user_id')?.value;
         const { clubId } = await params;
         const { searchParams } = new URL(request.url, `http://${request.headers.get('host') || 'localhost'}`);
         const monthStr = searchParams.get('month') || (new Date().getMonth() + 1).toString();
@@ -25,18 +26,7 @@ export async function GET(
             return NextResponse.json({ error: 'Invalid month or year' }, { status: 400 });
         }
 
-        if (!userId) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
-
-        // Check ownership/access
-        const ownerCheck = await query(
-            `SELECT 1 FROM clubs WHERE id = $1 AND owner_id = $2`,
-            [clubId, userId]
-        );
-        if ((ownerCheck.rowCount || 0) === 0) {
-            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-        }
+        await requireClubFullAccess(clubId)
 
         // AUTO-MIGRATION: Ensure database is ready (necessary for prod sync)
         try {
@@ -152,6 +142,10 @@ export async function GET(
         });
 
     } catch (error: any) {
+        const status = error?.status
+        if (status) {
+            return NextResponse.json({ error: status === 401 ? 'Unauthorized' : 'Forbidden' }, { status })
+        }
         console.error('CRITICAL: Work Schedule API Error:', error);
         return NextResponse.json({
             error: error.message,
@@ -175,8 +169,8 @@ export async function PATCH(
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        const ownerCheck = await query(`SELECT 1 FROM clubs WHERE id = $1 AND owner_id = $2`, [clubId, adminId]);
-        if ((ownerCheck.rowCount || 0) === 0) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        const guard = await ensureOwnerSubscriptionActive(clubId, adminId)
+        if (!guard.ok) return guard.response
 
         const clubRes = await query(
             `SELECT COALESCE(timezone, 'Europe/Moscow') as timezone
@@ -388,6 +382,9 @@ export async function POST(
         const { month, year } = await request.json();
 
         if (!adminId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+        const guard = await ensureOwnerSubscriptionActive(clubId, adminId)
+        if (!guard.ok) return guard.response
 
         let prevMonth = month - 1;
         let prevYear = year;

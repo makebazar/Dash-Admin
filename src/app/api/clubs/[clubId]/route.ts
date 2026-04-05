@@ -1,18 +1,14 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/db';
-import { cookies } from 'next/headers';
+import { requireClubApiAccess } from '@/lib/club-api-access';
 
 export async function GET(
     request: Request,
     { params }: { params: Promise<{ clubId: string }> }
 ) {
     try {
-        const userId = (await cookies()).get('session_user_id')?.value;
         const { clubId } = await params;
-
-        if (!userId) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
+        await requireClubApiAccess(clubId);
 
         // Получить клуб и проверить владельца
         const result = await query(
@@ -26,14 +22,13 @@ export async function GET(
 
         const club = result.rows[0];
 
-        // Проверить, что пользователь - владелец
-        if (club.owner_id !== userId) {
-            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-        }
-
         return NextResponse.json({ club });
 
-    } catch (error) {
+    } catch (error: any) {
+        const status = error?.status;
+        if (status) {
+            return NextResponse.json({ error: status === 401 ? 'Unauthorized' : 'Forbidden' }, { status });
+        }
         console.error('Get Club Error:', error);
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
