@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { useParams } from "next/navigation"
+import { optimizeFileBeforeUpload } from "@/lib/utils"
 
 interface ShiftOpeningWizardProps {
     isOpen: boolean
@@ -213,59 +214,6 @@ export function ShiftOpeningWizard({
         })
     }
 
-    const compressImage = async (file: File): Promise<Blob> => {
-        return new Promise((resolve, reject) => {
-            const img = new Image()
-            const reader = new FileReader()
-
-            reader.onload = (e) => {
-                img.src = e.target?.result as string
-            }
-
-            img.onload = () => {
-                const canvas = document.createElement('canvas')
-                const ctx = canvas.getContext('2d')
-                
-                // Max dimensions
-                const MAX_WIDTH = 1200
-                const MAX_HEIGHT = 1200
-                
-                let width = img.width
-                let height = img.height
-
-                // Calculate new dimensions
-                if (width > height) {
-                    if (width > MAX_WIDTH) {
-                        height *= MAX_WIDTH / width
-                        width = MAX_WIDTH
-                    }
-                } else {
-                    if (height > MAX_HEIGHT) {
-                        width *= MAX_HEIGHT / height
-                        height = MAX_HEIGHT
-                    }
-                }
-
-                canvas.width = width
-                canvas.height = height
-
-                ctx?.drawImage(img, 0, 0, width, height)
-
-                // Compress to JPEG with 0.7 quality
-                canvas.toBlob((blob) => {
-                    if (blob) {
-                        resolve(blob)
-                    } else {
-                        reject(new Error('Canvas to Blob failed'))
-                    }
-                }, 'image/jpeg', 0.7)
-            }
-
-            reader.onerror = (err) => reject(err)
-            reader.readAsDataURL(file)
-        })
-    }
-
     const handlePhotoUpload = async (itemId: number, e: React.ChangeEvent<HTMLInputElement>) => {
         const files = e.target.files
         if (!files || files.length === 0) return
@@ -273,16 +221,10 @@ export function ShiftOpeningWizard({
         setUploadingState(prev => ({ ...prev, [itemId]: true }))
         
         try {
-            // Process all selected files
             const uploadPromises = Array.from(files).map(async (file) => {
-                // Compress image
-                const compressedBlob = await compressImage(file)
-                const compressedFile = new File([compressedBlob], file.name.replace(/\.[^/.]+$/, "") + ".jpg", {
-                    type: 'image/jpeg'
-                })
-
+                const optimizedFile = await optimizeFileBeforeUpload(file)
                 const formData = new FormData()
-                formData.append('file', compressedFile)
+                formData.append('file', optimizedFile)
 
                 const res = await fetch('/api/upload', {
                     method: 'POST',

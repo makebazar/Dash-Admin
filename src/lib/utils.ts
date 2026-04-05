@@ -71,3 +71,76 @@ export function getMonthRangeInTimezone(value: Date | string, timeZone: string) 
     lastDay: `${year}-${monthStr}-${String(lastDay).padStart(2, "0")}`,
   }
 }
+
+const CLIENT_COMPRESSIBLE_IMAGE_TYPES = new Set([
+  "image/jpeg",
+  "image/jpg",
+  "image/png",
+  "image/webp",
+  "image/heic",
+  "image/heif",
+])
+
+type UploadImageOptions = {
+  maxDimension?: number
+  quality?: number
+}
+
+export async function optimizeFileBeforeUpload(
+  file: File,
+  options: UploadImageOptions = {}
+): Promise<File> {
+  const maxDimension = options.maxDimension ?? 1600
+  const quality = options.quality ?? 0.82
+
+  if (typeof window === "undefined") return file
+  if (!CLIENT_COMPRESSIBLE_IMAGE_TYPES.has(file.type)) return file
+
+  const objectUrl = URL.createObjectURL(file)
+
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const img = new window.Image()
+      img.onload = () => resolve(img)
+      img.onerror = reject
+      img.src = objectUrl
+    })
+
+    const width = image.naturalWidth || image.width
+    const height = image.naturalHeight || image.height
+    if (!width || !height) return file
+
+    const ratio = Math.min(1, maxDimension / Math.max(width, height))
+    const targetWidth = Math.max(1, Math.round(width * ratio))
+    const targetHeight = Math.max(1, Math.round(height * ratio))
+    const canvas = document.createElement("canvas")
+    canvas.width = targetWidth
+    canvas.height = targetHeight
+
+    const context = canvas.getContext("2d", { alpha: true })
+    if (!context) return file
+
+    context.drawImage(image, 0, 0, targetWidth, targetHeight)
+
+    const prefersWebP = file.type === "image/png" || file.type === "image/webp"
+    const outputType = prefersWebP ? "image/webp" : "image/jpeg"
+    const extension = prefersWebP ? "webp" : "jpg"
+
+    const blob = await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob(resolve, outputType, quality)
+    })
+
+    if (!blob) return file
+    if (ratio === 1 && blob.size >= file.size) return file
+
+    const optimizedName = file.name.replace(/\.[^/.]+$/, "") + `.${extension}`
+    return new File([blob], optimizedName, {
+      type: outputType,
+      lastModified: Date.now(),
+    })
+  } catch {
+    return file
+  } finally {
+    URL.revokeObjectURL(objectUrl)
+  }
+}

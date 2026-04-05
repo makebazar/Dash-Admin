@@ -10,6 +10,7 @@ import { Loader2, ArrowLeft, CheckCircle2, XCircle, AlertCircle, UserCircle, Cam
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import Link from "next/link"
+import { optimizeFileBeforeUpload } from "@/lib/utils"
 
 interface ChecklistItem {
     id: number
@@ -170,8 +171,9 @@ function EvaluationForm({ params }: { params: { clubId: string } }) {
         if (!file) return
 
         setUploadingState(prev => ({ ...prev, [itemId]: true }))
+        const optimizedFile = await optimizeFileBeforeUpload(file)
         const formData = new FormData()
-        formData.append('file', file)
+        formData.append('file', optimizedFile)
 
         try {
             const res = await fetch('/api/upload', {

@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Loader2, AlertTriangle, CheckCircle2, Image as ImageIcon, X } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
-import { cn, isLaundryEquipmentType } from "@/lib/utils"
+import { cn, isLaundryEquipmentType, optimizeFileBeforeUpload } from "@/lib/utils"
 
 interface MaintenanceTask {
     id: string
@@ -100,8 +100,9 @@ export function MaintenanceSessionWizard({ isOpen, onClose, tasks, onComplete }:
             const photoUrls: string[] = []
             if (photos.length > 0) {
                 for (const file of photos) {
+                    const optimizedFile = await optimizeFileBeforeUpload(file)
                     const formData = new FormData()
-                    formData.append('file', file)
+                    formData.append('file', optimizedFile)
                     
                     try {
                         const res = await fetch('/api/upload', {

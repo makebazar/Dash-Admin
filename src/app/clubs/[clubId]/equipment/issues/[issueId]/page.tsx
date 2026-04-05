@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { optimizeFileBeforeUpload } from "@/lib/utils"
 import {
     Select,
     SelectContent,
@@ -319,8 +320,9 @@ export default function IssueDetailsPage() {
             const uploadedUrls: string[] = []
 
             for (const file of resolutionPhotos) {
+                const optimizedFile = await optimizeFileBeforeUpload(file)
                 const formData = new FormData()
-                formData.append("file", file)
+                formData.append("file", optimizedFile)
 
                 const res = await fetch("/api/upload", {
                     method: "POST",

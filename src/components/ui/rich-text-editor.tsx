@@ -39,7 +39,7 @@ import {
     AlignJustify
 } from "lucide-react";
 import { Button } from "./button";
-import { cn } from "@/lib/utils";
+import { cn, optimizeFileBeforeUpload } from "@/lib/utils";
 
 interface RichTextEditorProps {
     value: string;
@@ -115,8 +115,9 @@ export function RichTextEditor({ value, onChange, placeholder, className, compac
         input.onchange = async () => {
             const file = input.files?.[0];
             if (!file) return;
+            const optimizedFile = await optimizeFileBeforeUpload(file);
             const formData = new FormData();
-            formData.append("file", file);
+            formData.append("file", optimizedFile);
             try {
                 const res = await fetch("/api/upload", { method: "POST", body: formData });
                 const data = await res.json();

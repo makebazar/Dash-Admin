@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Plus, Trash2, Upload, Loader2, Type, Barcode, DollarSign, Move, AlignLeft, AlignCenter, AlignRight, Box, Type as WrapIcon, Scaling, Copy, Edit2, Check, X } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { cn, optimizeFileBeforeUpload } from "@/lib/utils"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 import { Switch } from "@/components/ui/switch"
@@ -118,8 +118,9 @@ export function PriceTagTemplateTab({ products, initialSettings, onSave, isPendi
         if (!file) return
 
         setIsUploading(true)
+        const optimizedFile = await optimizeFileBeforeUpload(file)
         const formData = new FormData()
-        formData.append('file', file)
+        formData.append('file', optimizedFile)
 
         try {
             const res = await fetch('/api/upload', {

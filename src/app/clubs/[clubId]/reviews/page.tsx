@@ -520,31 +520,6 @@ export default function ChecklistsPage({ params, searchParams }: { params: Promi
         }
     }
 
-    const handleDeleteTask = async (task: VerificationTask) => {
-        if (!confirm("Вы уверены, что хотите удалить этот отчет? Это действие нельзя отменить.")) return
-
-        setIsSubmittingTask(true)
-        try {
-            const res = await fetch(`/api/clubs/${clubId}/equipment/maintenance/${task.id}`, {
-                method: 'DELETE'
-            })
-
-            if (res.ok) {
-                setTasks(prev => prev.filter(t => t.id !== task.id))
-                if (expandedTaskId === task.id) {
-                    setExpandedTaskId(null)
-                }
-            } else {
-                alert("Ошибка при удалении")
-            }
-        } catch (error) {
-            console.error("Error deleting task:", error)
-            alert("Произошла ошибка")
-        } finally {
-            setIsSubmittingTask(false)
-        }
-    }
-
     const handleSendToLaundry = async (task: VerificationTask) => {
         setIsSubmittingTask(true)
         try {
@@ -1037,30 +1012,31 @@ export default function ChecklistsPage({ params, searchParams }: { params: Promi
                             ) : (
                                 <div className="space-y-8">
                                     {groupedTasks.map(([zoneName, zoneTasks]) => (
-                                        <div key={zoneName} className="space-y-3 pb-24">
+                                        <div key={zoneName} className="space-y-4 pb-24">
                                             <div className="flex items-center gap-2 pb-2 border-b">
                                                 <Layers className="h-5 w-5 text-slate-500" />
                                                 <h2 className="text-xl font-semibold text-slate-800">{zoneName}</h2>
                                                 <Badge variant="secondary" className="ml-2">{zoneTasks.length}</Badge>
                                             </div>
                                             
-                                            <div className="flex flex-col gap-0 sm:gap-3 -mx-4 sm:mx-0">
+                                            <div className="flex flex-col gap-3 sm:gap-3">
                                                 {zoneTasks.map((task) => {
                                                     const isExpanded = expandedTaskId === task.id
                                                     const isLaundryItem = isLaundryEquipmentType(task.equipment_type)
                                                     const latestSubmission = getLatestTaskSubmission(task)
                                                     const previousSubmission = getPreviousTaskSubmission(task)
                                                     const latestRejection = getLatestTaskRejection(task)
+                                                    const isResubmittedForReview =
+                                                        task.verification_status === 'PENDING' &&
+                                                        latestSubmission?.event_type === 'RESUBMITTED'
                                                     return (
                                                         <div 
                                                             key={task.id} 
                                                             className={cn(
-                                                                "bg-white transition-all",
-                                                                // Mobile: flat list style
-                                                                "border-b last:border-0",
+                                                                "bg-white transition-all overflow-hidden rounded-2xl border border-slate-200 shadow-sm",
                                                                 // Desktop: card style
-                                                                "sm:border sm:rounded-xl sm:shadow-sm sm:overflow-hidden sm:mb-3",
-                                                                isExpanded ? "sm:ring-0 sm:border-slate-300" : "sm:hover:border-slate-300"
+                                                                "sm:rounded-xl",
+                                                                isExpanded ? "border-slate-300 shadow-md" : "hover:border-slate-300"
                                                             )}
                                                         >
                                                             {/* Summary Row */}
@@ -1071,8 +1047,8 @@ export default function ChecklistsPage({ params, searchParams }: { params: Promi
                                                                 <div className="flex items-center gap-4 flex-1 min-w-0">
                                                                     
                                                                     <div className="min-w-0 flex-1">
-                                                                        <div className="flex items-center gap-2 mb-1">
-                                                                            <span className="font-semibold text-base truncate">{task.equipment_name}</span>
+                                                                        <div className="flex items-start gap-2 mb-1 flex-wrap">
+                                                                            <span className="font-semibold text-[17px] leading-6 text-slate-950 break-words">{task.equipment_name}</span>
                                                                             {isLaundryItem && (
                                                                                 <Badge variant="outline" className="border-violet-200 bg-violet-50 text-violet-700">
                                                                                     Коврик
@@ -1086,7 +1062,7 @@ export default function ChecklistsPage({ params, searchParams }: { params: Promi
                                                                         </div>
                                                                         <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
                                                                             {task.workstation_name && (
-                                                                                <span className="text-xs text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded font-medium">
+                                                                                <span className="text-xs text-slate-600 bg-slate-100 px-2 py-1 rounded-md font-medium">
                                                                                     {task.workstation_name}
                                                                                 </span>
                                                                             )}
@@ -1098,184 +1074,205 @@ export default function ChecklistsPage({ params, searchParams }: { params: Promi
                                                                     </div>
                                                                 </div>
 
-                                                                <div className="flex items-center justify-between sm:justify-end gap-6 sm:mr-4 w-full sm:w-auto border-t sm:border-t-0 pt-3 sm:pt-0 mt-1 sm:mt-0">
-                                                                        <div className="flex flex-row sm:flex-col items-center sm:items-end gap-3 sm:gap-0 text-left sm:text-right">
-                                                                            <div className="flex items-center gap-2 mb-0.5">
-                                                                                <span className="text-sm font-medium text-slate-700">
+                                                                <div className="w-full border-t border-slate-100 pt-3 sm:mr-1 sm:w-auto sm:border-t-0 sm:pt-0">
+                                                                    <div className="sm:hidden">
+                                                                        <div className="flex items-start justify-between gap-3">
+                                                                            <div className="min-w-0 flex flex-col text-left">
+                                                                                <span className="text-sm font-medium leading-5 text-slate-700">
                                                                                     {task.completed_by_name?.split(' ')[0] || (task.verification_status === 'REJECTED' ? 'На доработке' : '—')}
                                                                                 </span>
+                                                                                <span className="mt-1 text-xs leading-4 text-slate-400">
+                                                                                    {task.completed_at 
+                                                                                        ? format(new Date(task.completed_at), 'dd.MM в HH:mm', { locale: ru }) 
+                                                                                        : task.verified_at
+                                                                                            ? `Отклонен ${format(new Date(task.verified_at), 'dd.MM в HH:mm', { locale: ru })}`
+                                                                                            : '-'}
+                                                                                </span>
                                                                             </div>
-                                                                        <div className="flex items-center gap-2 text-xs text-slate-400">
-                                                                            <span>
+
+                                                                            <div className="flex items-center gap-2">
+                                                                                {task.photos && task.photos.length > 0 && (
+                                                                                    <div className="inline-flex items-center gap-1.5 rounded-full px-1 text-blue-600">
+                                                                                        <Camera className="h-3.5 w-3.5" />
+                                                                                        <span className="text-xs font-semibold">{task.photos.length}</span>
+                                                                                    </div>
+                                                                                )}
+                                                                                <div className="flex h-8 w-8 items-center justify-center rounded-full text-slate-500">
+                                                                                    {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+
+                                                                        {(task.verification_status === 'APPROVED' || task.verification_status === 'REJECTED' || task.verification_status === 'PENDING') && (
+                                                                            <div className="mt-2 flex items-center justify-between gap-3 text-xs">
+                                                                                {task.verification_status === 'APPROVED' && (
+                                                                                    <div className="inline-flex max-w-full items-center text-[11px] font-medium leading-4 text-green-700">
+                                                                                        Одобрено
+                                                                                    </div>
+                                                                                )}
+                                                                                {task.verification_status === 'REJECTED' && (
+                                                                                    <div className="inline-flex max-w-full items-center text-[11px] font-medium leading-4 text-amber-700">
+                                                                                        На доработке {task.rework_days || 0} дн.
+                                                                                    </div>
+                                                                                )}
+                                                                                {task.verification_status === 'PENDING' && (
+                                                                                    <div
+                                                                                        className={cn(
+                                                                                            "inline-flex max-w-full items-center text-[11px] font-medium leading-4",
+                                                                                            isResubmittedForReview ? "text-blue-600" : "text-slate-600"
+                                                                                        )}
+                                                                                    >
+                                                                                        {isResubmittedForReview ? 'После доработки' : 'На проверке'}
+                                                                                    </div>
+                                                                                )}
+                                                                                <div className="h-px flex-1 bg-slate-100" />
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+
+                                                                    <div className="hidden sm:flex items-center gap-4">
+                                                                        {(task.verification_status === 'APPROVED' || task.verification_status === 'REJECTED' || task.verification_status === 'PENDING') && (
+                                                                            <div
+                                                                                className={cn(
+                                                                                    "whitespace-nowrap text-xs font-medium",
+                                                                                    task.verification_status === 'APPROVED' && "text-green-700",
+                                                                                    task.verification_status === 'REJECTED' && "text-amber-700",
+                                                                                    task.verification_status === 'PENDING' && (isResubmittedForReview ? "text-blue-600" : "text-slate-600")
+                                                                                )}
+                                                                            >
+                                                                                {task.verification_status === 'APPROVED' && 'Одобрено'}
+                                                                                {task.verification_status === 'REJECTED' && `На доработке ${task.rework_days || 0} дн.`}
+                                                                                {task.verification_status === 'PENDING' && (isResubmittedForReview ? 'После доработки' : 'На проверке')}
+                                                                            </div>
+                                                                        )}
+
+                                                                        <div className="text-right">
+                                                                            <div className="text-sm font-medium leading-5 text-slate-700">
+                                                                                {task.completed_by_name?.split(' ')[0] || (task.verification_status === 'REJECTED' ? 'На доработке' : '—')}
+                                                                            </div>
+                                                                            <div className="mt-0.5 text-xs leading-4 text-slate-400">
                                                                                 {task.completed_at 
                                                                                     ? format(new Date(task.completed_at), 'dd.MM в HH:mm', { locale: ru }) 
                                                                                     : task.verified_at
                                                                                         ? `Отклонен ${format(new Date(task.verified_at), 'dd.MM в HH:mm', { locale: ru })}`
                                                                                         : '-'}
-                                                                            </span>
-                                                                        </div>
-                                                                        {task.verification_status === 'APPROVED' && (
-                                                                            <div className="mt-1">
-                                                                                <Badge variant="default" className="bg-green-100 text-green-700 hover:bg-green-100 border-0 h-5 px-1.5 text-[10px]">
-                                                                                    <CheckCircle2 className="h-3 w-3 mr-1" /> Одобрено
-                                                                                </Badge>
                                                                             </div>
-                                                                        )}
-                                                                        {task.verification_status === 'REJECTED' && (
-                                                                            <div className="mt-1">
-                                                                                <Badge variant="destructive" className="bg-amber-100 text-amber-700 hover:bg-amber-100 border-0 h-5 px-1.5 text-[10px]">
-                                                                                    <RotateCcw className="h-3 w-3 mr-1" /> На доработке {task.rework_days || 0} дн.
-                                                                                </Badge>
-                                                                            </div>
-                                                                        )}
-                                                                        {task.verification_status === 'PENDING' && (
-                                                                            <div className="mt-1">
-                                                                                <Badge variant="outline" className="text-blue-600 border-blue-200 bg-blue-50 h-5 px-1.5 text-[10px]">
-                                                                                    <History className="h-3 w-3 mr-1" /> Ожидает
-                                                                                </Badge>
-                                                                            </div>
-                                                                        )}
-                                                                    </div>
-                                                                    
-                                                                    <div className="flex items-center gap-4">
-                                                                        {task.photos && task.photos.length > 0 && (
-                                                                        <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-blue-50 text-blue-600 border border-blue-100">
-                                                                            <Camera className="h-3.5 w-3.5" />
-                                                                            <span className="text-xs font-bold">{task.photos.length}</span>
                                                                         </div>
-                                                                    )}
-                                                                        <div className="sm:hidden text-muted-foreground">
-                                                                            {isExpanded ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
 
-                                                                <div className="hidden sm:flex items-center gap-3 pl-4 border-l">
-                                                                    {isExpanded ? <ChevronUp className="h-5 w-5 text-muted-foreground" /> : <ChevronDown className="h-5 w-5 text-muted-foreground" />}
+                                                                        <div className="flex items-center gap-3 pl-3 border-l border-slate-100">
+                                                                            {task.photos && task.photos.length > 0 && (
+                                                                                <div className="inline-flex items-center gap-1 text-blue-600">
+                                                                                    <Camera className="h-3.5 w-3.5" />
+                                                                                    <span className="text-xs font-semibold">{task.photos.length}</span>
+                                                                                </div>
+                                                                            )}
+                                                                            <div className="flex h-8 w-8 items-center justify-center rounded-full text-slate-500">
+                                                                                {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
                                                                 </div>
                                                             </div>
 
                                                             {/* Expanded Details */}
                                                             {isExpanded && (
                                                                 <div className="border-t bg-white p-6 sm:px-8 pb-8 animate-in slide-in-from-top-2 duration-200">
-                                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                                                    <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.85fr)] gap-6">
                                                                         {/* Photos */}
-                                                                        <div className="space-y-5">
-                                                                            <div className={cn("grid gap-4", previousSubmission ? "xl:grid-cols-2" : "grid-cols-1")}>
-                                                                                <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4 space-y-4">
-                                                                                    <div className="flex items-start justify-between gap-3">
-                                                                                        <div>
-                                                                                            <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-                                                                                                <Eye className="h-3 w-3" /> Текущий фотоотчет
-                                                                                            </h4>
-                                                                                            <p className="mt-1 text-sm font-medium text-slate-900">
-                                                                                                {latestSubmission?.event_type === 'RESUBMITTED' ? 'После доработки' : 'Первая отправка'}
-                                                                                            </p>
+                                                                        <div className="space-y-3">
+                                                                            <div className={cn("grid gap-3", previousSubmission ? "lg:grid-cols-2" : "grid-cols-1")}>
+                                                                                <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+                                                                                    <div className="mb-3">
+                                                                                        <div className="min-w-0">
+                                                                                            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                                                                                                {latestSubmission?.event_type === 'RESUBMITTED' ? 'После доработки' : 'Фотоотчет'}
+                                                                                            </div>
+                                                                                            {formatTaskMessageStamp(latestSubmission?.created_at) && (
+                                                                                                <div className="mt-1 text-xs text-slate-400">
+                                                                                                    {formatTaskMessageStamp(latestSubmission?.created_at)}
+                                                                                                </div>
+                                                                                            )}
                                                                                         </div>
-                                                                                        <Badge variant="outline" className="border-slate-200 bg-white text-slate-600">
-                                                                                            {latestSubmission?.photos?.length || 0} фото
-                                                                                        </Badge>
                                                                                     </div>
 
-                                                                                    <div className="rounded-xl bg-white p-3 border space-y-3">
-                                                                                        {latestSubmission?.photos && latestSubmission.photos.length > 0 ? (
-                                                                                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                                                                                                {latestSubmission.photos.map((photo, i) => (
+                                                                                    {latestSubmission?.photos && latestSubmission.photos.length > 0 ? (
+                                                                                        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                                                                                            {latestSubmission.photos.map((photo, i) => (
+                                                                                                <div
+                                                                                                    key={i}
+                                                                                                    className="group relative aspect-video overflow-hidden rounded-xl bg-slate-100 ring-1 ring-slate-200 cursor-zoom-in transition-all hover:ring-2 hover:ring-slate-300"
+                                                                                                    onClick={(e) => openImage(photo, latestSubmission.photos || [], e)}
+                                                                                                >
+                                                                                                    <img
+                                                                                                        src={photo}
+                                                                                                        alt={`Фото ${i + 1}`}
+                                                                                                        className="h-full w-full object-cover"
+                                                                                                    />
+                                                                                                    <div className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-all group-hover:bg-black/10 group-hover:opacity-100">
+                                                                                                        <Eye className="h-5 w-5 text-white drop-shadow-md" />
+                                                                                                    </div>
+                                                                                                </div>
+                                                                                            ))}
+                                                                                        </div>
+                                                                                    ) : (
+                                                                                        <div className="flex h-24 items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 text-sm text-slate-500">
+                                                                                            Нет фото
+                                                                                        </div>
+                                                                                    )}
+
+                                                                                    {latestSubmission?.task_notes && (
+                                                                                        <div className="mt-3 border-t border-slate-100 pt-3">
+                                                                                            <p className="text-sm leading-6 text-slate-700">{latestSubmission.task_notes}</p>
+                                                                                        </div>
+                                                                                    )}
+                                                                                </section>
+
+                                                                                {previousSubmission && (
+                                                                                    <section className="rounded-2xl border border-amber-200 bg-amber-50/25 p-4 shadow-sm sm:p-5">
+                                                                                        <div className="mb-3">
+                                                                                            <div className="min-w-0">
+                                                                                                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-700">
+                                                                                                    До доработки
+                                                                                                </div>
+                                                                                                {formatTaskMessageStamp(previousSubmission.created_at) && (
+                                                                                                    <div className="mt-1 text-xs text-amber-700/70">
+                                                                                                        {formatTaskMessageStamp(previousSubmission.created_at)}
+                                                                                                    </div>
+                                                                                                )}
+                                                                                            </div>
+                                                                                        </div>
+
+                                                                                        {previousSubmission.photos && previousSubmission.photos.length > 0 ? (
+                                                                                            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                                                                                                {previousSubmission.photos.map((photo, i) => (
                                                                                                     <div
                                                                                                         key={i}
-                                                                                                        className="group relative aspect-video bg-white rounded-lg overflow-hidden border shadow-sm cursor-zoom-in hover:ring-2 ring-primary/50 transition-all"
-                                                                                                        onClick={(e) => openImage(photo, latestSubmission.photos || [], e)}
+                                                                                                        className="group relative aspect-video overflow-hidden rounded-xl bg-white ring-1 ring-amber-200 cursor-zoom-in transition-all hover:ring-2 hover:ring-amber-300"
+                                                                                                        onClick={(e) => openImage(photo, previousSubmission.photos || [], e)}
                                                                                                     >
                                                                                                         <img
                                                                                                             src={photo}
-                                                                                                            alt={`Фото ${i + 1}`}
-                                                                                                            className="w-full h-full object-cover"
+                                                                                                            alt={`Фото до доработки ${i + 1}`}
+                                                                                                            className="h-full w-full object-cover"
                                                                                                         />
-                                                                                                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
-                                                                                                            <Eye className="text-white drop-shadow-md h-6 w-6" />
+                                                                                                        <div className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-all group-hover:bg-black/10 group-hover:opacity-100">
+                                                                                                            <Eye className="h-5 w-5 text-white drop-shadow-md" />
                                                                                                         </div>
                                                                                                     </div>
                                                                                                 ))}
                                                                                             </div>
                                                                                         ) : (
-                                                                                            <div className="h-24 flex items-center justify-center border-2 border-dashed border-slate-200 rounded-lg text-muted-foreground text-sm">
-                                                                                                Нет фото
+                                                                                            <div className="flex h-24 items-center justify-center rounded-xl border border-dashed border-amber-200 bg-white/70 text-sm text-amber-700/70">
+                                                                                                Ранее фото не были приложены
                                                                                             </div>
                                                                                         )}
 
-                                                                                        {latestSubmission?.task_notes && (
-                                                                                            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-                                                                                                <div className="mb-1 flex items-start justify-between gap-3">
-                                                                                                    <span className="font-medium">Комментарий сотрудника</span>
-                                                                                                    {formatTaskMessageStamp(latestSubmission.created_at) && (
-                                                                                                        <span className="shrink-0 text-[11px] text-slate-400">
-                                                                                                            {formatTaskMessageStamp(latestSubmission.created_at)}
-                                                                                                        </span>
-                                                                                                    )}
-                                                                                                </div>
-                                                                                                <p>{latestSubmission.task_notes}</p>
+                                                                                        {previousSubmission.task_notes && (
+                                                                                            <div className="mt-3 border-t border-amber-200/70 pt-3">
+                                                                                                <p className="text-sm leading-6 text-slate-700">{previousSubmission.task_notes}</p>
                                                                                             </div>
                                                                                         )}
-                                                                                    </div>
-                                                                                </div>
-
-                                                                                {previousSubmission && (
-                                                                                    <div className="rounded-2xl border border-amber-200 bg-amber-50/40 p-4 space-y-4">
-                                                                                        <div className="flex items-start justify-between gap-3">
-                                                                                            <div>
-                                                                                                <h4 className="text-xs font-semibold uppercase tracking-wider text-amber-700 flex items-center gap-2">
-                                                                                                    <History className="h-3 w-3" /> До доработки
-                                                                                                </h4>
-                                                                                                <p className="mt-1 text-sm font-medium text-amber-900">
-                                                                                                    Предыдущая отправка на проверку
-                                                                                                </p>
-                                                                                            </div>
-                                                                                            <Badge variant="outline" className="border-amber-200 bg-white text-amber-700">
-                                                                                                {previousSubmission.photos?.length || 0} фото
-                                                                                            </Badge>
-                                                                                        </div>
-
-                                                                                        <div className="rounded-xl bg-white/80 p-3 border border-amber-200 space-y-3">
-                                                                                            {previousSubmission.photos && previousSubmission.photos.length > 0 ? (
-                                                                                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                                                                                                    {previousSubmission.photos.map((photo, i) => (
-                                                                                                        <div
-                                                                                                            key={i}
-                                                                                                            className="group relative aspect-video bg-white rounded-lg overflow-hidden border shadow-sm cursor-zoom-in hover:ring-2 ring-amber-300 transition-all"
-                                                                                                            onClick={(e) => openImage(photo, previousSubmission.photos || [], e)}
-                                                                                                        >
-                                                                                                            <img
-                                                                                                                src={photo}
-                                                                                                                alt={`Фото до доработки ${i + 1}`}
-                                                                                                                className="w-full h-full object-cover"
-                                                                                                            />
-                                                                                                            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
-                                                                                                                <Eye className="text-white drop-shadow-md h-6 w-6" />
-                                                                                                            </div>
-                                                                                                        </div>
-                                                                                                    ))}
-                                                                                                </div>
-                                                                                            ) : (
-                                                                                                <div className="h-20 flex items-center justify-center border border-dashed border-amber-200 rounded-lg text-amber-700/70 text-sm">
-                                                                                                    Ранее фото не были приложены
-                                                                                                </div>
-                                                                                            )}
-
-                                                                                            {previousSubmission.task_notes && (
-                                                                                                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-                                                                                                    <div className="mb-1 flex items-start justify-between gap-3">
-                                                                                                        <span className="font-medium">Комментарий до доработки</span>
-                                                                                                        {formatTaskMessageStamp(previousSubmission.created_at) && (
-                                                                                                            <span className="shrink-0 text-[11px] text-amber-700/60">
-                                                                                                                {formatTaskMessageStamp(previousSubmission.created_at)}
-                                                                                                            </span>
-                                                                                                        )}
-                                                                                                    </div>
-                                                                                                    <p>{previousSubmission.task_notes}</p>
-                                                                                                </div>
-                                                                                            )}
-                                                                                        </div>
-                                                                                    </div>
+                                                                                    </section>
                                                                                 )}
                                                                             </div>
                                                                         </div>
@@ -1346,17 +1343,6 @@ export default function ChecklistsPage({ params, searchParams }: { params: Promi
                                                                                     </Button>
                                                                                 </div>
                                                                             )}
-                                                                            
-                                                                            <div className="flex justify-center pt-2 pb-2">
-                                                                                <button 
-                                                                                    onClick={() => handleDeleteTask(task)}
-                                                                                    className="text-xs text-slate-400 hover:text-red-500 flex items-center gap-1 transition-colors"
-                                                                                    disabled={isSubmittingTask}
-                                                                                >
-                                                                                    <Trash2 className="h-3 w-3" />
-                                                                                    Удалить отчет
-                                                                                </button>
-                                                                            </div>
                                                                         </div>
                                                                     </div>
                                                                 </div>

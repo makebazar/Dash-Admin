@@ -458,3 +458,82 @@ ADD COLUMN IF NOT EXISTS warehouse_id INTEGER REFERENCES warehouses(id);
 -- Add calculated_revenue to inventory_items
 ALTER TABLE warehouse_inventory_items 
 ADD COLUMN IF NOT EXISTS calculated_revenue DECIMAL(10, 2);
+
+-- ============================================
+-- RECRUITMENT (CANDIDATE APPLICATIONS)
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS recruitment_form_templates (
+    id SERIAL PRIMARY KEY,
+    club_id INTEGER NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
+    name VARCHAR(120) NOT NULL,
+    description TEXT,
+    position VARCHAR(80),
+    schema JSONB NOT NULL DEFAULT '{}'::jsonb,
+    public_token VARCHAR(64) UNIQUE,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_recruitment_form_templates_club ON recruitment_form_templates(club_id);
+CREATE INDEX IF NOT EXISTS idx_recruitment_form_templates_token ON recruitment_form_templates(public_token);
+
+CREATE TABLE IF NOT EXISTS recruitment_applications (
+    id SERIAL PRIMARY KEY,
+    club_id INTEGER NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
+    template_id INTEGER NOT NULL REFERENCES recruitment_form_templates(id) ON DELETE CASCADE,
+    candidate_name TEXT,
+    candidate_phone TEXT,
+    candidate_email TEXT,
+    answers JSONB NOT NULL DEFAULT '{}'::jsonb,
+    auto_score INTEGER,
+    manual_score INTEGER,
+    status VARCHAR(20) NOT NULL DEFAULT 'new',
+    reviewed_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_recruitment_applications_club ON recruitment_applications(club_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_recruitment_applications_template ON recruitment_applications(template_id, created_at DESC);
+
+-- Recruitment tests (separate from form)
+CREATE TABLE IF NOT EXISTS recruitment_test_templates (
+    id SERIAL PRIMARY KEY,
+    club_id INTEGER NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
+    name VARCHAR(120) NOT NULL,
+    description TEXT,
+    schema JSONB NOT NULL DEFAULT '{}'::jsonb,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_recruitment_test_templates_club ON recruitment_test_templates(club_id);
+
+CREATE TABLE IF NOT EXISTS recruitment_form_template_tests (
+    template_id INTEGER NOT NULL REFERENCES recruitment_form_templates(id) ON DELETE CASCADE,
+    test_id INTEGER NOT NULL REFERENCES recruitment_test_templates(id) ON DELETE CASCADE,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (template_id, test_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_recruitment_form_template_tests_template ON recruitment_form_template_tests(template_id, sort_order);
+
+CREATE TABLE IF NOT EXISTS recruitment_application_tests (
+    id SERIAL PRIMARY KEY,
+    application_id INTEGER NOT NULL REFERENCES recruitment_applications(id) ON DELETE CASCADE,
+    test_id INTEGER NOT NULL REFERENCES recruitment_test_templates(id) ON DELETE CASCADE,
+    answers JSONB NOT NULL DEFAULT '{}'::jsonb,
+    auto_score INTEGER,
+    max_score INTEGER,
+    score_percent INTEGER,
+    result JSONB,
+    created_at TIMESTAMP DEFAULT NOW(),
+    UNIQUE(application_id, test_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_recruitment_application_tests_application ON recruitment_application_tests(application_id, created_at DESC);
+
+ALTER TABLE recruitment_applications
+    ALTER COLUMN status SET DEFAULT 'in_progress';

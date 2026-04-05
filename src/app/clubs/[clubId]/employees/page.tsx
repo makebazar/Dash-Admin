@@ -1,15 +1,14 @@
 "use client"
 
 import { useEffect, useState, useMemo } from "react"
-import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Plus, Trash2, Loader2, UserPlus, Pencil, Search, Users, UserCheck, UserMinus, CreditCard, ArrowLeft, MoreHorizontal, User } from "lucide-react"
+import { Plus, Loader2, UserPlus, Pencil, Search, Users, UserCheck, UserMinus, MoreHorizontal, FileText } from "lucide-react"
 import { PhoneInput } from "@/components/ui/phone-input"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -43,9 +42,9 @@ interface SalaryScheme {
 }
 
 export default function EmployeesPage({ params }: { params: Promise<{ clubId: string }> }) {
-    const router = useRouter()
     const [clubId, setClubId] = useState<string>('')
     const [employees, setEmployees] = useState<Employee[]>([])
+    const [newCandidatesCount, setNewCandidatesCount] = useState(0)
     const [roles, setRoles] = useState<Role[]>([])
     const [salarySchemes, setSalarySchemes] = useState<SalaryScheme[]>([])
     const [isLoading, setIsLoading] = useState(true)
@@ -88,21 +87,24 @@ export default function EmployeesPage({ params }: { params: Promise<{ clubId: st
 
     const fetchData = async (id: string) => {
         try {
-            const [employeesRes, rolesRes, schemesRes] = await Promise.all([
+            const [employeesRes, rolesRes, schemesRes, applicationsRes] = await Promise.all([
                 fetch(`/api/clubs/${id}/employees`),
                 fetch(`/api/roles`),
-                fetch(`/api/clubs/${id}/salary-schemes`)
+                fetch(`/api/clubs/${id}/salary-schemes`),
+                fetch(`/api/clubs/${id}/recruitment/applications?status=new`)
             ])
 
-            const [employeesData, rolesData, schemesData] = await Promise.all([
+            const [employeesData, rolesData, schemesData, applicationsData] = await Promise.all([
                 employeesRes.json(),
                 rolesRes.json(),
-                schemesRes.json()
+                schemesRes.json(),
+                applicationsRes.json()
             ])
 
             if (employeesRes.ok) setEmployees(employeesData.employees)
             if (rolesRes.ok) setRoles(rolesData.roles)
             if (schemesRes.ok) setSalarySchemes(schemesData.schemes || [])
+            if (applicationsRes.ok) setNewCandidatesCount(Array.isArray(applicationsData) ? applicationsData.length : 0)
         } catch (error) {
             console.error('Error fetching data:', error)
         } finally {
@@ -297,10 +299,9 @@ export default function EmployeesPage({ params }: { params: Promise<{ clubId: st
     }, [employees, searchQuery, activeTab])
 
     const stats = useMemo(() => {
-        const active = employees.filter(e => e.is_active && !e.dismissed_at).length
-        const dismissed = employees.filter(e => !e.is_active || e.dismissed_at).length
-        return { total: employees.length, active, dismissed }
-    }, [employees])
+        const activeEmployees = employees.filter(employee => employee.is_active && !employee.dismissed_at).length
+        return { activeEmployees, newCandidates: newCandidatesCount }
+    }, [employees, newCandidatesCount])
 
     if (isLoading) {
         return (
@@ -315,37 +316,38 @@ export default function EmployeesPage({ params }: { params: Promise<{ clubId: st
 
     return (
         <div className="min-h-screen bg-[#F9FAFB] dark:bg-background">
-            {/* Top Bar */}
-            <div className="sticky top-0 z-30 w-full border-b bg-background/80 backdrop-blur-md">
-                <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:px-8 flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                        <Button variant="ghost" size="icon" asChild className="rounded-full">
-                            <Link href={`/clubs/${clubId}/settings/general`}>
-                                <ArrowLeft className="h-5 w-5" />
-                            </Link>
-                        </Button>
-                        <div>
-                            <h1 className="text-xl font-bold tracking-tight">Сотрудники</h1>
-                            <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Управление персоналом</p>
+            <div className="mx-auto max-w-[1600px] space-y-5 p-4 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:space-y-6 sm:p-6 sm:pb-[calc(6.5rem+env(safe-area-inset-bottom))] md:pb-8 lg:p-8">
+                <div className="flex flex-col gap-4">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                        <div className="min-w-0">
+                            <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Сотрудники</h1>
+                            <p className="mt-1 text-sm text-muted-foreground sm:text-base">Управление персоналом</p>
+                        </div>
+                        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap lg:justify-end">
+                            <Button asChild variant="outline" className="w-full sm:w-auto">
+                                <Link href={`/clubs/${clubId}/employees/recruitment/applications`}>
+                                    <FileText className="mr-2 h-4 w-4" />
+                                    Анкеты
+                                </Link>
+                            </Button>
+                            <Button onClick={() => setIsModalOpen(true)} className="w-full bg-primary text-primary-foreground shadow-md hover:bg-primary/90 sm:w-auto">
+                                <UserPlus className="mr-2 h-4 w-4" />
+                                Добавить сотрудника
+                            </Button>
                         </div>
                     </div>
-                    <Button onClick={() => setIsModalOpen(true)} className="bg-purple-600 hover:bg-purple-700 text-white shadow-md shadow-purple-200 transition-all active:scale-95">
-                        <UserPlus className="mr-2 h-4 w-4" />
-                        Добавить сотрудника
-                    </Button>
                 </div>
-            </div>
 
-            <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 space-y-8">
+                <div className="space-y-8">
                 
                 {/* Statistics Cards */}
-                <div className="grid gap-4 md:grid-cols-3">
+                <div className="grid gap-4 md:grid-cols-2">
                     <Card className="border-none shadow-sm bg-white overflow-hidden group">
                         <CardContent className="p-6">
                             <div className="flex items-center justify-between">
                                 <div className="space-y-1">
-                                    <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Всего сотрудников</p>
-                                    <p className="text-3xl font-black">{stats.total}</p>
+                                    <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Активные сотрудники</p>
+                                    <p className="text-3xl font-black">{stats.activeEmployees}</p>
                                 </div>
                                 <div className="h-12 w-12 rounded-2xl bg-purple-50 flex items-center justify-center group-hover:bg-purple-100 transition-colors">
                                     <Users className="h-6 w-6 text-purple-600" />
@@ -358,25 +360,11 @@ export default function EmployeesPage({ params }: { params: Promise<{ clubId: st
                         <CardContent className="p-6">
                             <div className="flex items-center justify-between">
                                 <div className="space-y-1">
-                                    <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Активные</p>
-                                    <p className="text-3xl font-black text-emerald-600">{stats.active}</p>
+                                    <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Новые кандидаты</p>
+                                    <p className="text-3xl font-black text-emerald-600">{stats.newCandidates}</p>
                                 </div>
                                 <div className="h-12 w-12 rounded-2xl bg-emerald-50 flex items-center justify-center group-hover:bg-emerald-100 transition-colors">
-                                    <UserCheck className="h-6 w-6 text-emerald-600" />
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
-
-                    <Card className="border-none shadow-sm bg-white overflow-hidden group">
-                        <CardContent className="p-6">
-                            <div className="flex items-center justify-between">
-                                <div className="space-y-1">
-                                    <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Уволенные</p>
-                                    <p className="text-3xl font-black text-orange-600">{stats.dismissed}</p>
-                                </div>
-                                <div className="h-12 w-12 rounded-2xl bg-orange-50 flex items-center justify-center group-hover:bg-orange-100 transition-colors">
-                                    <UserMinus className="h-6 w-6 text-orange-600" />
+                                    <FileText className="h-6 w-6 text-emerald-600" />
                                 </div>
                             </div>
                         </CardContent>
@@ -515,6 +503,7 @@ export default function EmployeesPage({ params }: { params: Promise<{ clubId: st
                         </CardContent>
                     </Card>
                 </div>
+            </div>
             </div>
 
             {/* Add Employee Modal */}
