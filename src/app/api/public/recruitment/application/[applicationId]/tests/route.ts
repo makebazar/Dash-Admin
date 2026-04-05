@@ -4,6 +4,19 @@ import { resolveScoreBand, scorePercent, scoreRecruitmentAnswers } from "@/lib/r
 
 export const dynamic = "force-dynamic"
 
+const TIMER_STARTED_AT_KEY = "__timer_started_at"
+const TIMER_DEADLINE_AT_KEY = "__timer_deadline_at"
+
+function getTimeLimitMinutes(schema: any) {
+    const value = schema?.time_limit_minutes
+    if (typeof value === "number" && Number.isFinite(value) && value > 0) return Math.trunc(value)
+    if (typeof value === "string") {
+        const parsed = Number(value)
+        if (Number.isFinite(parsed) && parsed > 0) return Math.trunc(parsed)
+    }
+    return null
+}
+
 export async function POST(
     request: Request,
     { params }: { params: Promise<{ applicationId: string }> }
@@ -15,6 +28,7 @@ export async function POST(
         const testId = Number(body?.test_id)
         const answers = body?.answers ?? {}
         const complete = Boolean(body?.complete)
+        const startOnly = Boolean(body?.start_only)
 
         if (!Number.isFinite(testId)) return NextResponse.json({ error: "test_id is required" }, { status: 400 })
 
@@ -33,6 +47,70 @@ export async function POST(
         if (testRes.rowCount === 0) return NextResponse.json({ error: "Test Not Found" }, { status: 404 })
 
         const test = testRes.rows[0]
+        const timeLimitMinutes = getTimeLimitMinutes(test.schema)
+
+        const existingAttemptRes = await query(
+            `
+            SELECT answers, auto_score, score_percent
+            FROM recruitment_application_tests
+            WHERE application_id = $1 AND test_id = $2
+            LIMIT 1
+            `,
+            [applicationId, testId]
+        )
+        const existingAttempt = existingAttemptRes.rows[0] || null
+        const existingAnswers = existingAttempt?.answers && typeof existingAttempt.answers === "object" ? existingAttempt.answers : {}
+
+        const currentStartedAt = typeof existingAnswers?.[TIMER_STARTED_AT_KEY] === "string" ? existingAnswers[TIMER_STARTED_AT_KEY] : null
+        const currentDeadlineAt = typeof existingAnswers?.[TIMER_DEADLINE_AT_KEY] === "string" ? existingAnswers[TIMER_DEADLINE_AT_KEY] : null
+
+        if (startOnly) {
+            if (!timeLimitMinutes) {
+                return NextResponse.json({
+                    success: true,
+                    started_at: null,
+                    deadline_at: null,
+                    time_limit_minutes: null
+                })
+            }
+
+            const startedAt = currentStartedAt || new Date().toISOString()
+            const deadlineAt = currentDeadlineAt || new Date(Date.now() + timeLimitMinutes * 60 * 1000).toISOString()
+            const timerMetaAnswers = {
+                ...existingAnswers,
+                [TIMER_STARTED_AT_KEY]: startedAt,
+                [TIMER_DEADLINE_AT_KEY]: deadlineAt
+            }
+
+            await query(
+                `
+                INSERT INTO recruitment_application_tests (application_id, test_id, answers, auto_score, max_score, score_percent, result)
+                VALUES ($1, $2, $3, NULL, NULL, NULL, NULL)
+                ON CONFLICT (application_id, test_id)
+                DO UPDATE SET answers = EXCLUDED.answers
+                `,
+                [applicationId, testId, timerMetaAnswers]
+            )
+
+            return NextResponse.json({
+                success: true,
+                started_at: startedAt,
+                deadline_at: deadlineAt,
+                time_limit_minutes: timeLimitMinutes
+            })
+        }
+
+        const startedAt = timeLimitMinutes ? (currentStartedAt || new Date().toISOString()) : null
+        const deadlineAt = timeLimitMinutes
+            ? (currentDeadlineAt || new Date(Date.now() + timeLimitMinutes * 60 * 1000).toISOString())
+            : null
+        const timedOut = deadlineAt ? Date.now() >= new Date(deadlineAt).getTime() : false
+        const finalAnswers = {
+            ...answers,
+            ...(startedAt ? { [TIMER_STARTED_AT_KEY]: startedAt } : {}),
+            ...(deadlineAt ? { [TIMER_DEADLINE_AT_KEY]: deadlineAt } : {})
+        }
+
         const { score, maxScore } = scoreRecruitmentAnswers(test.schema, answers)
         const percent = scorePercent(score, maxScore)
         const band = resolveScoreBand(test.schema, score)
@@ -45,7 +123,7 @@ export async function POST(
             ON CONFLICT (application_id, test_id)
             DO UPDATE SET answers = EXCLUDED.answers, auto_score = EXCLUDED.auto_score, max_score = EXCLUDED.max_score, score_percent = EXCLUDED.score_percent, result = EXCLUDED.result
             `,
-            [applicationId, testId, answers, score, maxScore, percent, result]
+            [applicationId, testId, finalAnswers, score, maxScore, percent, result]
         )
 
         const requiredRes = await query(
@@ -55,7 +133,7 @@ export async function POST(
         const requiredCount = requiredRes.rows[0]?.cnt ?? 0
 
         const doneRes = await query(
-            `SELECT COUNT(*)::int as cnt FROM recruitment_application_tests WHERE application_id = $1`,
+            `SELECT COUNT(*)::int as cnt FROM recruitment_application_tests WHERE application_id = $1 AND score_percent IS NOT NULL`,
             [applicationId]
         )
         const doneCount = doneRes.rows[0]?.cnt ?? 0
@@ -85,6 +163,8 @@ export async function POST(
             tests_required: requiredCount,
             auto_score_total: testsScore,
             completed: complete || allDone,
+            timed_out: timedOut,
+            deadline_at: deadlineAt,
             test: {
                 test_id: testId,
                 score,

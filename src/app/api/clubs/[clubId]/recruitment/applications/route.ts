@@ -60,6 +60,7 @@ export async function GET(
                     application_id,
                     COUNT(*)::int as completed_tests_count
                 FROM recruitment_application_tests
+                WHERE score_percent IS NOT NULL
                 GROUP BY application_id
             ) atc ON atc.application_id = a.id
             LEFT JOIN (
@@ -67,6 +68,7 @@ export async function GET(
                     application_id,
                     COALESCE(SUM(COALESCE(auto_score, 0)), 0)::int as tests_auto_score
                 FROM recruitment_application_tests
+                WHERE score_percent IS NOT NULL
                 GROUP BY application_id
             ) ts ON ts.application_id = a.id
             LEFT JOIN (
@@ -85,6 +87,7 @@ export async function GET(
                     ) as test_summaries
                 FROM recruitment_application_tests rat
                 JOIN recruitment_test_templates rt ON rt.id = rat.test_id
+                WHERE rat.score_percent IS NOT NULL
                 GROUP BY rat.application_id
             ) tsum ON tsum.application_id = a.id
             WHERE ${where.join(" AND ")}

@@ -55,6 +55,7 @@ export type RecruitmentFormSection = {
 export type RecruitmentTemplateSchemaV1 = {
     version: 1
     candidate_photo_mode?: "off" | "optional" | "required"
+    time_limit_minutes?: number
     questions?: RecruitmentQuestion[]
     sections?: RecruitmentFormSection[]
     score_bands?: RecruitmentScoreBand[]
@@ -185,6 +186,12 @@ export function validateRecruitmentTestSchema(schemaRaw: unknown): string | null
     const questions = getRecruitmentSchemaQuestions(schemaRaw)
     const maxScore = calculateRecruitmentMaxScore(schemaRaw)
     const bands = Array.isArray(schema?.score_bands) ? (schema!.score_bands as RecruitmentScoreBand[]) : []
+    const timeLimit = normalizeNumber(schema?.time_limit_minutes)
+
+    if (timeLimit !== null) {
+        if (timeLimit <= 0) return "Лимит времени должен быть больше 0 минут"
+        if (!Number.isInteger(timeLimit)) return "Лимит времени должен быть целым числом минут"
+    }
 
     for (const q of questions) {
         if (!q || typeof q !== "object") continue

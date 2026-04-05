@@ -44,7 +44,12 @@ type QuestionDraft = {
 
 function safeSchema(raw: any): RecruitmentTemplateSchemaV1 {
     if (raw && typeof raw === "object" && Array.isArray(raw.questions)) {
-        return { version: 1, questions: raw.questions as any, score_bands: Array.isArray(raw.score_bands) ? raw.score_bands : [] }
+        return {
+            version: 1,
+            questions: raw.questions as any,
+            score_bands: Array.isArray(raw.score_bands) ? raw.score_bands : [],
+            time_limit_minutes: typeof raw.time_limit_minutes === "number" ? raw.time_limit_minutes : undefined
+        }
     }
     return { version: 1, questions: [], score_bands: [] }
 }
@@ -333,6 +338,22 @@ export default function RecruitmentTestEditPage() {
                             <p className="text-sm font-medium">Максимальный балл</p>
                             <p className="mt-1 text-2xl font-bold tracking-tight">{maxScore}</p>
                             <p className="text-xs text-muted-foreground">Считается автоматически из вопросов и баллов</p>
+                        </div>
+                        <div className="space-y-1.5">
+                            <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Лимит времени, минут</Label>
+                            <Input
+                                value={typeof schema.time_limit_minutes === "number" ? String(schema.time_limit_minutes) : ""}
+                                onChange={(e) => {
+                                    const value = e.target.value.trim()
+                                    setSchema(prev => ({
+                                        ...prev,
+                                        time_limit_minutes: value === "" ? undefined : Number(value)
+                                    }))
+                                }}
+                                className="bg-muted/30 border-muted-foreground/10"
+                                placeholder="Без таймера"
+                            />
+                            <p className="text-xs text-muted-foreground">Если пусто, тест будет без ограничения по времени</p>
                         </div>
                         {schemaValidationError ? (
                             <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">

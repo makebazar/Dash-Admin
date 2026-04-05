@@ -1,6 +1,6 @@
 "use client"
 
-import { type ChangeEvent, useEffect, useMemo, useState } from "react"
+import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react"
 import { useParams } from "next/navigation"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -10,7 +10,7 @@ import { PhoneInput } from "@/components/ui/phone-input"
 import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Loader2, Send, CheckCircle2, Upload, Trash2 } from "lucide-react"
+import { Clock3, Loader2, Send, CheckCircle2, Upload, Trash2 } from "lucide-react"
 import type { RecruitmentQuestionType } from "@/lib/recruitment"
 import { optimizeFileBeforeUpload } from "@/lib/utils"
 
@@ -41,6 +41,25 @@ type PublicFormSection = {
 }
 
 const CANDIDATE_PHOTO_ANSWER_KEY = "_candidate_photo_url"
+
+function getTimeLimitMinutes(schema: any) {
+    const value = schema?.time_limit_minutes
+    if (typeof value === "number" && Number.isFinite(value) && value > 0) return Math.trunc(value)
+    if (typeof value === "string") {
+        const parsed = Number(value)
+        if (Number.isFinite(parsed) && parsed > 0) return Math.trunc(parsed)
+    }
+    return null
+}
+
+function formatDuration(totalSeconds: number) {
+    const safe = Math.max(0, totalSeconds)
+    const hours = Math.floor(safe / 3600)
+    const minutes = Math.floor((safe % 3600) / 60)
+    const seconds = safe % 60
+    if (hours > 0) return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`
+    return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`
+}
 
 function readFileAsDataUrl(file: File) {
     return new Promise<string>((resolve, reject) => {
@@ -181,6 +200,9 @@ export default function ApplyPage() {
     const [isPhotoUploading, setIsPhotoUploading] = useState(false)
     const [formAnswers, setFormAnswers] = useState<Record<string, any>>({})
     const [testAnswersByTestId, setTestAnswersByTestId] = useState<Record<number, Record<string, any>>>({})
+    const [testDeadlineByTestId, setTestDeadlineByTestId] = useState<Record<number, string | null>>({})
+    const [timerNow, setTimerNow] = useState(Date.now())
+    const autoSubmittedTestsRef = useRef<Record<number, boolean>>({})
 
     const formSections = useMemo(() => normalizeFormSections(template?.schema), [template?.schema])
     const questions = useMemo(() => formSections.flatMap((section) => section.questions), [formSections])
@@ -321,6 +343,12 @@ export default function ApplyPage() {
         const qs = currentTest?.schema?.questions
         return Array.isArray(qs) ? qs : []
     }, [currentTest?.schema])
+    const currentTestTimeLimitMinutes = useMemo(() => getTimeLimitMinutes(currentTest?.schema), [currentTest?.schema])
+    const currentTestDeadlineAt = currentTest ? (testDeadlineByTestId[currentTest.id] || null) : null
+    const currentTestRemainingSeconds = useMemo(() => {
+        if (!currentTestDeadlineAt) return null
+        return Math.max(0, Math.ceil((new Date(currentTestDeadlineAt).getTime() - timerNow) / 1000))
+    }, [currentTestDeadlineAt, timerNow])
 
     const currentAnswers = useMemo(() => {
         if (step === 0) return formAnswers
@@ -357,6 +385,62 @@ export default function ApplyPage() {
     const handleBack = () => {
         if (step > 0) setStep(s => s - 1)
     }
+
+    useEffect(() => {
+        if (!applicationId || !currentTest || !currentTestTimeLimitMinutes) return
+        if (testDeadlineByTestId[currentTest.id] !== undefined) return
+
+        let cancelled = false
+
+        const startTimer = async () => {
+            try {
+                const res = await fetch(`/api/public/recruitment/application/${applicationId}/tests`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        test_id: currentTest.id,
+                        start_only: true
+                    })
+                })
+                const data = await res.json()
+                if (!cancelled) {
+                    setTestDeadlineByTestId(prev => ({
+                        ...prev,
+                        [currentTest.id]: typeof data?.deadline_at === "string" ? data.deadline_at : null
+                    }))
+                }
+            } catch {
+                if (!cancelled) {
+                    setTestDeadlineByTestId(prev => ({
+                        ...prev,
+                        [currentTest.id]: null
+                    }))
+                }
+            }
+        }
+
+        startTimer()
+
+        return () => {
+            cancelled = true
+        }
+    }, [applicationId, currentTest, currentTestTimeLimitMinutes, testDeadlineByTestId])
+
+    useEffect(() => {
+        if (!currentTestDeadlineAt) return
+        const timer = window.setInterval(() => setTimerNow(Date.now()), 1000)
+        return () => window.clearInterval(timer)
+    }, [currentTestDeadlineAt])
+
+    useEffect(() => {
+        if (!currentTest || currentTestRemainingSeconds === null) return
+        if (currentTestRemainingSeconds > 0) return
+        if (isSubmitting || isSubmitted) return
+        if (autoSubmittedTestsRef.current[currentTest.id]) return
+
+        autoSubmittedTestsRef.current[currentTest.id] = true
+        handleSubmitTest()
+    }, [currentTest, currentTestRemainingSeconds, isSubmitting, isSubmitted])
 
     if (isLoading) {
         return (
@@ -574,6 +658,24 @@ export default function ApplyPage() {
                                 </>
                             ) : (
                                 <>
+                                    {currentTestTimeLimitMinutes ? (
+                                        <div className={`rounded-xl border p-4 ${currentTestRemainingSeconds !== null && currentTestRemainingSeconds <= 60 ? "border-red-200 bg-red-50 text-red-900" : "border-amber-200 bg-amber-50 text-amber-900"}`}>
+                                            <div className="flex items-center justify-between gap-3">
+                                                <div className="flex items-center gap-2">
+                                                    <Clock3 className="h-4 w-4" />
+                                                    <p className="text-sm font-bold">Время на тест</p>
+                                                </div>
+                                                <div className="text-lg font-black tabular-nums">
+                                                    {currentTestRemainingSeconds !== null ? formatDuration(currentTestRemainingSeconds) : `${currentTestTimeLimitMinutes} мин`}
+                                                </div>
+                                            </div>
+                                            <p className="mt-1 text-xs opacity-80">
+                                                {currentTestRemainingSeconds !== null && currentTestRemainingSeconds <= 60
+                                                    ? "Осталась последняя минута. По истечении времени ответы отправятся автоматически."
+                                                    : "После окончания времени ответы отправятся автоматически."}
+                                            </p>
+                                        </div>
+                                    ) : null}
                                     <div className="space-y-1">
                                         <p className="text-sm font-bold">
                                             Тест {step} / {tests.length}: {currentTest?.name}
