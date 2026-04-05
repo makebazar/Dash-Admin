@@ -77,6 +77,8 @@ export default function RecruitmentTestEditPage() {
     const [isActive, setIsActive] = useState(true)
 
     const [schema, setSchema] = useState<RecruitmentTemplateSchemaV1>({ version: 1, questions: [] })
+    const [rawMode, setRawMode] = useState(false)
+    const [rawSchemaText, setRawSchemaText] = useState("")
     const [saveError, setSaveError] = useState("")
     const [uploadingState, setUploadingState] = useState<Record<string, boolean>>({})
 
@@ -95,6 +97,7 @@ export default function RecruitmentTestEditPage() {
                 setIsActive(Boolean(data.is_active))
                 const s = safeSchema(data.schema)
                 setSchema(s)
+                setRawSchemaText(JSON.stringify(s, null, 2))
             }
         } finally {
             setIsLoading(false)
@@ -108,20 +111,21 @@ export default function RecruitmentTestEditPage() {
     const updateQuestion = (id: string, patch: Partial<QuestionDraft>) => {
         setSchema(prev => ({
             ...prev,
-            questions: prev.questions.map((q: any) => (q.id === id ? { ...q, ...patch } : q))
+            questions: (prev.questions || []).map((q: any) => (q.id === id ? { ...q, ...patch } : q))
         }))
     }
 
     const deleteQuestion = (id: string) => {
-        setSchema(prev => ({ ...prev, questions: prev.questions.filter((q: any) => q.id !== id) as any }))
+        setSchema(prev => ({ ...prev, questions: (prev.questions || []).filter((q: any) => q.id !== id) as any }))
     }
 
     const moveQuestion = (id: string, direction: -1 | 1) => {
         setSchema(prev => {
-            const index = prev.questions.findIndex((item: any) => item.id === id)
+            const questions = prev.questions || []
+            const index = questions.findIndex((item: any) => item.id === id)
             const target = index + direction
-            if (index === -1 || target < 0 || target >= prev.questions.length) return prev
-            const next = [...prev.questions]
+            if (index === -1 || target < 0 || target >= questions.length) return prev
+            const next = [...questions]
             const current = next[index]
             next[index] = next[target]
             next[target] = current
@@ -150,7 +154,7 @@ export default function RecruitmentTestEditPage() {
             q.truePoints = 1
             q.falsePoints = 0
         }
-        setSchema(prev => ({ ...prev, questions: [...prev.questions, q as any] }))
+        setSchema(prev => ({ ...prev, questions: [...(prev.questions || []), q as any] }))
     }
 
     const addBand = () => {
@@ -185,7 +189,19 @@ export default function RecruitmentTestEditPage() {
     }
 
     const handleSave = async () => {
-        const finalSchema = schema
+        const finalSchema = rawMode ? (() => {
+            try {
+                return JSON.parse(rawSchemaText)
+            } catch {
+                return null
+            }
+        })() : schema
+
+        if (!finalSchema) {
+            setSaveError("Некорректный JSON")
+            return
+        }
+
         const validationError = validateRecruitmentTestSchema(finalSchema)
         if (validationError) {
             setSaveError(validationError)
@@ -210,6 +226,7 @@ export default function RecruitmentTestEditPage() {
                 setTest(data)
                 const s = safeSchema(data.schema)
                 setSchema(s)
+                setRawSchemaText(JSON.stringify(s, null, 2))
                 setSaveError("")
             } else {
                 setSaveError(data?.error || "Не удалось сохранить тест")
@@ -270,7 +287,7 @@ export default function RecruitmentTestEditPage() {
                     <Button asChild variant="outline" className="w-full sm:w-auto">
                         <Link href={`/clubs/${clubId}/employees/recruitment/templates`}>К настройкам</Link>
                     </Button>
-                    <Button onClick={handleSave} disabled={isSaving || Boolean(schemaValidationError)} className="w-full bg-primary text-primary-foreground shadow-md hover:bg-primary/90 sm:w-auto">
+                    <Button onClick={handleSave} disabled={isSaving || (!rawMode && Boolean(schemaValidationError))} className="w-full bg-primary text-primary-foreground shadow-md hover:bg-primary/90 sm:w-auto">
                         {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                         Сохранить
                     </Button>
@@ -310,11 +327,25 @@ export default function RecruitmentTestEditPage() {
                                 <span className="font-bold">Ошибка:</span> {saveError}
                             </div>
                         ) : null}
+                        <div className="flex items-center justify-between rounded-xl border border-muted-foreground/10 p-3">
+                            <div>
+                                <p className="text-sm font-medium">RAW JSON</p>
+                                <p className="text-xs text-muted-foreground">Для прямого редактирования схемы теста</p>
+                            </div>
+                            <Switch checked={rawMode} onCheckedChange={setRawMode} />
+                        </div>
                     </CardContent>
                 </Card>
 
                 <Card className="border-none shadow-sm bg-white lg:col-span-2">
                     <CardContent className="p-5 space-y-4">
+                        {rawMode ? (
+                            <Textarea
+                                value={rawSchemaText}
+                                onChange={(e) => setRawSchemaText(e.target.value)}
+                                className="min-h-[640px] font-mono text-xs bg-muted/30 border-muted-foreground/10"
+                            />
+                        ) : (
                         <div className="space-y-3">
                                 <div className="rounded-2xl border border-muted-foreground/10 p-4 space-y-3">
                                     <div className="flex items-center justify-between gap-2">
@@ -380,7 +411,7 @@ export default function RecruitmentTestEditPage() {
                                 </div>
 
                                 <div className="space-y-3">
-                                    {schema.questions.map((q: any, index: number) => (
+                                    {(schema.questions || []).map((q: any, index: number) => (
                                         <div key={q.id} className="rounded-2xl border border-muted-foreground/10 p-4 space-y-3">
                                             <div className="flex items-start justify-between gap-3">
                                                 <div className="min-w-0 flex-1 space-y-2">
@@ -551,7 +582,7 @@ export default function RecruitmentTestEditPage() {
                                                     <Button variant="outline" size="icon" onClick={() => moveQuestion(q.id, -1)} disabled={index === 0}>
                                                         <ArrowUp className="h-4 w-4" />
                                                     </Button>
-                                                    <Button variant="outline" size="icon" onClick={() => moveQuestion(q.id, 1)} disabled={index === schema.questions.length - 1}>
+                                                    <Button variant="outline" size="icon" onClick={() => moveQuestion(q.id, 1)} disabled={index === (schema.questions || []).length - 1}>
                                                         <ArrowDown className="h-4 w-4" />
                                                     </Button>
                                                     <Button variant="outline" size="icon" onClick={() => deleteQuestion(q.id)}>
@@ -569,6 +600,7 @@ export default function RecruitmentTestEditPage() {
                                     </Button>
                                 </div>
                         </div>
+                        )}
                     </CardContent>
                 </Card>
             </div>
