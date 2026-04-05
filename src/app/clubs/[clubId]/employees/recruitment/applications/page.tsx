@@ -5,9 +5,10 @@ import Link from "next/link"
 import { useParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { Loader2, FileText } from "lucide-react"
+import { Loader2, FileText, Trash2 } from "lucide-react"
 
 type ApplicationRow = {
     id: number
@@ -65,6 +66,8 @@ export default function RecruitmentApplicationsPage() {
 
     const [apps, setApps] = useState<ApplicationRow[]>([])
     const [isLoading, setIsLoading] = useState(true)
+    const [deleteTarget, setDeleteTarget] = useState<ApplicationRow | null>(null)
+    const [isDeleting, setIsDeleting] = useState(false)
 
     const load = async () => {
         setIsLoading(true)
@@ -80,6 +83,26 @@ export default function RecruitmentApplicationsPage() {
     useEffect(() => {
         load()
     }, [clubId])
+
+    const requestDelete = (application: ApplicationRow) => {
+        setDeleteTarget(application)
+    }
+
+    const confirmDelete = async () => {
+        if (!deleteTarget) return
+        setIsDeleting(true)
+        try {
+            const res = await fetch(`/api/clubs/${clubId}/recruitment/applications/${deleteTarget.id}`, {
+                method: "DELETE"
+            })
+            if (res.ok) {
+                setDeleteTarget(null)
+                await load()
+            }
+        } finally {
+            setIsDeleting(false)
+        }
+    }
 
     if (isLoading) {
         return (
@@ -158,9 +181,14 @@ export default function RecruitmentApplicationsPage() {
                                             </div>
                                         </div>
                                         <div className="mt-4">
-                                            <Button asChild variant="outline" className="w-full">
-                                                <Link href={`/clubs/${clubId}/employees/recruitment/applications/${a.id}`}>Открыть</Link>
-                                            </Button>
+                                            <div className="flex gap-2">
+                                                <Button asChild variant="outline" className="flex-1">
+                                                    <Link href={`/clubs/${clubId}/employees/recruitment/applications/${a.id}`}>Открыть</Link>
+                                                </Button>
+                                                <Button variant="outline" className="text-red-600 hover:text-red-700" onClick={() => requestDelete(a)}>
+                                                    <Trash2 className="h-4 w-4" />
+                                                </Button>
+                                            </div>
                                         </div>
                                     </div>
                                 ))}
@@ -220,9 +248,14 @@ export default function RecruitmentApplicationsPage() {
                                                     <Badge variant="outline" className="text-[10px] uppercase tracking-wider">{STATUS_LABELS[a.status] || a.status}</Badge>
                                                 </TableCell>
                                                 <TableCell className="text-right">
-                                                    <Button asChild variant="outline" size="sm">
-                                                        <Link href={`/clubs/${clubId}/employees/recruitment/applications/${a.id}`}>Открыть</Link>
-                                                    </Button>
+                                                    <div className="flex justify-end gap-2">
+                                                        <Button asChild variant="outline" size="sm">
+                                                            <Link href={`/clubs/${clubId}/employees/recruitment/applications/${a.id}`}>Открыть</Link>
+                                                        </Button>
+                                                        <Button variant="outline" size="sm" className="text-red-600 hover:text-red-700" onClick={() => requestDelete(a)}>
+                                                            <Trash2 className="h-4 w-4" />
+                                                        </Button>
+                                                    </div>
                                                 </TableCell>
                                             </TableRow>
                                         ))}
@@ -244,6 +277,26 @@ export default function RecruitmentApplicationsPage() {
                     </Button>
                 </div>
             </div>
+
+            <Dialog open={Boolean(deleteTarget)} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+                <DialogContent className="sm:max-w-[480px] rounded-2xl border-none shadow-2xl">
+                    <DialogHeader className="space-y-2">
+                        <DialogTitle className="text-xl font-bold">Удалить анкету?</DialogTitle>
+                        <DialogDescription className="text-xs font-medium">
+                            Анкета кандидата и все ответы по тестам будут удалены без возможности восстановления.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="text-sm font-bold">{deleteTarget?.candidate_name || "Без имени"}</div>
+                    <DialogFooter className="gap-2 sm:gap-0">
+                        <Button variant="ghost" onClick={() => setDeleteTarget(null)} className="flex-1 text-xs font-bold uppercase tracking-widest">
+                            Отмена
+                        </Button>
+                        <Button onClick={confirmDelete} disabled={isDeleting} className="flex-1 bg-red-600 hover:bg-red-700 text-white text-xs font-bold uppercase tracking-widest shadow-lg">
+                            {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Удалить"}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     )
 }

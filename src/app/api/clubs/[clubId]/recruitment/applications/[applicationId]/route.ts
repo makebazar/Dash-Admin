@@ -5,7 +5,7 @@ import { requireClubFullAccess } from "@/lib/club-api-access"
 export const dynamic = "force-dynamic"
 
 export async function GET(
-    request: Request,
+    _request: Request,
     { params }: { params: Promise<{ clubId: string; applicationId: string }> }
 ) {
     try {
@@ -105,6 +105,32 @@ export async function PUT(
     } catch (error: any) {
         const status = typeof error?.status === "number" ? error.status : 500
         if (status === 500) console.error("Recruitment Application PUT Error:", error)
+        return NextResponse.json({ error: error?.message || "Internal Server Error" }, { status })
+    }
+}
+
+export async function DELETE(
+    _request: Request,
+    { params }: { params: Promise<{ clubId: string; applicationId: string }> }
+) {
+    try {
+        const { clubId, applicationId } = await params
+        await requireClubFullAccess(clubId)
+
+        const res = await query(
+            `
+            DELETE FROM recruitment_applications
+            WHERE club_id = $1 AND id = $2
+            RETURNING id
+            `,
+            [clubId, applicationId]
+        )
+
+        if (res.rowCount === 0) return NextResponse.json({ error: "Not Found" }, { status: 404 })
+        return NextResponse.json({ success: true, id: res.rows[0].id })
+    } catch (error: any) {
+        const status = typeof error?.status === "number" ? error.status : 500
+        if (status === 500) console.error("Recruitment Application DELETE Error:", error)
         return NextResponse.json({ error: error?.message || "Internal Server Error" }, { status })
     }
 }
