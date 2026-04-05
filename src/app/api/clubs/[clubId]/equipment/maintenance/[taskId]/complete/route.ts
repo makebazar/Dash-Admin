@@ -3,6 +3,7 @@ import { query } from '@/db';
 import { cookies } from 'next/headers';
 import { hasColumn } from '@/lib/db-compat';
 import { calculateMaintenanceOverduePenalty } from '@/lib/maintenance-penalties';
+import { appendMaintenanceTaskEvent, ensureMaintenanceTaskInitialHistory, getMaintenanceTaskCurrentCycle } from '@/lib/maintenance-task-events';
 import { formatDateKeyInTimezone, parseDateKey } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
@@ -39,6 +40,23 @@ export async function POST(
         if ((accessCheck.rowCount || 0) === 0) {
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
+
+        const taskHistorySnapshotRes = await query(
+            `SELECT id, verification_status, completed_at, completed_by, verified_at, verified_by, rejection_reason, verification_note, notes, photos
+             FROM equipment_maintenance_tasks
+             WHERE id = $1`,
+            [taskId]
+        );
+        const currentTaskSnapshot = taskHistorySnapshotRes.rows[0];
+
+        if (!currentTaskSnapshot) {
+            return NextResponse.json({ error: 'Task not found' }, { status: 404 });
+        }
+
+        await ensureMaintenanceTaskInitialHistory(currentTaskSnapshot);
+        const currentCycle = await getMaintenanceTaskCurrentCycle(taskId);
+        const isResubmission = currentTaskSnapshot.verification_status === 'REJECTED';
+        const nextCycle = isResubmission ? currentCycle + 1 : Math.max(currentCycle, 1);
 
         // 0. Get KPI Config from Active Salary Scheme & Current Task Info
         // We fetch the active salary scheme for this user to get their specific KPI rates
@@ -104,6 +122,10 @@ export async function POST(
                  completed_by = $2,
                  photos = $3,
                  notes = $4,
+                 verified_at = NULL,
+                 verified_by = NULL,
+                 verification_note = NULL,
+                 rejection_reason = NULL,
                  bonus_earned = $5,
                  kpi_points = $6,
                  applied_kpi_multiplier = $7,
@@ -118,6 +140,15 @@ export async function POST(
         if ((completeTask.rowCount || 0) === 0) {
              return NextResponse.json({ error: 'Task not found' }, { status: 404 });
         }
+
+        await appendMaintenanceTaskEvent({
+            taskId,
+            cycleNo: nextCycle,
+            eventType: isResubmission ? 'RESUBMITTED' : 'SUBMITTED',
+            actorUserId: userId,
+            taskNotes: notes,
+            photos,
+        });
 
         const equipmentId = completeTask.rows[0].equipment_id;
 

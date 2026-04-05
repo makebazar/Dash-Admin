@@ -224,7 +224,7 @@ async function createFinanceTransactionsFromShift(
     for (const field of expenseFields) {
         const value = shiftData.report_data?.[field.metric_key];
         
-        if (field.field_type === 'EXPENSE_LIST' && Array.isArray(value)) {
+        if (Array.isArray(value)) {
             for (const item of value) {
                 const amount = Number(item.amount) || 0;
                 if (amount > 0) {

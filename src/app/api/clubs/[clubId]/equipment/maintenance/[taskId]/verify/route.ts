@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/db';
 import { cookies } from 'next/headers';
+import { appendMaintenanceTaskEvent, ensureMaintenanceTaskInitialHistory, getMaintenanceTaskCurrentCycle } from '@/lib/maintenance-task-events';
 
 export const dynamic = 'force-dynamic';
 
@@ -46,7 +47,7 @@ export async function POST(
         }
 
         const taskResult = await query(
-            `SELECT mt.equipment_id, mt.task_type
+            `SELECT mt.id, mt.equipment_id, mt.task_type, mt.verification_status, mt.completed_at, mt.completed_by, mt.verified_at, mt.verified_by, mt.rejection_reason, mt.verification_note, mt.notes, mt.photos
              FROM equipment_maintenance_tasks mt
              JOIN equipment e ON mt.equipment_id = e.id
              WHERE mt.id = $1 AND e.club_id = $2`,
@@ -58,6 +59,8 @@ export async function POST(
         }
 
         const task = taskResult.rows[0];
+        await ensureMaintenanceTaskInitialHistory(task);
+        const currentCycle = await getMaintenanceTaskCurrentCycle(taskId);
 
         let updateQuery = '';
         let queryParams: any[] = [];
@@ -133,6 +136,16 @@ export async function POST(
         if ((result.rowCount || 0) === 0) {
             return NextResponse.json({ error: 'Task not found' }, { status: 404 });
         }
+
+        await appendMaintenanceTaskEvent({
+            taskId,
+            cycleNo: Math.max(currentCycle, 1),
+            eventType: action === 'APPROVE' ? 'APPROVED' : 'REJECTED',
+            actorUserId: userId,
+            note: comment || null,
+            taskNotes: task.notes || null,
+            photos: task.photos || [],
+        });
 
         return NextResponse.json({ success: true });
     } catch (error) {

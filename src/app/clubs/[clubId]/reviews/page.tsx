@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Loader2, History, Camera, CheckCircle, XCircle, Filter, Monitor, CheckCircle2, Eye, User, Layers, Calendar, ChevronDown, ChevronUp, Trash2, RotateCcw, ChevronLeft, ChevronRight } from "lucide-react"
+import { Loader2, History, Camera, CheckCircle, XCircle, Filter, CheckCircle2, Eye, User, Layers, Calendar, ChevronDown, ChevronUp, Trash2, RotateCcw, ChevronLeft, ChevronRight } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -57,6 +57,7 @@ interface VerificationTask {
     equipment_id: string
     equipment_name: string
     equipment_type: string
+    equipment_type_name?: string | null
     workstation_name: string | null
     zone_name: string | null
     task_type: string
@@ -65,6 +66,7 @@ interface VerificationTask {
     due_date: string
     completed_at: string | null
     verified_at?: string | null
+    rework_days?: number
     completed_by_name: string | null
     verified_by_name?: string | null
     photos: string[] | null
@@ -75,6 +77,19 @@ interface VerificationTask {
     kpi_points: number
     laundry_request_id?: string | null
     laundry_status?: string | null
+    history?: VerificationTaskEvent[]
+}
+
+interface VerificationTaskEvent {
+    id: number
+    task_id: string
+    cycle_no: number
+    event_type: 'SUBMITTED' | 'RESUBMITTED' | 'REJECTED' | 'APPROVED'
+    note?: string | null
+    task_notes?: string | null
+    photos?: string[] | null
+    created_at: string
+    actor_name?: string | null
 }
 
 interface ShiftReviewItem {
@@ -109,16 +124,6 @@ interface ShiftReportField {
     field_type: 'INCOME' | 'EXPENSE' | 'EXPENSE_LIST' | 'OTHER'
 }
 
-const getTaskTypeLabel = (type: string) => {
-    switch (type) {
-        case 'CLEANING': return 'ЧИСТКА';
-        case 'MAINTENANCE': return 'ОБСЛУЖИВАНИЕ';
-        case 'REPAIR': return 'РЕМОНТ';
-        case 'CHECK': return 'ПРОВЕРКА';
-        default: return type;
-    }
-}
-
 const getLaundryStatusLabel = (status?: string | null) => {
     switch (status) {
         case 'NEW': return 'Ожидает стирки'
@@ -128,6 +133,47 @@ const getLaundryStatusLabel = (status?: string | null) => {
         case 'CANCELLED': return 'Отменен'
         default: return 'Стирка'
     }
+}
+
+const getTaskHistoryEvents = (task: VerificationTask) => task.history || []
+
+const getTaskSubmissionEvents = (task: VerificationTask) =>
+    getTaskHistoryEvents(task).filter((event) => event.event_type === 'SUBMITTED' || event.event_type === 'RESUBMITTED')
+
+const getLatestTaskSubmission = (task: VerificationTask) => {
+    const submissions = getTaskSubmissionEvents(task)
+    if (submissions.length > 0) return submissions[submissions.length - 1]
+
+    if (task.completed_at || task.notes || (task.photos?.length || 0) > 0) {
+        return {
+            id: -1,
+            task_id: task.id,
+            cycle_no: 1,
+            event_type: 'SUBMITTED' as const,
+            task_notes: task.notes,
+            photos: task.photos,
+            created_at: task.completed_at || '',
+            actor_name: task.completed_by_name || null,
+        }
+    }
+
+    return null
+}
+
+const getPreviousTaskSubmission = (task: VerificationTask) => {
+    const submissions = getTaskSubmissionEvents(task)
+    return submissions.length > 1 ? submissions[submissions.length - 2] : null
+}
+
+const getLatestTaskRejection = (task: VerificationTask) => {
+    const rejections = getTaskHistoryEvents(task).filter((event) => event.event_type === 'REJECTED')
+    return rejections.length > 0 ? rejections[rejections.length - 1] : null
+}
+
+const formatTaskMessageStamp = (date?: string | null) => {
+    if (!date) return null
+
+    return format(new Date(date), 'dd.MM.yyyy в HH:mm', { locale: ru })
 }
 
 export default function ChecklistsPage({ params, searchParams }: { params: Promise<{ clubId: string }>, searchParams: Promise<{ tab?: string }> }) {
@@ -1002,6 +1048,9 @@ export default function ChecklistsPage({ params, searchParams }: { params: Promi
                                                 {zoneTasks.map((task) => {
                                                     const isExpanded = expandedTaskId === task.id
                                                     const isLaundryItem = isLaundryEquipmentType(task.equipment_type)
+                                                    const latestSubmission = getLatestTaskSubmission(task)
+                                                    const previousSubmission = getPreviousTaskSubmission(task)
+                                                    const latestRejection = getLatestTaskRejection(task)
                                                     return (
                                                         <div 
                                                             key={task.id} 
@@ -1043,7 +1092,7 @@ export default function ChecklistsPage({ params, searchParams }: { params: Promi
                                                                             )}
                                                                             <span className="text-xs text-slate-400">•</span>
                                                                             <span className="text-xs text-slate-500 uppercase tracking-wide font-medium">
-                                                                                {getTaskTypeLabel(task.task_type)}
+                                                                                {task.equipment_type_name || task.equipment_type || 'Устройство'}
                                                                             </span>
                                                                         </div>
                                                                     </div>
@@ -1075,7 +1124,7 @@ export default function ChecklistsPage({ params, searchParams }: { params: Promi
                                                                         {task.verification_status === 'REJECTED' && (
                                                                             <div className="mt-1">
                                                                                 <Badge variant="destructive" className="bg-amber-100 text-amber-700 hover:bg-amber-100 border-0 h-5 px-1.5 text-[10px]">
-                                                                                    <RotateCcw className="h-3 w-3 mr-1" /> На доработке
+                                                                                    <RotateCcw className="h-3 w-3 mr-1" /> На доработке {task.rework_days || 0} дн.
                                                                                 </Badge>
                                                                             </div>
                                                                         )}
@@ -1111,49 +1160,139 @@ export default function ChecklistsPage({ params, searchParams }: { params: Promi
                                                                 <div className="border-t bg-white p-6 sm:px-8 pb-8 animate-in slide-in-from-top-2 duration-200">
                                                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                                                         {/* Photos */}
-                                                                        <div>
-                                                                            <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-2">
-                                                                                <Eye className="h-3 w-3" /> Фотоотчет
-                                                                            </h4>
-                                                                            {task.photos && task.photos.length > 0 ? (
-                                                                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                                                                                    {task.photos.map((photo, i) => (
-                                                                                        <div 
-                                                                                                key={i} 
-                                                                                                className="group relative aspect-video bg-white rounded-lg overflow-hidden border shadow-sm cursor-zoom-in hover:ring-2 ring-primary/50 transition-all"
-                                                                                                onClick={(e) => openImage(photo, task.photos || [], e)}
-                                                                                            >
-                                                                                                <img 
-                                                                                                    src={photo} 
-                                                                                                    alt={`Фото ${i+1}`} 
-                                                                                                    className="w-full h-full object-cover" 
-                                                                                                />
-                                                                                            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
-                                                                                                <Eye className="text-white drop-shadow-md h-6 w-6" />
-                                                                                            </div>
+                                                                        <div className="space-y-5">
+                                                                            <div className={cn("grid gap-4", previousSubmission ? "xl:grid-cols-2" : "grid-cols-1")}>
+                                                                                <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4 space-y-4">
+                                                                                    <div className="flex items-start justify-between gap-3">
+                                                                                        <div>
+                                                                                            <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                                                                                                <Eye className="h-3 w-3" /> Текущий фотоотчет
+                                                                                            </h4>
+                                                                                            <p className="mt-1 text-sm font-medium text-slate-900">
+                                                                                                {latestSubmission?.event_type === 'RESUBMITTED' ? 'После доработки' : 'Первая отправка'}
+                                                                                            </p>
                                                                                         </div>
-                                                                                    ))}
+                                                                                        <Badge variant="outline" className="border-slate-200 bg-white text-slate-600">
+                                                                                            {latestSubmission?.photos?.length || 0} фото
+                                                                                        </Badge>
+                                                                                    </div>
+
+                                                                                    <div className="rounded-xl bg-white p-3 border space-y-3">
+                                                                                        {latestSubmission?.photos && latestSubmission.photos.length > 0 ? (
+                                                                                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                                                                                {latestSubmission.photos.map((photo, i) => (
+                                                                                                    <div
+                                                                                                        key={i}
+                                                                                                        className="group relative aspect-video bg-white rounded-lg overflow-hidden border shadow-sm cursor-zoom-in hover:ring-2 ring-primary/50 transition-all"
+                                                                                                        onClick={(e) => openImage(photo, latestSubmission.photos || [], e)}
+                                                                                                    >
+                                                                                                        <img
+                                                                                                            src={photo}
+                                                                                                            alt={`Фото ${i + 1}`}
+                                                                                                            className="w-full h-full object-cover"
+                                                                                                        />
+                                                                                                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+                                                                                                            <Eye className="text-white drop-shadow-md h-6 w-6" />
+                                                                                                        </div>
+                                                                                                    </div>
+                                                                                                ))}
+                                                                                            </div>
+                                                                                        ) : (
+                                                                                            <div className="h-24 flex items-center justify-center border-2 border-dashed border-slate-200 rounded-lg text-muted-foreground text-sm">
+                                                                                                Нет фото
+                                                                                            </div>
+                                                                                        )}
+
+                                                                                        {latestSubmission?.task_notes && (
+                                                                                            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                                                                                                <div className="mb-1 flex items-start justify-between gap-3">
+                                                                                                    <span className="font-medium">Комментарий сотрудника</span>
+                                                                                                    {formatTaskMessageStamp(latestSubmission.created_at) && (
+                                                                                                        <span className="shrink-0 text-[11px] text-slate-400">
+                                                                                                            {formatTaskMessageStamp(latestSubmission.created_at)}
+                                                                                                        </span>
+                                                                                                    )}
+                                                                                                </div>
+                                                                                                <p>{latestSubmission.task_notes}</p>
+                                                                                            </div>
+                                                                                        )}
+                                                                                    </div>
                                                                                 </div>
-                                                                            ) : (
-                                                                                <div className="h-24 flex items-center justify-center border-2 border-dashed border-slate-200 rounded-lg text-muted-foreground text-sm">
-                                                                                    Нет фото
-                                                                                </div>
-                                                                            )}
+
+                                                                                {previousSubmission && (
+                                                                                    <div className="rounded-2xl border border-amber-200 bg-amber-50/40 p-4 space-y-4">
+                                                                                        <div className="flex items-start justify-between gap-3">
+                                                                                            <div>
+                                                                                                <h4 className="text-xs font-semibold uppercase tracking-wider text-amber-700 flex items-center gap-2">
+                                                                                                    <History className="h-3 w-3" /> До доработки
+                                                                                                </h4>
+                                                                                                <p className="mt-1 text-sm font-medium text-amber-900">
+                                                                                                    Предыдущая отправка на проверку
+                                                                                                </p>
+                                                                                            </div>
+                                                                                            <Badge variant="outline" className="border-amber-200 bg-white text-amber-700">
+                                                                                                {previousSubmission.photos?.length || 0} фото
+                                                                                            </Badge>
+                                                                                        </div>
+
+                                                                                        <div className="rounded-xl bg-white/80 p-3 border border-amber-200 space-y-3">
+                                                                                            {previousSubmission.photos && previousSubmission.photos.length > 0 ? (
+                                                                                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                                                                                    {previousSubmission.photos.map((photo, i) => (
+                                                                                                        <div
+                                                                                                            key={i}
+                                                                                                            className="group relative aspect-video bg-white rounded-lg overflow-hidden border shadow-sm cursor-zoom-in hover:ring-2 ring-amber-300 transition-all"
+                                                                                                            onClick={(e) => openImage(photo, previousSubmission.photos || [], e)}
+                                                                                                        >
+                                                                                                            <img
+                                                                                                                src={photo}
+                                                                                                                alt={`Фото до доработки ${i + 1}`}
+                                                                                                                className="w-full h-full object-cover"
+                                                                                                            />
+                                                                                                            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+                                                                                                                <Eye className="text-white drop-shadow-md h-6 w-6" />
+                                                                                                            </div>
+                                                                                                        </div>
+                                                                                                    ))}
+                                                                                                </div>
+                                                                                            ) : (
+                                                                                                <div className="h-20 flex items-center justify-center border border-dashed border-amber-200 rounded-lg text-amber-700/70 text-sm">
+                                                                                                    Ранее фото не были приложены
+                                                                                                </div>
+                                                                                            )}
+
+                                                                                            {previousSubmission.task_notes && (
+                                                                                                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                                                                                                    <div className="mb-1 flex items-start justify-between gap-3">
+                                                                                                        <span className="font-medium">Комментарий до доработки</span>
+                                                                                                        {formatTaskMessageStamp(previousSubmission.created_at) && (
+                                                                                                            <span className="shrink-0 text-[11px] text-amber-700/60">
+                                                                                                                {formatTaskMessageStamp(previousSubmission.created_at)}
+                                                                                                            </span>
+                                                                                                        )}
+                                                                                                    </div>
+                                                                                                    <p>{previousSubmission.task_notes}</p>
+                                                                                                </div>
+                                                                                            )}
+                                                                                        </div>
+                                                                                    </div>
+                                                                                )}
+                                                                            </div>
                                                                         </div>
 
                                                                         {/* Actions & Comments */}
                                                                         <div className="space-y-4">
-                                                                            {task.notes && (
-                                                                                <div className="bg-white p-3 rounded-lg border shadow-sm">
-                                                                                    <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Комментарий сотрудника</div>
-                                                                                    <p className="text-sm text-slate-700 italic">"{task.notes}"</p>
-                                                                                </div>
-                                                                            )}
-
-                                                                            {task.verification_status === 'REJECTED' && task.rejection_reason && (
+                                                                            {latestRejection?.note && (
                                                                                 <div className="bg-amber-50 p-3 rounded-lg border border-amber-100 shadow-sm">
-                                                                                    <div className="text-[10px] text-amber-600 uppercase tracking-wider mb-1 font-bold">Ранее отправлено на доработку</div>
-                                                                                    <p className="text-sm text-amber-800 italic">"{task.rejection_reason}"</p>
+                                                                                    <div className="mb-2 flex items-start justify-between gap-3">
+                                                                                        <div className="text-[10px] text-amber-600 uppercase tracking-wider font-bold">Ранее отправлено на доработку</div>
+                                                                                        {formatTaskMessageStamp(latestRejection.created_at) && (
+                                                                                            <span className="shrink-0 text-[11px] text-amber-700/60">
+                                                                                                {formatTaskMessageStamp(latestRejection.created_at)}
+                                                                                            </span>
+                                                                                        )}
+                                                                                    </div>
+                                                                                    <p className="text-sm text-amber-800 italic">"{latestRejection.note}"</p>
                                                                                 </div>
                                                                             )}
 
@@ -1171,7 +1310,7 @@ export default function ChecklistsPage({ params, searchParams }: { params: Promi
                                                                                 </div>
                                                                                 <Textarea 
                                                                                     placeholder={equipmentTab === 'active' ? "Опишите, что нужно исправить..." : "Комментарий отсутствует"} 
-                                                                                    value={equipmentTab === 'active' ? comment : (task.rejection_reason || task.verification_note || '')}
+                                                                                    value={equipmentTab === 'active' ? comment : (latestRejection?.note || task.verification_note || '')}
                                                                                     onChange={(e) => setComment(e.target.value)}
                                                                                     className="bg-white min-h-[80px] resize-none text-sm"
                                                                                     disabled={equipmentTab === 'history'}

@@ -2,39 +2,45 @@ import { NextResponse } from 'next/server';
 import { query } from '@/db';
 import { cookies } from 'next/headers';
 import { ensureOwnerSubscriptionActive } from '@/lib/club-subscription-guard';
+import { requireClubApiAccess } from '@/lib/club-api-access';
 
 // GET: Get current active template and available system metrics
 export async function GET(
-    request: Request,
+    _request: Request,
     { params }: { params: Promise<{ clubId: string }> }
 ) {
     try {
-        const userId = (await cookies()).get('session_user_id')?.value;
         const { clubId } = await params;
-
-        if (!userId) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
-
-        // Check access (Owner OR Employee)
-        const accessCheck = await query(
-            `
-            SELECT 1 FROM clubs WHERE id = $1 AND owner_id = $2
-            UNION
-            SELECT 1 FROM club_employees WHERE club_id = $1 AND user_id = $2
-            `,
-            [clubId, userId]
-        );
-
-        if ((accessCheck.rowCount || 0) === 0) {
-            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-        }
+        await requireClubApiAccess(clubId)
 
         // 1. Get all available system metrics (return empty if table doesn't exist)
         let systemMetrics: any[] = [];
         try {
             const metricsResult = await query(
-                `SELECT * FROM system_metrics ORDER BY category, id`
+                `SELECT
+                    sm.id::text as id,
+                    sm.key,
+                    sm.label,
+                    sm.description,
+                    sm.type,
+                    sm.category,
+                    sm.is_required,
+                    FALSE as is_custom
+                 FROM system_metrics sm
+                 UNION ALL
+                 SELECT
+                    ccm.id::text as id,
+                    ccm.key,
+                    ccm.label,
+                    ccm.description,
+                    ccm.type,
+                    ccm.category,
+                    ccm.is_required,
+                    TRUE as is_custom
+                 FROM club_custom_metrics ccm
+                 WHERE ccm.club_id = $1 AND ccm.is_active = TRUE
+                 ORDER BY category, label`,
+                [clubId]
             );
             systemMetrics = metricsResult.rows;
         } catch (e) {
@@ -65,7 +71,11 @@ export async function GET(
             accounts: accountsResult.rows
         });
 
-    } catch (error) {
+    } catch (error: any) {
+        const status = error?.status
+        if (status) {
+            return NextResponse.json({ error: status === 401 ? 'Unauthorized' : 'Forbidden' }, { status })
+        }
         console.error('Get Template Error:', error);
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }

@@ -18,11 +18,21 @@ export async function GET(
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        // Default to active (PENDING or REJECTED) if no status provided or status is not history
-        let statusFilter = "t.verification_status IN ('PENDING', 'REJECTED')";
+        // Active tab must include both current tasks and legacy completed tasks
+        // where verification_status has not been backfilled yet.
+        let statusFilter = `(
+            (
+                t.status = 'COMPLETED'
+                AND (
+                    t.verification_status IS NULL
+                    OR t.verification_status IN ('PENDING', 'NONE')
+                )
+            )
+            OR t.verification_status = 'REJECTED'
+        )`;
         
         if (status === 'history') {
-            statusFilter = "t.verification_status = 'APPROVED'";
+            statusFilter = "COALESCE(t.verification_status, '') = 'APPROVED'";
         }
 
         const result = await query(
@@ -31,6 +41,7 @@ export async function GET(
                 t.equipment_id,
                 e.name as equipment_name,
                 e.type as equipment_type,
+                et.name_ru as equipment_type_name,
                 cw.name as workstation_name,
                 cw.zone as zone_name,
                 t.task_type,
@@ -39,6 +50,11 @@ export async function GET(
                 t.due_date,
                 t.completed_at,
                 t.verified_at,
+                CASE
+                    WHEN t.verification_status = 'REJECTED'
+                    THEN GREATEST((CURRENT_DATE - COALESCE(t.verified_at::date, t.completed_at::date, t.due_date::date)), 0)
+                    ELSE 0
+                END as rework_days,
                 u.full_name as completed_by_name,
                 vu.full_name as verified_by_name,
                 t.photos,
@@ -51,6 +67,7 @@ export async function GET(
                 lr.status as laundry_status
              FROM equipment_maintenance_tasks t
              JOIN equipment e ON t.equipment_id = e.id
+             LEFT JOIN equipment_types et ON e.type = et.code
              LEFT JOIN club_workstations cw ON e.workstation_id = cw.id
              LEFT JOIN users u ON t.completed_by = u.id
              LEFT JOIN users vu ON t.verified_by = vu.id
@@ -72,7 +89,44 @@ export async function GET(
             [clubId]
         );
 
-        return NextResponse.json(result.rows);
+        const rows = result.rows;
+        const taskIds = rows.map((row) => row.id).filter(Boolean);
+        let historyByTaskId = new Map<string, any[]>();
+
+        if (taskIds.length > 0) {
+            const historyRes = await query(
+                `SELECT
+                    ev.id,
+                    ev.task_id,
+                    ev.cycle_no,
+                    ev.event_type,
+                    ev.note,
+                    ev.task_notes,
+                    ev.photos,
+                    ev.created_at,
+                    COALESCE(u.full_name, 'Система') AS actor_name
+                 FROM equipment_maintenance_task_events ev
+                 LEFT JOIN users u ON u.id = ev.actor_user_id
+                 WHERE ev.task_id = ANY($1::uuid[])
+                 ORDER BY ev.created_at ASC, ev.id ASC`,
+                [taskIds]
+            );
+
+            historyByTaskId = historyRes.rows.reduce((acc, item) => {
+                const key = String(item.task_id);
+                const list = acc.get(key) || [];
+                list.push(item);
+                acc.set(key, list);
+                return acc;
+            }, new Map<string, any[]>());
+        }
+
+        return NextResponse.json(
+            rows.map((row) => ({
+                ...row,
+                history: historyByTaskId.get(String(row.id)) || [],
+            }))
+        );
     } catch (error) {
         console.error('Fetch Verification Tasks Error:', error);
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });

@@ -150,6 +150,27 @@ function summarizeInventory(items: ExtendedInventoryItem[]): InventorySummary {
     }
 }
 
+function normalizeExpenseEntries(value: any) {
+    if (Array.isArray(value)) return value
+
+    const amount = Number(value)
+    if (Number.isFinite(amount) && amount > 0) {
+        return [{ amount: String(amount), comment: '' }]
+    }
+
+    return []
+}
+
+function hasReportValue(value: any) {
+    if (Array.isArray(value)) {
+        return value.some((item) => (Number(item?.amount) || 0) > 0)
+    }
+
+    if (typeof value === 'number') return value > 0
+    if (typeof value === 'string') return value.trim() !== '' && Number(value) > 0
+    return Boolean(value)
+}
+
 export function ShiftClosingWizard({
     isOpen,
     onClose,
@@ -549,7 +570,7 @@ export function ShiftClosingWizard({
 
     const handleStep1Submit = () => {
         const requiredFields = reportTemplate?.schema.filter((f: any) => f.is_required).map((f: any) => f.metric_key) || []
-        const missing = requiredFields.filter((key: string) => !reportData[key])
+        const missing = requiredFields.filter((key: string) => !hasReportValue(reportData[key]))
         if (missing.length > 0) return alert(`Заполните обязательные поля отчета`)
         
         // Validation for checklist photos
@@ -1497,7 +1518,7 @@ export function ShiftClosingWizard({
                             <div className="grid gap-5">
                                 {reportTemplate?.schema.map((field: any, idx: number) => (
                                     <div key={idx} className="space-y-2">
-                                        {field.field_type === 'EXPENSE_LIST' ? (
+                                        {field.field_type === 'EXPENSE' || field.field_type === 'EXPENSE_LIST' ? (
                                             <div className="space-y-3">
                                                 <div className="flex items-center justify-between">
                                                     <Label className="text-slate-400 text-xs uppercase tracking-wider ml-1">
@@ -1508,7 +1529,7 @@ export function ShiftClosingWizard({
                                                         variant="ghost" 
                                                         size="sm" 
                                                         onClick={() => {
-                                                            const currentList = reportData[field.metric_key] || []
+                                                            const currentList = normalizeExpenseEntries(reportData[field.metric_key])
                                                             setReportData({
                                                                 ...reportData,
                                                                 [field.metric_key]: [...currentList, { amount: '', comment: '' }]
@@ -1521,7 +1542,7 @@ export function ShiftClosingWizard({
                                                 </div>
                                                 
                                                 <div className="space-y-3">
-                                                    {(reportData[field.metric_key] || []).map((item: any, itemIdx: number) => (
+                                                    {normalizeExpenseEntries(reportData[field.metric_key]).map((item: any, itemIdx: number) => (
                                                         <div key={itemIdx} className="flex gap-2 items-start">
                                                             <div className="flex-1 space-y-2">
                                                                 <Input
@@ -1530,7 +1551,7 @@ export function ShiftClosingWizard({
                                                                     className="bg-slate-900 border-slate-800 h-10 rounded-xl focus:ring-2 focus:ring-purple-500"
                                                                     value={item.amount}
                                                                     onChange={(e) => {
-                                                                        const newList = [...(reportData[field.metric_key] || [])]
+                                                                        const newList = [...normalizeExpenseEntries(reportData[field.metric_key])]
                                                                         newList[itemIdx] = { ...newList[itemIdx], amount: e.target.value }
                                                                         setReportData({ ...reportData, [field.metric_key]: newList })
                                                                     }}
@@ -1540,7 +1561,7 @@ export function ShiftClosingWizard({
                                                                     className="bg-slate-900 border-slate-800 h-10 rounded-xl text-xs focus:ring-2 focus:ring-purple-500"
                                                                     value={item.comment}
                                                                     onChange={(e) => {
-                                                                        const newList = [...(reportData[field.metric_key] || [])]
+                                                                        const newList = [...normalizeExpenseEntries(reportData[field.metric_key])]
                                                                         newList[itemIdx] = { ...newList[itemIdx], comment: e.target.value }
                                                                         setReportData({ ...reportData, [field.metric_key]: newList })
                                                                     }}
@@ -1550,7 +1571,7 @@ export function ShiftClosingWizard({
                                                                 variant="ghost"
                                                                 size="icon"
                                                                 onClick={() => {
-                                                                    const newList = [...(reportData[field.metric_key] || [])]
+                                                                    const newList = [...normalizeExpenseEntries(reportData[field.metric_key])]
                                                                     newList.splice(itemIdx, 1)
                                                                     setReportData({ ...reportData, [field.metric_key]: newList })
                                                                 }}
@@ -1561,7 +1582,7 @@ export function ShiftClosingWizard({
                                                         </div>
                                                     ))}
                                                     
-                                                    {(!reportData[field.metric_key] || reportData[field.metric_key].length === 0) && (
+                                                    {normalizeExpenseEntries(reportData[field.metric_key]).length === 0 && (
                                                         <div className="text-center py-4 bg-slate-900/30 border border-dashed border-slate-800 rounded-xl text-slate-500 text-[10px] uppercase font-bold">
                                                             Расходов не зафиксировано
                                                         </div>

@@ -1,29 +1,28 @@
 "use client"
 
-import { useEffect, useState, useMemo } from "react"
-import { useRouter } from "next/navigation"
+import { useEffect, useMemo, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
-import { Loader2, Plus, GripVertical, Save, Trash2, ArrowLeft, Minus, List } from "lucide-react"
+import { Loader2, Plus, GripVertical, Save, Trash2, Minus } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import Link from "next/link"
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from "@dnd-kit/core"
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
 
 interface SystemMetric {
-    id: number
+    id: number | string
     key: string
     label: string
     type: string
     category: string
     description: string
     is_required: boolean
+    is_custom?: boolean
 }
 
 interface TemplateField {
@@ -44,6 +43,17 @@ interface Account {
     color: string
     account_type: string
 }
+
+const normalizeTemplateFields = (fields: TemplateField[]) =>
+    fields.map((field) => ({
+        metric_key: field.metric_key,
+        custom_label: field.custom_label,
+        is_required: field.is_required,
+        field_type: field.field_type === 'EXPENSE_LIST' ? 'EXPENSE' : field.field_type,
+        show_in_stats: field.show_in_stats,
+        show_for_employee: field.show_for_employee ?? true,
+        account_id: field.account_id ?? null,
+    }))
 
 function SortableField({ 
     field, 
@@ -82,7 +92,7 @@ function SortableField({
         <div 
             ref={setNodeRef} 
             style={style} 
-            className={`group relative flex flex-col gap-4 rounded-xl border bg-card p-5 transition-all shadow-sm ${
+            className={`group relative flex flex-col gap-4 rounded-xl border bg-card p-4 transition-all shadow-sm md:p-5 ${
                 isDragging ? 'border-purple-500 shadow-lg' : 'hover:border-purple-200 hover:shadow-md'
             }`}
         >
@@ -133,7 +143,7 @@ function SortableField({
 
                     <div className="space-y-3">
                         <Label className="text-xs font-medium text-muted-foreground">Тип операции</Label>
-                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 bg-muted/50 p-1 rounded-lg">
+                        <div className="grid grid-cols-3 gap-2 rounded-lg bg-muted/50 p-1">
                             <button
                                 onClick={() => onUpdate(index, 'field_type', 'INCOME')}
                                 className={`flex items-center justify-center gap-1.5 py-1.5 text-[10px] lg:text-xs font-medium rounded-md transition-all ${
@@ -147,22 +157,12 @@ function SortableField({
                             <button
                                 onClick={() => onUpdate(index, 'field_type', 'EXPENSE')}
                                 className={`flex items-center justify-center gap-1.5 py-1.5 text-[10px] lg:text-xs font-medium rounded-md transition-all ${
-                                    field.field_type === 'EXPENSE'
+                                    field.field_type === 'EXPENSE' || field.field_type === 'EXPENSE_LIST'
                                         ? 'bg-orange-500 text-white shadow-sm'
                                         : 'text-muted-foreground hover:bg-background/50'
                                 }`}
                             >
                                 <Minus className="h-3 w-3" /> Расход
-                            </button>
-                            <button
-                                onClick={() => onUpdate(index, 'field_type', 'EXPENSE_LIST')}
-                                className={`flex items-center justify-center gap-1.5 py-1.5 text-[10px] lg:text-xs font-medium rounded-md transition-all ${
-                                    field.field_type === 'EXPENSE_LIST'
-                                        ? 'bg-purple-500 text-white shadow-sm'
-                                        : 'text-muted-foreground hover:bg-background/50'
-                                }`}
-                            >
-                                <List className="h-3 w-3" /> Список
                             </button>
                             <button
                                 onClick={() => onUpdate(index, 'field_type', 'OTHER')}
@@ -283,13 +283,19 @@ function SortableField({
 }
 
 export default function ReportBuilderPage({ params }: { params: Promise<{ clubId: string }> }) {
-    const router = useRouter()
     const [clubId, setClubId] = useState('')
     const [systemMetrics, setSystemMetrics] = useState<SystemMetric[]>([])
     const [selectedFields, setSelectedFields] = useState<TemplateField[]>([])
+    const [savedFieldsSnapshot, setSavedFieldsSnapshot] = useState("[]")
     const [accounts, setAccounts] = useState<Account[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [isSaving, setIsSaving] = useState(false)
+    const [isCreatingMetric, setIsCreatingMetric] = useState(false)
+    const [isCustomMetricFormOpen, setIsCustomMetricFormOpen] = useState(false)
+    const [customMetricLabel, setCustomMetricLabel] = useState('')
+    const [customMetricType, setCustomMetricType] = useState('MONEY')
+    const [customMetricCategory, setCustomMetricCategory] = useState('OPERATIONS')
+    const [customMetricDescription, setCustomMetricDescription] = useState('')
 
     const sensors = useSensors(
         useSensor(PointerSensor, {
@@ -322,9 +328,11 @@ export default function ReportBuilderPage({ params }: { params: Promise<{ clubId
                     // Ensure all fields have an id for dnd-kit
                     const schema = data.currentTemplate.schema.map((f: any) => ({
                         ...f,
-                        id: f.id || `${f.metric_key}-${Math.random().toString(36).substr(2, 9)}`
+                        id: f.id || `${f.metric_key}-${Math.random().toString(36).slice(2, 11)}`,
+                        field_type: f.field_type === 'EXPENSE_LIST' ? 'EXPENSE' : f.field_type
                     }))
                     setSelectedFields(schema)
+                    setSavedFieldsSnapshot(JSON.stringify(normalizeTemplateFields(schema)))
                 } else {
                     // Default fields if no template exists
                     const defaults = data.systemMetrics
@@ -335,9 +343,10 @@ export default function ReportBuilderPage({ params }: { params: Promise<{ clubId
                             is_required: true,
                             field_type: 'OTHER',
                             show_in_stats: true,
-                            id: `${m.key}-${Math.random().toString(36).substr(2, 9)}`
+                            id: `${m.key}-${Math.random().toString(36).slice(2, 11)}`
                         }))
                     setSelectedFields(defaults)
+                    setSavedFieldsSnapshot(JSON.stringify(normalizeTemplateFields(defaults)))
                 }
             }
         } catch (error) {
@@ -358,9 +367,81 @@ export default function ReportBuilderPage({ params }: { params: Promise<{ clubId
                 is_required: metric.is_required,
                 field_type: 'OTHER',
                 show_in_stats: true,
-                id: `${metric.key}-${Math.random().toString(36).substr(2, 9)}`
+                id: `${metric.key}-${Math.random().toString(36).slice(2, 11)}`
             }
         ])
+    }
+
+    const handleCreateCustomMetric = async () => {
+        if (!customMetricLabel.trim()) {
+            alert('Введите название метрики')
+            return
+        }
+
+        setIsCreatingMetric(true)
+        try {
+            const res = await fetch(`/api/clubs/${clubId}/settings/reports/metrics`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    label: customMetricLabel,
+                    type: customMetricType,
+                    category: customMetricCategory,
+                    description: customMetricDescription,
+                }),
+            })
+
+            const data = await res.json()
+            if (!res.ok) {
+                alert(data.error || 'Ошибка создания метрики')
+                return
+            }
+
+            const createdMetric: SystemMetric = data.metric
+            setSystemMetrics((prev) =>
+                [...prev, createdMetric].sort((a, b) =>
+                    a.category.localeCompare(b.category, 'ru') || a.label.localeCompare(b.label, 'ru')
+                )
+            )
+            handleAddField(createdMetric)
+            setCustomMetricLabel('')
+            setCustomMetricType('MONEY')
+            setCustomMetricCategory('OPERATIONS')
+            setCustomMetricDescription('')
+            setIsCustomMetricFormOpen(false)
+        } catch (error) {
+            console.error(error)
+            alert('Ошибка создания метрики')
+        } finally {
+            setIsCreatingMetric(false)
+        }
+    }
+
+    const handleDeleteCustomMetric = async (metric: SystemMetric) => {
+        if (!metric.is_custom) return
+
+        if (!confirm(`Удалить метрику "${metric.label}"?`)) {
+            return
+        }
+
+        try {
+            const res = await fetch(`/api/clubs/${clubId}/settings/reports/metrics`, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ metricId: metric.id }),
+            })
+
+            const data = await res.json()
+            if (!res.ok) {
+                alert(data.error || 'Ошибка удаления метрики')
+                return
+            }
+
+            setSystemMetrics((prev) => prev.filter((item) => String(item.id) !== String(metric.id)))
+        } catch (error) {
+            console.error(error)
+            alert('Ошибка удаления метрики')
+        }
     }
 
     const handleRemoveField = (index: number) => {
@@ -398,6 +479,7 @@ export default function ReportBuilderPage({ params }: { params: Promise<{ clubId
             })
 
             if (res.ok) {
+                setSavedFieldsSnapshot(JSON.stringify(normalizeTemplateFields(selectedFields)))
                 // We could use a toast here, but since the project doesn't have one, 
                 // we'll use a more professional message.
                 alert('✅ Шаблон отчета успешно обновлен! Все изменения вступят в силу немедленно.')
@@ -413,44 +495,41 @@ export default function ReportBuilderPage({ params }: { params: Promise<{ clubId
     }
 
     const getMetricInfo = (key: string) => systemMetrics.find(m => m.key === key)
+    const hasUnsavedChanges = useMemo(
+        () => JSON.stringify(normalizeTemplateFields(selectedFields)) !== savedFieldsSnapshot,
+        [selectedFields, savedFieldsSnapshot]
+    )
 
     if (isLoading) return <div className="flex h-screen items-center justify-center bg-background"><Loader2 className="animate-spin text-purple-600" /></div>
 
     return (
-        <div className="min-h-screen bg-[#F9FAFB] dark:bg-background">
-            <div className="sticky top-0 z-30 w-full border-b bg-background/80 backdrop-blur-md">
-                <div className="mx-auto max-w-6xl px-4 py-4 flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                        <Button variant="ghost" size="icon" asChild className="rounded-full">
-                            <Link href={`/clubs/${clubId}/settings/general`}>
-                                <ArrowLeft className="h-5 w-5" />
-                            </Link>
-                        </Button>
-                        <div>
-                            <h1 className="text-xl font-bold tracking-tight">Настройка отчета</h1>
-                            <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Конструктор смены</p>
-                        </div>
+        <div className="min-h-screen bg-background pb-24 md:pb-0">
+            <div className="border-b bg-background">
+                <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-5 md:flex-row md:items-start md:justify-between md:px-6 md:py-6">
+                    <div className="min-w-0">
+                        <h1 className="text-2xl font-bold tracking-tight md:text-3xl">Настройка отчета</h1>
+                        <p className="mt-1 text-sm text-muted-foreground">Конструктор полей для открытия и закрытия смены</p>
                     </div>
-                    <div className="flex items-center gap-3">
-                        <Button onClick={handleSave} disabled={isSaving} className="bg-purple-600 hover:bg-purple-700 text-white px-6 shadow-md shadow-purple-200 transition-all active:scale-95">
+                    <div className="hidden items-center gap-3 md:flex">
+                        <Button onClick={handleSave} disabled={isSaving || !hasUnsavedChanges} className="bg-black px-6 text-white hover:bg-black/90">
                             {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                            Сохранить изменения
+                            Сохранить
                         </Button>
                     </div>
                 </div>
             </div>
 
-            <div className="mx-auto max-w-6xl p-6 lg:p-10">
-                <div className="grid gap-10 lg:grid-cols-12">
+            <div className="mx-auto max-w-6xl px-4 py-6 md:px-6 md:py-8 lg:py-10">
+                <div className="grid gap-6 md:gap-8 lg:grid-cols-12 lg:gap-10">
 
                     {/* Left: Current Template */}
-                    <div className="lg:col-span-7 space-y-6">
+                    <div className="space-y-4 lg:col-span-7 lg:space-y-6">
                         <div className="flex items-center justify-between">
-                            <h2 className="text-lg font-bold flex items-center gap-2">
+                            <h2 className="flex items-center gap-2 text-base font-bold md:text-lg">
                                 <span className="flex h-6 w-6 items-center justify-center rounded-full bg-purple-100 text-purple-600 text-xs font-bold">1</span>
                                 Структура отчета
                             </h2>
-                            <Badge variant="outline" className="bg-white/50 text-muted-foreground">
+                            <Badge variant="outline" className="bg-white/50 text-[10px] text-muted-foreground sm:text-xs">
                                 {selectedFields.length} полей добавлено
                             </Badge>
                         </div>
@@ -464,9 +543,9 @@ export default function ReportBuilderPage({ params }: { params: Promise<{ clubId
                                 items={selectedFields.map(f => f.id)}
                                 strategy={verticalListSortingStrategy}
                             >
-                                <div className="space-y-4">
+                                <div className="space-y-3 md:space-y-4">
                                     {selectedFields.length === 0 ? (
-                                        <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-muted-foreground/10 bg-white/30 py-20 text-center animate-in fade-in zoom-in-95 duration-500">
+                                        <div className="animate-in zoom-in-95 flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-muted-foreground/10 bg-white/50 py-14 text-center fade-in duration-500 md:py-20">
                                             <div className="h-12 w-12 rounded-full bg-purple-50 flex items-center justify-center mb-4">
                                                 <Plus className="h-6 w-6 text-purple-400" />
                                             </div>
@@ -494,19 +573,108 @@ export default function ReportBuilderPage({ params }: { params: Promise<{ clubId
                     </div>
 
                     {/* Right: Available Metrics */}
-                    <div className="lg:col-span-5 space-y-6">
-                        <div className="sticky top-24 space-y-6">
-                            <h2 className="text-lg font-bold flex items-center gap-2">
+                    <div className="space-y-4 lg:col-span-5 lg:space-y-6">
+                        <div className="space-y-4 lg:sticky lg:top-24 lg:space-y-6">
+                            <h2 className="flex items-center gap-2 text-base font-bold md:text-lg">
                                 <span className="flex h-6 w-6 items-center justify-center rounded-full bg-purple-100 text-purple-600 text-xs font-bold">2</span>
                                 Библиотека метрик
                             </h2>
 
-                            <Card className="border-none shadow-xl shadow-purple-900/5 bg-white/80 backdrop-blur-sm overflow-hidden rounded-2xl">
+                            <div className="space-y-3">
+                                <Button
+                                    variant={isCustomMetricFormOpen ? "outline" : "default"}
+                                    onClick={() => setIsCustomMetricFormOpen((prev) => !prev)}
+                                    className={cn(
+                                        "w-full",
+                                        !isCustomMetricFormOpen && "bg-black text-white hover:bg-black/90"
+                                    )}
+                                >
+                                    <Plus className="mr-2 h-4 w-4" />
+                                    {isCustomMetricFormOpen ? "Скрыть форму своей метрики" : "Добавить свою метрику"}
+                                </Button>
+
+                                {isCustomMetricFormOpen && (
+                                    <Card className="rounded-2xl border bg-white">
+                                        <CardHeader className="pb-3">
+                                            <CardTitle className="text-sm font-bold">Своя метрика клуба</CardTitle>
+                                            <CardDescription className="text-xs">Создайте свою метрику и сразу добавьте её в текущий отчет</CardDescription>
+                                        </CardHeader>
+                                        <CardContent className="space-y-3">
+                                            <div className="space-y-2">
+                                                <Label htmlFor="custom-metric-label">Название</Label>
+                                                <Input
+                                                    id="custom-metric-label"
+                                                    value={customMetricLabel}
+                                                    onChange={(e) => setCustomMetricLabel(e.target.value)}
+                                                    placeholder="Например, Выручка кальяны"
+                                                />
+                                            </div>
+                                            <div className="grid gap-3 sm:grid-cols-2">
+                                                <div className="space-y-2">
+                                                    <Label>Категория</Label>
+                                                    <Select value={customMetricCategory} onValueChange={setCustomMetricCategory}>
+                                                        <SelectTrigger>
+                                                            <SelectValue />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            <SelectItem value="FINANCE">Финансы</SelectItem>
+                                                            <SelectItem value="OPERATIONS">Операционка</SelectItem>
+                                                            <SelectItem value="MARKETING">Маркетинг</SelectItem>
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <Label>Тип данных</Label>
+                                                    <Select value={customMetricType} onValueChange={setCustomMetricType}>
+                                                        <SelectTrigger>
+                                                            <SelectValue />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            <SelectItem value="MONEY">Деньги</SelectItem>
+                                                            <SelectItem value="NUMBER">Число</SelectItem>
+                                                            <SelectItem value="TEXT">Текст</SelectItem>
+                                                            <SelectItem value="BOOLEAN">Да / Нет</SelectItem>
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label htmlFor="custom-metric-description">Описание</Label>
+                                                <Input
+                                                    id="custom-metric-description"
+                                                    value={customMetricDescription}
+                                                    onChange={(e) => setCustomMetricDescription(e.target.value)}
+                                                    placeholder="Необязательно"
+                                                />
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <Button
+                                                    variant="outline"
+                                                    className="flex-1"
+                                                    onClick={() => setIsCustomMetricFormOpen(false)}
+                                                >
+                                                    Отмена
+                                                </Button>
+                                                <Button
+                                                    onClick={handleCreateCustomMetric}
+                                                    disabled={isCreatingMetric || !customMetricLabel.trim()}
+                                                    className="flex-1 bg-black text-white hover:bg-black/90"
+                                                >
+                                                    {isCreatingMetric ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
+                                                    Создать
+                                                </Button>
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+                                )}
+                            </div>
+
+                            <Card className="overflow-hidden rounded-2xl border-none bg-white/90 shadow-lg shadow-purple-900/5 backdrop-blur-sm md:shadow-xl">
                                 <CardHeader className="pb-3 bg-gradient-to-br from-purple-50/50 to-transparent">
                                     <CardTitle className="text-sm font-bold">Доступные показатели</CardTitle>
                                     <CardDescription className="text-xs">Нажмите на метрику, чтобы добавить её в отчет</CardDescription>
                                 </CardHeader>
-                                <CardContent className="space-y-6 max-h-[calc(100vh-250px)] overflow-y-auto custom-scrollbar pt-4">
+                                <CardContent className="space-y-5 pt-4 lg:max-h-[calc(100vh-250px)] lg:overflow-y-auto custom-scrollbar">
                                     {['FINANCE', 'OPERATIONS', 'MARKETING'].map(category => {
                                         const metrics = systemMetrics.filter(m => m.category === category)
                                         if (metrics.length === 0) return null
@@ -525,7 +693,7 @@ export default function ReportBuilderPage({ params }: { params: Promise<{ clubId
 
                                         return (
                                             <div key={category} className="space-y-3">
-                                                <h4 className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-muted-foreground/60 px-1">
+                                                <h4 className="flex items-center gap-2 px-1 text-[11px] font-bold uppercase tracking-widest text-muted-foreground/60">
                                                     <span>{categoryIcons[category]}</span>
                                                     {categoryNames[category]}
                                                 </h4>
@@ -533,29 +701,52 @@ export default function ReportBuilderPage({ params }: { params: Promise<{ clubId
                                                     {metrics.map(metric => {
                                                         const isAdded = selectedFields.some(f => f.metric_key === metric.key)
                                                         return (
-                                                            <button
+                                                            <div
                                                                 key={metric.id}
-                                                                onClick={() => handleAddField(metric)}
-                                                                disabled={isAdded}
-                                                                className={`group w-full flex items-center justify-between rounded-xl border p-3 text-left transition-all duration-200 ${isAdded
-                                                                    ? 'bg-muted/50 border-muted-foreground/5 opacity-50 cursor-not-allowed scale-[0.98]'
-                                                                    : 'bg-white border-muted-foreground/10 hover:border-purple-300 hover:shadow-md hover:shadow-purple-500/5 active:scale-95'
+                                                                className={`group flex items-center gap-2 rounded-xl border p-3 transition-all duration-200 ${isAdded
+                                                                    ? 'bg-muted/50 border-muted-foreground/5 opacity-50'
+                                                                    : 'bg-white border-muted-foreground/10 hover:border-purple-300 hover:shadow-md hover:shadow-purple-500/5'
                                                                     }`}
                                                             >
-                                                                <div className="space-y-0.5">
-                                                                    <div className="font-semibold text-xs text-foreground group-hover:text-purple-700 transition-colors">{metric.label}</div>
-                                                                    <div className="text-[10px] text-muted-foreground line-clamp-1 group-hover:text-muted-foreground/80 transition-colors">{metric.description}</div>
-                                                                </div>
-                                                                <div className={`h-6 w-6 rounded-full flex items-center justify-center transition-all ${
-                                                                    isAdded ? 'bg-muted-foreground/10' : 'bg-purple-50 group-hover:bg-purple-600'
-                                                                }`}>
-                                                                    {isAdded ? (
-                                                                        <div className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40" />
-                                                                    ) : (
-                                                                        <Plus className="h-3 w-3 text-purple-600 group-hover:text-white" />
-                                                                    )}
-                                                                </div>
-                                                            </button>
+                                                                <button
+                                                                    onClick={() => handleAddField(metric)}
+                                                                    disabled={isAdded}
+                                                                    className="flex min-w-0 flex-1 items-center justify-between text-left"
+                                                                >
+                                                                    <div className="space-y-0.5">
+                                                                        <div className="flex items-center gap-2">
+                                                                            <div className="font-semibold text-xs text-foreground group-hover:text-purple-700 transition-colors">{metric.label}</div>
+                                                                            {metric.is_custom && (
+                                                                                <Badge variant="outline" className="h-4 px-1 text-[9px]">
+                                                                                    Своя
+                                                                                </Badge>
+                                                                            )}
+                                                                        </div>
+                                                                        <div className="text-[10px] text-muted-foreground line-clamp-1 group-hover:text-muted-foreground/80 transition-colors">{metric.description}</div>
+                                                                    </div>
+                                                                    <div className={`ml-3 h-6 w-6 shrink-0 rounded-full flex items-center justify-center transition-all ${
+                                                                        isAdded ? 'bg-muted-foreground/10' : 'bg-purple-50 group-hover:bg-purple-600'
+                                                                    }`}>
+                                                                        {isAdded ? (
+                                                                            <div className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40" />
+                                                                        ) : (
+                                                                            <Plus className="h-3 w-3 text-purple-600 group-hover:text-white" />
+                                                                        )}
+                                                                    </div>
+                                                                </button>
+                                                                {metric.is_custom && (
+                                                                    <Button
+                                                                        type="button"
+                                                                        variant="ghost"
+                                                                        size="icon"
+                                                                        className="h-8 w-8 shrink-0 text-muted-foreground hover:text-red-500"
+                                                                        onClick={() => handleDeleteCustomMetric(metric)}
+                                                                        title="Удалить метрику"
+                                                                    >
+                                                                        <Trash2 className="h-4 w-4" />
+                                                                    </Button>
+                                                                )}
+                                                            </div>
                                                         )
                                                     })}
                                                 </div>
@@ -584,6 +775,15 @@ export default function ReportBuilderPage({ params }: { params: Promise<{ clubId
                     background: #cbd5e1;
                 }
             `}</style>
+
+            <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur supports-[backdrop-filter]:bg-background/80 md:hidden">
+                <div className="mx-auto flex max-w-6xl gap-2">
+                    <Button onClick={handleSave} disabled={isSaving || !hasUnsavedChanges} className="h-11 flex-1 bg-purple-600 text-white hover:bg-purple-700">
+                        {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                        Сохранить
+                    </Button>
+                </div>
+            </div>
         </div>
     )
 }

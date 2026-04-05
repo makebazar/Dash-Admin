@@ -139,7 +139,7 @@ export default function GeneralSettingsPage({ params }: { params: Promise<{ club
                                 id="name"
                                 value={name}
                                 onChange={e => setName(e.target.value)}
-                                placeholder="Например: Colizeum"
+                                placeholder="Например: Игровой клуб Центр"
                             />
                         </div>
                         <div className="space-y-2">

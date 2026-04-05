@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Loader2, Plus, GripVertical, Save, Trash2, ArrowLeft, Camera, Monitor, ChevronUp, ChevronDown } from "lucide-react"
+import { Loader2, Plus, GripVertical, Save, Trash2, ArrowLeft, ChevronUp, ChevronDown } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core'
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
@@ -109,7 +109,7 @@ function SortableItem({ item, index, totalItems, onUpdate, onRemove, onBulkUpdat
     }, [item.weight])
 
     return (
-        <Card ref={setNodeRef} style={style} className="overflow-hidden mb-4 bg-white sm:rounded-xl sm:border sm:shadow-sm border-b sm:border-b-0 last:border-b-0 rounded-none shadow-none">
+        <Card ref={setNodeRef} style={style} className="mb-4 overflow-hidden rounded-none border-x-0 bg-white shadow-none last:border-b-0 sm:rounded-xl sm:border sm:shadow-sm">
             <div className="flex items-start bg-card p-4 md:p-6">
                 <div {...attributes} {...listeners} className="mt-3 mr-3 text-muted-foreground cursor-move touch-none hidden md:block">
                     <GripVertical className="h-5 w-5" />
@@ -144,7 +144,7 @@ function SortableItem({ item, index, totalItems, onUpdate, onRemove, onBulkUpdat
                         <Button
                             variant="ghost"
                             size="sm"
-                            className="h-8 w-8 p-0 text-muted-foreground hover:text-red-500"
+                            className="h-8 w-8 shrink-0 p-0 text-muted-foreground hover:text-red-500"
                             onClick={() => onRemove(index)}
                         >
                             <Trash2 className="h-4 w-4" />
@@ -202,7 +202,7 @@ function SortableItem({ item, index, totalItems, onUpdate, onRemove, onBulkUpdat
                             />
                         </div>
                     </div>
-                    <div className="flex flex-wrap items-center gap-3 sm:gap-4 pt-2">
+                    <div className="flex flex-col gap-3 pt-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4">
                         <div className="flex items-center gap-2">
                             <Switch 
                                 id={`photo-required-${index}`}
@@ -228,7 +228,7 @@ function SortableItem({ item, index, totalItems, onUpdate, onRemove, onBulkUpdat
                             </div>
                         )}
                         
-                        <div className="w-full sm:w-auto h-px sm:h-4 bg-border sm:block hidden" />
+                        <div className="hidden h-px bg-border sm:block sm:h-4 sm:w-auto" />
 
                         <div className="flex items-center gap-2">
                             <Switch 
@@ -264,13 +264,13 @@ function SortableItem({ item, index, totalItems, onUpdate, onRemove, onBulkUpdat
 
                     {/* Options Section - Hide if workstation check is enabled */}
                     {!item.related_entity_type && (
-                        <div className="mt-4 pt-2 border-t">
-                            <div className="flex items-center justify-between mb-2">
+                            <div className="mt-4 border-t pt-2">
+                            <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                                 <Label className="text-xs font-semibold text-muted-foreground">Варианты замечаний (Опционально)</Label>
                                 <Button 
                                     variant="ghost" 
                                     size="sm" 
-                                    className="h-6 text-xs"
+                                    className="h-8 justify-start px-0 text-xs sm:h-6 sm:justify-center sm:px-2"
                                     onClick={() => {
                                         const currentOptions = item.options || []
                                         onUpdate(index, 'options', [...currentOptions, { label: '', score: 0 }])
@@ -283,7 +283,7 @@ function SortableItem({ item, index, totalItems, onUpdate, onRemove, onBulkUpdat
                             {item.options && item.options.length > 0 && (
                                 <div className="space-y-2">
                                     {item.options.map((option, optIndex) => (
-                                        <div key={optIndex} className="flex gap-2 items-center">
+                                        <div key={optIndex} className="space-y-2">
                                             <Input
                                                 placeholder="Текст замечания (напр. Грязно)"
                                                 value={option.label}
@@ -294,50 +294,52 @@ function SortableItem({ item, index, totalItems, onUpdate, onRemove, onBulkUpdat
                                                 }}
                                                 className="h-8 text-sm"
                                             />
-                                            <div className="w-24 flex items-center gap-1">
-                                                <OptionScoreInput
-                                                    score={option.score}
-                                                    onChange={(val) => {
-                                                        const newOptions = [...(item.options || [])]
-                                                        newOptions[optIndex] = { ...newOptions[optIndex], score: val }
-                                                        
-                                                        // Calculate max score from ALL options (including the one just updated)
-                                                        // Parse everything to numbers for calculation
-                                                        const currentParsedScore = (typeof val === 'string' ? parseFloat(val) : val) || 0
-                                                        let maxWeight = currentParsedScore
-                                                        
-                                                        newOptions.forEach((opt, idx) => {
-                                                            if (idx === optIndex) return // Already handled
-                                                            const s = typeof opt.score === 'string' ? (parseFloat(opt.score) || 0) : opt.score
-                                                            if (s > maxWeight) maxWeight = s
-                                                        })
-                                                        
-                                                        // Only update weight if it's less than the max option score
-                                                        const currentWeight = typeof item.weight === 'string' ? (parseFloat(item.weight) || 0) : item.weight
-                                                        
-                                                        if (currentWeight < maxWeight) {
-                                                            onBulkUpdate(index, {
-                                                                options: newOptions,
-                                                                weight: maxWeight
+                                            <div className="flex items-center gap-2">
+                                                <div className="flex-1 sm:max-w-[96px]">
+                                                    <OptionScoreInput
+                                                        score={option.score}
+                                                        onChange={(val) => {
+                                                            const newOptions = [...(item.options || [])]
+                                                            newOptions[optIndex] = { ...newOptions[optIndex], score: val }
+                                                            
+                                                            // Calculate max score from ALL options (including the one just updated)
+                                                            // Parse everything to numbers for calculation
+                                                            const currentParsedScore = (typeof val === 'string' ? parseFloat(val) : val) || 0
+                                                            let maxWeight = currentParsedScore
+                                                            
+                                                            newOptions.forEach((opt, idx) => {
+                                                                if (idx === optIndex) return // Already handled
+                                                                const s = typeof opt.score === 'string' ? (parseFloat(opt.score) || 0) : opt.score
+                                                                if (s > maxWeight) maxWeight = s
                                                             })
-                                                        } else {
-                                                            onUpdate(index, 'options', newOptions)
-                                                        }
+                                                            
+                                                            // Only update weight if it's less than the max option score
+                                                            const currentWeight = typeof item.weight === 'string' ? (parseFloat(item.weight) || 0) : item.weight
+                                                            
+                                                            if (currentWeight < maxWeight) {
+                                                                onBulkUpdate(index, {
+                                                                    options: newOptions,
+                                                                    weight: maxWeight
+                                                                })
+                                                            } else {
+                                                                onUpdate(index, 'options', newOptions)
+                                                            }
+                                                        }}
+                                                    />
+                                                </div>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    className="h-8 w-8 shrink-0 p-0 text-muted-foreground hover:text-red-500"
+                                                    onClick={() => {
+                                                        const newOptions = [...(item.options || [])]
+                                                        newOptions.splice(optIndex, 1)
+                                                        onUpdate(index, 'options', newOptions)
                                                     }}
-                                                />
+                                                >
+                                                    <Trash2 className="h-3 w-3" />
+                                                </Button>
                                             </div>
-                                            <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                className="h-8 w-8 p-0 text-muted-foreground hover:text-red-500"
-                                                onClick={() => {
-                                                    const newOptions = [...(item.options || [])]
-                                                    newOptions.splice(optIndex, 1)
-                                                    onUpdate(index, 'options', newOptions)
-                                                }}
-                                            >
-                                                <Trash2 className="h-3 w-3" />
-                                            </Button>
                                         </div>
                                     ))}
                                 </div>
@@ -579,36 +581,25 @@ export default function ChecklistTemplatePage({ params }: { params: Promise<{ cl
     if (isLoading) return <div className="flex h-screen items-center justify-center"><Loader2 className="animate-spin" /></div>
 
     return (
-        <div className="min-h-screen bg-slate-50/50 pb-24">
-            {/* Mobile Header - Sticky */}
-            <div className="sticky top-0 left-0 right-0 z-40 bg-white border-b px-4 py-3 flex items-center gap-3 md:hidden shadow-sm">
-                <Button variant="ghost" size="icon" className="-ml-2 h-9 w-9 shrink-0" onClick={() => router.push(`/clubs/${clubId}/settings/checklists`)}>
-                    <ArrowLeft className="h-5 w-5" />
-                </Button>
-                <div className="flex-1 min-w-0">
-                    <h1 className="text-base font-semibold truncate leading-tight">{templateId === 'new' ? 'Создание чеклиста' : 'Редактирование'}</h1>
-                </div>
-                <Button onClick={handleSave} disabled={isSaving} size="sm" className="bg-purple-600 hover:bg-purple-700 shrink-0 h-8 text-xs px-3">
-                    {isSaving ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Save className="mr-1 h-3 w-3" />}
-                    Сохранить
-                </Button>
-            </div>
-
-            <div className="mx-auto max-w-3xl md:p-8">
-                <div className="hidden md:flex mb-8 items-center justify-between">
-                    <div>
-                        <Button variant="ghost" onClick={() => router.push(`/clubs/${clubId}/settings/checklists`)} className="pl-0 hover:pl-0 hover:bg-transparent -ml-2 mb-2">
-                            <ArrowLeft className="mr-2 h-4 w-4" /> К списку
-                        </Button>
-                        <h1 className="text-3xl font-bold">{templateId === 'new' ? 'Создание чеклиста' : 'Редактирование чеклиста'}</h1>
+        <div className="min-h-screen bg-background pb-28 md:pb-24">
+            <div className="border-b bg-background">
+                <div className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-5 md:flex-row md:items-start md:justify-between md:px-6 md:py-6">
+                    <div className="min-w-0">
+                        <h1 className="truncate text-2xl font-bold tracking-tight md:text-3xl">
+                            {templateId === 'new' ? 'Создание чеклиста' : 'Редактирование чеклиста'}
+                        </h1>
+                        <p className="mt-1 text-sm text-muted-foreground">Настройка структуры, пунктов и правил проверки</p>
                     </div>
-                    <Button onClick={handleSave} disabled={isSaving} className="bg-purple-600 hover:bg-purple-700">
+                    <Button onClick={handleSave} disabled={isSaving} className="hidden bg-black text-white hover:bg-black/90 md:inline-flex">
                         {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
                         Сохранить
                     </Button>
                 </div>
+            </div>
 
-                <Card className="mb-4 md:mb-8 border-x-0 md:border-x rounded-none md:rounded-xl shadow-none md:shadow-sm">
+            <div className="mx-auto max-w-3xl px-4 py-6 md:px-6 md:py-8">
+
+                <Card className="mb-4 rounded-none border-x-0 shadow-none md:mb-8 md:rounded-xl md:border-x md:shadow-sm">
                     <CardHeader className="px-4 md:px-6">
                         <CardTitle>Основная информация</CardTitle>
                     </CardHeader>
@@ -649,7 +640,7 @@ export default function ChecklistTemplatePage({ params }: { params: Promise<{ cl
                         {currentTemplate.type === 'shift_handover' && (
                             <div className="space-y-4 pt-2 border-t mt-4">
                                 <h3 className="font-medium text-sm text-muted-foreground">Настройки приемки</h3>
-                                <div className="flex items-center justify-between rounded-lg border p-4">
+                                <div className="flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-center sm:justify-between">
                                     <div className="space-y-0.5">
                                         <Label>Блокировать открытие смены</Label>
                                         <p className="text-sm text-muted-foreground">
@@ -657,6 +648,7 @@ export default function ChecklistTemplatePage({ params }: { params: Promise<{ cl
                                         </p>
                                     </div>
                                     <Switch 
+                                        className="self-end sm:self-auto"
                                         checked={currentTemplate.settings?.block_shift_open}
                                         onCheckedChange={checked => setCurrentTemplate({
                                             ...currentTemplate, 
@@ -664,7 +656,7 @@ export default function ChecklistTemplatePage({ params }: { params: Promise<{ cl
                                         })}
                                     />
                                 </div>
-                                <div className="flex items-center justify-between rounded-lg border p-4">
+                                <div className="flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-center sm:justify-between">
                                     <div className="space-y-0.5">
                                         <Label>Блокировать закрытие смены</Label>
                                         <p className="text-sm text-muted-foreground">
@@ -672,6 +664,7 @@ export default function ChecklistTemplatePage({ params }: { params: Promise<{ cl
                                         </p>
                                     </div>
                                     <Switch 
+                                        className="self-end sm:self-auto"
                                         checked={currentTemplate.settings?.block_shift_close}
                                         onCheckedChange={checked => setCurrentTemplate({
                                             ...currentTemplate, 
@@ -685,7 +678,7 @@ export default function ChecklistTemplatePage({ params }: { params: Promise<{ cl
                         {(!currentTemplate.type || currentTemplate.type === 'manager_audit') && (
                             <div className="space-y-4 pt-2 border-t mt-4">
                                 <h3 className="font-medium text-sm text-muted-foreground">Настройки аудита</h3>
-                                <div className="flex items-center justify-between rounded-lg border p-4">
+                                <div className="flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-center sm:justify-between">
                                     <div className="space-y-0.5">
                                         <Label>Влияет на KPI</Label>
                                         <p className="text-sm text-muted-foreground">
@@ -693,6 +686,7 @@ export default function ChecklistTemplatePage({ params }: { params: Promise<{ cl
                                         </p>
                                     </div>
                                     <Switch 
+                                        className="self-end sm:self-auto"
                                         checked={currentTemplate.settings?.affects_kpi}
                                         onCheckedChange={checked => setCurrentTemplate({
                                             ...currentTemplate, 
@@ -706,9 +700,9 @@ export default function ChecklistTemplatePage({ params }: { params: Promise<{ cl
                 </Card>
 
                 <div className="space-y-4 px-4 md:px-0">
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                         <h2 className="text-xl font-semibold">Пункты проверки</h2>
-                        <Button variant="outline" size="sm" onClick={handleAddItem}>
+                        <Button variant="outline" size="sm" className="w-full sm:w-auto" onClick={handleAddItem}>
                             <Plus className="mr-1 h-4 w-4" /> Добавить пункт
                         </Button>
                     </div>
@@ -743,6 +737,21 @@ export default function ChecklistTemplatePage({ params }: { params: Promise<{ cl
                             ))}
                         </SortableContext>
                     </DndContext>
+                </div>
+            </div>
+
+            <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur supports-[backdrop-filter]:bg-background/80 md:hidden">
+                <div className="mx-auto flex max-w-3xl gap-2">
+                    <Button variant="outline" size="icon" className="h-11 w-11 shrink-0" onClick={() => router.push(`/clubs/${clubId}/settings/checklists`)}>
+                        <ArrowLeft className="h-4 w-4" />
+                    </Button>
+                    <Button variant="outline" className="h-11 flex-1" onClick={handleAddItem}>
+                        <Plus className="mr-2 h-4 w-4" />
+                        Добавить пункт
+                    </Button>
+                    <Button onClick={handleSave} disabled={isSaving} size="icon" className="h-11 w-11 shrink-0 bg-purple-600 hover:bg-purple-700" aria-label="Сохранить" title="Сохранить">
+                        {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                    </Button>
                 </div>
             </div>
         </div>

@@ -74,6 +74,17 @@ interface ShiftReportField {
     field_type: "INCOME" | "EXPENSE" | "EXPENSE_LIST" | "OTHER"
 }
 
+function normalizeExpenseEntries(value: any) {
+    if (Array.isArray(value)) return value
+
+    const amount = Number(value)
+    if (Number.isFinite(amount) && amount > 0) {
+        return [{ amount: String(amount), comment: "" }]
+    }
+
+    return []
+}
+
 const DATE_TIME_MASK_TEMPLATE = "__.__.____, __:__"
 const DATE_TIME_EDITABLE_POSITIONS = [0, 1, 3, 4, 6, 7, 8, 9, 12, 13, 15, 16]
 
@@ -790,13 +801,76 @@ export default function ShiftDetailsPage() {
                                                                 <Label className="text-xs text-muted-foreground uppercase truncate" title={field.custom_label}>
                                                                     {field.custom_label}
                                                                 </Label>
-                                                                <Input
-                                                                    type="number"
-                                                                    value={editCustomFields[field.metric_key] || ""}
-                                                                    onChange={(e) => setEditCustomFields((prev) => ({ ...prev, [field.metric_key]: e.target.value }))}
-                                                                    placeholder="0"
-                                                                    className="bg-muted/30"
-                                                                />
+                                                                {field.field_type === "EXPENSE" || field.field_type === "EXPENSE_LIST" ? (
+                                                                    <div className="space-y-2 rounded-lg border bg-muted/20 p-3">
+                                                                        <div className="space-y-2">
+                                                                            {normalizeExpenseEntries(editCustomFields[field.metric_key]).map((item: any, itemIdx: number) => (
+                                                                                <div key={itemIdx} className="flex items-start gap-2">
+                                                                                    <div className="grid flex-1 gap-2 md:grid-cols-[140px_minmax(0,1fr)]">
+                                                                                        <Input
+                                                                                            type="number"
+                                                                                            value={item.amount}
+                                                                                            onChange={(e) => {
+                                                                                                const nextItems = [...normalizeExpenseEntries(editCustomFields[field.metric_key])]
+                                                                                                nextItems[itemIdx] = { ...nextItems[itemIdx], amount: e.target.value }
+                                                                                                setEditCustomFields((prev) => ({ ...prev, [field.metric_key]: nextItems }))
+                                                                                            }}
+                                                                                            placeholder="Сумма"
+                                                                                            className="bg-background"
+                                                                                        />
+                                                                                        <Input
+                                                                                            value={item.comment}
+                                                                                            onChange={(e) => {
+                                                                                                const nextItems = [...normalizeExpenseEntries(editCustomFields[field.metric_key])]
+                                                                                                nextItems[itemIdx] = { ...nextItems[itemIdx], comment: e.target.value }
+                                                                                                setEditCustomFields((prev) => ({ ...prev, [field.metric_key]: nextItems }))
+                                                                                            }}
+                                                                                            placeholder="Описание расхода"
+                                                                                            className="bg-background"
+                                                                                        />
+                                                                                    </div>
+                                                                                    <Button
+                                                                                        type="button"
+                                                                                        variant="ghost"
+                                                                                        size="icon"
+                                                                                        className="h-10 w-10 shrink-0 text-muted-foreground hover:text-red-500"
+                                                                                        onClick={() => {
+                                                                                            const nextItems = [...normalizeExpenseEntries(editCustomFields[field.metric_key])]
+                                                                                            nextItems.splice(itemIdx, 1)
+                                                                                            setEditCustomFields((prev) => ({ ...prev, [field.metric_key]: nextItems }))
+                                                                                        }}
+                                                                                    >
+                                                                                        <Trash2 className="h-4 w-4" />
+                                                                                    </Button>
+                                                                                </div>
+                                                                            ))}
+                                                                        </div>
+                                                                        <div className="flex items-center justify-between">
+                                                                            <span className="text-xs text-muted-foreground">
+                                                                                {normalizeExpenseEntries(editCustomFields[field.metric_key]).length === 0 ? "Расходов пока нет" : `Позиций: ${normalizeExpenseEntries(editCustomFields[field.metric_key]).length}`}
+                                                                            </span>
+                                                                            <Button
+                                                                                type="button"
+                                                                                variant="outline"
+                                                                                size="sm"
+                                                                                onClick={() => {
+                                                                                    const nextItems = [...normalizeExpenseEntries(editCustomFields[field.metric_key]), { amount: "", comment: "" }]
+                                                                                    setEditCustomFields((prev) => ({ ...prev, [field.metric_key]: nextItems }))
+                                                                                }}
+                                                                            >
+                                                                                Добавить расход
+                                                                            </Button>
+                                                                        </div>
+                                                                    </div>
+                                                                ) : (
+                                                                    <Input
+                                                                        type="number"
+                                                                        value={editCustomFields[field.metric_key] || ""}
+                                                                        onChange={(e) => setEditCustomFields((prev) => ({ ...prev, [field.metric_key]: e.target.value }))}
+                                                                        placeholder="0"
+                                                                        className="bg-muted/30"
+                                                                    />
+                                                                )}
                                                             </div>
                                                         ))}
                                                     </div>
