@@ -62,6 +62,23 @@ function readFileAsDataUrl(file: File) {
     })
 }
 
+function getQuestionTypeLabel(type: RecruitmentQuestionType) {
+    switch (type) {
+        case "text":
+            return "Текст"
+        case "choice":
+            return "Один выбор"
+        case "multi_choice":
+            return "Мультивыбор"
+        case "scale":
+            return "Шкала"
+        case "boolean":
+            return "Да / Нет"
+        default:
+            return type
+    }
+}
+
 export default function RecruitmentTestEditPage() {
     const params = useParams<{ clubId: string; testId: string }>()
     const router = useRouter()
@@ -413,6 +430,12 @@ export default function RecruitmentTestEditPage() {
                                 <div className="space-y-3">
                                     {(schema.questions || []).map((q: any, index: number) => (
                                         <div key={q.id} className="rounded-2xl border border-muted-foreground/10 p-4 space-y-3">
+                                            <div className="flex items-center justify-between gap-2 border-b border-muted-foreground/10 pb-3">
+                                                <p className="text-sm font-bold">Вопрос {index + 1}</p>
+                                                <Badge variant="outline" className="text-[10px] uppercase tracking-wider">
+                                                    {getQuestionTypeLabel((q.type || "text") as RecruitmentQuestionType)}
+                                                </Badge>
+                                            </div>
                                             <div className="flex items-start justify-between gap-3">
                                                 <div className="min-w-0 flex-1 space-y-2">
                                                     <div className="space-y-1.5">
