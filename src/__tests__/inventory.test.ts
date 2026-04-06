@@ -7,6 +7,9 @@ import {
     deleteSupply,
     adjustWarehouseStock,
     createInventory,
+    addProductToInventory,
+    updateInventoryItem,
+    cancelInventory,
     closeInventory,
     createShiftReceipt,
     getWarehouses,
@@ -69,7 +72,7 @@ describe("Warehouse System Logic", () => {
     })
 
     it("creates category successfully", async () => {
-        vi.mocked(query).mockImplementation(async (sql: any, params?: any[]) => {
+        vi.mocked(query).mockImplementation(async (sql: any) => {
             if (typeof sql === "string" && sql.includes("FROM clubs c") && sql.includes("club_employees")) {
                 return { rowCount: 1, rows: [{ ok: 1 }] } as any
             }
@@ -116,7 +119,7 @@ describe("Warehouse System Logic", () => {
         await createWarehouse(clubId, userId, { name: "Main Warehouse", type: "GENERAL", address: "123 Street" })
         expect(query).toHaveBeenCalledWith(
             expect.stringContaining("INSERT INTO warehouses"),
-            [clubId, "Main Warehouse", "123 Street", "GENERAL", undefined, {}]
+            [clubId, "Main Warehouse", "123 Street", "GENERAL", null, false, undefined, {}]
         )
     })
 
@@ -371,6 +374,32 @@ describe("Warehouse System Logic", () => {
         expect(client.query).toHaveBeenCalledWith("COMMIT")
     })
 
+    it("adds inventory item as uncounted instead of auto-zero", async () => {
+        const client = createMockClient((sql) => {
+            if (sql.includes("SELECT warehouse_id, club_id, status FROM warehouse_inventories")) {
+                return { rowCount: 1, rows: [{ warehouse_id: 2, club_id: clubId, status: "OPEN" }] }
+            }
+            if (sql.includes("SELECT 1 FROM warehouse_inventory_items")) return { rowCount: 0, rows: [] }
+            if (sql.includes("FROM warehouse_products p")) {
+                return { rowCount: 1, rows: [{ cost_price: 50, selling_price: 100, current_stock: 7 }] }
+            }
+            return { rows: [], rowCount: 1 }
+        })
+        vi.mocked(getClient).mockResolvedValue(client as any)
+
+        await addProductToInventory(55, 10)
+
+        expect(client.query).toHaveBeenCalledWith(
+            expect.stringContaining("INSERT INTO warehouse_inventory_items"),
+            [55, 10, 7, 50, 100]
+        )
+        const insertCall = vi.mocked(client.query).mock.calls.find(([sql]) =>
+            typeof sql === "string" && sql.includes("INSERT INTO warehouse_inventory_items")
+        )
+        expect(String(insertCall?.[0])).toContain("added_manually")
+        expect(String(insertCall?.[0])).toContain("VALUES ($1, $2, $3, NULL, $4, $5, TRUE)")
+    })
+
     it("blocks creating a second open revision inventory", async () => {
         const client = createMockClient((sql) => {
             if (sql.includes("WHERE club_id = $1 AND status = 'OPEN'")) {
@@ -382,6 +411,49 @@ describe("Warehouse System Logic", () => {
 
         await expect(createInventory(clubId, userId, null, null, 3, null)).rejects.toThrow("В клубе уже есть открытая инвентаризация")
         expect(client.query).toHaveBeenCalledWith("ROLLBACK")
+    })
+
+    it("blocks canceling closed inventory history", async () => {
+        const client = createMockClient((sql) => {
+            if (sql.includes("FROM warehouse_inventories") && sql.includes("FOR UPDATE")) {
+                return { rowCount: 1, rows: [{ id: 91, status: "CLOSED", warehouse_id: 2, created_by: userId }] }
+            }
+            return { rows: [], rowCount: 1 }
+        })
+        vi.mocked(getClient).mockResolvedValue(client as any)
+
+        await expect(cancelInventory(91, clubId, userId)).rejects.toThrow("Отменять можно только открытую инвентаризацию")
+        expect(client.query).toHaveBeenCalledWith("ROLLBACK")
+    })
+
+    it("cancels open inventory into history instead of deleting", async () => {
+        const client = createMockClient((sql) => {
+            if (sql.includes("FROM warehouse_inventories") && sql.includes("FOR UPDATE")) {
+                return { rowCount: 1, rows: [{ id: 92, status: "OPEN", warehouse_id: 2, created_by: userId }] }
+            }
+            return { rows: [], rowCount: 1 }
+        })
+        vi.mocked(getClient).mockResolvedValue(client as any)
+
+        await cancelInventory(92, clubId, userId)
+
+        expect(client.query).toHaveBeenCalledWith(
+            expect.stringContaining("SET status = 'CANCELED'"),
+            [92, clubId, userId]
+        )
+        expect(client.query).toHaveBeenCalledWith("COMMIT")
+    })
+
+    it("blocks updating items in closed inventory", async () => {
+        const client = createMockClient((sql) => {
+            if (sql.includes("FROM warehouse_inventory_items ii") && sql.includes("JOIN warehouse_inventories i")) {
+                return { rowCount: 1, rows: [{ status: "CLOSED", warehouse_id: 2 }] }
+            }
+            return { rows: [], rowCount: 1 }
+        })
+        vi.mocked(getClient).mockResolvedValue(client as any)
+
+        await expect(updateInventoryItem(501, 3, clubId)).rejects.toThrow("Редактировать можно только открытую инвентаризацию")
     })
 
     it("blocks POS receipts when club is not in SHIFT sales mode", async () => {
@@ -458,7 +530,7 @@ describe("Warehouse System Logic", () => {
         )
     })
 
-    it("closes inventory with movement compensation and auto supply", async () => {
+    it("closes inventory with movement compensation without auto supply", async () => {
         const mainClient = createMockClient((sql, params) => {
             if (sql.startsWith("SELECT warehouse_id, shift_id, created_by, started_at, status FROM warehouse_inventories")) {
                 return { rows: [{ warehouse_id: 1, shift_id: "shift-9", created_by: userId, started_at: "2026-01-01T10:00:00Z", status: "OPEN" }] }
@@ -485,7 +557,15 @@ describe("Warehouse System Logic", () => {
                     ],
                 }
             }
-            if (sql.includes("INSERT INTO warehouse_supplies")) return { rows: [{ id: 707 }] }
+            if (sql.includes("SELECT quantity") && sql.includes("FROM warehouse_stock")) {
+                if (params?.[1] === 55) return { rowCount: 1, rows: [{ quantity: 11 }] }
+                if (params?.[1] === 99) return { rowCount: 1, rows: [{ quantity: 5 }] }
+            }
+            if (sql.includes("INSERT INTO warehouse_stock") && sql.includes("RETURNING quantity")) {
+                const delta = Number(params?.[2] ?? 0)
+                const baseline = params?.[1] === 55 ? 11 : 5
+                return { rowCount: 1, rows: [{ quantity: baseline + delta }] }
+            }
             return { rows: [], rowCount: 1 }
         })
         const replenishmentClient = createMockClient((sql) => {
@@ -498,15 +578,14 @@ describe("Warehouse System Logic", () => {
 
         expect(mainClient.query).toHaveBeenCalledWith(
             expect.stringContaining("UPDATE warehouse_inventories"),
-            [77, 1000, 540, 460]
+            [77, 1000, 540, 460, userId, "INVENTORY"]
         )
-        expect(mainClient.query).toHaveBeenCalledWith(expect.stringContaining("INSERT INTO warehouse_supplies"), [
-            clubId,
-            expect.stringContaining("закрытии инвентаризации #77"),
-            120,
-            userId,
-            1,
-        ])
+        expect(mainClient.query).toHaveBeenCalledWith(
+            expect.stringContaining("INSERT INTO warehouse_stock_movements"),
+            expect.arrayContaining([clubId, 55, userId, -3, 11, 8, "INVENTORY_LOSS"])
+        )
+        const supplyCalls = vi.mocked(mainClient.query).mock.calls.filter(([sql]) => typeof sql === "string" && sql.includes("INSERT INTO warehouse_supplies"))
+        expect(supplyCalls.length).toBe(0)
         expect(mainClient.query).toHaveBeenCalledWith("COMMIT")
         expect(mainClient.release).toHaveBeenCalled()
     })
@@ -550,7 +629,7 @@ describe("Warehouse System Logic", () => {
         // In SHIFT mode, closeInventory should not recognize inventory deficits as sales by default.
         expect(mainClient.query).toHaveBeenCalledWith(
             expect.stringContaining("UPDATE warehouse_inventories"),
-            [77, 1000, 500, 500]
+            [77, 1000, 500, 500, userId, "SHIFT"]
         )
         expect(mainClient.query).toHaveBeenCalledWith(
             expect.stringContaining("sm.type IN ('SALE', 'RETURN')"),
@@ -559,7 +638,7 @@ describe("Warehouse System Logic", () => {
     })
 
     it("aggregates duplicate unaccounted sales on close", async () => {
-        const mainClient = createMockClient((sql) => {
+        const mainClient = createMockClient((sql, params) => {
             if (sql.startsWith("SELECT warehouse_id, shift_id, created_by, started_at, status FROM warehouse_inventories")) {
                 return { rows: [{ warehouse_id: 1, shift_id: "shift-9", created_by: userId, started_at: "2026-01-01T10:00:00Z", status: "OPEN" }] }
             }
@@ -584,7 +663,15 @@ describe("Warehouse System Logic", () => {
                     ],
                 }
             }
-            if (sql.includes("INSERT INTO warehouse_supplies")) return { rows: [{ id: 808 }] }
+            if (sql.includes("SELECT quantity") && sql.includes("FROM warehouse_stock")) {
+                if (params?.[1] === 55) return { rowCount: 1, rows: [{ quantity: 10 }] }
+                if (params?.[1] === 99) return { rowCount: 1, rows: [{ quantity: 4 }] }
+            }
+            if (sql.includes("INSERT INTO warehouse_stock") && sql.includes("RETURNING quantity")) {
+                const delta = Number(params?.[2] ?? 0)
+                const baseline = params?.[1] === 55 ? 10 : 4
+                return { rowCount: 1, rows: [{ quantity: baseline + delta }] }
+            }
             return { rows: [], rowCount: 1 }
         })
         const replenishmentClient = createMockClient((sql) => {
@@ -600,9 +687,10 @@ describe("Warehouse System Logic", () => {
 
         expect(mainClient.query).toHaveBeenCalledWith(
             expect.stringContaining("UPDATE warehouse_inventories"),
-            [88, 400, 300, 100]
+            [88, 400, 300, 100, userId, "INVENTORY"]
         )
-        expect(mainClient.query).toHaveBeenCalledWith(expect.stringContaining("INSERT INTO warehouse_supply_items"), [808, 99, 3, 50, 150])
+        const supplyItemCalls = vi.mocked(mainClient.query).mock.calls.filter(([sql]) => typeof sql === "string" && sql.includes("INSERT INTO warehouse_supply_items"))
+        expect(supplyItemCalls.length).toBe(0)
     })
 
     it("includes zero-stock items in procurement and rounds suggested quantity up to box size", async () => {

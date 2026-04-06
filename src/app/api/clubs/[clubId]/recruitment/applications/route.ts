@@ -50,21 +50,6 @@ export async function GET(
             JOIN recruitment_form_templates t ON t.id = a.template_id
             LEFT JOIN (
                 SELECT
-                    template_id,
-                    COUNT(*)::int as required_tests_count
-                FROM recruitment_form_template_tests
-                GROUP BY template_id
-            ) rtc ON rtc.template_id = a.template_id
-            LEFT JOIN (
-                SELECT
-                    application_id,
-                    COUNT(*)::int as completed_tests_count
-                FROM recruitment_application_tests
-                WHERE score_percent IS NOT NULL
-                GROUP BY application_id
-            ) atc ON atc.application_id = a.id
-            LEFT JOIN (
-                SELECT
                     application_id,
                     COALESCE(SUM(COALESCE(auto_score, 0)), 0)::int as tests_auto_score
                 FROM recruitment_application_tests
@@ -91,10 +76,6 @@ export async function GET(
                 GROUP BY rat.application_id
             ) tsum ON tsum.application_id = a.id
             WHERE ${where.join(" AND ")}
-              AND (
-                COALESCE(rtc.required_tests_count, 0) = 0
-                OR COALESCE(atc.completed_tests_count, 0) >= COALESCE(rtc.required_tests_count, 0)
-              )
             ORDER BY a.created_at DESC
             `,
             values

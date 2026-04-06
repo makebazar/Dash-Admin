@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState, useTransition, useEffect, useMemo, useCallback } from "react"
-import { ArrowLeft, CheckCircle2, AlertTriangle, Loader2, Save, X, Search, Camera, Barcode, RefreshCcw, Package, ReceiptText, CircleAlert, Boxes, Warehouse as WarehouseIcon } from "lucide-react"
+import { ArrowLeft, CheckCircle2, AlertTriangle, Loader2, Save, X, Search, Camera, Barcode, RefreshCcw, Package, ReceiptText, CircleAlert, Boxes, Warehouse as WarehouseIcon, History } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
-import { getInventory, getInventoryItems, updateInventoryItem, closeInventory, Inventory, InventoryItem, addProductToInventory, getProducts, getProductByBarcode, correctInventoryItem, getInventoryShiftReceipts, ShiftReceipt } from "../actions"
+import { getInventory, getInventoryItems, updateInventoryItem, closeInventory, Inventory, InventoryItem, addProductToInventory, getProducts, getProductByBarcode, correctInventoryItem, getInventoryShiftReceipts, getInventoryPostCloseCorrections, InventoryPostCloseCorrection, ShiftReceipt } from "../actions"
 import { useParams } from "next/navigation"
 import { Plus, Pencil } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -32,6 +32,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
     
     const [inventory, setInventory] = useState<Inventory | null>(null)
     const [items, setItems] = useState<InventoryItem[]>([])
+    const [corrections, setCorrections] = useState<InventoryPostCloseCorrection[]>([])
     const [shiftReceipts, setShiftReceipts] = useState<ShiftReceipt[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [isSaving, setIsSaving] = useState(false)
@@ -73,12 +74,14 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                 const res = await correctInventoryItem(inventoryId, productId, val, clubId, currentUserId)
                 if (res.success) {
                     // Refresh data
-                    const [inv, invItems] = await Promise.all([
+                    const [inv, invItems, invCorrections] = await Promise.all([
                         getInventory(inventoryId),
-                        getInventoryItems(inventoryId)
+                        getInventoryItems(inventoryId),
+                        getInventoryPostCloseCorrections(inventoryId)
                     ])
                     setInventory(inv)
                     setItems(invItems)
+                    setCorrections(invCorrections)
                     setEditingItemId(null)
                 }
             } catch (err: any) {
@@ -96,12 +99,14 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
         const loadData = async () => {
             setIsLoading(true)
             try {
-                const [inv, invItems] = await Promise.all([
+                const [inv, invItems, invCorrections] = await Promise.all([
                     getInventory(inventoryId),
-                    getInventoryItems(inventoryId)
+                    getInventoryItems(inventoryId),
+                    getInventoryPostCloseCorrections(inventoryId)
                 ])
                 setInventory(inv)
                 setItems(invItems)
+                setCorrections(invCorrections)
                 if (inv.shift_id && inv.created_by) {
                     const receipts = await getInventoryShiftReceipts(clubId, inventoryId, { includeVoided: true })
                     setShiftReceipts(receipts)
@@ -148,10 +153,33 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
     const uncountedCount = uncountedItems.length
     const totalCount = items.length
     const isClosed = inventory?.status === 'CLOSED'
+    const isCanceled = inventory?.status === 'CANCELED'
+    const isReadOnly = inventory?.status !== 'OPEN'
+    const usesPosRevenue = Boolean(inventory?.shift_id && inventory?.sales_capture_mode === 'SHIFT')
+    const canAddUnaccountedSales = Boolean(inventory?.target_metric_key && !usesPosRevenue)
+    const canCorrectClosedInventory = Boolean(isOwner && isClosed && !inventory?.shift_id && !inventory?.target_metric_key)
+    const showInventoryRevenueColumn = Boolean(inventory?.target_metric_key && !usesPosRevenue)
 
-    // Calculate Sales Summary for Preview
-    // Note: This shows sales (expected > actual means sold), so we use (expected - actual)
     const salesPreview = useMemo(() => {
+        if (usesPosRevenue) {
+            return shiftReceipts.flatMap((receipt) => {
+                if (receipt.voided_at) return []
+                return (receipt.items || [])
+                    .map((item) => {
+                        const qty = Math.max(0, Number(item.quantity) - Number(item.returned_qty || 0))
+                        return {
+                            id: item.id,
+                            name: item.product_name,
+                            qty,
+                            price: item.selling_price_snapshot,
+                            total: qty * Number(item.selling_price_snapshot || 0),
+                            isUnaccounted: false
+                        }
+                    })
+                    .filter(item => item.qty > 0)
+            })
+        }
+
         const standardSales = items
             .filter(i => i.actual_stock !== null && (i.expected_stock || 0) > (i.actual_stock || 0))
             .map(i => ({
@@ -173,7 +201,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
         }))
 
         return [...standardSales, ...manualSales]
-    }, [items, unaccountedSales])
+    }, [items, shiftReceipts, unaccountedSales, usesPosRevenue])
 
     const totalSalesRevenue = salesPreview.reduce((acc, s) => acc + s.total, 0)
 
@@ -208,7 +236,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
         {
             label: "Посчитано",
             value: `${inventorySummary.counted}/${totalCount}`,
-            hint: isClosed ? "Позиции инвентаризации" : `${inventorySummary.progress}% заполнено`,
+            hint: isReadOnly ? "Позиции инвентаризации" : `${inventorySummary.progress}% заполнено`,
             icon: Package,
             tone: "text-slate-700 bg-slate-50 border-slate-200"
         },
@@ -293,7 +321,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                     inventoryId,
                     clubId,
                     metricRequired ? Number(reportedRevenue) : 0,
-                    unaccountedSales.map(s => ({
+                    (canAddUnaccountedSales ? unaccountedSales : []).map(s => ({
                         product_id: s.product_id,
                         quantity: s.quantity,
                         selling_price: s.selling_price,
@@ -593,7 +621,13 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                             <div className="space-y-2">
                                 <div className="flex flex-wrap items-center gap-2">
                                     <h2 className="text-xl font-black text-slate-900 md:text-2xl">Инвентаризация #{inventory.id}</h2>
-                                    {isClosed ? <Badge className="bg-green-600">Завершено</Badge> : <Badge className="bg-amber-500">В процессе</Badge>}
+                                    {isClosed ? (
+                                        <Badge className="bg-green-600">Завершено</Badge>
+                                    ) : isCanceled ? (
+                                        <Badge variant="outline" className="border-slate-300 bg-slate-100 text-slate-700">Отменено</Badge>
+                                    ) : (
+                                        <Badge className="bg-amber-500">В процессе</Badge>
+                                    )}
                                 </div>
                                 <div className="flex flex-wrap items-center gap-3 text-sm text-slate-600">
                                     <span>Начата: {new Date(inventory.started_at).toLocaleString('ru-RU')}</span>
@@ -607,7 +641,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                                         </span>
                                     )}
                                 </div>
-                                {!isClosed && (
+                                {!isReadOnly && (
                                     <div className="rounded-2xl border bg-white/80 p-3">
                                         <div className="flex items-center justify-between gap-3 text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
                                             <span>Готовность подсчёта</span>
@@ -678,7 +712,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                             <RefreshCcw className={cn("h-4 w-4", isLoading && "animate-spin")} />
                         </button>
                         </div>
-                        {!isClosed && (
+                        {!isReadOnly && (
                             <div className="grid gap-2 sm:grid-cols-3 xl:grid-cols-1">
                                 <Button variant="outline" onClick={() => setIsScannerOpen(true)} className="h-11 rounded-xl bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100">
                                     <Camera className="mr-2 h-4 w-4" />
@@ -719,6 +753,8 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                     <CardDescription>
                         {isClosed 
                             ? "Результаты инвентаризации" 
+                            : isCanceled
+                                ? "Инвентаризация была отменена. Данные доступны только для истории."
                             : isOwner 
                                 ? "Введите фактическое количество. Ожидаемый остаток показан для сверки."
                                 : "Введите фактическое количество товара на полках. Система скрывает ожидаемый остаток для чистоты проверки."}
@@ -764,12 +800,12 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                                 <TableRow>
                                     <TableHead className="w-[40%]">Товар</TableHead>
                                     <TableHead className="text-right">Цена продажи</TableHead>
-                                    {(isClosed || isOwner) && <TableHead className="text-right text-muted-foreground">Ожидалось</TableHead>}
+                                    {(isReadOnly || isOwner) && <TableHead className="text-right text-muted-foreground">Ожидалось</TableHead>}
                                     <TableHead className="text-right w-[150px]">Фактический остаток</TableHead>
                                     {isClosed && (
                                         <>
                                             <TableHead className="text-right">Разница (шт)</TableHead>
-                                            {inventory.target_metric_key && <TableHead className="text-right">Разница (₽)</TableHead>}
+                                            {showInventoryRevenueColumn && <TableHead className="text-right">Разница (₽)</TableHead>}
                                         </>
                                     )}
                                 </TableRow>
@@ -778,7 +814,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                                 {groupedItems.map(([category, categoryItems]) => (
                                     <React.Fragment key={`cat-group-${category}`}>
                                         <TableRow key={`cat-${category}`} className="bg-muted/50 hover:bg-muted/50">
-                                            <TableCell colSpan={isClosed ? (inventory.target_metric_key ? 6 : 5) : (isOwner ? 4 : 3)} className="font-semibold py-2">
+                                            <TableCell colSpan={isClosed ? (showInventoryRevenueColumn ? 6 : 5) : ((isReadOnly || isOwner) ? 4 : 3)} className="font-semibold py-2">
                                                 {category} ({categoryItems.length})
                                             </TableCell>
                                         </TableRow>
@@ -790,13 +826,13 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                                             return (
                                                 <TableRow key={item.id} className={cn(
                                                     isClosed && difference < 0 ? "bg-red-50/40" : isClosed && difference > 0 ? "bg-green-50/40" : scannedItem?.id === item.id ? "bg-blue-50 ring-2 ring-blue-500 ring-inset" : "",
-                                                    !isClosed && item.actual_stock !== null && "bg-blue-50/30"
+                                                    !isReadOnly && item.actual_stock !== null && "bg-blue-50/30"
                                                 )}>
                                                     <TableCell className="font-medium pl-8">
                                                         <div className="flex flex-col">
                                                             <div className="flex items-center gap-2">
                                                                 <span>{item.product_name}</span>
-                                                                {!isClosed && item.actual_stock !== null && (
+                                                                {!isReadOnly && item.actual_stock !== null && (
                                                                     <Badge variant="outline" className="h-5 border-blue-200 bg-blue-50 text-[10px] font-bold text-blue-700">Посчитан</Badge>
                                                                 )}
                                                                 {soldProductIds.has(Number(item.product_id)) && (
@@ -825,14 +861,14 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                                                     </TableCell>
                                                     <TableCell className="text-right">{item.selling_price_snapshot} ₽</TableCell>
                                                     
-                                                    {(isClosed || isOwner) && (
+                                                    {(isReadOnly || isOwner) && (
                                                         <TableCell className="text-right text-muted-foreground">
                                                             {item.expected_stock}
                                                         </TableCell>
                                                     )}
 
                                                     <TableCell className="text-right">
-                                                        {isClosed ? (
+                                                        {isReadOnly ? (
                                                             editingItemId === item.id ? (
                                                                 <div className="flex items-center justify-end gap-1">
                                                                     <Input 
@@ -864,7 +900,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                                                             ) : (
                                                                 <div className="flex items-center justify-end gap-2">
                                                                     <span className="font-bold">{item.actual_stock}</span>
-                                                                    {isOwner && (
+                                                                    {canCorrectClosedInventory && (
                                                                         <Button 
                                                                             aria-label={`Редактировать позицию ${item.product_name}`}
                                                                             variant="ghost" 
@@ -901,7 +937,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                                                                     {difference > 0 ? `+${difference}` : difference < 0 ? `${difference}` : '0'}
                                                                 </span>
                                                             </TableCell>
-                                                            {inventory.target_metric_key && (
+                                                            {showInventoryRevenueColumn && (
                                                                 <TableCell className={cn(
                                                                     "text-right font-bold",
                                                                     inventoryValue > 0 ? "text-green-600" : inventoryValue < 0 ? "text-red-600" : "text-slate-500"
@@ -918,7 +954,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                                 ))}
                                 {items.length === 0 && (
                                     <TableRow>
-                                        <TableCell colSpan={isClosed ? 6 : 4} className="h-24 text-center text-muted-foreground">
+                                        <TableCell colSpan={isClosed ? 6 : ((isReadOnly || isOwner) ? 4 : 3)} className="h-24 text-center text-muted-foreground">
                                             Товары не найдены
                                         </TableCell>
                                     </TableRow>
@@ -967,7 +1003,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                                                 </div>
                                                 
                                                 <div className="flex flex-col items-end gap-1">
-                                                    {isClosed ? (
+                                                    {isReadOnly ? (
                                                         <div className="flex flex-col items-end">
                                                             <div className="flex items-center gap-2">
                                                                 <span className="text-xs text-slate-400">Было: {item.expected_stock}</span>
@@ -981,7 +1017,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                                                                 )}>
                                                                     {difference === 0 ? "OK" : difference > 0 ? `+${difference}` : `${difference}`}
                                                                 </span>
-                                                                {inventory.target_metric_key && (
+                                                                {showInventoryRevenueColumn && (
                                                                     <span className={cn(
                                                                         "text-xs font-bold",
                                                                         inventoryValue > 0 ? "text-green-600" : inventoryValue < 0 ? "text-red-600" : "text-slate-500"
@@ -993,7 +1029,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                                                         </div>
                                                     ) : (
                                                         <div className="flex items-center gap-3">
-                                                            {(isOwner) && (
+                                                            {(isReadOnly || isOwner) && (
                                                                 <div className="flex flex-col items-end">
                                                                     <span className="text-[9px] text-slate-400 uppercase font-bold tracking-widest">Ожидалось</span>
                                                                     <span className="text-sm font-bold text-slate-400">{item.expected_stock}</span>
@@ -1030,6 +1066,57 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                     </div>
                 </CardContent>
             </Card>
+
+            {isClosed && (
+                <Card>
+                    <CardHeader>
+                        <div className="flex items-center gap-2">
+                            <History className="h-4 w-4 text-slate-500" />
+                            <CardTitle>История пост-коррекций</CardTitle>
+                        </div>
+                        <CardDescription>
+                            Показывает все изменения, которые были внесены после закрытия ревизии.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        {corrections.length === 0 ? (
+                            <div className="rounded-xl border border-dashed p-6 text-sm text-slate-500">
+                                После закрытия этой инвентаризации корректировок не было.
+                            </div>
+                        ) : (
+                            <div className="space-y-3">
+                                {corrections.map(correction => (
+                                    <div key={correction.id} className="rounded-2xl border bg-white p-4">
+                                        <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                                            <div className="space-y-1">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="font-bold text-slate-900">{correction.product_name}</span>
+                                                    <Badge variant="outline" className={cn(
+                                                        "text-[10px] font-bold",
+                                                        correction.stock_delta > 0 ? "border-green-200 bg-green-50 text-green-700" : "border-red-200 bg-red-50 text-red-700"
+                                                    )}>
+                                                        {correction.stock_delta > 0 ? `+${correction.stock_delta}` : correction.stock_delta} шт
+                                                    </Badge>
+                                                </div>
+                                                <p className="text-xs text-slate-500">
+                                                    Было: {correction.old_actual_stock} · Стало: {correction.new_actual_stock} · Разница до: {correction.difference_before ?? "—"} · После: {correction.difference_after}
+                                                </p>
+                                                <p className="text-xs text-slate-500">
+                                                    Причина: {correction.reason || "Не указана"}
+                                                </p>
+                                            </div>
+                                            <div className="text-xs text-slate-500 md:text-right">
+                                                <div>{new Date(correction.created_at).toLocaleString('ru-RU')}</div>
+                                                <div className="font-semibold text-slate-700">{correction.created_by_name || correction.created_by}</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+            )}
 
             {/* Add Product Dialog */}
             <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
@@ -1074,7 +1161,9 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                         <DialogTitle>Завершение инвентаризации</DialogTitle>
                         <DialogDescription>
                             {inventory.target_metric_key 
-                                ? `Сверьте продажи со склада с кассой за смену.` 
+                                ? usesPosRevenue
+                                    ? `Сверьте сумму чеков смены с кассой. Инвентаризация больше не подменяет продажи складскими корректировками.`
+                                    : `Сверьте продажи по расхождениям склада с кассой за смену.`
                                 : "Подтвердите обновление остатков на складе."}
                         </DialogDescription>
                     </DialogHeader>
@@ -1099,7 +1188,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                             {/* Sales Summary Section */}
                             <div className="border rounded-lg overflow-hidden">
                                 <div className="bg-muted/50 p-2 text-xs font-bold border-b flex justify-between">
-                                    <span>ПРОДАНО ЗА СМЕНУ (СИСТЕМА)</span>
+                                    <span>{usesPosRevenue ? "ПРОДАЖИ ПО POS" : "ПРОДАНО ЗА СМЕНУ (СИСТЕМА)"}</span>
                                     <span>СУММА: {totalSalesRevenue} ₽</span>
                                 </div>
                                 <div className="max-h-[200px] overflow-y-auto">
@@ -1147,41 +1236,42 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                                 </div>
                             </div>
 
-                            {/* Unaccounted Sales Section */}
-                            <div className="pt-2 border-t">
-                                <div className="flex items-center justify-between mb-2">
-                                    <Label className="text-xs font-semibold">Добавить неучтенную продажу</Label>
-                                    <Button 
-                                        type="button" 
-                                        variant="outline" 
-                                        size="sm" 
-                                        onClick={async () => {
-                                            await ensureProductsLoaded()
-                                            setIsUnaccountedDialogOpen(true)
-                                        }}
-                                        className="h-7 text-[10px] bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-100"
-                                    >
-                                        <Plus className="h-3 w-3 mr-1" /> Добавить
-                                    </Button>
-                                </div>
-                                
-                                {unaccountedSales.length > 0 && (
-                                    <div className="flex flex-wrap gap-2">
-                                        {unaccountedSales.map(sale => (
-                                            <div key={sale.product_id} className="flex items-center gap-1 bg-slate-100 px-2 py-1 rounded-full text-[10px] border border-slate-200">
-                                                <span>{sale.name} ({sale.quantity} шт)</span>
-                                                <button
-                                                    aria-label={`Удалить неучтенную продажу ${sale.name}`}
-                                                    onClick={() => removeUnaccountedSale(sale.product_id)}
-                                                    className="inline-flex items-center justify-center"
-                                                >
-                                                    <X className="h-3 w-3 cursor-pointer text-red-500 hover:text-red-700" />
-                                                </button>
-                                            </div>
-                                        ))}
+                            {canAddUnaccountedSales && (
+                                <div className="pt-2 border-t">
+                                    <div className="flex items-center justify-between mb-2">
+                                        <Label className="text-xs font-semibold">Добавить неучтенную продажу</Label>
+                                        <Button 
+                                            type="button" 
+                                            variant="outline" 
+                                            size="sm" 
+                                            onClick={async () => {
+                                                await ensureProductsLoaded()
+                                                setIsUnaccountedDialogOpen(true)
+                                            }}
+                                            className="h-7 text-[10px] bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-100"
+                                        >
+                                            <Plus className="h-3 w-3 mr-1" /> Добавить
+                                        </Button>
                                     </div>
-                                )}
-                            </div>
+                                    
+                                    {unaccountedSales.length > 0 && (
+                                        <div className="flex flex-wrap gap-2">
+                                            {unaccountedSales.map(sale => (
+                                                <div key={sale.product_id} className="flex items-center gap-1 bg-slate-100 px-2 py-1 rounded-full text-[10px] border border-slate-200">
+                                                    <span>{sale.name} ({sale.quantity} шт)</span>
+                                                    <button
+                                                        aria-label={`Удалить неучтенную продажу ${sale.name}`}
+                                                        onClick={() => removeUnaccountedSale(sale.product_id)}
+                                                        className="inline-flex items-center justify-center"
+                                                    >
+                                                        <X className="h-3 w-3 cursor-pointer text-red-500 hover:text-red-700" />
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
 
                             {/* Revenue Difference Warning */}
                             {reportedRevenue && Number(reportedRevenue) !== totalSalesRevenue && (
@@ -1201,8 +1291,12 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                                         </span>
                                         <p className="text-[10px] opacity-80 leading-tight mt-1">
                                             {Number(reportedRevenue) > totalSalesRevenue 
-                                                ? "Сумма в кассе больше, чем проданных товаров со склада. Проверьте, все ли продажи зафиксированы в системе." 
-                                                : "Денег в кассе меньше, чем должно быть по остаткам склада. Проверьте правильность подсчета товара."}
+                                                ? usesPosRevenue
+                                                    ? "Сумма в кассе больше, чем сумма чеков по смене. Проверьте лишние поступления наличных или непробитые возвраты."
+                                                    : "Сумма в кассе больше, чем проданных товаров со склада. Проверьте, все ли продажи зафиксированы в системе."
+                                                : usesPosRevenue
+                                                    ? "Денег в кассе меньше, чем по чекам смены. Проверьте отмены, возвраты и дисциплину пробития."
+                                                    : "Денег в кассе меньше, чем должно быть по остаткам склада. Проверьте правильность подсчета товара."}
                                         </p>
                                     </div>
                                 </div>

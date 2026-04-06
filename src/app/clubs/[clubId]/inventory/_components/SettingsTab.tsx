@@ -3,15 +3,17 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { CategoriesTab } from "./CategoriesTab"
 import { WarehousesTab } from "./WarehousesTab"
-import { Category, Warehouse, updateInventoryRequired, updateInventorySettings, PriceTagSettings, Product, getMetrics } from "../actions"
+import { Category, Warehouse, updateInventoryRequired, updateInventorySettings, PriceTagSettings, Product, getMetrics, getShiftAccountabilitySetupStatus, ShiftAccountabilitySetupStatus } from "../actions"
 import { useRouter, useSearchParams, useParams } from "next/navigation"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { useTransition, useState, useEffect } from "react"
-import { RefreshCw, ShieldCheck, Wallet, Percent, Tag, Package, Warehouse as WarehouseIcon } from "lucide-react"
+import { RefreshCw, ShieldCheck, Wallet, Percent, Tag, Package, Warehouse as WarehouseIcon, AlertTriangle, CheckCircle2 } from "lucide-react"
 import { PriceTagTemplateTab } from "./PriceTagTemplateTab"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Badge } from "@/components/ui/badge"
+import { cn } from "@/lib/utils"
 
 interface SettingsTabProps {
     products: Product[]
@@ -26,6 +28,7 @@ interface SettingsTabProps {
         blind_inventory_enabled?: boolean,
         sales_capture_mode?: 'INVENTORY' | 'SHIFT',
         inventory_timing?: 'END_SHIFT' | 'START_SHIFT',
+        shift_accountability_mode?: 'DISABLED' | 'WAREHOUSE',
         allow_salary_deduction?: boolean,
         employee_discount_percent?: number,
         allow_cost_price_sale?: boolean,
@@ -41,6 +44,7 @@ export function SettingsTab({ products, categories, warehouses, employees, curre
     const [isPending, startTransition] = useTransition()
     const [metrics, setMetrics] = useState<{ key: string, label: string }[]>([])
     const [inventoryRequiredValue, setInventoryRequiredValue] = useState(inventoryRequired)
+    const [accountabilityStatus, setAccountabilityStatus] = useState<ShiftAccountabilitySetupStatus | null>(null)
     
     // Local state for discount input to avoid too many DB updates while typing
     const [discountValue, setDiscountValue] = useState(inventorySettings?.employee_discount_percent?.toString() || "0")
@@ -58,6 +62,12 @@ export function SettingsTab({ products, categories, warehouses, employees, curre
             .then(setMetrics)
             .catch(console.error)
     }, [])
+
+    useEffect(() => {
+        getShiftAccountabilitySetupStatus(clubId)
+            .then(setAccountabilityStatus)
+            .catch(console.error)
+    }, [clubId, inventorySettings])
 
     // Default to categories if on 'settings' or something else
     const currentSubTab = searchParams.get("tab")
@@ -107,6 +117,8 @@ export function SettingsTab({ products, categories, warehouses, employees, curre
             : [...current, warehouseId]
         handleUpdateSetting('employee_allowed_warehouse_ids', next)
     }
+
+    const isShiftAccountabilityEnabled = (inventorySettings?.shift_accountability_mode || "DISABLED") === "WAREHOUSE"
 
     return (
         <div className="space-y-4 md:space-y-6">
@@ -243,6 +255,91 @@ export function SettingsTab({ products, categories, warehouses, employees, curre
 
                             <div className="divide-y divide-slate-100">
                                 <div className="p-6 hover:bg-slate-50/30 transition-colors">
+                                    <div className="space-y-4">
+                                        <div className="space-y-1">
+                                            <Label className="text-sm font-bold text-slate-700">
+                                                Система сменной ответственности
+                                            </Label>
+                                            <p className="text-xs text-slate-500 leading-relaxed max-w-[520px]">
+                                                Явно включает новую модель приемки и сдачи холодильника/витрины вместо старой shift-инвентаризации.
+                                            </p>
+                                        </div>
+
+                                        <div className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 p-4">
+                                            <div className="space-y-1">
+                                                <div className="font-semibold text-slate-800">Активировать систему</div>
+                                                <div className="text-xs text-slate-500">
+                                                    Когда включено, сотрудники проходят приемку/сдачу зон, а старая shift-инвентаризация отключается.
+                                                </div>
+                                            </div>
+                                            <Switch
+                                                checked={isShiftAccountabilityEnabled}
+                                                onCheckedChange={(checked) => handleUpdateSetting('shift_accountability_mode', checked ? 'WAREHOUSE' : 'DISABLED')}
+                                                disabled={isPending}
+                                                className="data-[state=checked]:bg-blue-600"
+                                            />
+                                        </div>
+
+                                        <div className={cn(
+                                            "rounded-xl border p-4 space-y-3",
+                                            !isShiftAccountabilityEnabled
+                                                ? "border-slate-200 bg-slate-50"
+                                                : accountabilityStatus?.ready
+                                                    ? "border-green-200 bg-green-50"
+                                                    : "border-amber-200 bg-amber-50"
+                                        )}>
+                                            <div className="flex items-center justify-between gap-3">
+                                                <div className="flex items-center gap-2">
+                                                    {!isShiftAccountabilityEnabled ? (
+                                                        <Package className="h-4 w-4 text-slate-500" />
+                                                    ) : accountabilityStatus?.ready ? (
+                                                        <CheckCircle2 className="h-4 w-4 text-green-600" />
+                                                    ) : (
+                                                        <AlertTriangle className="h-4 w-4 text-amber-600" />
+                                                    )}
+                                                    <span className="font-semibold text-slate-900">
+                                                        {!isShiftAccountabilityEnabled
+                                                            ? "Система отключена"
+                                                            : accountabilityStatus?.ready
+                                                                ? "Система готова к включению"
+                                                                : "Система включена, но конфигурация не завершена"}
+                                                    </span>
+                                                </div>
+                                                <Badge variant="outline">
+                                                    {accountabilityStatus?.warehouses_count ?? 0} зон/складов
+                                                </Badge>
+                                            </div>
+
+                                            {accountabilityStatus?.configured_warehouses?.length ? (
+                                                <div className="flex flex-wrap gap-2">
+                                                    {accountabilityStatus.configured_warehouses.map((warehouse) => (
+                                                        <Badge key={warehouse.id} variant="secondary" className="bg-white text-slate-700 border border-slate-200">
+                                                            {warehouse.name} · {warehouse.shift_zone_label}
+                                                        </Badge>
+                                                    ))}
+                                                </div>
+                                            ) : null}
+
+                                            {isShiftAccountabilityEnabled && accountabilityStatus?.issues?.length ? (
+                                                <div className="space-y-2">
+                                                    {accountabilityStatus.issues.map((issue) => (
+                                                        <div key={issue} className="text-xs text-amber-900">
+                                                            • {issue}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <p className="text-xs text-slate-600">
+                                                    {!isShiftAccountabilityEnabled
+                                                        ? "Новая система не влияет на смены, пока не включена."
+                                                        : "Сотрудники будут работать через приемку/сдачу барной зоны. Можно подключить один или несколько складов к бару."}
+                                                </p>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="p-6 hover:bg-slate-50/30 transition-colors">
                                     <div className="space-y-3">
                                         <div className="space-y-1">
                                             <Label className="text-sm font-bold text-slate-700">
@@ -255,7 +352,7 @@ export function SettingsTab({ products, categories, warehouses, employees, curre
                                         <Select
                                             value={inventorySettings?.sales_capture_mode || "INVENTORY"}
                                             onValueChange={(val: any) => handleUpdateSetting('sales_capture_mode', val)}
-                                            disabled={isPending}
+                                            disabled={isPending || isShiftAccountabilityEnabled}
                                         >
                                             <SelectTrigger>
                                                 <SelectValue placeholder="Выберите режим" />
@@ -280,7 +377,7 @@ export function SettingsTab({ products, categories, warehouses, employees, curre
                                     <Switch
                                         checked={inventoryRequiredValue}
                                         onCheckedChange={handleUpdateInventoryRequired}
-                                        disabled={isPending}
+                                        disabled={isPending || isShiftAccountabilityEnabled}
                                         className="data-[state=checked]:bg-blue-600"
                                     />
                                 </div>
@@ -298,7 +395,7 @@ export function SettingsTab({ products, categories, warehouses, employees, curre
                                         <Select
                                             value={inventorySettings?.inventory_timing || "END_SHIFT"}
                                             onValueChange={(val: 'END_SHIFT' | 'START_SHIFT') => handleUpdateSetting('inventory_timing', val)}
-                                            disabled={isPending || !inventoryRequiredValue}
+                                            disabled={isPending || !inventoryRequiredValue || isShiftAccountabilityEnabled}
                                         >
                                             <SelectTrigger>
                                                 <SelectValue placeholder="Выберите момент инвентаризации" />
@@ -311,6 +408,10 @@ export function SettingsTab({ products, categories, warehouses, employees, curre
                                         {!inventoryRequiredValue ? (
                                             <p className="text-[11px] text-amber-600">
                                                 Сначала включи обязательную инвентаризацию, чтобы выбрать момент её проведения.
+                                            </p>
+                                        ) : isShiftAccountabilityEnabled ? (
+                                            <p className="text-[11px] text-amber-600">
+                                                Пока включена система сменной ответственности, эта настройка не используется.
                                             </p>
                                         ) : null}
                                     </div>

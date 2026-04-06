@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent } from "@/components/ui/card"
-import { createInventory, deleteInventory, Inventory, Category, Warehouse, getMetrics } from "../actions"
+import { createInventory, cancelInventory, Inventory, Category, Warehouse, getMetrics } from "../actions"
 import { useParams } from "next/navigation"
 import { ActiveInventory } from "./ActiveInventory"
 import { cn } from "@/lib/utils"
@@ -42,7 +42,7 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
 
     // Active Inventory State
     const [activeInventoryId, setActiveInventoryId] = useState<number | null>(null)
-    const [deleteId, setDeleteId] = useState<number | null>(null)
+    const [cancelId, setCancelId] = useState<number | null>(null)
     const { showMessage, Dialogs } = useUiDialogs()
 
     useEffect(() => {
@@ -111,20 +111,20 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
                 setActiveInventoryId(newId)
             } catch (e) {
                 console.error(e)
-                showMessage({ title: "Ошибка", description: "Ошибка при создании инвентаризации" })
+                showMessage({ title: "Ошибка", description: e instanceof Error ? e.message : "Ошибка при создании инвентаризации" })
             }
         })
     }
 
-    const handleDelete = async () => {
-        if (!deleteId) return
+    const handleCancel = async () => {
+        if (!cancelId) return
         startTransition(async () => {
             try {
-                await deleteInventory(deleteId, clubId, currentUserId)
-                setDeleteId(null)
+                await cancelInventory(cancelId, clubId, currentUserId)
+                setCancelId(null)
             } catch (e) {
                 console.error(e)
-                showMessage({ title: "Ошибка", description: "Ошибка при удалении" })
+                showMessage({ title: "Ошибка", description: e instanceof Error ? e.message : "Ошибка при отмене инвентаризации" })
             }
         })
     }
@@ -132,11 +132,13 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
     const inventoryStats = useMemo(() => {
         const openCount = inventories.filter(inv => inv.status === "OPEN").length
         const closedCount = inventories.filter(inv => inv.status === "CLOSED").length
+        const canceledCount = inventories.filter(inv => inv.status === "CANCELED").length
         const withMetricCount = inventories.filter(inv => Boolean(inv.target_metric_key)).length
         return {
             total: inventories.length,
             open: openCount,
             closed: closedCount,
+            canceled: canceledCount,
             withMetric: withMetricCount
         }
     }, [inventories])
@@ -170,6 +172,13 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
             hint: inventoryStats.closed > 0 ? "Есть результаты для анализа" : "Закрытых ещё нет",
             icon: CheckCircle2,
             tone: "text-green-700 bg-green-50 border-green-200"
+        },
+        {
+            label: "Отменено",
+            value: inventoryStats.canceled,
+            hint: inventoryStats.canceled > 0 ? "История отмен сохранена" : "Отмен пока не было",
+            icon: Sparkles,
+            tone: "text-slate-700 bg-slate-50 border-slate-200"
         },
         {
             label: "Складов доступно",
@@ -219,7 +228,7 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
                     )}
                 </div>
 
-                <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
                     {inventoryCards.map(card => {
                         const Icon = card.icon
                         return (
@@ -305,6 +314,8 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
                                     <TableCell>
                                         {inv.status === 'OPEN' ? (
                                             <Badge variant="outline" className="border-amber-200 text-amber-700 bg-amber-50 text-[10px] h-5 px-1.5 font-bold">В процессе</Badge>
+                                        ) : inv.status === 'CANCELED' ? (
+                                            <Badge variant="outline" className="border-slate-200 text-slate-600 bg-slate-50 text-[10px] h-5 px-1.5 font-bold">Отменено</Badge>
                                         ) : (
                                             <Badge variant="outline" className="border-green-200 text-green-700 bg-green-50 text-[10px] h-5 px-1.5 font-bold">Завершено</Badge>
                                         )}
@@ -341,6 +352,8 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
                                                 <Button aria-label={`Открыть результаты инвентаризации ${inv.id}`} variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-blue-600" onClick={() => setActiveInventoryId(inv.id)}>
                                                     <ArrowRight className="h-4 w-4" />
                                                 </Button>
+                                            ) : inv.status === 'CANCELED' ? (
+                                                <span className="text-[10px] text-slate-400 italic px-2 font-medium">Отменена</span>
                                             ) : (
                                                 inv.created_by === currentUserId ? (
                                                     <Button variant="ghost" size="sm" onClick={() => setActiveInventoryId(inv.id)} className="text-amber-600 hover:text-amber-700 hover:bg-amber-50 h-8 px-2 text-xs font-bold">
@@ -350,9 +363,11 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
                                                     <span className="text-[10px] text-muted-foreground italic px-2 font-medium">В процессе...</span>
                                                 )
                                             )}
-                                            <Button aria-label={`Удалить инвентаризацию ${inv.id}`} variant="ghost" size="icon" className="h-8 w-8 text-slate-300 hover:text-red-600 hover:bg-red-50 transition-colors" onClick={() => setDeleteId(inv.id)}>
-                                                <Trash2 className="h-4 w-4" />
-                                            </Button>
+                                            {inv.status === 'OPEN' && (
+                                                <Button aria-label={`Отменить инвентаризацию ${inv.id}`} variant="ghost" size="icon" className="h-8 w-8 text-slate-300 hover:text-red-600 hover:bg-red-50 transition-colors" onClick={() => setCancelId(inv.id)}>
+                                                    <Trash2 className="h-4 w-4" />
+                                                </Button>
+                                            )}
                                         </div>
                                     </TableCell>
                                 </TableRow>
@@ -370,10 +385,11 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
                     </div>
                 ) : inventories.map(inv => {
                     const isClosed = inv.status === 'CLOSED';
+                    const isCanceled = inv.status === 'CANCELED';
                     return (
                         <div key={inv.id} className={cn(
                             "rounded-2xl border p-4 shadow-sm",
-                            isClosed ? "bg-white" : "border-amber-200 bg-amber-50/40"
+                            isClosed ? "bg-white" : isCanceled ? "bg-slate-50/70" : "border-amber-200 bg-amber-50/40"
                         )}>
                             <div className="flex justify-between items-start mb-3">
                                 <div className="flex flex-col">
@@ -388,6 +404,8 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
                                 </div>
                                 {inv.status === 'OPEN' ? (
                                     <Badge variant="outline" className="border-amber-200 text-amber-700 bg-amber-50 text-[10px] h-5 px-1.5 font-bold">В процессе</Badge>
+                                ) : isCanceled ? (
+                                    <Badge variant="outline" className="border-slate-200 text-slate-600 bg-slate-50 text-[10px] h-5 px-1.5 font-bold">Отменено</Badge>
                                 ) : (
                                     <Badge variant="outline" className="border-green-200 text-green-700 bg-green-50 text-[10px] h-5 px-1.5 font-bold">Завершено</Badge>
                                 )}
@@ -431,6 +449,10 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
                                     <Button variant="outline" className="flex-1 h-9 text-xs font-bold border-slate-200 text-slate-600" onClick={() => setActiveInventoryId(inv.id)}>
                                         Результаты
                                     </Button>
+                                ) : isCanceled ? (
+                                    <Button disabled variant="outline" className="flex-1 h-9 text-xs font-bold border-slate-200 text-slate-400">
+                                        Отменена
+                                    </Button>
                                 ) : (
                                     inv.created_by === currentUserId ? (
                                         <Button variant="default" className="flex-1 h-9 text-xs font-bold bg-amber-600 hover:bg-amber-700" onClick={() => setActiveInventoryId(inv.id)}>
@@ -442,9 +464,11 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
                                         </Button>
                                     )
                                 )}
-                                <Button aria-label={`Удалить инвентаризацию ${inv.id}`} variant="ghost" size="icon" className="h-9 w-9 text-slate-300 hover:text-red-600 hover:bg-red-50" onClick={() => setDeleteId(inv.id)}>
-                                    <Trash2 className="h-4 w-4" />
-                                </Button>
+                                {inv.status === 'OPEN' && (
+                                    <Button aria-label={`Отменить инвентаризацию ${inv.id}`} variant="ghost" size="icon" className="h-9 w-9 text-slate-300 hover:text-red-600 hover:bg-red-50" onClick={() => setCancelId(inv.id)}>
+                                        <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                )}
                             </div>
                         </div>
                     );
@@ -452,19 +476,19 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
             </div>
 
             {/* Delete Confirmation Dialog */}
-            <Dialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(null)}>
+            <Dialog open={!!cancelId} onOpenChange={(open) => !open && setCancelId(null)}>
                 <DialogContent>
                     <DialogHeader>
-                        <DialogTitle>Удаление инвентаризации</DialogTitle>
+                        <DialogTitle>Отмена инвентаризации</DialogTitle>
                         <DialogDescription>
-                            Вы уверены, что хотите удалить эту запись? Это действие нельзя отменить.
+                            Открытая инвентаризация будет отменена. Закрытые инвентаризации удалять нельзя, они сохраняются как история.
                         </DialogDescription>
                     </DialogHeader>
                     <DialogFooter>
-                        <Button variant="outline" onClick={() => setDeleteId(null)}>Отмена</Button>
-                        <Button variant="destructive" onClick={handleDelete} disabled={isPending}>
+                        <Button variant="outline" onClick={() => setCancelId(null)}>Отмена</Button>
+                        <Button variant="destructive" onClick={handleCancel} disabled={isPending}>
                             {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                            Удалить
+                            Отменить
                         </Button>
                     </DialogFooter>
                 </DialogContent>

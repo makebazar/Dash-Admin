@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
-import { Clipboard, Loader2, Plus, RotateCcw, Trash2, ArrowUp, ArrowDown, Link2 } from "lucide-react"
+import { Clipboard, Loader2, Plus, RotateCcw, Trash2, ArrowUp, ArrowDown, Link2, ArrowLeft } from "lucide-react"
 import type { RecruitmentFormSection, RecruitmentQuestionType, RecruitmentRepeatableFieldType, RecruitmentTemplateSchemaV1 } from "@/lib/recruitment"
 import { QRCode } from "@/components/qr/QRCode"
 
@@ -439,28 +439,31 @@ export default function RecruitmentTemplateEditPage() {
     }
 
     return (
-        <div className="mx-auto max-w-[1600px] space-y-5 p-4 sm:space-y-6 sm:p-6 lg:p-8">
+        <div className="mx-auto max-w-[1600px] overflow-x-hidden space-y-5 p-4 pb-28 sm:space-y-6 sm:p-6 sm:pb-6 lg:p-8">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl truncate">{template.name}</h1>
+                    <div className="flex min-w-0 items-center gap-2">
+                        <h1 className="min-w-0 truncate text-2xl font-bold tracking-tight sm:text-3xl">{template.name}</h1>
                         {!isActive && <Badge variant="outline" className="text-[10px] uppercase tracking-wider">Неактивен</Badge>}
                     </div>
-                    <p className="mt-1 text-sm text-muted-foreground sm:text-base">Редактор анкеты (вопросы + автоматические баллы)</p>
+                    <p className="mt-1 text-sm text-muted-foreground sm:text-base">Здесь настраивается анкета кандидата: разделы, вопросы и тесты, которые он проходит</p>
                 </div>
                 <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap lg:justify-end">
-                    <Button asChild variant="outline" className="w-full sm:w-auto">
-                        <Link href={`/clubs/${clubId}/employees/recruitment/templates`}>К шаблонам</Link>
+                    <Button asChild variant="outline" className="hidden sm:inline-flex sm:w-auto">
+                        <Link href={`/clubs/${clubId}/employees/recruitment/templates`}>
+                            <ArrowLeft className="mr-2 h-4 w-4" />
+                            Назад
+                        </Link>
                     </Button>
-                    <Button onClick={handleSave} disabled={isSaving} className="w-full bg-primary text-primary-foreground shadow-md hover:bg-primary/90 sm:w-auto">
+                    <Button onClick={handleSave} disabled={isSaving} className="hidden w-full bg-primary text-primary-foreground shadow-md hover:bg-primary/90 sm:inline-flex sm:w-auto">
                         {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                         Сохранить
                     </Button>
                 </div>
             </div>
 
-            <div className="grid gap-4 lg:grid-cols-3">
-                <Card className="border-none shadow-sm bg-white lg:col-span-1">
+            <div className="grid min-w-0 gap-4 lg:grid-cols-3">
+                <Card className="min-w-0 border-none bg-white shadow-sm lg:col-span-1">
                     <CardContent className="p-5 space-y-4">
                         <div className="space-y-1.5">
                             <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Название</Label>
@@ -479,8 +482,8 @@ export default function RecruitmentTemplateEditPage() {
                             <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Позиция</Label>
                             <Input value={position} onChange={(e) => setPosition(e.target.value)} className="bg-muted/30 border-muted-foreground/10" />
                         </div>
-                        <div className="flex items-center justify-between rounded-xl border border-muted-foreground/10 p-3">
-                            <div>
+                        <div className="flex items-start justify-between gap-3 rounded-xl border border-muted-foreground/10 p-3">
+                            <div className="min-w-0">
                                 <p className="text-sm font-medium">Активен</p>
                                 <p className="text-xs text-muted-foreground">Если выключить — ссылка перестанет работать</p>
                             </div>
@@ -492,7 +495,7 @@ export default function RecruitmentTemplateEditPage() {
                                 value={schema.candidate_photo_mode || "off"}
                                 onValueChange={(value) => setSchema(prev => ({ ...prev, candidate_photo_mode: value as "off" | "optional" | "required" }))}
                             >
-                                <SelectTrigger className="bg-muted/30 border-muted-foreground/10">
+                                <SelectTrigger className="min-w-0 bg-muted/30 border-muted-foreground/10">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -506,9 +509,9 @@ export default function RecruitmentTemplateEditPage() {
 
                         <div className="space-y-2">
                             <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Ссылка</Label>
-                            <div className="flex gap-2">
-                                <Input value={publicUrl} readOnly className="bg-muted/30 border-muted-foreground/10" />
-                                <Button variant="outline" onClick={() => publicUrl && handleCopy(publicUrl)} disabled={!publicUrl}>
+                            <div className="flex flex-col gap-2 sm:flex-row">
+                                <Input value={publicUrl} readOnly className="min-w-0 bg-muted/30 border-muted-foreground/10" />
+                                <Button variant="outline" className="w-full sm:w-auto" onClick={() => publicUrl && handleCopy(publicUrl)} disabled={!publicUrl}>
                                     <Clipboard className="h-4 w-4" />
                                 </Button>
                             </div>
@@ -527,9 +530,9 @@ export default function RecruitmentTemplateEditPage() {
 
                         <div className="space-y-2">
                             <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Тесты после анкеты</Label>
-                            <div className="flex gap-2">
+                            <div className="flex flex-col gap-2 sm:flex-row">
                                 <Select value={attachTestId} onValueChange={setAttachTestId}>
-                                    <SelectTrigger className="bg-muted/30 border-muted-foreground/10">
+                                    <SelectTrigger className="min-w-0 bg-muted/30 border-muted-foreground/10">
                                         <SelectValue placeholder="Выбрать тест" />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -538,7 +541,7 @@ export default function RecruitmentTemplateEditPage() {
                                         ))}
                                     </SelectContent>
                                 </Select>
-                                <Button variant="outline" onClick={handleAttach} disabled={!attachTestId}>
+                                <Button variant="outline" className="w-full shrink-0 sm:w-auto" onClick={handleAttach} disabled={!attachTestId}>
                                     <Link2 className="h-4 w-4" />
                                 </Button>
                             </div>
@@ -546,12 +549,12 @@ export default function RecruitmentTemplateEditPage() {
                                 {attachedTests.length === 0 ? (
                                     <div className="text-xs text-muted-foreground">Нет тестов</div>
                                 ) : attachedTests.map((t, i) => (
-                                    <div key={t.id} className="flex items-center justify-between rounded-xl border border-muted-foreground/10 p-3 gap-2">
+                                    <div key={t.id} className="flex flex-col gap-3 rounded-xl border border-muted-foreground/10 p-3 sm:flex-row sm:items-center sm:justify-between">
                                         <div className="min-w-0">
                                             <div className="text-sm font-medium truncate">{t.name}</div>
                                             <div className="text-xs text-muted-foreground truncate">{t.description || ""}</div>
                                         </div>
-                                        <div className="flex gap-1">
+                                        <div className="flex gap-1 self-end sm:self-auto">
                                             <Button variant="outline" size="icon" onClick={() => moveAttached(i, -1)} disabled={i === 0}>
                                                 <ArrowUp className="h-4 w-4" />
                                             </Button>
@@ -567,8 +570,8 @@ export default function RecruitmentTemplateEditPage() {
                             </div>
                         </div>
 
-                        <div className="flex items-center justify-between rounded-xl border border-muted-foreground/10 p-3">
-                            <div>
+                        <div className="flex items-start justify-between gap-3 rounded-xl border border-muted-foreground/10 p-3">
+                            <div className="min-w-0">
                                 <p className="text-sm font-medium">RAW JSON</p>
                                 <p className="text-xs text-muted-foreground">Для быстрых правок схемы</p>
                             </div>
@@ -577,7 +580,7 @@ export default function RecruitmentTemplateEditPage() {
                     </CardContent>
                 </Card>
 
-                <Card className="border-none shadow-sm bg-white lg:col-span-2">
+                <Card className="min-w-0 border-none bg-white shadow-sm lg:col-span-2">
                     <CardContent className="p-5 space-y-4">
                         {rawMode ? (
                             <Textarea
@@ -636,8 +639,8 @@ export default function RecruitmentTemplateEditPage() {
 
                                             <div className="space-y-3">
                                                 {(section.questions || []).map((q: any, index: number) => (
-                                                    <div key={q.id} className="rounded-2xl border border-muted-foreground/10 p-4 space-y-3">
-                                                        <div className="flex items-start justify-between gap-3">
+                                                    <div key={q.id} className="space-y-3 rounded-2xl border border-muted-foreground/10 p-3 sm:p-4">
+                                                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                                             <div className="min-w-0 flex-1 space-y-2">
                                                                 <div className="space-y-1.5">
                                                                     <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Текст вопроса</Label>
@@ -675,7 +678,7 @@ export default function RecruitmentTemplateEditPage() {
                                                                             </SelectContent>
                                                                         </Select>
                                                                     </div>
-                                                                    <div className="flex h-10 items-center justify-between rounded-xl border border-muted-foreground/10 px-3 sm:min-w-[180px] sm:gap-4">
+                                                                    <div className="flex h-10 w-full items-center justify-between rounded-xl border border-muted-foreground/10 px-3 sm:min-w-[180px] sm:w-auto sm:gap-4">
                                                                         <span className="text-sm">Обязательный</span>
                                                                         <Switch checked={Boolean(q.required)} onCheckedChange={(v) => updateQuestion(section.id, q.id, { required: Boolean(v) })} />
                                                                     </div>
@@ -795,7 +798,7 @@ export default function RecruitmentTemplateEditPage() {
                                                                 )}
                                                             </div>
 
-                                                            <div className="flex flex-col gap-2">
+                                                            <div className="flex flex-row gap-2 self-end sm:flex-col sm:self-auto">
                                                                 <Button variant="outline" size="icon" onClick={() => moveQuestion(section.id, q.id, -1)} disabled={index === 0}>
                                                                     <ArrowUp className="h-4 w-4" />
                                                                 </Button>
@@ -828,6 +831,19 @@ export default function RecruitmentTemplateEditPage() {
                         )}
                     </CardContent>
                 </Card>
+            </div>
+            <div className="fixed inset-x-0 bottom-0 z-40 border-t border-muted-foreground/10 bg-background/95 p-4 backdrop-blur sm:hidden">
+                <div className="mx-auto flex max-w-[1600px] gap-3">
+                    <Button asChild variant="outline" className="flex-1">
+                        <Link href={`/clubs/${clubId}/employees/recruitment/templates`}>
+                            <ArrowLeft className="mr-2 h-4 w-4" />
+                            Назад
+                        </Link>
+                    </Button>
+                    <Button onClick={handleSave} disabled={isSaving} className="flex-1 bg-primary text-primary-foreground shadow-lg">
+                        {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <><span>Сохранить</span></>}
+                    </Button>
+                </div>
             </div>
         </div>
     )

@@ -1,10 +1,10 @@
 "use client"
 
-import { useState, useTransition, useEffect } from "react"
+import { useState, useTransition, useEffect, useMemo } from "react"
 import { 
     ArrowRightLeft, Plus, History, 
     ArrowRight, Package, Warehouse as WarehouseIcon,
-    Loader2, Search, CheckCircle2, User
+    Loader2, Search, CheckCircle2, User, Filter
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/table"
 import { 
     transferStock, getStockMovements, 
-    Warehouse, Category 
+    Warehouse 
 } from "../actions"
 import { useParams } from "next/navigation"
 import { cn } from "@/lib/utils"
@@ -40,6 +40,8 @@ export function TransfersTab({ warehouses, products, currentUserId }: TransfersT
     const [isDialogOpen, setIsDialogOpen] = useState(false)
     const [isPending, startTransition] = useTransition()
     const [movements, setMovements] = useState<any[]>([])
+    const [movementSearch, setMovementSearch] = useState("")
+    const [movementFilter, setMovementFilter] = useState<"all" | "inventory" | "sales" | "transfers" | "supplies" | "manual">("all")
     
     // Form State
     const [formData, setFormData] = useState({
@@ -102,6 +104,72 @@ export function TransfersTab({ warehouses, products, currentUserId }: TransfersT
         p.name.toLowerCase().includes(searchQuery.toLowerCase())
     )
 
+    const getMovementMeta = (movement: any) => {
+        if (movement.related_entity_type === "TRANSFER") {
+            return {
+                label: movement.change_amount > 0 ? "Приход по перемещению" : "Расход по перемещению",
+                className: movement.change_amount > 0
+                    ? "bg-blue-50 text-blue-700"
+                    : "bg-indigo-50 text-indigo-700"
+            }
+        }
+
+        switch (movement.type) {
+            case "SUPPLY":
+                return { label: "Поставка", className: "bg-emerald-50 text-emerald-700" }
+            case "SALE":
+                return { label: "Продажа", className: "bg-red-50 text-red-700" }
+            case "RETURN":
+                return { label: "Возврат", className: "bg-violet-50 text-violet-700" }
+            case "INVENTORY_GAIN":
+                return { label: "Излишек инв.", className: "bg-green-50 text-green-700" }
+            case "INVENTORY_LOSS":
+                return { label: "Недостача инв.", className: "bg-amber-50 text-amber-700" }
+            case "INVENTORY_CORRECTION":
+                return { label: "Коррекция инв.", className: "bg-orange-50 text-orange-700" }
+            case "ADJUSTMENT":
+                return { label: "Корректировка", className: "bg-slate-100 text-slate-700" }
+            default:
+                return { label: movement.type || "Движение", className: "bg-slate-100 text-slate-700" }
+        }
+    }
+
+    const filteredMovements = useMemo(() => {
+        return movements.filter((movement) => {
+            const haystack = [
+                movement.product_name,
+                movement.warehouse_name,
+                movement.user_name,
+                movement.reason,
+                getMovementMeta(movement).label
+            ]
+                .filter(Boolean)
+                .join(" ")
+                .toLowerCase()
+
+            const matchesSearch = !movementSearch.trim() || haystack.includes(movementSearch.trim().toLowerCase())
+
+            const matchesFilter =
+                movementFilter === "all" ||
+                (movementFilter === "inventory" && ["INVENTORY_GAIN", "INVENTORY_LOSS", "INVENTORY_CORRECTION"].includes(movement.type)) ||
+                (movementFilter === "sales" && ["SALE", "RETURN"].includes(movement.type)) ||
+                (movementFilter === "transfers" && movement.related_entity_type === "TRANSFER") ||
+                (movementFilter === "supplies" && movement.type === "SUPPLY") ||
+                (movementFilter === "manual" && movement.type === "ADJUSTMENT")
+
+            return matchesSearch && matchesFilter
+        })
+    }, [movementFilter, movementSearch, movements])
+
+    const movementFilterButtons: Array<{ value: typeof movementFilter, label: string }> = [
+        { value: "all", label: "Все" },
+        { value: "inventory", label: "Инвентаризация" },
+        { value: "sales", label: "Продажи" },
+        { value: "transfers", label: "Перемещения" },
+        { value: "supplies", label: "Поставки" },
+        { value: "manual", label: "Коррекции" }
+    ]
+
     return (
         <div className="space-y-6">
             {/* Actions Area */}
@@ -125,6 +193,45 @@ export function TransfersTab({ warehouses, products, currentUserId }: TransfersT
                 </Button>
             </div>
 
+            <div className="bg-white border rounded-2xl shadow-sm p-4 space-y-4">
+                <div className="flex items-center gap-2 text-slate-500">
+                    <Filter className="h-4 w-4" />
+                    <span className="text-sm font-bold uppercase tracking-wider">Фильтры журнала</span>
+                    <Badge variant="secondary" className="ml-auto bg-slate-100 text-slate-700">
+                        {filteredMovements.length} из {movements.length}
+                    </Badge>
+                </div>
+
+                <div className="relative">
+                    <Search className="absolute left-3 top-3.5 h-4 w-4 text-slate-400" />
+                    <Input
+                        value={movementSearch}
+                        onChange={(e) => setMovementSearch(e.target.value)}
+                        placeholder="Поиск по товару, складу, комментарию или пользователю..."
+                        className="pl-10 h-11 rounded-xl border-slate-200"
+                    />
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                    {movementFilterButtons.map((button) => (
+                        <Button
+                            key={button.value}
+                            type="button"
+                            variant={movementFilter === button.value ? "default" : "outline"}
+                            className={cn(
+                                "h-9 rounded-xl text-xs",
+                                movementFilter === button.value
+                                    ? "bg-slate-900 hover:bg-slate-800"
+                                    : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                            )}
+                            onClick={() => setMovementFilter(button.value)}
+                        >
+                            {button.label}
+                        </Button>
+                    ))}
+                </div>
+            </div>
+
             {/* Desktop Table */}
             <div className="hidden md:block bg-white border rounded-2xl overflow-hidden shadow-sm">
                 <div className="p-4 border-b bg-slate-50/50 flex items-center gap-2">
@@ -137,13 +244,16 @@ export function TransfersTab({ warehouses, products, currentUserId }: TransfersT
                             <TableHead className="text-[10px] font-bold uppercase text-slate-400">Дата</TableHead>
                             <TableHead className="text-[10px] font-bold uppercase text-slate-400">Товар</TableHead>
                             <TableHead className="text-[10px] font-bold uppercase text-slate-400">Склад</TableHead>
+                            <TableHead className="text-[10px] font-bold uppercase text-slate-400">Тип</TableHead>
                             <TableHead className="text-[10px] font-bold uppercase text-slate-400">Изменение</TableHead>
                             <TableHead className="text-[10px] font-bold uppercase text-slate-400">Комментарий</TableHead>
                             <TableHead className="text-[10px] font-bold uppercase text-slate-400 text-right">Пользователь</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {movements.map((m) => (
+                        {filteredMovements.map((m) => {
+                            const meta = getMovementMeta(m)
+                            return (
                             <TableRow key={m.id} className="hover:bg-slate-50 transition-colors">
                                 <TableCell className="py-4 text-xs">
                                     {new Date(m.created_at).toLocaleString('ru-RU', { 
@@ -159,6 +269,11 @@ export function TransfersTab({ warehouses, products, currentUserId }: TransfersT
                                         <WarehouseIcon className="h-3 w-3 text-slate-400" />
                                         <span className="text-xs">{m.warehouse_name || "Неизвестно"}</span>
                                     </div>
+                                </TableCell>
+                                <TableCell className="py-4">
+                                    <Badge variant="secondary" className={cn("font-bold text-[10px] border-none", meta.className)}>
+                                        {meta.label}
+                                    </Badge>
                                 </TableCell>
                                 <TableCell className="py-4">
                                     <Badge 
@@ -178,11 +293,11 @@ export function TransfersTab({ warehouses, products, currentUserId }: TransfersT
                                     {m.user_name || "Система"}
                                 </TableCell>
                             </TableRow>
-                        ))}
-                        {movements.length === 0 && (
+                        )})}
+                        {filteredMovements.length === 0 && (
                             <TableRow>
-                                <TableCell colSpan={6} className="h-32 text-center text-slate-400">
-                                    Движений пока не зафиксировано
+                                <TableCell colSpan={7} className="h-32 text-center text-slate-400">
+                                    По текущим фильтрам ничего не найдено
                                 </TableCell>
                             </TableRow>
                         )}
@@ -196,12 +311,14 @@ export function TransfersTab({ warehouses, products, currentUserId }: TransfersT
                     <History className="h-4 w-4 text-slate-400" />
                     <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">История движений</span>
                 </div>
-                {movements.length === 0 ? (
+                {filteredMovements.length === 0 ? (
                     <div className="h-32 flex flex-col items-center justify-center text-muted-foreground bg-white rounded-xl border border-dashed">
                         <Package className="h-8 w-8 opacity-10 mb-2" />
-                        <p className="italic text-sm">Движений пока нет</p>
+                        <p className="italic text-sm">По текущим фильтрам ничего не найдено</p>
                     </div>
-                ) : movements.map(m => (
+                ) : filteredMovements.map(m => {
+                    const meta = getMovementMeta(m)
+                    return (
                     <div key={m.id} className="bg-white rounded-xl border p-4 shadow-sm relative">
                         <div className="flex justify-between items-start mb-2">
                             <div className="flex flex-col">
@@ -223,6 +340,11 @@ export function TransfersTab({ warehouses, products, currentUserId }: TransfersT
                                 {m.change_amount > 0 ? "+" : ""}{m.change_amount} шт
                             </Badge>
                         </div>
+                        <div className="mb-3">
+                            <Badge variant="secondary" className={cn("font-bold text-[10px] border-none", meta.className)}>
+                                {meta.label}
+                            </Badge>
+                        </div>
                         
                         <div className="flex justify-between items-center mt-3 pt-2 border-t border-slate-50">
                             <div className="flex items-center gap-3">
@@ -242,7 +364,7 @@ export function TransfersTab({ warehouses, products, currentUserId }: TransfersT
                             )}
                         </div>
                     </div>
-                ))}
+                )})}
             </div>
 
             {/* Transfer Dialog */}

@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { useUiDialogs } from "@/app/clubs/[clubId]/inventory/_components/useUiDialogs"
 import { cn } from "@/lib/utils"
 import { renderEquipmentIcon } from "@/lib/equipment-icons"
 
@@ -68,6 +69,7 @@ interface Zone {
 
 export default function EmployeeEquipmentPage() {
     const { clubId } = useParams()
+    const { showMessage, Dialogs } = useUiDialogs()
     const [workstations, setWorkstations] = useState<Workstation[]>([])
     const [equipment, setEquipment] = useState<Equipment[]>([])
     const [zoneList, setZoneList] = useState<Zone[]>([])
@@ -183,11 +185,11 @@ export default function EmployeeEquipmentPage() {
                 throw new Error(data.error || "Не удалось создать инцидент")
             }
 
-            alert("Проблема зарегистрирована")
+            showMessage({ title: "Готово", description: "Проблема зарегистрирована" })
             setIsReportIssueOpen(false)
         } catch (error: any) {
             console.error(error)
-            alert(error.message || "Ошибка при создании инцидента")
+            showMessage({ title: "Ошибка", description: error.message || "Ошибка при создании инцидента" })
         } finally {
             setIsSubmitting(false)
         }
@@ -196,11 +198,11 @@ export default function EmployeeEquipmentPage() {
     const handleMoveSubmit = async () => {
         if (!selectedEquipment) return
         if (moveAction === 'SWAP' && !targetWorkstationId) {
-            alert("Выберите целевое место для перемещения")
+            showMessage({ title: "Проверьте данные", description: "Выберите целевое место для перемещения" })
             return
         }
         if (!moveReason.trim()) {
-            alert("Укажите причину перемещения")
+            showMessage({ title: "Проверьте данные", description: "Укажите причину перемещения" })
             return
         }
 
@@ -240,16 +242,22 @@ export default function EmployeeEquipmentPage() {
                 if (!issueRes.ok) {
                     const issueData = await issueRes.json()
                     console.error("Failed to create issue:", issueData)
-                    alert(`Оборудование перемещено, но не удалось создать инцидент: ${issueData.error || 'Unknown error'}`)
+                    showMessage({
+                        title: "Внимание",
+                        description: `Оборудование перемещено, но не удалось создать инцидент: ${issueData.error || 'Unknown error'}`
+                    })
                 }
             }
 
-            alert(moveAction === 'SWAP' ? "Оборудование перемещено" : "Оборудование отправлено на склад")
+            showMessage({
+                title: "Готово",
+                description: moveAction === 'SWAP' ? "Оборудование перемещено" : "Оборудование отправлено на склад"
+            })
             setIsMoveDialogOpen(false)
             fetchData()
         } catch (error: any) {
             console.error("Error moving equipment:", error)
-            alert(error.message)
+            showMessage({ title: "Ошибка", description: error.message })
         } finally {
             setIsSubmitting(false)
         }
@@ -624,6 +632,7 @@ export default function EmployeeEquipmentPage() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+            {Dialogs}
         </div>
     )
 }

@@ -35,6 +35,7 @@ type ApplicationRow = {
 }
 
 const STATUS_LABELS: Record<string, string> = {
+    in_progress: "В процессе",
     new: "Новая",
     reviewed: "Просмотрена",
     interview: "Собеседование",
@@ -117,7 +118,7 @@ export default function RecruitmentApplicationsPage() {
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div className="min-w-0">
                     <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Анкеты кандидатов</h1>
-                    <p className="mt-1 text-sm text-muted-foreground sm:text-base">Только завершенные анкеты кандидатов с итогами по тестам</p>
+                    <p className="mt-1 text-sm text-muted-foreground sm:text-base">Все анкеты кандидатов, включая тех, кто еще не завершил тесты</p>
                 </div>
                 <div className="hidden sm:flex sm:flex-row sm:flex-wrap sm:gap-2 lg:justify-end">
                     <Button asChild variant="outline" className="w-full sm:w-auto">

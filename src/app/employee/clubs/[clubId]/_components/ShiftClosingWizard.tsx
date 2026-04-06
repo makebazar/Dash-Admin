@@ -2,29 +2,29 @@
 
 import { useState, useTransition, useEffect, useMemo, useCallback, useRef } from "react"
 import { createPortal } from "react-dom"
-import { Loader2, ArrowRight, CheckCircle2, AlertTriangle, Package, Camera, Search, Barcode, X, Plus, Trash2, ArrowLeft, RefreshCcw, AlertCircle, DollarSign } from "lucide-react"
+import { Loader2, ArrowRight, CheckCircle2, AlertTriangle, Camera, X, Plus, Trash2, ArrowLeft, RefreshCcw, DollarSign } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { useSSE } from "@/hooks/usePOSWebSocket"
 import {
-    addProductToInventory,
-    bulkUpdateInventoryItems,
-    closeInventory,
-    createShiftReceipt,
-    createInventory,
+    addProductToInventorySafe,
+    bulkUpdateInventoryItemsSafe,
+    closeInventorySafe,
+    createShiftReceiptSafe,
+    createInventorySafe,
     getInventoryItems,
     getProductByBarcode,
     getProducts,
     getShiftReceipts,
-    voidShiftReceipt,
     type InventoryItem,
     type ShiftReceipt
 } from "@/app/clubs/[clubId]/inventory/actions"
 import { Badge } from "@/components/ui/badge"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { BarcodeScanner } from "@/app/clubs/[clubId]/inventory/_components/BarcodeScanner"
+import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table"
+import { StockCountWorkspace, type StockCountWorkspaceItem } from "@/app/clubs/[clubId]/inventory/_components/StockCountWorkspace"
+import { useUiDialogs } from "@/app/clubs/[clubId]/inventory/_components/useUiDialogs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { optimizeFileBeforeUpload } from "@/lib/utils"
 import { cn } from "@/lib/utils"
@@ -185,6 +185,7 @@ export function ShiftClosingWizard({
     inventorySettings,
     mode = 'END_SHIFT'
 }: ShiftClosingWizardProps) {
+    const { confirmAction, showMessage, Dialogs } = useUiDialogs()
     const [step, setStep] = useState<1 | 2 | 3 | 4>(1)
     const [reportData, setReportData] = useState<any>({})
     const [inventoryId, setInventoryId] = useState<number | null>(null)
@@ -204,19 +205,29 @@ export function ShiftClosingWizard({
     const [payoutSuggestion, setPayoutSuggestion] = useState<{ amount: number, isAvailable: boolean } | null>(null)
 
     // New states for barcode scanner and manual adding
-    const [isScannerOpen, setIsScannerOpen] = useState(false)
     const [scannedItemId, setScannedItemId] = useState<number | null>(null)
     const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
     const [allProducts, setAllProducts] = useState<{ id: number, name: string, barcode?: string | null, barcodes?: string[] | null }[]>([])
     const [selectedProductToAdd, setSelectedProductToAdd] = useState("")
-    const [searchQuery, setSearchQuery] = useState("")
     const [isRefreshingCatalog, setIsRefreshingCatalog] = useState(false)
     const autosaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const lastAutosavedSnapshotRef = useRef("")
 
+    const notifyError = useCallback((description: string, title = "Ошибка") => {
+        showMessage({ title, description })
+    }, [showMessage])
+
+    const notifyInfo = useCallback((description: string, title = "Уведомление") => {
+        showMessage({ title, description })
+    }, [showMessage])
+
     const salesMode = inventorySettings?.sales_capture_mode ?? 'INVENTORY'
     const isShiftSalesMode = salesMode === 'SHIFT'
     const isStartShiftMode = mode === 'START_SHIFT'
+    const usesSalesReconciliation = !isStartShiftMode && isShiftSalesMode
+    const usesInventoryCounting = isStartShiftMode || (!isStartShiftMode && !skipInventory)
+    const usesRevisionMode = !isStartShiftMode && !isShiftSalesMode
+    const usesShiftInventoryReconciliation = usesSalesReconciliation && usesInventoryCounting
     const inventoryStep = isStartShiftMode ? 1 : (isShiftSalesMode ? 3 : 2)
     const finalizeStep = isStartShiftMode ? 2 : (isShiftSalesMode ? 4 : 3)
     const totalSteps = isStartShiftMode ? 2 : (isShiftSalesMode ? (skipInventory ? 2 : 4) : (skipInventory ? 1 : 3))
@@ -332,7 +343,8 @@ export function ShiftClosingWizard({
         [discrepancyItems]
     )
 
-    const hasInventoryMismatch = isShiftSalesMode && inventorySummary?.isPerfect === false
+    const hasInventoryMismatch = usesShiftInventoryReconciliation && inventorySummary?.isPerfect === false
+    const isBlindClosingInventory = !isStartShiftMode && usesInventoryCounting
 
     const revenueKey = useMemo(() => {
         return inventorySettings?.employee_default_metric_key ||
@@ -358,6 +370,92 @@ export function ShiftClosingWizard({
             diff: reportedRevenueValue - totalSalesRevenue
         }
     }, [reportedRevenueValue, totalSalesRevenue])
+
+    const headerTitle = useMemo(() => {
+        if (isStartShiftMode) {
+            return step === 1 ? "Стартовая инвентаризация" : "Подтверждение инвентаризации"
+        }
+        if (step === 1) return "Финансовый отчет"
+        if (usesSalesReconciliation && step === 2) return "Сверка продаж"
+        if (step === inventoryStep) return "Ревизия товаров"
+        return "Сверка итогов"
+    }, [inventoryStep, isStartShiftMode, step, usesSalesReconciliation])
+
+    const primaryStepOneLabel = useMemo(() => {
+        if (skipInventory) return "Завершить смену"
+        if (usesSalesReconciliation) return "Далее: Сверка продаж"
+        return "Далее: Ревизия"
+    }, [skipInventory, usesSalesReconciliation])
+
+    const inventoryNextLabel = useMemo(() => {
+        if (isStartShiftMode) return "Далее: Подтверждение"
+        return "Далее"
+    }, [isStartShiftMode])
+
+    const finalizeSummary = useMemo(() => {
+        if (!calculationResult) return null
+
+        if (isStartShiftMode) {
+            const hasMismatch = inventorySummary?.isPerfect === false
+            return {
+                tone: hasMismatch ? "warning" : "success",
+                title: hasMismatch ? "Стартовая инвентаризация завершена с расхождениями" : "Стартовая инвентаризация завершена",
+                value: `${inventorySummary?.discrepancyQuantity ?? 0} шт.`,
+                description: hasMismatch
+                    ? "На старте смены найдены расхождения по остаткам. Проверь подтверждение перед продолжением работы."
+                    : "Остатки на старте смены подтверждены. Можно продолжать работу."
+            }
+        }
+
+        if (usesSalesReconciliation) {
+            if (calculationResult.diff === 0 && !hasInventoryMismatch) {
+                return {
+                    tone: "success",
+                    title: "Касса и продажи сходятся",
+                    value: "0 ₽",
+                    description: usesShiftInventoryReconciliation
+                        ? "По кассе и по итогам ревизии расхождений не найдено."
+                        : "По кассе и продажам расхождений не найдено."
+                }
+            }
+
+            if (calculationResult.diff === 0 && hasInventoryMismatch) {
+                return {
+                    tone: "warning",
+                    title: "Касса сходится, но по товару есть расхождения",
+                    value: `${inventorySummary?.discrepancyQuantity ?? 0} шт.`,
+                    description: "Продажи по смене сошлись, но ревизия нашла расхождения по остаткам."
+                }
+            }
+
+            return {
+                tone: calculationResult.diff > 0 ? "warning" : "danger",
+                title: calculationResult.diff > 0 ? "Обнаружен излишек по кассе" : "Обнаружена недостача по кассе",
+                value: `${calculationResult.diff > 0 ? '+' : ''}${calculationResult.diff.toLocaleString()} ₽`,
+                description: calculationResult.diff > 0
+                    ? "Денег в кассе больше, чем по пробитым товарам. Проверьте неучтенные продажи и сторно."
+                    : "Денег в кассе меньше, чем по пробитым товарам. Проверьте возвраты, сторно и корректность отчета."
+            }
+        }
+
+        if (calculationResult.diff === 0) {
+            return {
+                tone: "success",
+                title: "Смена сходится",
+                value: "0 ₽",
+                description: "Данные по складу полностью соответствуют сумме в кассе."
+            }
+        }
+
+        return {
+            tone: calculationResult.diff > 0 ? "warning" : "danger",
+            title: calculationResult.diff > 0 ? "Обнаружен излишек" : "Обнаружена недостача",
+            value: `${calculationResult.diff > 0 ? '+' : ''}${calculationResult.diff.toLocaleString()} ₽`,
+            description: calculationResult.diff > 0
+                ? "Денег в кассе больше, чем проданного товара. Возможно, не указана часть продаж."
+                : "Денег в кассе меньше, чем должно быть по остаткам склада. Проверьте правильность подсчета."
+        }
+    }, [calculationResult, hasInventoryMismatch, inventorySummary, isStartShiftMode, usesSalesReconciliation, usesShiftInventoryReconciliation])
 
     useEffect(() => {
         if (!isOpen) return
@@ -479,7 +577,11 @@ export function ShiftClosingWizard({
 
             startTransition(async () => {
                 try {
-                    await bulkUpdateInventoryItems(itemsToSave, clubId)
+                    const result = await bulkUpdateInventoryItemsSafe(itemsToSave, clubId)
+                    if (!result.ok) {
+                        console.error('Failed to autosave inventory progress:', result.error)
+                        return
+                    }
                     lastAutosavedSnapshotRef.current = snapshot
                 } catch (error) {
                     console.error('Failed to autosave inventory progress:', error)
@@ -508,7 +610,6 @@ export function ShiftClosingWizard({
                 setChecklistResponses({})
                 setProblematicItems({})
                 setScannedItemId(null)
-                setSearchQuery("")
                 setUnaccountedSales([])
                 setShiftReceipts([])
                 
@@ -572,14 +673,18 @@ export function ShiftClosingWizard({
     const handleStep1Submit = () => {
         const requiredFields = reportTemplate?.schema.filter((f: any) => f.is_required).map((f: any) => f.metric_key) || []
         const missing = requiredFields.filter((key: string) => !hasReportValue(reportData[key]))
-        if (missing.length > 0) return alert(`Заполните обязательные поля отчета`)
+        if (missing.length > 0) {
+            notifyInfo(`Заполните обязательные поля отчета`, "Проверьте данные")
+            return
+        }
         
         // Validation for checklist photos
         if (requiredChecklist?.items) {
             for (const item of requiredChecklist.items) {
                 const response = checklistResponses[item.id]
                 if (item.is_photo_required && (!response?.photo_urls || response.photo_urls.length < (item.min_photos || 1))) {
-                    return alert(`Загрузите фото для пункта: ${item.content}`)
+                    notifyInfo(`Загрузите фото для пункта: ${item.content}`, "Нужно фото")
+                    return
                 }
             }
         }
@@ -593,16 +698,17 @@ export function ShiftClosingWizard({
                 return comment.trim().length === 0
             })
             if (missingWorkstationComment) {
-                return alert("Укажите причину для проблемных мест")
+                notifyInfo("Укажите причину для проблемных мест", "Проверьте данные")
+                return
             }
         }
 
-        if (skipInventory && !isShiftSalesMode) {
+        if (skipInventory && !usesSalesReconciliation) {
             onFinalComplete()
             return
         }
 
-        if (isShiftSalesMode) {
+        if (usesSalesReconciliation) {
             setStep(2)
             return
         }
@@ -647,7 +753,7 @@ export function ShiftClosingWizard({
             }))
         } catch (error) {
             console.error('Failed to upload file:', error)
-            alert('Не удалось загрузить фото')
+            notifyError('Не удалось загрузить фото', "Ошибка загрузки")
         } finally {
             setUploadingState(prev => ({ ...prev, [itemId]: false }))
         }
@@ -720,7 +826,7 @@ export function ShiftClosingWizard({
 
                 console.log('Starting inventory:', { targetMetric, allowedWarehouseId })
                 
-                const newInvId = await createInventory(
+                const inventoryResult = await createInventorySafe(
                     clubId, 
                     userId, 
                     targetMetric, 
@@ -728,6 +834,11 @@ export function ShiftClosingWizard({
                     allowedWarehouseId,
                     activeShiftId.toString() // Pass shiftId
                 )
+                if (!inventoryResult.ok) {
+                    notifyError(inventoryResult.error)
+                    return
+                }
+                const newInvId = inventoryResult.inventoryId
                 
                 setInventoryId(newInvId)
                 const items = await getInventoryItems(newInvId)
@@ -742,7 +853,7 @@ export function ShiftClosingWizard({
                 })))
             } catch (e) {
                 console.error('Failed to start inventory:', e)
-                alert("Ошибка запуска инвентаризации")
+                notifyError("Ошибка запуска инвентаризации")
             }
         })
     }
@@ -763,7 +874,6 @@ export function ShiftClosingWizard({
                 return i
             }))
             setScannedItemId(item.id)
-            setIsScannerOpen(false) 
             return true
         }
 
@@ -791,7 +901,6 @@ export function ShiftClosingWizard({
                         return i
                     }))
                     setScannedItemId(existingInList.id)
-                    setIsScannerOpen(false)
                     return true
                 }
 
@@ -801,7 +910,11 @@ export function ShiftClosingWizard({
                     return acc
                 }, {} as Record<number, number>)
 
-                await addProductToInventory(inventoryId!, product.id)
+                const addResult = await addProductToInventorySafe(inventoryId!, product.id)
+                if (!addResult.ok) {
+                    notifyError(addResult.error)
+                    return false
+                }
                 const invItems = await getInventoryItems(inventoryId!)
                 
                 setInventoryItems(invItems.map(i => {
@@ -816,7 +929,6 @@ export function ShiftClosingWizard({
                 }))
                 const newItem = invItems.find(i => i.product_id === product.id)
                 if (newItem) setScannedItemId(newItem.id)
-                setIsScannerOpen(false) 
                 return true
             } else {
                 return false
@@ -839,7 +951,11 @@ export function ShiftClosingWizard({
                     return acc
                 }, {} as Record<number, number>)
 
-                await addProductToInventory(inventoryId!, idToAdd)
+                const addResult = await addProductToInventorySafe(inventoryId!, idToAdd)
+                if (!addResult.ok) {
+                    notifyError(addResult.error)
+                    return
+                }
                 const invItems = await getInventoryItems(inventoryId!)
                 
                 setInventoryItems(invItems.map(i => {
@@ -859,7 +975,7 @@ export function ShiftClosingWizard({
                 setIsAddDialogOpen(false)
                 setSelectedProductToAdd("")
             } catch (e: any) {
-                alert(e.message)
+                notifyError(e.message)
             }
         })
     }
@@ -924,23 +1040,6 @@ export function ShiftClosingWizard({
     }, [scannedItemId])
 
     // Step 2: Inventory Count
-    const handleStockChange = (itemId: number, val: string) => {
-        const numVal = val === "" ? null : parseInt(val)
-        setInventoryItems(prev => prev.map(i => {
-            if (i.id === itemId) {
-                // Если ввели число >= 0, помечаем товар как видимый навсегда
-                const isVisible = numVal !== null ? true : i.is_visible
-                return { 
-                    ...i, 
-                    actual_stock: numVal, 
-                    is_visible: isVisible,
-                    last_modified: numVal !== null ? Date.now() : i.last_modified
-                }
-            }
-            return i
-        }))
-    }
-
     const handleRemoveItem = (itemId: number) => {
         setInventoryItems(prev => prev.map(i => {
             if (i.id === itemId) {
@@ -950,118 +1049,36 @@ export function ShiftClosingWizard({
         }))
     }
 
-    const translateLayout = (text: string) => {
-        const ru = "йцукенгшщзхъфывапролджэячсмитьбю.ЙЦУКЕНГШЩЗХЪФЫВАПРОЛДЖЭЯЧСМИТЬБЮ,"
-        const en = "qwertyuiop[]asdfghjkl;'zxcvbnm,./QWERTYUIOP{}ASDFGHJKL:\"ZXCVBNM<>?"
-        
-        const toRu = (s: string) => s.split('').map(c => {
-            const i = en.indexOf(c)
-            return i !== -1 ? ru[i] : c
-        }).join('')
-        
-        const toEn = (s: string) => s.split('').map(c => {
-            const i = ru.indexOf(c)
-            return i !== -1 ? en[i] : c
-        }).join('')
+    const inventoryWorkspaceItems = useMemo<StockCountWorkspaceItem[]>(() => {
+        return inventoryItems
+            .filter(item => item.is_visible)
+            .map((item) => ({
+                id: String(item.id),
+                groupId: "inventory",
+                groupLabel: "Текущий пересчет",
+                productId: item.product_id,
+                productName: item.product_name,
+                barcode: item.barcode,
+                barcodes: item.barcodes,
+                systemQuantity: Number(item.expected_stock || 0),
+                countedQuantity: item.actual_stock,
+                sellingPrice: Number(item.selling_price_snapshot || 0),
+                removable: true
+            }))
+    }, [inventoryItems])
 
-        return {
-            original: text.toLowerCase(),
-            ru: toRu(text).toLowerCase(),
-            en: toEn(text).toLowerCase()
-        }
-    }
-
-    const visibleItems = useMemo(() => {
-        const queries = translateLayout(searchQuery)
-        const q = searchQuery.toLowerCase()
-        
-        // 1. Filter items
-        let filtered: ExtendedInventoryItem[] = []
-
-        if (q) {
-            // When searching, show ONLY items that match the search (regardless of is_visible)
-            const inventoryMatches = inventoryItems.filter(i => {
-                const name = i.product_name.toLowerCase()
-                const barcode = i.barcode || ""
-                const barcodes = i.barcodes || []
-                
-                return name.includes(queries.original) || 
-                       barcode.includes(queries.original) || 
-                       barcodes.some(bc => bc.includes(queries.original)) ||
-                       name.includes(queries.ru) || 
-                       name.includes(queries.en)
-            })
-
-            // Also find products NOT yet in inventory
-            const inventoryProductIds = new Set(inventoryItems.map(i => i.product_id))
-            const externalMatches = allProducts
-                .filter(p => !inventoryProductIds.has(p.id))
-                .filter(p => {
-                    const name = p.name.toLowerCase()
-                    const barcode = p.barcode || ""
-                    const barcodes = p.barcodes || []
-                    return name.includes(queries.original) || 
-                           name.includes(queries.ru) || 
-                           name.includes(queries.en) ||
-                           barcode.includes(queries.original) ||
-                           barcodes.some(bc => bc.includes(queries.original))
-                })
-                .map(p => ({
-                    id: -p.id,
-                    product_id: p.id,
-                    product_name: p.name,
-                    is_external: true,
-                    actual_stock: null,
-                    expected_stock: 0,
-                    is_visible: false,
-                    difference: null,
-                    cost_price_snapshot: 0,
-                    selling_price_snapshot: 0,
-                    calculated_revenue: null
-                } as ExtendedInventoryItem))
-
-            filtered = [...inventoryMatches, ...externalMatches]
-
-            // Sort by relevance
-            filtered.sort((a, b) => {
-                // Priority 1: Exact match
-                const aName = a.product_name.toLowerCase()
-                const bName = b.product_name.toLowerCase()
-                const aExact = aName === q
-                const bExact = bName === q
-                if (aExact && !bExact) return -1
-                if (!aExact && bExact) return 1
-
-                // Priority 2: Recently modified items (during this search)
-                const aMod = a.last_modified || 0
-                const bMod = b.last_modified || 0
-                if (aMod !== bMod) return bMod - aMod
-
-                // Priority 3: Start match
-                const aStarts = aName.startsWith(q)
-                const bStarts = bName.startsWith(q)
-                if (aStarts && !bStarts) return -1
-                if (!aStarts && bStarts) return 1
-
-                return aName.localeCompare(bName)
-            })
-        } else {
-            // When NOT searching, show only items that were already made visible (counted or added)
-            filtered = inventoryItems.filter(i => i.is_visible)
-            
-            // Sort by: most recently added/changed first (by timestamp)
-            filtered.sort((a, b) => {
-                const aMod = a.last_modified || 0
-                const bMod = b.last_modified || 0
-                if (aMod !== bMod) return bMod - aMod
-                
-                // If both never modified, sort alphabetically
-                return a.product_name.localeCompare(b.product_name)
-            })
-        }
-
-        return filtered
-    }, [inventoryItems, searchQuery, allProducts])
+    const handleInventoryWorkspaceChange = useCallback((nextItems: StockCountWorkspaceItem[]) => {
+        setInventoryItems((prev) => prev.map((item) => {
+            const next = nextItems.find((candidate) => candidate.id === String(item.id))
+            if (!next) return item
+            return {
+                ...item,
+                actual_stock: next.countedQuantity,
+                is_visible: next.countedQuantity !== null ? true : item.is_visible,
+                last_modified: next.countedQuantity !== item.actual_stock ? Date.now() : item.last_modified
+            }
+        }))
+    }, [])
 
     const handleReconcileNext = () => {
         if (!isShiftSalesMode) return
@@ -1071,12 +1088,16 @@ export function ShiftClosingWizard({
             try {
                 // FIX: Sales are already committed in real-time, no need to commit
                 if (unaccountedSales.length > 0) {
-                    await createShiftReceipt(clubId, userId, {
+                    const receiptResult = await createShiftReceiptSafe(clubId, userId, {
                         shift_id: shiftIdStr,
                         payment_type: 'other',
                         items: unaccountedSales.map(s => ({ product_id: s.product_id, quantity: s.quantity })),
                         notes: "Ручная продажа при закрытии смены"
                     })
+                    if (!receiptResult.ok) {
+                        notifyError(receiptResult.error)
+                        return
+                    }
                     setUnaccountedSales([])
                 }
 
@@ -1101,7 +1122,7 @@ export function ShiftClosingWizard({
                 startInventory()
             } catch (e: any) {
                 console.error(e)
-                alert(e?.message || "Ошибка сверки продаж")
+                notifyError(e?.message || "Ошибка сверки продаж")
             }
         })
     }
@@ -1115,7 +1136,11 @@ export function ShiftClosingWizard({
                     .map(item => ({ id: item.id, actual_stock: item.actual_stock }))
                 
                 if (itemsToUpdate.length > 0) {
-                    await bulkUpdateInventoryItems(itemsToUpdate, clubId)
+                    const saveResult = await bulkUpdateInventoryItemsSafe(itemsToUpdate, clubId)
+                    if (!saveResult.ok) {
+                        notifyError(saveResult.error)
+                        return
+                    }
                 }
 
                 if (isStartShiftMode) {
@@ -1140,7 +1165,7 @@ export function ShiftClosingWizard({
                     return
                 }
 
-                if (isShiftSalesMode) {
+                if (usesSalesReconciliation) {
                     const refreshedItems = inventoryId ? await getInventoryItems(inventoryId) : inventoryItems
                     const mergedItems = refreshedItems.map(item => {
                         const existing = inventoryItems.find(current => current.id === item.id)
@@ -1190,7 +1215,7 @@ export function ShiftClosingWizard({
                 setStep(finalizeStep)
             } catch (e) {
                 console.error('Error saving inventory:', e)
-                alert("Ошибка сохранения подсчетов")
+                notifyError("Ошибка сохранения подсчетов")
             }
         })
     }
@@ -1201,7 +1226,7 @@ export function ShiftClosingWizard({
         
         // Prevent finalize if there are uncounted items
         if (forgottenItems.length > 0) {
-            alert(`Вы не посчитали ${forgottenItems.length} товаров. Укажите их остаток (даже если 0), чтобы закрыть смену.`)
+            notifyInfo(`Вы не посчитали ${forgottenItems.length} товаров. Укажите их остаток (даже если 0), чтобы закрыть смену.`, "Инвентаризация не завершена")
             setStep(inventoryStep) // Return to inventory
             return
         }
@@ -1209,11 +1234,19 @@ export function ShiftClosingWizard({
         startTransition(async () => {
                 try {
                     if (isStartShiftMode) {
-                        await closeInventory(inventoryId, clubId, 0, [], { salesRecognition: 'NONE' })
-                    } else if (isShiftSalesMode) {
-                        await closeInventory(inventoryId, clubId, calculationResult.reported, [], { salesRecognition: 'NONE' })
+                        const result = await closeInventorySafe(inventoryId, clubId, 0, [], { salesRecognition: 'NONE' })
+                        if (!result.ok) {
+                            notifyError(`Ошибка завершения: ${result.error}`)
+                            return
+                        }
+                    } else if (usesSalesReconciliation) {
+                        const result = await closeInventorySafe(inventoryId, clubId, calculationResult.reported, [], { salesRecognition: 'NONE' })
+                        if (!result.ok) {
+                            notifyError(`Ошибка завершения: ${result.error}`)
+                            return
+                        }
                     } else {
-                        await closeInventory(
+                        const result = await closeInventorySafe(
                             inventoryId,
                             clubId,
                             calculationResult.reported,
@@ -1223,14 +1256,18 @@ export function ShiftClosingWizard({
                             selling_price: s.selling_price,
                             cost_price: s.cost_price
                         }))
-                    )
+                        )
+                        if (!result.ok) {
+                            notifyError(`Ошибка завершения: ${result.error}`)
+                            return
+                        }
                 }
                 
                 // Complete shift closing
                 onFinalComplete()
             } catch (e: any) {
                 console.error('Error closing inventory:', e)
-                alert(`Ошибка завершения: ${e.message || 'Неизвестная ошибка'}`)
+                notifyError(`Ошибка завершения: ${e.message || 'Неизвестная ошибка'}`)
             }
         })
     }
@@ -1245,14 +1282,14 @@ export function ShiftClosingWizard({
 
         const quantity = Number(unaccountedQty)
         if (!Number.isInteger(quantity) || quantity <= 0) {
-            alert("Количество должно быть целым положительным числом")
+            notifyInfo("Количество должно быть целым положительным числом", "Проверьте данные")
             return
         }
 
         // Check if already in standard inventory (just in case, though they should be separate)
         const inInventory = inventoryItems.some(i => i.product_id === product.id)
         if (inInventory) {
-            alert("Этот товар уже есть в списке инвентаризации. Просто укажите его остаток там.")
+            notifyInfo("Этот товар уже есть в списке инвентаризации. Просто укажите его остаток там.", "Товар уже добавлен")
             setIsUnaccountedDialogOpen(false)
             return
         }
@@ -1284,16 +1321,22 @@ export function ShiftClosingWizard({
         setIsUnaccountedDialogOpen(false)
     }
 
-    const markAllForgottenAsZero = () => {
-        if (confirm(`Вы уверены, что хотите установить остаток 0 для всех ${forgottenItems.length} нераспределенных товаров? Это зафиксирует недостачу.`)) {
-            const updatedItems = inventoryItems.map(item => {
-                if (item.actual_stock === null) {
-                    return { ...item, actual_stock: 0 }
-                }
-                return item
-            })
-            setInventoryItems(updatedItems)
-        }
+    const markAllForgottenAsZero = async () => {
+        const confirmed = await confirmAction({
+            title: "Подтвердите действие",
+            description: `Установить остаток 0 для всех ${forgottenItems.length} нераспределенных товаров? Это зафиксирует недостачу.`,
+            confirmText: "Установить 0",
+            cancelText: "Отмена"
+        })
+        if (!confirmed) return
+
+        const updatedItems = inventoryItems.map(item => {
+            if (item.actual_stock === null) {
+                return { ...item, actual_stock: 0 }
+            }
+            return item
+        })
+        setInventoryItems(updatedItems)
     }
 
     const handleBack = () => {
@@ -1306,26 +1349,10 @@ export function ShiftClosingWizard({
 
     return createPortal((
         <div className="fixed inset-0 h-[100dvh] bg-slate-950 text-white flex flex-col z-[9999] overflow-hidden overscroll-none">
-            {step === inventoryStep && (
-                <BarcodeScanner 
-                    isOpen={isScannerOpen} 
-                    onScan={handleBarcodeScan} 
-                    onClose={() => setIsScannerOpen(false)} 
-                />
-            )}
-            
             <header className="px-4 py-4 border-b border-slate-800 bg-slate-900/50 backdrop-blur-md sticky top-0 z-50">
                 <div className="space-y-4">
                     <div className="flex items-center justify-between gap-4">
-                        <h2 className="text-lg font-bold truncate">
-                            {isStartShiftMode ? (
-                                step === 1 ? "Стартовая инвентаризация" : "Подтверждение инвентаризации"
-                            ) : skipInventory ? "Закрытие смены" : 
-                             step === 1 ? "Финансовый отчет" :
-                             isShiftSalesMode
-                                 ? (step === 2 ? "Сверка продаж" : step === 3 ? "Инвентаризация" : "Сверка итогов")
-                                 : (step === 2 ? "Инвентаризация" : "Сверка итогов")}
-                        </h2>
+                        <h2 className="text-lg font-bold truncate">{headerTitle}</h2>
                         {!isStartShiftMode ? (
                             <Button 
                                 variant="outline" 
@@ -1690,83 +1717,47 @@ export function ShiftClosingWizard({
                 {/* STEP 2/3: INVENTORY */}
                 {step === inventoryStep && (
                     <div className="space-y-6 max-w-4xl mx-auto pb-20">
-                        <div className="relative">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
-                            <Input 
-                                placeholder="Поиск по названию или штрихкоду..."
-                                className="pl-10 pr-10 bg-slate-900 border-slate-800 h-12 rounded-xl focus:ring-2 focus:ring-blue-500 transition-all text-base"
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                            />
-                            <button 
-                                onClick={async () => {
-                                    await refreshInventoryList()
-                                    await refreshProductCatalog()
-                                }}
-                                disabled={isPending || isRefreshingCatalog}
-                                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-slate-500 hover:text-blue-400 disabled:opacity-50 transition-colors"
-                                title="Синхронизировать с базой"
-                            >
-                                <RefreshCcw className={cn("h-4 w-4", (isPending || isRefreshingCatalog) && "animate-spin")} />
-                            </button>
-                        </div>
-
-                        {visibleItems.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center py-20 bg-slate-900/30 border-2 border-dashed border-slate-800 rounded-2xl">
-                                <Barcode className="h-12 w-12 text-slate-700 mb-4" />
-                                <h3 className="text-lg font-medium text-slate-400 text-center">Список пуст.<br/>Сканируйте товар!</h3>
-                            </div>
-                        ) : (
-                            <div className="border border-slate-800 rounded-2xl overflow-hidden bg-slate-900/50">
-                                <Table>
-                                    <TableHeader className="bg-slate-900">
-                                        <TableRow className="border-slate-800 hover:bg-transparent">
-                                            <TableHead className="text-slate-400 text-[10px] uppercase font-bold py-4 pl-6">Товар</TableHead>
-                                            <TableHead className="text-right text-slate-400 text-[10px] uppercase font-bold py-4 pr-6">Кол-во</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {visibleItems.map(item => (
-                                            <TableRow key={item.id} className={`border-slate-800 ${scannedItemId === item.id ? 'bg-blue-900/20' : ''}`}>
-                                                <TableCell className="py-4 pl-6">
-                                                    <div className="flex items-center gap-3">
-                                                        {!("is_external" in item) && !searchQuery && (
-                                                            <Button
-                                                                variant="ghost"
-                                                                size="icon"
-                                                                onClick={() => handleRemoveItem(item.id)}
-                                                                className="h-8 w-8 text-slate-500 hover:text-red-400 hover:bg-red-400/10 shrink-0"
-                                                            >
-                                                                <Trash2 className="h-4 w-4" />
-                                                            </Button>
-                                                        )}
-                                                        <div className="flex flex-col">
-                                                            <span className="font-bold text-slate-200">{item.product_name}</span>
-                                                            {("barcode" in item && item.barcode) && <span className="text-[10px] text-slate-500 font-mono">{item.barcode}</span>}
-                                                        </div>
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell className="text-right py-4 pr-6">
-                                                    <Input 
-                                                        type="number" 
-                                                        id={`inventory-input-${item.id}`}
-                                                        className="bg-slate-900 border-slate-800 text-right w-20 ml-auto font-bold h-10 rounded-lg text-base"
-                                                        value={item.actual_stock === null ? "" : item.actual_stock}
-                                                        onChange={(e) => {
-                                                            if ("is_external" in item) {
-                                                                handleAddProductManually(item.product_id)
-                                                            } else {
-                                                                handleStockChange(item.id, e.target.value)
-                                                            }
-                                                        }}
-                                                    />
-                                                </TableCell>
-                                            </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
-                            </div>
-                        )}
+                        <StockCountWorkspace
+                            title={isStartShiftMode ? "Стартовый пересчет" : "Пересчет товаров"}
+                            description={isStartShiftMode
+                                ? "Используйте сканер, поиск и быстрый ввод, чтобы подтвердить остатки на старте смены."
+                                : "Используйте сканер, поиск и быстрый ввод для слепой ревизии товаров перед закрытием смены."}
+                            items={inventoryWorkspaceItems}
+                            onItemsChange={handleInventoryWorkspaceChange}
+                            onBarcodeScan={handleBarcodeScan}
+                            onRemoveItem={(item) => handleRemoveItem(Number(item.id))}
+                            blindMode={isBlindClosingInventory}
+                            toolbarActions={
+                                <>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        className="border-slate-700 text-white"
+                                        onClick={async () => {
+                                            await refreshInventoryList()
+                                            await refreshProductCatalog()
+                                        }}
+                                        disabled={isPending || isRefreshingCatalog}
+                                    >
+                                        <RefreshCcw className={cn("mr-2 h-4 w-4", (isPending || isRefreshingCatalog) && "animate-spin")} />
+                                        Синхронизировать
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        className="border-slate-700 text-white"
+                                        onClick={openAddDialog}
+                                    >
+                                        <Plus className="mr-2 h-4 w-4" />
+                                        Добавить товар
+                                    </Button>
+                                </>
+                            }
+                            emptyStateMessage="Список пересчета пуст. Сканируйте товар или добавьте его вручную."
+                            discrepancyMessage={isStartShiftMode
+                                ? "На следующем шаге система покажет стартовые расхождения по остаткам."
+                                : "На следующем шаге система учтет эти расхождения в итогах смены."}
+                        />
                     </div>
                 )}
 
@@ -1817,49 +1808,19 @@ export function ShiftClosingWizard({
                                             ? inventorySummary?.isPerfect === false
                                                 ? "Стартовая инвентаризация завершена с расхождениями"
                                                 : "Стартовая инвентаризация завершена"
-                                            : isShiftSalesMode
-                                            ? calculationResult.diff === 0
-                                                ? inventorySummary?.isPerfect === false
-                                                    ? "Касса сходится, но по складу есть расхождения"
-                                                    : "Касса и склад сходятся"
-                                                : calculationResult.diff > 0
-                                                    ? "Обнаружен излишек по кассе"
-                                                    : "Обнаружена недостача по кассе"
-                                            : calculationResult.diff === 0
-                                                ? "Смена сходится!"
-                                                : calculationResult.diff > 0
-                                                    ? "Обнаружен излишек"
-                                                    : "Обнаружена недостача"}
+                                            : finalizeSummary?.title}
                                     </span>
                                     <span className="text-xl font-black">
-                                        {isStartShiftMode
-                                            ? `${inventorySummary?.discrepancyQuantity ?? 0} шт.`
-                                            : `${calculationResult.diff > 0 ? '+' : ''}${calculationResult.diff.toLocaleString()} ₽`}
+                                        {finalizeSummary?.value}
                                     </span>
                                 </div>
                                 <p className="text-xs opacity-80 mt-1 leading-relaxed">
-                                    {isStartShiftMode
-                                        ? inventorySummary?.isPerfect === false
-                                            ? "На старте смены найдены расхождения по остаткам. Проверь подтверждение перед продолжением работы."
-                                            : "Остатки на старте смены подтверждены. Можно продолжать работу."
-                                        : isShiftSalesMode
-                                        ? calculationResult.diff === 0
-                                            ? inventorySummary?.isPerfect === false
-                                                ? "По кассе всё сходится, но инвентаризация нашла расхождения по остаткам."
-                                                : "По кассе и по остаткам расхождений не найдено."
-                                            : calculationResult.diff > 0
-                                                ? "Денег в кассе больше, чем по пробитым товарам. Проверьте неучтённые продажи и сторно."
-                                                : "Денег в кассе меньше, чем по пробитым товарам. Проверьте возвраты, сторно и корректность отчёта."
-                                        : calculationResult.diff === 0
-                                            ? "Данные по складу полностью соответствуют сумме в кассе."
-                                            : calculationResult.diff > 0
-                                                ? "Денег в кассе больше, чем проданного товара. Возможно, вы не указали продажу какого-то товара."
-                                                : "Денег в кассе меньше, чем должно быть по остаткам склада. Проверьте правильность подсчета."}
+                                    {finalizeSummary?.description}
                                 </p>
                             </div>
                         </div>
 
-                        {isShiftSalesMode && inventorySummary && (
+                        {usesShiftInventoryReconciliation && inventorySummary && (
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="bg-slate-900/50 p-4 rounded-2xl border border-slate-800">
                                     <span className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Расхождения по товарам</span>
@@ -1878,7 +1839,7 @@ export function ShiftClosingWizard({
                             </div>
                         )}
 
-                        {isShiftSalesMode && discrepancyItems.length > 0 && (
+                        {usesShiftInventoryReconciliation && discrepancyItems.length > 0 && (
                             <div className="grid gap-4 lg:grid-cols-2">
                                 <div className="rounded-2xl border border-red-500/20 bg-red-900/10 overflow-hidden">
                                     <div className="flex items-center justify-between px-4 py-3 border-b border-red-500/20">
@@ -2010,7 +1971,7 @@ export function ShiftClosingWizard({
                             <div className="bg-slate-900/50 rounded-2xl border border-slate-800 overflow-hidden">
                             <div className="px-4 py-3 bg-slate-900 border-b border-slate-800 flex justify-between items-center">
                                 <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Детализация продаж</h4>
-                                {!isShiftSalesMode && (
+                                {usesRevisionMode && (
                                     <Button 
                                         variant="ghost" 
                                         size="sm" 
@@ -2066,7 +2027,7 @@ export function ShiftClosingWizard({
                         )}
 
                         {/* Unaccounted Logic (Automatic Supply) Alert - moved below detail */}
-                        {!isStartShiftMode && inventoryItems.some(item => (item.expected_stock || 0) === 0 && (item.actual_stock || 0) > 0) && (
+                        {usesRevisionMode && inventoryItems.some(item => (item.expected_stock || 0) === 0 && (item.actual_stock || 0) > 0) && (
                             <div className="bg-blue-900/20 border border-blue-500/30 p-4 rounded-2xl space-y-3">
                                 <div className="flex items-center gap-2 text-blue-400">
                                     <AlertTriangle className="h-5 w-5" />
@@ -2153,15 +2114,11 @@ export function ShiftClosingWizard({
             <footer className="p-4 pb-safe border-t border-slate-800 bg-slate-900/80 backdrop-blur-md sticky bottom-0 z-50">
                 {step === 1 && !isStartShiftMode && (
                     <Button onClick={handleStep1Submit} className="w-full h-14 text-lg font-bold bg-purple-600 hover:bg-purple-700 rounded-2xl shadow-lg shadow-purple-900/20">
-                        {skipInventory
-                            ? "Завершить смену"
-                            : isShiftSalesMode
-                                ? "Далее: Сверка продаж"
-                                : "Далее: Инвентаризация"}
+                        {primaryStepOneLabel}
                         <ArrowRight className="ml-2 h-5 w-5" />
                     </Button>
                 )}
-                {step === 2 && isShiftSalesMode && !isStartShiftMode && (
+                {step === 2 && usesSalesReconciliation && !isStartShiftMode && (
                     <div className="flex gap-3">
                         <Button 
                             variant="outline"
@@ -2172,48 +2129,14 @@ export function ShiftClosingWizard({
                             <ArrowLeft className="h-6 w-6" />
                         </Button>
                         <Button onClick={handleReconcileNext} disabled={isPending} className="flex-1 h-14 text-lg font-bold bg-blue-600 hover:bg-blue-700 rounded-2xl shadow-lg shadow-blue-900/20">
-                            Далее: Инвентаризация
+                            Далее: Ревизия
                             <ArrowRight className="ml-2 h-5 w-5" />
                         </Button>
                     </div>
                 )}
-                {step === inventoryStep && !isShiftSalesMode && (
-                    <div className="flex flex-col gap-3">
-                        <Button 
-                            onClick={() => setIsScannerOpen(true)}
-                            className="w-full h-14 text-lg font-bold bg-blue-600/20 border-blue-500/30 text-blue-400 hover:bg-blue-600/30 rounded-2xl"
-                        >
-                            <Camera className="mr-2 h-6 w-6" />
-                            Открыть Сканер
-                        </Button>
-                        <div className="flex gap-3">
-                            {!isStartShiftMode ? (
-                                <Button 
-                                    variant="outline"
-                                    size="icon"
-                                    onClick={handleBack}
-                                    className="h-14 w-14 border-slate-800 text-slate-400 hover:bg-slate-800 rounded-2xl shrink-0"
-                                >
-                                    <ArrowLeft className="h-6 w-6" />
-                                </Button>
-                            ) : null}
-                            <Button onClick={handleInventorySubmit} disabled={isPending} className="flex-1 h-14 text-lg font-bold bg-blue-600 hover:bg-blue-700 rounded-2xl shadow-lg shadow-blue-900/20">
-                                {isStartShiftMode ? "Далее: Подтверждение" : "Далее"}
-                                <ArrowRight className="ml-2 h-5 w-5" />
-                            </Button>
-                        </div>
-                    </div>
-                )}
-                {step === inventoryStep && isShiftSalesMode && (
-                    <div className="flex flex-col gap-3">
-                        <Button 
-                            onClick={() => setIsScannerOpen(true)}
-                            className="w-full h-14 text-lg font-bold bg-blue-600/20 border-blue-500/30 text-blue-400 hover:bg-blue-600/30 rounded-2xl"
-                        >
-                            <Camera className="mr-2 h-6 w-6" />
-                            Открыть Сканер
-                        </Button>
-                        <div className="flex gap-3">
+                {step === inventoryStep && !usesSalesReconciliation && (
+                    <div className="flex gap-3">
+                        {!isStartShiftMode ? (
                             <Button 
                                 variant="outline"
                                 size="icon"
@@ -2222,11 +2145,27 @@ export function ShiftClosingWizard({
                             >
                                 <ArrowLeft className="h-6 w-6" />
                             </Button>
-                            <Button onClick={handleInventorySubmit} disabled={isPending} className="flex-1 h-14 text-lg font-bold bg-blue-600 hover:bg-blue-700 rounded-2xl shadow-lg shadow-blue-900/20">
-                                Далее
-                                <ArrowRight className="ml-2 h-5 w-5" />
-                            </Button>
-                        </div>
+                        ) : null}
+                        <Button onClick={handleInventorySubmit} disabled={isPending} className="flex-1 h-14 text-lg font-bold bg-blue-600 hover:bg-blue-700 rounded-2xl shadow-lg shadow-blue-900/20">
+                            {inventoryNextLabel}
+                            <ArrowRight className="ml-2 h-5 w-5" />
+                        </Button>
+                    </div>
+                )}
+                {step === inventoryStep && usesSalesReconciliation && (
+                    <div className="flex gap-3">
+                        <Button 
+                            variant="outline"
+                            size="icon"
+                            onClick={handleBack}
+                            className="h-14 w-14 border-slate-800 text-slate-400 hover:bg-slate-800 rounded-2xl shrink-0"
+                        >
+                            <ArrowLeft className="h-6 w-6" />
+                        </Button>
+                        <Button onClick={handleInventorySubmit} disabled={isPending} className="flex-1 h-14 text-lg font-bold bg-blue-600 hover:bg-blue-700 rounded-2xl shadow-lg shadow-blue-900/20">
+                            Далее
+                            <ArrowRight className="ml-2 h-5 w-5" />
+                        </Button>
                     </div>
                 )}
                 {step === finalizeStep && (
@@ -2312,6 +2251,7 @@ export function ShiftClosingWizard({
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+            {Dialogs}
         </div>
     ), document.body)
 }

@@ -8,15 +8,16 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { 
-    Loader2, Plus, Trash2, Search, Camera, 
+    Loader2, Trash2, Search, Camera, 
     ArrowLeft, ArrowRight, CheckCircle2, ShoppingCart, Warehouse,
     ArrowRightLeft
 } from "lucide-react"
-import { getProducts, createTransfer, getProductByBarcode, getWarehouses, type Warehouse as WarehouseType } from "@/app/clubs/[clubId]/inventory/actions"
+import { getProducts, createTransferSafe, getProductByBarcode, getWarehouses, type Warehouse as WarehouseType } from "@/app/clubs/[clubId]/inventory/actions"
 import { 
     Table, TableBody, TableCell, TableRow 
 } from "@/components/ui/table"
 import { BarcodeScanner } from "@/app/clubs/[clubId]/inventory/_components/BarcodeScanner"
+import { useUiDialogs } from "@/app/clubs/[clubId]/inventory/_components/useUiDialogs"
 import { cn } from "@/lib/utils"
 
 interface EmployeeTransferWizardProps {
@@ -35,6 +36,7 @@ interface TransferItem {
 }
 
 export function EmployeeTransferWizard({ isOpen, onClose, clubId, userId, activeShiftId }: EmployeeTransferWizardProps) {
+    const { showMessage, Dialogs } = useUiDialogs()
     const [step, setStep] = useState(1) // 1: Warehouses, 2: Items, 3: Confirm
     const [items, setItems] = useState<TransferItem[]>([])
     const [allProducts, setAllProducts] = useState<any[]>([])
@@ -155,12 +157,12 @@ export function EmployeeTransferWizard({ isOpen, onClose, clubId, userId, active
     const handleFinalize = () => {
         if (items.length === 0) return
         if (!sourceWarehouseId || !targetWarehouseId) {
-            alert("Выберите склады")
+            showMessage({ title: "Проверьте данные", description: "Выберите склады" })
             return
         }
         startTransition(async () => {
             try {
-                await createTransfer(clubId, userId, {
+                const result = await createTransferSafe(clubId, userId, {
                     source_warehouse_id: Number(sourceWarehouseId),
                     target_warehouse_id: Number(targetWarehouseId),
                     notes: notes,
@@ -170,11 +172,15 @@ export function EmployeeTransferWizard({ isOpen, onClose, clubId, userId, active
                         quantity: i.quantity
                     }))
                 })
-                alert("Перемещение успешно оформлено")
+                if (!result.ok) {
+                    showMessage({ title: "Ошибка", description: result.error })
+                    return
+                }
+                showMessage({ title: "Готово", description: "Перемещение успешно оформлено" })
                 handleClose()
             } catch (e: any) {
                 console.error(e)
-                alert(e.message || "Ошибка при оформлении перемещения")
+                showMessage({ title: "Ошибка", description: e.message || "Ошибка при оформлении перемещения" })
             }
         })
     }
@@ -526,6 +532,7 @@ export function EmployeeTransferWizard({ isOpen, onClose, clubId, userId, active
                 onClose={() => setIsScannerOpen(false)}
                 onScan={handleBarcodeScan}
             />
+            {Dialogs}
         </>
     )
 }

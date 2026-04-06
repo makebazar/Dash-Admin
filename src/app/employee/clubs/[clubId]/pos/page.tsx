@@ -5,6 +5,7 @@ import { useParams } from "next/navigation"
 import { Loader2 } from "lucide-react"
 import { SSEProvider } from "@/hooks/usePOSWebSocket"
 import { EmployeeSalesWizard } from "../_components/EmployeeSalesWizard"
+import { getOpenShiftInventory } from "@/app/clubs/[clubId]/inventory/actions"
 
 export default function EmployeePosPage() {
     const { clubId } = useParams<{ clubId: string }>()
@@ -12,6 +13,7 @@ export default function EmployeePosPage() {
     const [activeShiftId, setActiveShiftId] = useState<string | undefined>(undefined)
     const [isLoading, setIsLoading] = useState(true)
     const [isPosEnabled, setIsPosEnabled] = useState(true)
+    const [isBlockedByAcceptance, setIsBlockedByAcceptance] = useState(false)
 
     useEffect(() => {
         const load = async () => {
@@ -32,9 +34,23 @@ export default function EmployeePosPage() {
                 const shiftRes = await fetch(`/api/employee/clubs/${clubId}/active-shift`, { cache: "no-store" })
                 const shiftData = await shiftRes.json()
                 if (shiftRes.ok && shiftData?.shift?.id) {
-                    setActiveShiftId(String(shiftData.shift.id))
+                    const shiftId = String(shiftData.shift.id)
+                    setActiveShiftId(shiftId)
+
+                    const requiresStartAcceptance = Boolean(
+                        currentClub?.inventory_required &&
+                        (currentClub?.inventory_settings?.inventory_timing || "END_SHIFT") === "START_SHIFT"
+                    )
+
+                    if (requiresStartAcceptance) {
+                        const openInventory = await getOpenShiftInventory(String(clubId), shiftId)
+                        setIsBlockedByAcceptance(Boolean(openInventory))
+                    } else {
+                        setIsBlockedByAcceptance(false)
+                    }
                 } else {
                     setActiveShiftId(undefined)
+                    setIsBlockedByAcceptance(false)
                 }
             } finally {
                 setIsLoading(false)
@@ -59,6 +75,19 @@ export default function EmployeePosPage() {
         return (
             <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center p-6 text-center">
                 <div className="text-slate-300">Продажи через POS недоступны для этого клуба.</div>
+            </div>
+        )
+    }
+
+    if (isBlockedByAcceptance) {
+        return (
+            <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center p-6 text-center">
+                <div className="max-w-md space-y-3">
+                    <div className="text-lg font-bold text-amber-300">Бар временно заблокирован</div>
+                    <div className="text-slate-300">
+                        Сначала завершите приемку остатков на старте смены. После подтверждения инвентаризации касса откроется автоматически.
+                    </div>
+                </div>
             </div>
         )
     }

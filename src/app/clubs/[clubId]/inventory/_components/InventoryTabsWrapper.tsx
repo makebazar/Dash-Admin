@@ -21,6 +21,7 @@ export function InventoryTabsWrapper({
             "transfers",
             "supplies",
             "procurement",
+            "zones",
             "inventory",
             "abc-analysis",
             "settings"

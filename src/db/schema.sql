@@ -373,10 +373,14 @@ CREATE TABLE IF NOT EXISTS warehouse_inventories (
     id SERIAL PRIMARY KEY,
     club_id INTEGER NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
     created_by UUID REFERENCES users(id),
+    closed_by UUID REFERENCES users(id),
+    canceled_by UUID REFERENCES users(id),
     status VARCHAR(20) DEFAULT 'OPEN', -- OPEN, CLOSED
     started_at TIMESTAMP DEFAULT NOW(),
     closed_at TIMESTAMP,
+    canceled_at TIMESTAMP,
     target_metric_key VARCHAR(50), -- The metric key from system_metrics to compare against (e.g. 'bar_revenue')
+    sales_capture_mode_snapshot VARCHAR(20),
     reported_revenue DECIMAL(10, 2), -- The value of that metric entered by admin
     calculated_revenue DECIMAL(10, 2), -- Calculated from stock difference
     revenue_difference DECIMAL(10, 2), -- reported - calculated
@@ -391,12 +395,52 @@ CREATE TABLE IF NOT EXISTS warehouse_inventory_items (
     product_id INTEGER NOT NULL REFERENCES warehouse_products(id),
     expected_stock INTEGER NOT NULL, -- Snapshot before count
     actual_stock INTEGER, -- Filled by admin
+    adjusted_expected_stock INTEGER,
+    stock_before_close INTEGER,
+    applied_stock_delta INTEGER,
     difference INTEGER, -- actual - expected (negative means loss/sold)
     cost_price_snapshot DECIMAL(10, 2),
     selling_price_snapshot DECIMAL(10, 2),
-    calculated_revenue DECIMAL(10, 2)
+    calculated_revenue DECIMAL(10, 2),
+    added_manually BOOLEAN NOT NULL DEFAULT FALSE,
+    counted_by UUID REFERENCES users(id),
+    counted_at TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_warehouse_inventory_items_inventory ON warehouse_inventory_items(inventory_id);
+
+CREATE TABLE IF NOT EXISTS inventory_post_close_corrections (
+    id BIGSERIAL PRIMARY KEY,
+    inventory_id INTEGER NOT NULL REFERENCES warehouse_inventories(id) ON DELETE CASCADE,
+    product_id INTEGER NOT NULL REFERENCES warehouse_products(id),
+    old_actual_stock INTEGER NOT NULL,
+    new_actual_stock INTEGER NOT NULL,
+    difference_before INTEGER,
+    difference_after INTEGER NOT NULL,
+    stock_delta INTEGER NOT NULL,
+    reason TEXT,
+    created_by UUID NOT NULL REFERENCES users(id),
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_inventory_post_close_corrections_inventory ON inventory_post_close_corrections(inventory_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_inventory_post_close_corrections_product ON inventory_post_close_corrections(product_id, created_at DESC);
+
+ALTER TABLE warehouse_inventories
+ADD COLUMN IF NOT EXISTS closed_by UUID REFERENCES users(id),
+ADD COLUMN IF NOT EXISTS canceled_by UUID REFERENCES users(id),
+ADD COLUMN IF NOT EXISTS canceled_at TIMESTAMP,
+ADD COLUMN IF NOT EXISTS sales_capture_mode_snapshot VARCHAR(20);
+
+ALTER TABLE warehouse_inventory_items
+ADD COLUMN IF NOT EXISTS adjusted_expected_stock INTEGER,
+ADD COLUMN IF NOT EXISTS stock_before_close INTEGER,
+ADD COLUMN IF NOT EXISTS applied_stock_delta INTEGER,
+ADD COLUMN IF NOT EXISTS added_manually BOOLEAN NOT NULL DEFAULT FALSE,
+ADD COLUMN IF NOT EXISTS counted_by UUID REFERENCES users(id),
+ADD COLUMN IF NOT EXISTS counted_at TIMESTAMP;
+
+ALTER TABLE warehouses
+ADD COLUMN IF NOT EXISTS shift_zone_key VARCHAR(20),
+ADD COLUMN IF NOT EXISTS shift_accountability_enabled BOOLEAN NOT NULL DEFAULT FALSE;
 -- WAREHOUSE EXPANSION
 
 -- 1. Expand Categories
@@ -415,6 +459,8 @@ CREATE TABLE IF NOT EXISTS warehouses (
     name VARCHAR(100) NOT NULL,
     address TEXT,
     type VARCHAR(50) DEFAULT 'GENERAL', -- GENERAL, COLD_STORAGE, KITCHEN, BAR
+    shift_zone_key VARCHAR(20), -- BAR, FRIDGE, SHOWCASE, BACKROOM
+    shift_accountability_enabled BOOLEAN NOT NULL DEFAULT FALSE,
     responsible_user_id UUID REFERENCES users(id),
     contact_info TEXT,
     characteristics JSONB DEFAULT '{}', -- area, temperature, etc.
@@ -434,6 +480,31 @@ CREATE TABLE IF NOT EXISTS warehouse_stock (
 );
 CREATE INDEX IF NOT EXISTS idx_warehouse_stock_warehouse ON warehouse_stock(warehouse_id);
 CREATE INDEX IF NOT EXISTS idx_warehouse_stock_product ON warehouse_stock(product_id);
+
+CREATE TABLE IF NOT EXISTS shift_zone_snapshots (
+    id BIGSERIAL PRIMARY KEY,
+    club_id INTEGER NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
+    shift_id UUID NOT NULL REFERENCES shifts(id) ON DELETE CASCADE,
+    employee_id UUID NOT NULL REFERENCES users(id),
+    warehouse_id INTEGER NOT NULL REFERENCES warehouses(id) ON DELETE CASCADE,
+    snapshot_type VARCHAR(10) NOT NULL, -- OPEN, CLOSE
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    UNIQUE(shift_id, warehouse_id, snapshot_type)
+);
+CREATE INDEX IF NOT EXISTS idx_shift_zone_snapshots_shift ON shift_zone_snapshots(shift_id, snapshot_type);
+CREATE INDEX IF NOT EXISTS idx_shift_zone_snapshots_warehouse ON shift_zone_snapshots(warehouse_id, snapshot_type);
+
+CREATE TABLE IF NOT EXISTS shift_zone_snapshot_items (
+    id BIGSERIAL PRIMARY KEY,
+    snapshot_id BIGINT NOT NULL REFERENCES shift_zone_snapshots(id) ON DELETE CASCADE,
+    product_id INTEGER NOT NULL REFERENCES warehouse_products(id) ON DELETE CASCADE,
+    counted_quantity INTEGER NOT NULL,
+    system_quantity INTEGER NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    UNIQUE(snapshot_id, product_id)
+);
+CREATE INDEX IF NOT EXISTS idx_shift_zone_snapshot_items_snapshot ON shift_zone_snapshot_items(snapshot_id);
+CREATE INDEX IF NOT EXISTS idx_shift_zone_snapshot_items_product ON shift_zone_snapshot_items(product_id);
 
 -- 4. Operation Logs
 CREATE TABLE IF NOT EXISTS operation_logs (

@@ -22,7 +22,7 @@ const AVAILABLE_PERMISSIONS = [
 ];
 
 export async function GET(
-    request: Request,
+    _request: Request,
     { params }: { params: Promise<{ clubId: string }> }
 ) {
     try {

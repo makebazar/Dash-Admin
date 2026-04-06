@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
+import { Switch } from "@/components/ui/switch"
 import { createWarehouse, updateWarehouse, deleteWarehouse, Warehouse } from "../actions"
 import { useParams } from "next/navigation"
 import { useUiDialogs } from "./useUiDialogs"
@@ -40,6 +41,8 @@ export function WarehousesTab({ warehouses, employees, currentUserId }: Warehous
                         name,
                         address: editingWarehouse.address || undefined,
                         type: editingWarehouse.type || 'GENERAL',
+                        shift_zone_key: editingWarehouse.shift_zone_key || null,
+                        shift_accountability_enabled: Boolean(editingWarehouse.shift_accountability_enabled),
                         contact_info: editingWarehouse.contact_info || undefined,
                         characteristics: editingWarehouse.characteristics || undefined,
                         is_active: editingWarehouse.is_active ?? true
@@ -50,6 +53,8 @@ export function WarehousesTab({ warehouses, employees, currentUserId }: Warehous
                         name,
                         address: editingWarehouse.address || undefined,
                         type: editingWarehouse.type || 'GENERAL',
+                        shift_zone_key: editingWarehouse.shift_zone_key || null,
+                        shift_accountability_enabled: Boolean(editingWarehouse.shift_accountability_enabled),
                         contact_info: editingWarehouse.contact_info || undefined,
                         characteristics: editingWarehouse.characteristics || undefined
                     }
@@ -84,7 +89,7 @@ export function WarehousesTab({ warehouses, employees, currentUserId }: Warehous
     }
 
     const openCreate = () => {
-        setEditingWarehouse({ name: '', is_active: true })
+        setEditingWarehouse({ name: '', is_active: true, shift_accountability_enabled: false, shift_zone_key: null })
         setIsDialogOpen(true)
     }
 
@@ -136,6 +141,14 @@ export function WarehousesTab({ warehouses, employees, currentUserId }: Warehous
                                 <Info className="h-4 w-4 text-slate-400" />
                                 <span>Тип: {wh.type === 'GENERAL' ? 'Общий' : wh.type}</span>
                             </div>
+                            {wh.shift_accountability_enabled && wh.shift_zone_key && (
+                                <div className="flex items-center gap-2">
+                                    <Badge variant="outline" className="text-[10px]">
+                                        {wh.shift_zone_key === 'BAR' ? 'Бар' : wh.shift_zone_key === 'FRIDGE' ? 'Холодильник' : wh.shift_zone_key === 'SHOWCASE' ? 'Витрина' : 'Подсобка'}
+                                    </Badge>
+                                    <span className="text-xs text-slate-500">Участвует в сменной ответственности</span>
+                                </div>
+                            )}
                         </div>
                     </div>
                 ))}
@@ -162,6 +175,43 @@ export function WarehousesTab({ warehouses, employees, currentUserId }: Warehous
                                 required
                                 placeholder="Например: Бар"
                             />
+                        </div>
+
+                        <div className="space-y-3 rounded-xl border p-4">
+                            <div className="flex items-center justify-between gap-3">
+                                <div>
+                                    <Label className="text-sm font-medium">Сменная ответственность</Label>
+                                    <p className="text-xs text-muted-foreground">
+                                        Использовать этот склад как зону при приемке и сдаче смены.
+                                    </p>
+                                </div>
+                                <Switch
+                                    checked={Boolean(editingWarehouse?.shift_accountability_enabled)}
+                                    onCheckedChange={(checked) => setEditingWarehouse(prev => ({ ...prev!, shift_accountability_enabled: checked }))}
+                                />
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label>Тип зоны</Label>
+                                <Select
+                                    value={editingWarehouse?.shift_zone_key || "NONE"}
+                                    onValueChange={(value) => setEditingWarehouse(prev => ({
+                                        ...prev!,
+                                        shift_zone_key: value === "NONE" ? null : value as Warehouse["shift_zone_key"]
+                                    }))}
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Выберите тип зоны" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="NONE">Не выбрано</SelectItem>
+                                        <SelectItem value="BAR">Бар</SelectItem>
+                                        <SelectItem value="FRIDGE">Холодильник</SelectItem>
+                                        <SelectItem value="SHOWCASE">Витрина</SelectItem>
+                                        <SelectItem value="BACKROOM">Подсобка</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
                         </div>
 
                         <DialogFooter>

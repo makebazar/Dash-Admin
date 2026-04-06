@@ -68,6 +68,36 @@ export function ProductsTab({ products, categories, warehouses, currentUserId, p
     const [isPending, startTransition] = useTransition()
     const { confirmAction, showMessage, Dialogs } = useUiDialogs()
 
+    const getHistoryTypeMeta = (log: any) => {
+        if (log.related_entity_type === "TRANSFER") {
+            return {
+                label: log.change_amount > 0 ? "Приход по перемещению" : "Расход по перемещению",
+                className: log.change_amount > 0 ? "text-blue-700 border-blue-200 bg-blue-50" : "text-indigo-700 border-indigo-200 bg-indigo-50"
+            }
+        }
+
+        switch (log.type) {
+            case "SUPPLY":
+                return { label: "Поставка", className: "text-emerald-700 border-emerald-200 bg-emerald-50" }
+            case "SALE":
+                return { label: "Продажа", className: "text-red-700 border-red-200 bg-red-50" }
+            case "RETURN":
+                return { label: "Возврат", className: "text-violet-700 border-violet-200 bg-violet-50" }
+            case "INVENTORY_GAIN":
+                return { label: "Излишек инв.", className: "text-green-700 border-green-200 bg-green-50" }
+            case "INVENTORY_LOSS":
+                return { label: "Недостача инв.", className: "text-amber-700 border-amber-200 bg-amber-50" }
+            case "INVENTORY_CORRECTION":
+                return { label: "Коррекция инв.", className: "text-orange-700 border-orange-200 bg-orange-50" }
+            case "WRITE_OFF":
+                return { label: "Списание", className: "text-slate-700 border-slate-200 bg-slate-100" }
+            case "ADJUSTMENT":
+                return { label: "Ручная корректировка", className: "text-slate-700 border-slate-200 bg-slate-100" }
+            default:
+                return { label: log.type || "Движение", className: "text-slate-700 border-slate-200 bg-slate-100" }
+        }
+    }
+
     // Filter Logic
     const filteredProducts = products.filter(p => {
         const matchesSearch = 
@@ -1300,19 +1330,16 @@ export function ProductsTab({ products, categories, warehouses, currentUserId, p
                             </TableHeader>
                             <TableBody>
                                 {historyDialog.logs.length > 0 ? (
-                                    historyDialog.logs.map((log: any) => (
+                                    historyDialog.logs.map((log: any) => {
+                                        const meta = getHistoryTypeMeta(log)
+                                        return (
                                         <TableRow key={log.id}>
                                             <TableCell className="text-xs">
                                                 {format(new Date(log.created_at), 'dd MMM yyyy HH:mm', { locale: ru })}
                                             </TableCell>
                                             <TableCell>
-                                                <Badge variant="outline" className="text-xs">
-                                                    {log.type === 'SUPPLY' && 'Поставка'}
-                                                    {log.type === 'SALE' && 'Продажа'}
-                                                    {log.type === 'INVENTORY_ADJUSTMENT' && 'Инвентаризация'}
-                                                    {log.type === 'WRITE_OFF' && 'Списание'}
-                                                    {log.type === 'MANUAL_EDIT' && 'Ред. вручную'}
-                                                    {!['SUPPLY', 'SALE', 'INVENTORY_ADJUSTMENT', 'WRITE_OFF', 'MANUAL_EDIT'].includes(log.type) && log.type}
+                                                <Badge variant="outline" className={cn("text-xs", meta.className)}>
+                                                    {meta.label}
                                                 </Badge>
                                             </TableCell>
                                             <TableCell className={log.change_amount > 0 ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
@@ -1324,7 +1351,7 @@ export function ProductsTab({ products, categories, warehouses, currentUserId, p
                                                 {log.reason || '-'}
                                             </TableCell>
                                         </TableRow>
-                                    ))
+                                    )})
                                 ) : (
                                     <TableRow>
                                         <TableCell colSpan={6} className="text-center text-muted-foreground h-24">
