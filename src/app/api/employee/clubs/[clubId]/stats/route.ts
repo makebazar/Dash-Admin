@@ -216,15 +216,15 @@ export async function GET(
         const totalManualMaintBonus = parseFloat(monthlyBonusRes.rows[0]?.total_monthly_bonus || '0');
 
         const barDeductionsRes = await query(
-            `SELECT COALESCE(SUM(ABS(m.change_amount) * p.selling_price), 0) as total
-             FROM warehouse_stock_movements m
-             JOIN warehouse_products p ON p.id = m.product_id
-             WHERE m.club_id = $1
-               AND m.user_id = $2
-               AND m.type = 'SALE'
-               AND m.reason LIKE 'В счет ЗП%'
-               AND m.created_at >= $3
-               AND m.created_at <= $4`,
+            `SELECT COALESCE(SUM(i.quantity * i.selling_price_snapshot), 0) as total
+             FROM shift_receipts r
+             JOIN shift_receipt_items i ON i.receipt_id = r.id
+             WHERE r.club_id = $1
+               AND r.salary_target_user_id = $2
+               AND r.payment_type = 'salary'
+               AND r.voided_at IS NULL
+               AND r.created_at >= $3
+               AND r.created_at <= $4`,
             [clubId, userId, startOfMonth, endOfMonth]
         );
         const totalBarDeductions = parseFloat(barDeductionsRes.rows[0]?.total || '0');

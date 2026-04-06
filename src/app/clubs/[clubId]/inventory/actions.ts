@@ -59,12 +59,104 @@ export type Warehouse = {
     name: string
     address?: string
     type: string
+    shift_zone_key?: 'BAR' | 'FRIDGE' | 'SHOWCASE' | 'BACKROOM' | null
+    shift_accountability_enabled?: boolean
     is_default?: boolean
     responsible_user_id?: string
     responsible_name?: string
     contact_info?: string
     characteristics?: any
     is_active: boolean
+}
+
+export type ShiftZoneSnapshotType = 'OPEN' | 'CLOSE'
+
+export type ShiftZoneSnapshotDraftItem = {
+    warehouse_id: number
+    warehouse_name: string
+    shift_zone_key: 'BAR' | 'FRIDGE' | 'SHOWCASE' | 'BACKROOM'
+    shift_zone_label: string
+    product_id: number
+    product_name: string
+    barcode?: string | null
+    barcodes?: string[] | null
+    counted_quantity: number
+    system_quantity: number
+    selling_price: number
+}
+
+export type ShiftZoneDiscrepancyRow = {
+    warehouse_id: number
+    warehouse_name: string
+    shift_zone_key: 'BAR' | 'FRIDGE' | 'SHOWCASE' | 'BACKROOM'
+    shift_zone_label: string
+    product_id: number
+    product_name: string
+    selling_price: number
+    opening_counted_quantity: number | null
+    opening_system_quantity: number | null
+    inflow_quantity: number
+    outflow_quantity: number
+    expected_closing_quantity: number | null
+    actual_closing_quantity: number | null
+    difference_quantity: number | null
+    responsibility_type: 'SHIFT_RESPONSIBILITY' | 'INHERITED_FROM_PREVIOUS_SHIFT' | 'PROCESS_GAP'
+    responsibility_label: string
+    explanation: string
+}
+
+export type ShiftAccountabilitySetupStatus = {
+    mode: 'DISABLED' | 'WAREHOUSE'
+    enabled: boolean
+    ready: boolean
+    warehouses_count: number
+    configured_warehouses: Array<{
+        id: number
+        name: string
+        shift_zone_key: 'BAR' | 'FRIDGE' | 'SHOWCASE' | 'BACKROOM'
+        shift_zone_label: string
+    }>
+    issues: string[]
+}
+
+export type ShiftZoneOverviewShift = {
+    shift_id: string
+    employee_name: string
+    check_in: string
+    check_out: string | null
+    total_zones: number
+    open_zones_count: number
+    close_zones_count: number
+    discrepancy_items_count: number
+    discrepancy_total_abs: number
+    status: 'COMPLETE' | 'OPEN_ONLY' | 'CLOSE_ONLY' | 'PARTIAL'
+    last_snapshot_at: string | null
+}
+
+export type ShiftZoneOverviewZone = {
+    warehouse_id: number
+    warehouse_name: string
+    shift_zone_key: 'BAR' | 'FRIDGE' | 'SHOWCASE' | 'BACKROOM'
+    shift_zone_label: string
+    open_snapshots_count: number
+    close_snapshots_count: number
+    discrepancy_shifts_count: number
+    discrepancy_items_count: number
+    discrepancy_total_abs: number
+    latest_open_at: string | null
+    latest_close_at: string | null
+}
+
+export type ShiftZoneOverview = {
+    summary: {
+        recent_shifts_count: number
+        configured_zones_count: number
+        complete_shifts_count: number
+        discrepancy_shifts_count: number
+        discrepancy_total_abs: number
+    }
+    recent_shifts: ShiftZoneOverviewShift[]
+    zones: ShiftZoneOverviewZone[]
 }
 
 async function assertSessionUserCanAccessClub(clubId: string, sessionUserId: string) {
@@ -129,6 +221,26 @@ function normalizeAllowedWarehouseIds(raw: any): number[] {
                 .filter((value) => Number.isInteger(value) && value > 0)
         )
     )
+}
+
+function normalizeShiftZoneKey(raw: any): 'BAR' | 'FRIDGE' | 'SHOWCASE' | 'BACKROOM' | null {
+    if (raw === 'BAR' || raw === 'FRIDGE' || raw === 'SHOWCASE' || raw === 'BACKROOM') return raw
+    return null
+}
+
+function getShiftZoneLabel(zoneKey: 'BAR' | 'FRIDGE' | 'SHOWCASE' | 'BACKROOM') {
+    switch (zoneKey) {
+        case 'BAR':
+            return 'Бар'
+        case 'FRIDGE':
+            return 'Холодильник'
+        case 'SHOWCASE':
+            return 'Витрина'
+        case 'BACKROOM':
+            return 'Подсобка'
+        default:
+            return zoneKey
+    }
 }
 
 async function getInventoryAccessScope(client: any, clubId: string, userId: string): Promise<InventoryAccessScope> {
@@ -236,10 +348,12 @@ export type SupplyItem = {
 
 export type Inventory = {
     id: number
-    status: 'OPEN' | 'CLOSED'
+    status: 'OPEN' | 'CLOSED' | 'CANCELED'
     started_at: string
     closed_at: string | null
+    canceled_at?: string | null
     shift_id?: string | null
+    sales_capture_mode?: 'INVENTORY' | 'SHIFT' | null
     target_metric_key: string | null
     warehouse_id: number | null
     warehouse_name?: string
@@ -264,7 +378,29 @@ export type InventoryItem = {
     cost_price_snapshot: number
     selling_price_snapshot: number
     calculated_revenue: number | null
+    adjusted_expected_stock?: number | null
+    stock_before_close?: number | null
+    applied_stock_delta?: number | null
+    added_manually?: boolean
+    counted_by?: string | null
+    counted_at?: string | null
     last_modified?: number
+}
+
+export type InventoryPostCloseCorrection = {
+    id: number
+    inventory_id: number
+    product_id: number
+    product_name: string
+    old_actual_stock: number
+    new_actual_stock: number
+    difference_before: number | null
+    difference_after: number
+    stock_delta: number
+    reason: string | null
+    created_by: string
+    created_by_name: string | null
+    created_at: string
 }
 
 // --- CATEGORIES ---
@@ -371,28 +507,933 @@ export async function getWarehouses(clubId: string) {
     }
 }
 
-export async function createWarehouse(clubId: string, userId: string, data: { name: string, address?: string, type: string, contact_info?: string, characteristics?: any }) {
+export async function createWarehouse(clubId: string, userId: string, data: {
+    name: string
+    address?: string
+    type: string
+    contact_info?: string
+    characteristics?: any
+    shift_zone_key?: 'BAR' | 'FRIDGE' | 'SHOWCASE' | 'BACKROOM' | null
+    shift_accountability_enabled?: boolean
+}) {
     await assertUserCanAccessClub(clubId, userId)
+    const shiftZoneKey = normalizeShiftZoneKey(data.shift_zone_key)
     const res = await query(`
-        INSERT INTO warehouses (club_id, name, address, type, contact_info, characteristics)
-        VALUES ($1, $2, $3, $4, $5, $6)
+        INSERT INTO warehouses (club_id, name, address, type, shift_zone_key, shift_accountability_enabled, contact_info, characteristics)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         RETURNING id
-    `, [clubId, data.name, data.address, data.type, data.contact_info, data.characteristics || {}])
+    `, [clubId, data.name, data.address, data.type, shiftZoneKey, Boolean(data.shift_accountability_enabled && shiftZoneKey), data.contact_info, data.characteristics || {}])
 
     await logOperation(clubId, userId, 'CREATE_WAREHOUSE', 'WAREHOUSE', res.rows[0].id, data)
     revalidatePath(`/clubs/${clubId}/inventory`)
 }
 
-export async function updateWarehouse(id: number, clubId: string, userId: string, data: { name: string, address?: string, type: string, contact_info?: string, characteristics?: any, is_active: boolean }) {
+export async function updateWarehouse(id: number, clubId: string, userId: string, data: {
+    name: string
+    address?: string
+    type: string
+    contact_info?: string
+    characteristics?: any
+    is_active: boolean
+    shift_zone_key?: 'BAR' | 'FRIDGE' | 'SHOWCASE' | 'BACKROOM' | null
+    shift_accountability_enabled?: boolean
+}) {
     await assertUserCanAccessClub(clubId, userId)
+    const shiftZoneKey = normalizeShiftZoneKey(data.shift_zone_key)
     await query(`
         UPDATE warehouses
-        SET name = $1, address = $2, type = $3, contact_info = $4, characteristics = $5, is_active = $6
-        WHERE id = $7
-    `, [data.name, data.address, data.type, data.contact_info, data.characteristics || {}, data.is_active, id])
+        SET name = $1, address = $2, type = $3, shift_zone_key = $4, shift_accountability_enabled = $5, contact_info = $6, characteristics = $7, is_active = $8
+        WHERE id = $9
+    `, [data.name, data.address, data.type, shiftZoneKey, Boolean(data.shift_accountability_enabled && shiftZoneKey), data.contact_info, data.characteristics || {}, data.is_active, id])
 
     await logOperation(clubId, userId, 'UPDATE_WAREHOUSE', 'WAREHOUSE', id, data)
     revalidatePath(`/clubs/${clubId}/inventory`)
+}
+
+async function getShiftAccountabilityWarehousesInternal(client: any, clubId: string, userId: string) {
+    const scope = await getInventoryAccessScope(client, clubId, userId)
+    if (!scope.canManageInventory && scope.allowedWarehouseIds.length === 0) {
+        return []
+    }
+
+    const params: any[] = [clubId]
+    let warehouseFilter = ""
+    if (!scope.canManageInventory) {
+        params.push(scope.allowedWarehouseIds)
+        warehouseFilter = " AND w.id = ANY($2)"
+    }
+
+    const res = await client.query(
+        `
+        SELECT w.*
+        FROM warehouses w
+        WHERE w.club_id = $1
+          AND w.is_active = true
+          AND w.shift_accountability_enabled = true
+          AND w.shift_zone_key IS NOT NULL
+          ${warehouseFilter}
+        ORDER BY
+          CASE w.shift_zone_key
+            WHEN 'BAR' THEN 1
+            WHEN 'FRIDGE' THEN 2
+            WHEN 'SHOWCASE' THEN 3
+            WHEN 'BACKROOM' THEN 4
+            ELSE 99
+          END,
+          w.name
+        `,
+        params
+    )
+
+    return res.rows
+        .map((row: any) => ({
+            ...row,
+            shift_zone_key: normalizeShiftZoneKey(row.shift_zone_key)
+        }))
+        .filter((row: any) => row.shift_zone_key) as Array<Warehouse & { shift_zone_key: 'BAR' | 'FRIDGE' | 'SHOWCASE' | 'BACKROOM' }>
+}
+
+async function getShiftForZoneAccountability(client: any, clubId: string, shiftId: string, sessionUserId: string) {
+    const shiftRes = await client.query(
+        `
+        SELECT s.id, s.user_id, s.club_id, s.check_in, s.check_out, s.status
+        FROM shifts s
+        WHERE s.id = $1 AND s.club_id = $2
+        LIMIT 1
+        `,
+        [shiftId, clubId]
+    )
+    if (shiftRes.rowCount === 0) throw new Error("Смена не найдена")
+
+    const shift = shiftRes.rows[0]
+    const scope = await getInventoryAccessScope(client, clubId, sessionUserId)
+    if (!scope.canManageInventory && String(shift.user_id) !== String(sessionUserId)) {
+        throw new Error("Недостаточно прав для работы с этой сменой")
+    }
+
+    return shift
+}
+
+export async function getShiftAccountabilityWarehouses(clubId: string) {
+    const sessionUserId = await requireClubAccess(clubId)
+    const client = await import("@/db").then(m => m.getClient())
+    try {
+        const warehouses = await getShiftAccountabilityWarehousesInternal(client, clubId, sessionUserId)
+        return warehouses.map((warehouse) => ({
+            ...warehouse,
+            shift_zone_label: getShiftZoneLabel(warehouse.shift_zone_key!)
+        }))
+    } finally {
+        client.release()
+    }
+}
+
+export async function getShiftAccountabilitySetupStatus(clubId: string): Promise<ShiftAccountabilitySetupStatus> {
+    const sessionUserId = await requireClubAccess(clubId)
+    const client = await import("@/db").then(m => m.getClient())
+    try {
+        const clubRes = await client.query(
+            `SELECT inventory_settings FROM clubs WHERE id = $1 LIMIT 1`,
+            [clubId]
+        )
+        const settings = clubRes.rows[0]?.inventory_settings || {}
+        const mode: ShiftAccountabilitySetupStatus["mode"] =
+            settings?.shift_accountability_mode === 'WAREHOUSE' ? 'WAREHOUSE' : 'DISABLED'
+
+        const warehouses = await getShiftAccountabilityWarehousesInternal(client, clubId, sessionUserId)
+        const issues: string[] = []
+
+        if (mode === 'WAREHOUSE') {
+            if (warehouses.length === 0) {
+                issues.push("Не настроены склады со сменной ответственностью.")
+            }
+
+            const configuredZoneKeys = new Set(warehouses.map((warehouse) => warehouse.shift_zone_key))
+            const hasBarZone = configuredZoneKeys.has('BAR')
+            const hasLegacyBarPair = configuredZoneKeys.has('FRIDGE') && configuredZoneKeys.has('SHOWCASE')
+            if (!hasBarZone && !hasLegacyBarPair) {
+                issues.push("Настрой барную зону: либо один или несколько складов с типом 'Бар', либо пару 'Холодильник' + 'Витрина'.")
+            }
+
+            const enabledIds = new Set(warehouses.map((warehouse) => Number(warehouse.id)))
+            const allowedWarehouseIds = normalizeAllowedWarehouseIds(settings?.employee_allowed_warehouse_ids)
+            const inaccessible = warehouses.filter((warehouse) => !allowedWarehouseIds.includes(Number(warehouse.id)))
+            if (allowedWarehouseIds.length === 0) {
+                issues.push("Для сотрудников не выбраны доступные склады инвентаризации.")
+            } else if (inaccessible.length > 0) {
+                issues.push("Не все accountability-склады включены в доступные сотрудникам склады.")
+            }
+
+            if ((settings?.inventory_timing || 'END_SHIFT') === 'START_SHIFT' && settings?.inventory_required) {
+                issues.push("Обязательная стартовая ревизия включена одновременно с системой сменной ответственности.")
+            }
+
+            // Extra safety: configuration should not be empty after access filtering.
+            if (enabledIds.size === 0) {
+                issues.push("Для текущего профиля не видно ни одной настроенной зоны ответственности.")
+            }
+        }
+
+        return {
+            mode,
+            enabled: mode === 'WAREHOUSE',
+            ready: mode === 'WAREHOUSE' ? issues.length === 0 : true,
+            warehouses_count: warehouses.length,
+            configured_warehouses: warehouses.map((warehouse) => ({
+                id: Number(warehouse.id),
+                name: warehouse.name,
+                shift_zone_key: warehouse.shift_zone_key!,
+                shift_zone_label: getShiftZoneLabel(warehouse.shift_zone_key!)
+            })),
+            issues
+        }
+    } finally {
+        client.release()
+    }
+}
+
+export async function getShiftZoneSnapshotDraft(clubId: string, shiftId: string, snapshotType: ShiftZoneSnapshotType) {
+    const sessionUserId = await requireClubAccess(clubId)
+    const client = await import("@/db").then(m => m.getClient())
+    try {
+        const shift = await getShiftForZoneAccountability(client, clubId, shiftId, sessionUserId)
+        const warehouses = await getShiftAccountabilityWarehousesInternal(client, clubId, sessionUserId)
+        if (warehouses.length === 0) return [] as ShiftZoneSnapshotDraftItem[]
+
+        const shiftWindowEnd = shift.check_out || new Date().toISOString()
+        const result: ShiftZoneSnapshotDraftItem[] = []
+
+        for (const warehouse of warehouses) {
+            const rows = await client.query(
+                `
+                WITH relevant_products AS (
+                    SELECT product_id
+                    FROM warehouse_stock
+                    WHERE warehouse_id = $2
+                      AND quantity <> 0
+
+                    UNION
+
+                    SELECT sii.product_id
+                    FROM shift_zone_snapshot_items sii
+                    JOIN shift_zone_snapshots ss ON ss.id = sii.snapshot_id
+                    WHERE ss.shift_id = $1
+                      AND ss.warehouse_id = $2
+                      AND ss.snapshot_type IN ('OPEN', $3)
+
+                    UNION
+
+                    SELECT DISTINCT m.product_id
+                    FROM warehouse_stock_movements m
+                    WHERE m.club_id = $4
+                      AND m.warehouse_id = $2
+                      AND m.created_at >= $5
+                      AND m.created_at <= $6
+                )
+                SELECT
+                    p.id as product_id,
+                    p.name as product_name,
+                    p.barcode,
+                    p.barcodes,
+                    COALESCE(ws.quantity, 0) as system_quantity,
+                    COALESCE(sii.counted_quantity, COALESCE(ws.quantity, 0)) as counted_quantity,
+                    COALESCE(p.selling_price, 0) as selling_price
+                FROM relevant_products rp
+                JOIN warehouse_products p ON p.id = rp.product_id AND p.club_id = $4
+                LEFT JOIN warehouse_stock ws
+                    ON ws.warehouse_id = $2
+                   AND ws.product_id = p.id
+                LEFT JOIN shift_zone_snapshots ss
+                    ON ss.shift_id = $1
+                   AND ss.warehouse_id = $2
+                   AND ss.snapshot_type = $3
+                LEFT JOIN shift_zone_snapshot_items sii
+                    ON sii.snapshot_id = ss.id
+                   AND sii.product_id = p.id
+                WHERE p.is_active = true
+                ORDER BY p.name
+                `,
+                [shiftId, warehouse.id, snapshotType, clubId, shift.check_in, shiftWindowEnd]
+            )
+
+            for (const row of rows.rows) {
+                result.push({
+                    warehouse_id: warehouse.id,
+                    warehouse_name: warehouse.name,
+                    shift_zone_key: warehouse.shift_zone_key!,
+                    shift_zone_label: getShiftZoneLabel(warehouse.shift_zone_key!),
+                    product_id: Number(row.product_id),
+                    product_name: row.product_name,
+                    barcode: row.barcode,
+                    barcodes: row.barcodes,
+                    counted_quantity: Number(row.counted_quantity || 0),
+                    system_quantity: Number(row.system_quantity || 0),
+                    selling_price: Number(row.selling_price || 0),
+                })
+            }
+        }
+
+        return result
+    } finally {
+        client.release()
+    }
+}
+
+export type HandoverSourceCandidate = {
+    shift_id: string
+    employee_id: string | null
+    employee_name: string
+    check_in: string
+    check_out: string
+}
+
+export async function getHandoverSourceCandidates(clubId: string, shiftId: string) {
+    const sessionUserId = await requireClubAccess(clubId)
+    const client = await import("@/db").then(m => m.getClient())
+    try {
+        const shift = await getShiftForZoneAccountability(client, clubId, shiftId, sessionUserId)
+        const res = await client.query(
+            `
+            SELECT
+                s.id as shift_id,
+                s.user_id as employee_id,
+                COALESCE(u.full_name, 'Неизвестный сотрудник') as employee_name,
+                s.check_in,
+                s.check_out
+            FROM shifts s
+            LEFT JOIN users u ON u.id = s.user_id
+            WHERE s.club_id = $1
+              AND s.id <> $2
+              AND s.check_out IS NOT NULL
+              AND s.check_out <= $3
+            ORDER BY s.check_out DESC, s.check_in DESC, s.id DESC
+            LIMIT 20
+            `,
+            [clubId, shiftId, shift.check_in]
+        )
+
+        return res.rows.map((row: any) => ({
+            shift_id: String(row.shift_id),
+            employee_id: row.employee_id ? String(row.employee_id) : null,
+            employee_name: String(row.employee_name || 'Неизвестный сотрудник'),
+            check_in: String(row.check_in),
+            check_out: String(row.check_out),
+        })) as HandoverSourceCandidate[]
+    } finally {
+        client.release()
+    }
+}
+
+export async function saveShiftZoneSnapshot(
+    clubId: string,
+    shiftId: string,
+    snapshotType: ShiftZoneSnapshotType,
+    payload: Array<{ warehouse_id: number, items: Array<{ product_id: number, counted_quantity: number }> }>,
+    options?: { accepted_from_shift_id?: string | null }
+) {
+    const sessionUserId = await requireClubAccess(clubId)
+    const client = await import("@/db").then(m => m.getClient())
+    try {
+        await client.query('BEGIN')
+        const shift = await getShiftForZoneAccountability(client, clubId, shiftId, sessionUserId)
+        const warehouses = await getShiftAccountabilityWarehousesInternal(client, clubId, sessionUserId)
+        const allowedWarehouseIds = new Set(warehouses.map(warehouse => Number(warehouse.id)))
+        const normalizedPayload = payload
+            .map((warehouse) => ({
+                warehouse_id: Number(warehouse.warehouse_id),
+                items: (warehouse.items || [])
+                    .map((item) => ({
+                        product_id: Number(item.product_id),
+                        counted_quantity: Math.max(0, Math.trunc(Number(item.counted_quantity) || 0))
+                    }))
+                    .filter((item) => Number.isInteger(item.product_id) && item.product_id > 0)
+            }))
+            .filter((warehouse) => allowedWarehouseIds.has(warehouse.warehouse_id))
+
+        if (normalizedPayload.length === 0) {
+            throw new Error("Нет зон для сохранения приемки/сдачи")
+        }
+
+        const touchedProductIds = new Set<number>()
+        const acceptedFrom = snapshotType === 'OPEN'
+            ? await findAcceptedFromShift(client, clubId, shiftId, shift.check_in, options?.accepted_from_shift_id || null)
+            : { accepted_from_shift_id: null as string | null, accepted_from_employee_id: null as string | null }
+
+        const shouldSyncStock = snapshotType === 'OPEN' || snapshotType === 'CLOSE'
+
+        for (const warehousePayload of normalizedPayload) {
+            const snapshotRes = await client.query(
+                `
+                INSERT INTO shift_zone_snapshots (
+                    club_id,
+                    shift_id,
+                    employee_id,
+                    warehouse_id,
+                    snapshot_type,
+                    accepted_from_shift_id,
+                    accepted_from_employee_id
+                )
+                VALUES ($1, $2, $3, $4, $5, $6, $7)
+                ON CONFLICT (shift_id, warehouse_id, snapshot_type)
+                DO UPDATE SET
+                    employee_id = EXCLUDED.employee_id,
+                    accepted_from_shift_id = EXCLUDED.accepted_from_shift_id,
+                    accepted_from_employee_id = EXCLUDED.accepted_from_employee_id,
+                    created_at = NOW()
+                RETURNING id
+                `,
+                [
+                    clubId,
+                    shiftId,
+                    shift.user_id,
+                    warehousePayload.warehouse_id,
+                    snapshotType,
+                    acceptedFrom.accepted_from_shift_id,
+                    acceptedFrom.accepted_from_employee_id,
+                ]
+            )
+            const snapshotId = Number(snapshotRes.rows[0].id)
+
+            if (shouldSyncStock) {
+                const existingAdjustmentRes = await client.query(
+                    `
+                    SELECT id, product_id, change_amount
+                    FROM warehouse_stock_movements
+                    WHERE club_id = $1
+                      AND warehouse_id = $2
+                      AND related_entity_type = 'SHIFT_ZONE_SNAPSHOT'
+                      AND related_entity_id = $3
+                    ORDER BY id
+                    `,
+                    [clubId, warehousePayload.warehouse_id, snapshotId]
+                )
+
+                for (const movement of existingAdjustmentRes.rows) {
+                    await applyWarehouseStockDelta(
+                        client,
+                        warehousePayload.warehouse_id,
+                        Number(movement.product_id),
+                        -Number(movement.change_amount || 0)
+                    )
+                    touchedProductIds.add(Number(movement.product_id))
+                }
+
+                if (existingAdjustmentRes.rowCount) {
+                    await client.query(
+                        `
+                        DELETE FROM warehouse_stock_movements
+                        WHERE club_id = $1
+                          AND warehouse_id = $2
+                          AND related_entity_type = 'SHIFT_ZONE_SNAPSHOT'
+                          AND related_entity_id = $3
+                        `,
+                        [clubId, warehousePayload.warehouse_id, snapshotId]
+                    )
+                }
+            }
+
+            await client.query(`DELETE FROM shift_zone_snapshot_items WHERE snapshot_id = $1`, [snapshotId])
+
+            if (warehousePayload.items.length === 0) continue
+
+            const productIds = warehousePayload.items.map(item => item.product_id)
+            const productRes = await client.query(
+                `
+                SELECT
+                    p.id,
+                    COALESCE(ws.quantity, 0) as system_quantity
+                FROM warehouse_products p
+                LEFT JOIN warehouse_stock ws
+                    ON ws.warehouse_id = $2
+                   AND ws.product_id = p.id
+                WHERE p.club_id = $1
+                  AND p.id = ANY($3)
+                `,
+                [clubId, warehousePayload.warehouse_id, productIds]
+            )
+            if (productRes.rowCount !== productIds.length) {
+                throw new Error("Некоторые товары для снимка зоны не найдены")
+            }
+            const systemMap = new Map<number, number>(
+                productRes.rows.map((row: any) => [Number(row.id), Number(row.system_quantity || 0)])
+            )
+
+            for (const item of warehousePayload.items) {
+                const systemQuantity = systemMap.get(item.product_id) || 0
+                touchedProductIds.add(item.product_id)
+                await client.query(
+                    `
+                    INSERT INTO shift_zone_snapshot_items (snapshot_id, product_id, counted_quantity, system_quantity)
+                    VALUES ($1, $2, $3, $4)
+                    `,
+                    [snapshotId, item.product_id, item.counted_quantity, systemQuantity]
+                )
+
+                if (shouldSyncStock) {
+                    const stockDelta = item.counted_quantity - systemQuantity
+                    if (stockDelta !== 0) {
+                        const { previousStock, newStock } = await applyWarehouseStockDelta(
+                            client,
+                            warehousePayload.warehouse_id,
+                            item.product_id,
+                            stockDelta
+                        )
+
+                        await logStockMovement(
+                            client,
+                            clubId,
+                            sessionUserId,
+                            item.product_id,
+                            stockDelta,
+                            previousStock,
+                            newStock,
+                            stockDelta > 0 ? 'INVENTORY_GAIN' : 'INVENTORY_LOSS',
+                            stockDelta > 0
+                                ? `${snapshotType === 'OPEN' ? 'Приемка остатков' : 'Сдача остатков'} #${snapshotId}: найден излишек`
+                                : `${snapshotType === 'OPEN' ? 'Приемка остатков' : 'Сдача остатков'} #${snapshotId}: подтверждена недостача`,
+                            'SHIFT_ZONE_SNAPSHOT',
+                            snapshotId,
+                            shiftId,
+                            warehousePayload.warehouse_id,
+                            null
+                        )
+                    }
+                }
+            }
+        }
+
+        await syncProductsCurrentStock(client, clubId, touchedProductIds)
+
+        await client.query('COMMIT')
+        revalidatePath(`/employee/clubs/${clubId}`)
+        revalidatePath(`/clubs/${clubId}/shifts/${shiftId}`)
+        revalidatePath(`/clubs/${clubId}/inventory`)
+        return { ok: true as const }
+    } catch (error) {
+        await client.query('ROLLBACK')
+        throw error
+    } finally {
+        client.release()
+    }
+}
+
+async function getShiftZoneDiscrepancyReportInternal(client: any, clubId: string, shiftId: string, sessionUserId: string) {
+    const shift = await getShiftForZoneAccountability(client, clubId, shiftId, sessionUserId)
+    const warehouses = await getShiftAccountabilityWarehousesInternal(client, clubId, sessionUserId)
+    if (warehouses.length === 0) return [] as ShiftZoneDiscrepancyRow[]
+
+    const warehouseIds = warehouses.map(warehouse => Number(warehouse.id))
+    const warehouseById = new Map<number, Warehouse>(
+        warehouses.map((warehouse) => [Number(warehouse.id), warehouse as Warehouse])
+    )
+    const snapshotItemsRes = await client.query(
+        `
+        SELECT
+            ss.warehouse_id,
+            ss.snapshot_type,
+            sii.product_id,
+            sii.counted_quantity,
+            sii.system_quantity,
+            p.name as product_name,
+            p.selling_price
+        FROM shift_zone_snapshots ss
+        JOIN shift_zone_snapshot_items sii ON sii.snapshot_id = ss.id
+        JOIN warehouse_products p ON p.id = sii.product_id
+        WHERE ss.shift_id = $1
+          AND ss.warehouse_id = ANY($2)
+        `,
+        [shiftId, warehouseIds]
+    )
+
+    const movementRows = await client.query(
+        `
+            SELECT warehouse_id, product_id, change_amount, type, user_id, shift_id, related_entity_type
+        FROM warehouse_stock_movements
+        WHERE club_id = $1
+          AND warehouse_id = ANY($2)
+          AND created_at >= $3
+          AND created_at <= $4
+        `,
+        [clubId, warehouseIds, shift.check_in, shift.check_out || new Date().toISOString()]
+    )
+
+    const byKey = new Map<string, any>()
+    const ensureEntry = (warehouseId: number, productId: number, defaults?: Partial<any>) => {
+        const key = `${warehouseId}:${productId}`
+        if (!byKey.has(key)) {
+            const warehouse = warehouseById.get(warehouseId)
+            byKey.set(key, {
+                warehouse_id: warehouseId,
+                warehouse_name: warehouse?.name || `Склад #${warehouseId}`,
+                shift_zone_key: warehouse?.shift_zone_key || 'BACKROOM',
+                shift_zone_label: getShiftZoneLabel((warehouse?.shift_zone_key || 'BACKROOM') as 'BAR' | 'FRIDGE' | 'SHOWCASE' | 'BACKROOM'),
+                product_id: productId,
+                product_name: defaults?.product_name || `Товар #${productId}`,
+                selling_price: Number(defaults?.selling_price || 0),
+                opening_counted_quantity: null,
+                opening_system_quantity: null,
+                closing_counted_quantity: null,
+                closing_system_quantity: null,
+                inflow_quantity: 0,
+                outflow_quantity: 0,
+                has_process_gap: false,
+            })
+        }
+        if (defaults) {
+            Object.assign(byKey.get(key), defaults)
+        }
+        return byKey.get(key)
+    }
+
+    for (const row of snapshotItemsRes.rows) {
+            const entry = ensureEntry(Number(row.warehouse_id), Number(row.product_id), {
+                product_name: row.product_name,
+                selling_price: Number(row.selling_price || 0)
+            })
+        if (row.snapshot_type === 'OPEN') {
+            entry.opening_counted_quantity = Number(row.counted_quantity)
+            entry.opening_system_quantity = Number(row.system_quantity)
+        } else if (row.snapshot_type === 'CLOSE') {
+            entry.closing_counted_quantity = Number(row.counted_quantity)
+            entry.closing_system_quantity = Number(row.system_quantity)
+        }
+    }
+
+    for (const row of movementRows.rows) {
+        const entry = ensureEntry(Number(row.warehouse_id), Number(row.product_id))
+        const movementType = String(row.type || '')
+            const relatedEntityType = String(row.related_entity_type || '')
+        const amount = Number(row.change_amount || 0)
+        const isInventoryMovement = ['INVENTORY_GAIN', 'INVENTORY_LOSS', 'INVENTORY_CORRECTION'].includes(movementType)
+        const isManualGap = movementType === 'ADJUSTMENT'
+            const isShiftZoneSnapshotAdjustment = relatedEntityType === 'SHIFT_ZONE_SNAPSHOT'
+            const isOperationalMovement = !isInventoryMovement && !isManualGap && !isShiftZoneSnapshotAdjustment
+
+        if (isOperationalMovement) {
+            if (amount > 0) entry.inflow_quantity += amount
+            if (amount < 0) entry.outflow_quantity += Math.abs(amount)
+        }
+
+        if (
+            isInventoryMovement ||
+            isManualGap ||
+                isShiftZoneSnapshotAdjustment ||
+            !row.shift_id ||
+            String(row.shift_id) !== String(shiftId) ||
+            (row.user_id && String(row.user_id) !== String(shift.user_id))
+        ) {
+                if (isShiftZoneSnapshotAdjustment) continue
+            entry.has_process_gap = true
+        }
+    }
+
+    return Array.from(byKey.values())
+        .map((entry) => {
+            const openingCounted = entry.opening_counted_quantity
+            const closingCounted = entry.closing_counted_quantity
+            const hasOpening = openingCounted !== null
+            const hasClosing = closingCounted !== null
+            let expectedClosing: number | null = null
+            let difference: number | null = null
+
+            if (hasOpening) {
+                expectedClosing = openingCounted + entry.inflow_quantity - entry.outflow_quantity
+            }
+
+            if (hasOpening && hasClosing) {
+                difference = closingCounted - expectedClosing!
+            } else if (!hasOpening && hasClosing && entry.closing_system_quantity !== null) {
+                expectedClosing = Number(entry.closing_system_quantity)
+                difference = closingCounted - expectedClosing
+            } else if (hasOpening && !hasClosing && entry.opening_system_quantity !== null) {
+                expectedClosing = openingCounted
+                difference = openingCounted - Number(entry.opening_system_quantity)
+            }
+
+            let responsibilityType: ShiftZoneDiscrepancyRow['responsibility_type'] = 'SHIFT_RESPONSIBILITY'
+            let responsibilityLabel = 'Ответственность смены'
+            let explanation = 'Расхождение возникло внутри этой смены при чистой приемке зоны.'
+
+            if (!hasOpening && hasClosing) {
+                responsibilityType = 'PROCESS_GAP'
+                responsibilityLabel = 'Сдача без приемки'
+                explanation = `Зона сдана без стартовой приемки. Сравнение идет с системным остатком ${entry.closing_system_quantity ?? 0}.`
+            } else if (hasOpening && !hasClosing) {
+                responsibilityType = 'PROCESS_GAP'
+                responsibilityLabel = 'Только приемка'
+                explanation = `Есть стартовая приемка, но нет сдачи зоны. На старте уже было отклонение: по системе ${entry.opening_system_quantity ?? 0}, принято ${openingCounted}.`
+            } else if (openingCounted === null || closingCounted === null) {
+                responsibilityType = 'PROCESS_GAP'
+                responsibilityLabel = 'Сбой процесса'
+                explanation = 'Не хватает приемки или сдачи зоны, поэтому привязать расхождение к смене нельзя.'
+            } else if (entry.opening_system_quantity !== null && openingCounted !== entry.opening_system_quantity) {
+                responsibilityType = 'INHERITED_FROM_PREVIOUS_SHIFT'
+                responsibilityLabel = 'Наследовано со старта'
+                explanation = `На старте уже было расхождение: по системе ${entry.opening_system_quantity}, принято ${openingCounted}.`
+            } else if (entry.has_process_gap) {
+                responsibilityType = 'PROCESS_GAP'
+                responsibilityLabel = 'Сбой процесса'
+                explanation = 'Во время смены были внешние или неразмеченные движения по этой зоне.'
+            } else if ((difference ?? 0) > 0) {
+                explanation = 'В конце смены обнаружен излишек при чистой приемке зоны.'
+            }
+
+            return {
+                warehouse_id: entry.warehouse_id,
+                warehouse_name: entry.warehouse_name,
+                shift_zone_key: entry.shift_zone_key,
+                shift_zone_label: entry.shift_zone_label,
+                product_id: entry.product_id,
+                product_name: entry.product_name,
+                selling_price: Number(entry.selling_price || 0),
+                opening_counted_quantity: openingCounted,
+                opening_system_quantity: entry.opening_system_quantity,
+                inflow_quantity: entry.inflow_quantity,
+                outflow_quantity: entry.outflow_quantity,
+                expected_closing_quantity: expectedClosing,
+                actual_closing_quantity: closingCounted,
+                difference_quantity: difference,
+                responsibility_type: responsibilityType,
+                responsibility_label: responsibilityLabel,
+                explanation
+            } satisfies ShiftZoneDiscrepancyRow
+        })
+        .filter(row => (row.difference_quantity ?? 0) !== 0)
+        .sort((a, b) => (a.difference_quantity ?? 0) - (b.difference_quantity ?? 0))
+}
+
+export async function getShiftZoneDiscrepancyReport(clubId: string, shiftId: string) {
+    const sessionUserId = await requireClubAccess(clubId)
+    const client = await import("@/db").then(m => m.getClient())
+    try {
+        return await getShiftZoneDiscrepancyReportInternal(client, clubId, shiftId, sessionUserId)
+    } finally {
+        client.release()
+    }
+}
+
+export async function getShiftZoneOverview(clubId: string, limit: number = 30) {
+    const sessionUserId = await requireClubAccess(clubId)
+    const client = await import("@/db").then(m => m.getClient())
+    try {
+        const warehouses = await getShiftAccountabilityWarehousesInternal(client, clubId, sessionUserId)
+        if (warehouses.length === 0) {
+            return {
+                summary: {
+                    recent_shifts_count: 0,
+                    configured_zones_count: 0,
+                    complete_shifts_count: 0,
+                    discrepancy_shifts_count: 0,
+                    discrepancy_total_abs: 0,
+                },
+                recent_shifts: [],
+                zones: [],
+            } satisfies ShiftZoneOverview
+        }
+
+        const totalZones = warehouses.length
+        const warehouseById = new Map<number, Warehouse>(
+            warehouses.map((warehouse) => [Number(warehouse.id), warehouse as Warehouse])
+        )
+
+        const recentShiftRows = await client.query(
+            `
+            SELECT DISTINCT ON (ss.shift_id)
+                ss.shift_id,
+                s.check_in,
+                s.check_out,
+                u.full_name as employee_name
+            FROM shift_zone_snapshots ss
+            JOIN shifts s ON s.id = ss.shift_id
+            LEFT JOIN users u ON u.id = s.user_id
+            WHERE ss.club_id = $1
+            ORDER BY ss.shift_id, s.check_in DESC
+            `,
+            [clubId]
+        )
+
+        const sortedRecentShifts = recentShiftRows.rows
+            .sort((a: any, b: any) => new Date(b.check_in).getTime() - new Date(a.check_in).getTime())
+            .slice(0, Math.max(1, Math.trunc(limit)))
+
+        const shiftIds = sortedRecentShifts.map((row: any) => String(row.shift_id))
+        if (shiftIds.length === 0) {
+            return {
+                summary: {
+                    recent_shifts_count: 0,
+                    configured_zones_count: totalZones,
+                    complete_shifts_count: 0,
+                    discrepancy_shifts_count: 0,
+                    discrepancy_total_abs: 0,
+                },
+                recent_shifts: [],
+                zones: warehouses.map((warehouse) => ({
+                    warehouse_id: Number(warehouse.id),
+                    warehouse_name: warehouse.name,
+                    shift_zone_key: normalizeShiftZoneKey(warehouse.shift_zone_key) || 'BACKROOM',
+                    shift_zone_label: getShiftZoneLabel((normalizeShiftZoneKey(warehouse.shift_zone_key) || 'BACKROOM')),
+                    open_snapshots_count: 0,
+                    close_snapshots_count: 0,
+                    discrepancy_shifts_count: 0,
+                    discrepancy_items_count: 0,
+                    discrepancy_total_abs: 0,
+                    latest_open_at: null,
+                    latest_close_at: null,
+                })),
+            } satisfies ShiftZoneOverview
+        }
+
+        const snapshotsRes = await client.query(
+            `
+            SELECT
+                ss.shift_id,
+                ss.warehouse_id,
+                ss.snapshot_type,
+                ss.created_at
+            FROM shift_zone_snapshots ss
+            WHERE ss.club_id = $1
+              AND ss.shift_id = ANY($2)
+            ORDER BY ss.created_at DESC
+            `,
+            [clubId, shiftIds]
+        )
+
+        const shiftMap = new Map<string, ShiftZoneOverviewShift>()
+        for (const row of sortedRecentShifts) {
+            shiftMap.set(String(row.shift_id), {
+                shift_id: String(row.shift_id),
+                employee_name: row.employee_name || "Неизвестно",
+                check_in: row.check_in,
+                check_out: row.check_out,
+                total_zones: totalZones,
+                open_zones_count: 0,
+                close_zones_count: 0,
+                discrepancy_items_count: 0,
+                discrepancy_total_abs: 0,
+                status: 'PARTIAL',
+                last_snapshot_at: null,
+            })
+        }
+
+        const zoneMap = new Map<number, ShiftZoneOverviewZone>()
+        for (const warehouse of warehouses) {
+            const zoneKey = normalizeShiftZoneKey(warehouse.shift_zone_key) || 'BACKROOM'
+            zoneMap.set(Number(warehouse.id), {
+                warehouse_id: Number(warehouse.id),
+                warehouse_name: warehouse.name,
+                shift_zone_key: zoneKey,
+                shift_zone_label: getShiftZoneLabel(zoneKey),
+                open_snapshots_count: 0,
+                close_snapshots_count: 0,
+                discrepancy_shifts_count: 0,
+                discrepancy_items_count: 0,
+                discrepancy_total_abs: 0,
+                latest_open_at: null,
+                latest_close_at: null,
+            })
+        }
+
+        const shiftOpenZones = new Map<string, Set<number>>()
+        const shiftCloseZones = new Map<string, Set<number>>()
+
+        for (const row of snapshotsRes.rows) {
+            const shiftId = String(row.shift_id)
+            const warehouseId = Number(row.warehouse_id)
+            const shiftEntry = shiftMap.get(shiftId)
+            const zoneEntry = zoneMap.get(warehouseId)
+            if (!shiftEntry || !zoneEntry) continue
+
+            const createdAt = row.created_at ? new Date(row.created_at).toISOString() : null
+            shiftEntry.last_snapshot_at = shiftEntry.last_snapshot_at && createdAt
+                ? (new Date(shiftEntry.last_snapshot_at).getTime() > new Date(createdAt).getTime() ? shiftEntry.last_snapshot_at : createdAt)
+                : (shiftEntry.last_snapshot_at || createdAt)
+
+            if (row.snapshot_type === 'OPEN') {
+                if (!shiftOpenZones.has(shiftId)) shiftOpenZones.set(shiftId, new Set<number>())
+                shiftOpenZones.get(shiftId)!.add(warehouseId)
+                zoneEntry.open_snapshots_count += 1
+                if (!zoneEntry.latest_open_at || (createdAt && new Date(createdAt).getTime() > new Date(zoneEntry.latest_open_at).getTime())) {
+                    zoneEntry.latest_open_at = createdAt
+                }
+            }
+
+            if (row.snapshot_type === 'CLOSE') {
+                if (!shiftCloseZones.has(shiftId)) shiftCloseZones.set(shiftId, new Set<number>())
+                shiftCloseZones.get(shiftId)!.add(warehouseId)
+                zoneEntry.close_snapshots_count += 1
+                if (!zoneEntry.latest_close_at || (createdAt && new Date(createdAt).getTime() > new Date(zoneEntry.latest_close_at).getTime())) {
+                    zoneEntry.latest_close_at = createdAt
+                }
+            }
+        }
+
+        let discrepancyShiftsCount = 0
+        let discrepancyTotalAbs = 0
+
+        for (const shiftId of shiftIds) {
+            const shiftEntry = shiftMap.get(shiftId)
+            if (!shiftEntry) continue
+
+            shiftEntry.open_zones_count = shiftOpenZones.get(shiftId)?.size || 0
+            shiftEntry.close_zones_count = shiftCloseZones.get(shiftId)?.size || 0
+
+            if (shiftEntry.open_zones_count >= totalZones && shiftEntry.close_zones_count >= totalZones) {
+                shiftEntry.status = 'COMPLETE'
+            } else if (shiftEntry.open_zones_count >= totalZones && shiftEntry.close_zones_count === 0) {
+                shiftEntry.status = 'OPEN_ONLY'
+            } else if (shiftEntry.close_zones_count > 0 && shiftEntry.open_zones_count === 0) {
+                shiftEntry.status = 'CLOSE_ONLY'
+            } else {
+                shiftEntry.status = 'PARTIAL'
+            }
+
+            const discrepancyRows = await getShiftZoneDiscrepancyReportInternal(client, clubId, shiftId, sessionUserId)
+            const discrepancyItemsCount = discrepancyRows.length
+            const discrepancyAbs = discrepancyRows.reduce((sum, row) => sum + Math.abs(Number(row.difference_quantity || 0)), 0)
+
+            shiftEntry.discrepancy_items_count = discrepancyItemsCount
+            shiftEntry.discrepancy_total_abs = discrepancyAbs
+
+            if (discrepancyItemsCount > 0) {
+                discrepancyShiftsCount += 1
+                discrepancyTotalAbs += discrepancyAbs
+            }
+
+            const discrepancyWarehouses = new Set<number>()
+            for (const row of discrepancyRows) {
+                const zoneEntry = zoneMap.get(Number(row.warehouse_id)) || warehouseById.get(Number(row.warehouse_id))
+                if (!zoneEntry || !("discrepancy_items_count" in zoneEntry)) continue
+                zoneEntry.discrepancy_items_count += 1
+                zoneEntry.discrepancy_total_abs += Math.abs(Number(row.difference_quantity || 0))
+                discrepancyWarehouses.add(Number(row.warehouse_id))
+            }
+            for (const warehouseId of discrepancyWarehouses) {
+                const zoneEntry = zoneMap.get(warehouseId)
+                if (zoneEntry) {
+                    zoneEntry.discrepancy_shifts_count += 1
+                }
+            }
+        }
+
+        const recent_shifts = Array.from(shiftMap.values()).sort(
+            (a, b) => new Date(b.check_in).getTime() - new Date(a.check_in).getTime()
+        )
+        const zones = Array.from(zoneMap.values()).sort((a, b) => a.warehouse_name.localeCompare(b.warehouse_name, 'ru'))
+
+        return {
+            summary: {
+                recent_shifts_count: recent_shifts.length,
+                configured_zones_count: totalZones,
+                complete_shifts_count: recent_shifts.filter((shift) => shift.status === 'COMPLETE').length,
+                discrepancy_shifts_count: discrepancyShiftsCount,
+                discrepancy_total_abs: discrepancyTotalAbs,
+            },
+            recent_shifts,
+            zones,
+        } satisfies ShiftZoneOverview
+    } finally {
+        client.release()
+    }
 }
 
 export async function deleteWarehouse(id: number, clubId: string, userId: string) {
@@ -437,13 +1478,114 @@ export async function deleteWarehouse(id: number, clubId: string, userId: string
 export async function getEmployees(clubId: string) {
     await requireClubAccess(clubId)
     const res = await query(`
-        SELECT u.id, u.full_name, 'Сотрудник' as role 
+        SELECT u.id, u.full_name, COALESCE(ce.role, 'Сотрудник') as role 
         FROM club_employees ce
         JOIN users u ON ce.user_id = u.id
         WHERE ce.club_id = $1 AND ce.is_active = true
         ORDER BY u.full_name
     `, [clubId])
     return res.rows as { id: string, full_name: string, role: string }[]
+}
+
+export type SalarySaleCandidate = {
+    id: string
+    full_name: string
+    role: string
+    reference_shift_id: string
+    shifts_in_month: number
+    available_amount: number
+}
+
+async function getSalarySaleCandidatesInternal(client: any, clubId: string) {
+    const now = new Date()
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999)
+
+    const res = await client.query(
+        `
+        WITH month_shifts AS (
+            SELECT
+                s.user_id,
+                s.id,
+                s.check_in,
+                COALESCE(s.calculated_salary, 0) as calculated_salary,
+                COALESCE(s.bar_purchases, 0) as bar_purchases
+            FROM shifts s
+            WHERE s.club_id = $1
+              AND s.check_in >= $2
+              AND s.check_in <= $3
+              AND s.status IN ('CLOSED', 'PAID', 'VERIFIED', 'ACTIVE')
+        ),
+        latest_shift AS (
+            SELECT DISTINCT ON (user_id)
+                user_id,
+                id as reference_shift_id,
+                check_in
+            FROM month_shifts
+            ORDER BY user_id, check_in DESC, id DESC
+        ),
+        shift_agg AS (
+            SELECT
+                user_id,
+                COUNT(*)::int as shifts_in_month,
+                SUM(calculated_salary)::numeric as earned_amount,
+                SUM(bar_purchases)::numeric as bar_purchases_amount
+            FROM month_shifts
+            GROUP BY user_id
+        ),
+        payments_agg AS (
+            SELECT
+                p.user_id,
+                SUM(p.amount) FILTER (WHERE p.payment_type != 'bonus')::numeric as paid_amount
+            FROM payments p
+            WHERE p.club_id = $1
+              AND p.month = $4
+              AND p.year = $5
+            GROUP BY p.user_id
+        )
+        SELECT
+            u.id,
+            u.full_name,
+            COALESCE(ce.role, 'Сотрудник') as role,
+            ls.reference_shift_id,
+            sa.shifts_in_month,
+            GREATEST(
+                COALESCE(sa.earned_amount, 0) - COALESCE(pa.paid_amount, 0) - COALESCE(sa.bar_purchases_amount, 0),
+                0
+            )::numeric as available_amount
+        FROM club_employees ce
+        JOIN users u ON u.id = ce.user_id
+        JOIN shift_agg sa ON sa.user_id = ce.user_id
+        JOIN latest_shift ls ON ls.user_id = ce.user_id
+        LEFT JOIN payments_agg pa ON pa.user_id = ce.user_id
+        WHERE ce.club_id = $1
+          AND ce.is_active = true
+          AND ce.dismissed_at IS NULL
+        ORDER BY
+            CASE WHEN COALESCE(ce.role, '') IN ('Админ', 'Управляющий', 'Владелец') THEN 0 ELSE 1 END,
+            u.full_name
+        `,
+        [clubId, monthStart.toISOString(), monthEnd.toISOString(), now.getMonth() + 1, now.getFullYear()]
+    )
+
+    return res.rows.map((row: any) => ({
+        id: String(row.id),
+        full_name: String(row.full_name),
+        role: String(row.role || 'Сотрудник'),
+        reference_shift_id: String(row.reference_shift_id),
+        shifts_in_month: Number(row.shifts_in_month || 0),
+        available_amount: Number(row.available_amount || 0),
+    })) as SalarySaleCandidate[]
+}
+
+export async function getSalarySaleCandidates(clubId: string) {
+    await requireClubAccess(clubId)
+    const client = await import("@/db").then(m => m.getClient())
+    try {
+        return await getSalarySaleCandidatesInternal(client, clubId)
+    } finally {
+        client.release()
+    }
 }
 
 export async function transferStock(clubId: string, userId: string, data: { source_warehouse_id: number, target_warehouse_id: number, product_id: number, quantity: number, notes?: string }) {
@@ -573,15 +1715,15 @@ export async function createTransfer(clubId: string, userId: string, data: { sou
             
             // Log out from source
             await logStockMovement(
-                client, clubId, userId, product_id, -quantity, sourcePrev, sourceNewStock, 
-                'ADJUSTMENT', `Перемещение на склад #${target_warehouse_id}${notesStr}`, 
+                client, clubId, userId, product_id, -quantity, sourcePrev, sourceNewStock,
+                'TRANSFER', `Перемещение на склад #${target_warehouse_id}${notesStr}`,
                 'TRANSFER', null, shift_id || null, source_warehouse_id
             )
             
             // Log in to target
             await logStockMovement(
-                client, clubId, userId, product_id, quantity, targetPrevStock, targetNewStock, 
-                'ADJUSTMENT', `Перемещение со склада #${source_warehouse_id}${notesStr}`, 
+                client, clubId, userId, product_id, quantity, targetPrevStock, targetNewStock,
+                'TRANSFER', `Перемещение со склада #${source_warehouse_id}${notesStr}`,
                 'TRANSFER', null, shift_id || null, target_warehouse_id
             )
 
@@ -959,8 +2101,10 @@ export async function calculateAnalytics(clubId: string) {
                             END
                         )::numeric as net_units
                     FROM warehouse_stock_movements m
+                    LEFT JOIN shift_receipts sr ON m.related_entity_type = 'SHIFT_RECEIPT' AND m.related_entity_id = sr.id
                     WHERE m.created_at > NOW() - INTERVAL '30 days'
                       AND m.type IN ('SALE', 'RETURN')
+                      AND COALESCE(sr.counts_in_revenue, true) = true
                     GROUP BY m.product_id
                 )
                 SELECT 
@@ -993,7 +2137,9 @@ export async function calculateAnalytics(clubId: string) {
                 LEFT JOIN warehouse_stock_movements m ON p.id = m.product_id 
                     AND m.type IN ('SALE', 'RETURN')
                     AND m.created_at > NOW() - INTERVAL '30 days'
+                LEFT JOIN shift_receipts sr ON m.related_entity_type = 'SHIFT_RECEIPT' AND m.related_entity_id = sr.id
                 WHERE p.club_id = $1 AND p.is_active = true
+                  AND COALESCE(sr.counts_in_revenue, true) = true
                 GROUP BY p.id
             ),
             TotalStats AS (
@@ -1364,6 +2510,73 @@ async function assertProductsBelongToClub(db: { query: (sql: string, params?: an
     if (cnt !== unique.length) throw new Error("Список товаров содержит позиции, которые не принадлежат клубу")
 }
 
+async function syncProductsCurrentStock(client: any, clubId: string, productIds: Iterable<number>) {
+    const uniqueProductIds = Array.from(new Set(Array.from(productIds).map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0)))
+    if (uniqueProductIds.length === 0) return
+    await client.query(
+        `
+        UPDATE warehouse_products p
+        SET current_stock = (
+            SELECT COALESCE(SUM(quantity), 0)
+            FROM warehouse_stock ws
+            WHERE ws.product_id = p.id
+        )
+        WHERE p.club_id = $1
+          AND p.id = ANY($2)
+        `,
+        [clubId, uniqueProductIds]
+    )
+}
+
+async function findAcceptedFromShift(
+    client: any,
+    clubId: string,
+    currentShiftId: string,
+    currentCheckIn: string,
+    selectedShiftId: string | null
+) {
+    const previousShiftRes = selectedShiftId
+        ? await client.query(
+            `
+            SELECT id, user_id
+            FROM shifts
+            WHERE club_id = $1
+              AND id = $2
+              AND id <> $3
+              AND check_out IS NOT NULL
+              AND check_out <= $4
+            LIMIT 1
+            `,
+            [clubId, selectedShiftId, currentShiftId, currentCheckIn]
+        )
+        : await client.query(
+            `
+            SELECT id, user_id
+            FROM shifts
+            WHERE club_id = $1
+              AND id <> $2
+              AND check_out IS NOT NULL
+              AND check_out <= $3
+            ORDER BY check_out DESC, check_in DESC, id DESC
+            LIMIT 1
+            `,
+            [clubId, currentShiftId, currentCheckIn]
+        )
+
+    const previousShift = previousShiftRes.rows[0]
+    if (!previousShift) {
+        return {
+            accepted_from_shift_id: null as string | null,
+            accepted_from_employee_id: null as string | null,
+        }
+    }
+
+    return {
+        accepted_from_shift_id: String(previousShift.id),
+        accepted_from_employee_id: previousShift.user_id ? String(previousShift.user_id) : null,
+    }
+}
+
 async function applyWarehouseStockDelta(
     client: any,
     warehouseId: number,
@@ -1438,6 +2651,19 @@ async function getInventoryMovementDuringCount(
         [productId, warehouseId, clubId, startedAt, closedAt || null, inventoryId]
     )
     return Number(movementRes.rows[0]?.total || 0)
+}
+
+async function getLockedWarehouseStock(client: any, warehouseId: number, productId: number) {
+    const stockRes = await client.query(
+        `
+        SELECT quantity
+        FROM warehouse_stock
+        WHERE warehouse_id = $1 AND product_id = $2
+        FOR UPDATE
+        `,
+        [warehouseId, productId]
+    )
+    return Number(stockRes.rows[0]?.quantity || 0)
 }
 
 // --- TASKS ---
@@ -1658,12 +2884,12 @@ export async function getSalesAnalytics(clubId: string, limit: number = 500) {
                 wi.id DESC
             LIMIT 1
         ) inv ON TRUE
-        -- Join for voided receipts
-        LEFT JOIN shift_receipts sr ON sm.related_entity_type = 'SHIFT_RECEIPT' AND sm.related_entity_id = sr.id AND sr.voided_at IS NOT NULL
+        -- Join for voided and non-revenue receipts
+        LEFT JOIN shift_receipts sr ON sm.related_entity_type = 'SHIFT_RECEIPT' AND sm.related_entity_id = sr.id
         WHERE sm.club_id = $1 
           AND sm.type IN ('SALE', 'RETURN')  -- Include both sales and returns
           AND COALESCE(sm.related_entity_type, '') != 'SHIFT_RECEIPT_VOID'
-          AND sr.id IS NULL  -- Exclude voided receipts
+          AND (sr.id IS NULL OR (sr.voided_at IS NULL AND COALESCE(sr.counts_in_revenue, true) = true))
         ORDER BY sm.created_at DESC
         LIMIT $2
     `, [clubId, limit, preferredMetricKey])
@@ -1713,6 +2939,17 @@ export async function correctInventoryItem(inventoryId: number, productId: numbe
             warehouseId = whRes.rows[0]?.id
         }
         if (!warehouseId) throw new Error("Не найден склад для корректировки остатков")
+        await assertUserCanUseWarehouses(client, clubId, userId, [warehouseId])
+
+        if (inventory.status !== 'CLOSED') {
+            throw new Error("Для открытой инвентаризации используйте обычное редактирование остатков")
+        }
+        if (inventory.shift_id || inventory.target_metric_key) {
+            throw new Error("Закрытую сменную инвентаризацию нельзя корректировать постфактум. Создайте новую ревизию.")
+        }
+        if (oldActualStock === null) {
+            throw new Error("Нельзя корректировать позицию без зафиксированного фактического остатка")
+        }
 
         const movementDuringInventory = await getInventoryMovementDuringCount(
             client,
@@ -1723,72 +2960,76 @@ export async function correctInventoryItem(inventoryId: number, productId: numbe
             inventory.started_at,
             inventory.closed_at || null
         )
-        const { adjustedExpected, difference: newDifference } = calculateInventoryDelta(expectedStock, movementDuringInventory, normalizedActualStock)
+        const { difference: newDifference } = calculateInventoryDelta(expectedStock, movementDuringInventory, normalizedActualStock)
+        const newCalculatedRevenue = 0
 
-        // 2. Calculate New Stats for the Item
-        const newCalculatedRevenue = normalizedActualStock < adjustedExpected ? (adjustedExpected - normalizedActualStock) * price : 0
-
-        // 3. Calculate Deltas for the Header
-        const oldCalculatedRevenue = (oldActualStock !== null && oldActualStock < adjustedExpected) 
-            ? (adjustedExpected - oldActualStock) * price 
-            : 0
-        
-        const revenueChange = newCalculatedRevenue - oldCalculatedRevenue
-
-        // 4. Update inventory item
+        // 2. Update inventory item
         await client.query(`
             UPDATE warehouse_inventory_items 
             SET actual_stock = $1::integer, 
                 difference = $2::integer, 
-                calculated_revenue = $3::numeric
+                calculated_revenue = $3::numeric,
+                counted_at = COALESCE(counted_at, NOW()),
+                counted_by = COALESCE(counted_by, $6::uuid)
             WHERE inventory_id = $4 AND product_id = $5
-        `, [normalizedActualStock, newDifference, newCalculatedRevenue, inventoryId, productId])
+        `, [normalizedActualStock, newDifference, newCalculatedRevenue, inventoryId, productId, userId])
 
-        // 5. Update inventory header totals
-        await client.query(`
-            UPDATE warehouse_inventories 
-            SET calculated_revenue = (calculated_revenue + $1::numeric)::numeric,
-                revenue_difference = (revenue_difference - $1::numeric)::numeric
-            WHERE id = $2 AND club_id = $3
-        `, [revenueChange, inventoryId, clubId])
+        // 3. Apply only the compensating delta to current stock.
+        const stockDelta = normalizedActualStock - oldActualStock
+        if (stockDelta !== 0) {
+            const { previousStock, newStock } = await applyWarehouseStockDelta(client, Number(warehouseId), productId, stockDelta)
 
-        // 6. Update physical stock and movements if inventory is closed
-        if (inventory.status === 'CLOSED') {
-            // Calculate delta to apply to current warehouse stock
-            // If item wasn't counted (null), the previous adjustment was 0 (relative to expected)
-            // If item was counted, the previous adjustment was (actual - expected)
-            const oldAdjustment = oldActualStock !== null ? (oldActualStock - adjustedExpected) : 0
-            const newAdjustment = normalizedActualStock - adjustedExpected
-            const stockDelta = newAdjustment - oldAdjustment
+            await client.query(`
+                UPDATE warehouse_products
+                SET current_stock = (SELECT COALESCE(SUM(quantity), 0) FROM warehouse_stock WHERE product_id = $1)
+                WHERE id = $1 AND club_id = $2
+            `, [productId, clubId])
 
-            if (stockDelta !== 0) {
-                const { previousStock, newStock } = await applyWarehouseStockDelta(client, Number(warehouseId), productId, stockDelta)
-
-                // Update product cache (sum of all warehouses)
-                await client.query(`
-                    UPDATE warehouse_products
-                    SET current_stock = (SELECT COALESCE(SUM(quantity), 0) FROM warehouse_stock WHERE product_id = $1)
-                    WHERE id = $1 AND club_id = $2
-                `, [productId, clubId])
-
-                // Log the correction movement
-                await logStockMovement(
-                    client, 
-                    clubId, 
-                    userId, 
-                    productId, 
-                    stockDelta, 
-                    previousStock, 
-                    newStock, 
-                    'ADJUSTMENT', 
-                    `Корректировка инвентаризации #${inventoryId}`, 
-                    'INVENTORY', 
-                    inventoryId, 
-                    null, 
-                        Number(warehouseId)
-                )
-            }
+            await logStockMovement(
+                client,
+                clubId,
+                userId,
+                productId,
+                stockDelta,
+                previousStock,
+                newStock,
+                'INVENTORY_CORRECTION',
+                `Пост-корректировка ревизии #${inventoryId}`,
+                'INVENTORY',
+                inventoryId,
+                null,
+                Number(warehouseId),
+                price
+            )
         }
+
+        await client.query(
+            `
+            INSERT INTO inventory_post_close_corrections (
+                inventory_id,
+                product_id,
+                old_actual_stock,
+                new_actual_stock,
+                difference_before,
+                difference_after,
+                stock_delta,
+                reason,
+                created_by
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            `,
+            [
+                inventoryId,
+                productId,
+                oldActualStock,
+                normalizedActualStock,
+                item.difference !== null ? Number(item.difference) : null,
+                newDifference,
+                stockDelta,
+                'Пост-корректировка закрытой ревизии',
+                userId
+            ]
+        )
 
         await client.query('COMMIT')
         revalidatePath(`/clubs/${clubId}/inventory`)
@@ -2015,7 +3256,7 @@ export type ShiftSaleItem = {
 // удалены как неиспользуемые. POS-система использует только shift_receipts.
 // ============================================================================
 
-export type ShiftReceiptPaymentType = 'cash' | 'card' | 'mixed' | 'other'
+export type ShiftReceiptPaymentType = 'cash' | 'card' | 'mixed' | 'other' | 'salary'
 
 export type ShiftReceiptItem = {
     id: number
@@ -2037,6 +3278,9 @@ export type ShiftReceipt = {
     warehouse_id: number
     warehouse_name: string
     payment_type: ShiftReceiptPaymentType
+    counts_in_revenue?: boolean
+    salary_target_user_id?: string | null
+    salary_target_shift_id?: string | null
     cash_amount: number
     card_amount: number
     total_amount: number
@@ -2208,6 +3452,7 @@ export async function createShiftReceipt(
         card_amount?: number
         notes?: string
         warehouse_id?: number
+        salary_target_user_id?: string
     }
 ) {
     await assertUserCanAccessClub(clubId, userId)
@@ -2237,6 +3482,16 @@ export async function createShiftReceipt(
             [data.shift_id, clubId, userId]
         )
         if (shiftCheck.rowCount === 0) throw new Error("Смена не найдена или уже завершена")
+
+        let salaryTargetUserId: string | null = null
+        let salaryTargetShiftId: string | null = null
+        let countsInRevenue = data.payment_type !== 'salary'
+        if (data.payment_type === 'salary') {
+            salaryTargetUserId = data.salary_target_user_id ? String(data.salary_target_user_id) : null
+            if (!salaryTargetUserId) {
+                throw new Error("Для продажи в счет ЗП нужно выбрать сотрудника")
+            }
+        }
 
         const warehouseId = await resolvePosWarehouseIdForItems(client, clubId, userId, normalizedItems, data.warehouse_id ?? null)
 
@@ -2273,9 +3528,24 @@ export async function createShiftReceipt(
             if (cashAmount + cardAmount === 0) {
                 cashAmount = itemsTotal
             }
+        } else if (data.payment_type === 'salary') {
+            cashAmount = 0
+            cardAmount = 0
         } else {
             cashAmount = cashAmount || 0
             cardAmount = cardAmount || 0
+        }
+
+        if (data.payment_type === 'salary') {
+            const candidates = await getSalarySaleCandidatesInternal(client, clubId)
+            const candidate = candidates.find((item) => item.id === salaryTargetUserId)
+            if (!candidate) {
+                throw new Error("У выбранного сотрудника нет смен в текущем месяце")
+            }
+            if (candidate.available_amount < itemsTotal) {
+                throw new Error(`Недостаточно доступной суммы. Доступно: ${candidate.available_amount.toLocaleString('ru-RU')} ₽`)
+            }
+            salaryTargetShiftId = candidate.reference_shift_id
         }
 
         // Monetary sanity checks
@@ -2311,9 +3581,10 @@ export async function createShiftReceipt(
             `
             INSERT INTO shift_receipts (
                 club_id, shift_id, created_by, warehouse_id,
-                payment_type, cash_amount, card_amount, total_amount, notes, committed_at
+                payment_type, cash_amount, card_amount, total_amount, notes, committed_at,
+                salary_target_user_id, salary_target_shift_id, counts_in_revenue
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), $10, $11, $12)
             RETURNING id
             `,
             [
@@ -2325,7 +3596,10 @@ export async function createShiftReceipt(
                 cashAmount,
                 cardAmount,
                 itemsTotal,
-                data.notes || null
+                data.notes || null,
+                salaryTargetUserId,
+                salaryTargetShiftId,
+                countsInRevenue
             ]
         )
         const receiptId = Number(receiptRes.rows[0].id)
@@ -2362,7 +3636,9 @@ export async function createShiftReceipt(
                 previousStock,
                 newStock,
                 'SALE',
-                `POS чек #${receiptId}`,
+                data.payment_type === 'salary'
+                    ? `В счет ЗП: POS чек #${receiptId}`
+                    : `POS чек #${receiptId}`,
                 'SHIFT_RECEIPT',
                 receiptId,
                 data.shift_id,
@@ -2380,6 +3656,17 @@ export async function createShiftReceipt(
                 WHERE id = ANY($1) AND club_id = $2
                 `,
                 [productIds, clubId]
+            )
+        }
+
+        if (data.payment_type === 'salary' && salaryTargetShiftId) {
+            await client.query(
+                `
+                UPDATE shifts
+                SET bar_purchases = COALESCE(bar_purchases, 0) + $1
+                WHERE id = $2 AND club_id = $3
+                `,
+                [itemsTotal, salaryTargetShiftId, clubId]
             )
         }
 
@@ -2420,6 +3707,7 @@ export async function createShiftReceiptSafe(
         card_amount?: number
         notes?: string
         warehouse_id?: number
+        salary_target_user_id?: string
     }
 ) {
     try {
@@ -2428,7 +3716,182 @@ export async function createShiftReceiptSafe(
     } catch (error: any) {
         return {
             ok: false as const,
-            error: error?.message || "Ошибка пробития товара"
+            error: getActionErrorMessage(error, "Ошибка пробития товара")
+        }
+    }
+}
+
+function getActionErrorMessage(error: unknown, fallback: string) {
+    if (error instanceof Error) {
+        const parts = [error.message?.trim()].filter(Boolean) as string[]
+        const detail = typeof (error as { detail?: unknown }).detail === "string"
+            ? (error as { detail?: string }).detail?.trim()
+            : ""
+        const hint = typeof (error as { hint?: unknown }).hint === "string"
+            ? (error as { hint?: string }).hint?.trim()
+            : ""
+
+        if (detail && !parts.includes(detail)) {
+            parts.push(detail)
+        }
+        if (hint && !parts.includes(hint)) {
+            parts.push(hint)
+        }
+
+        if (parts.length > 0) {
+            return parts.join("\n")
+        }
+    }
+
+    if (typeof error === "string" && error.trim()) {
+        return error.trim()
+    }
+
+    return fallback
+}
+
+export async function voidShiftReceiptSafe(clubId: string, userId: string, receiptId: number) {
+    try {
+        await voidShiftReceipt(clubId, userId, receiptId)
+        return { ok: true as const }
+    } catch (error) {
+        return {
+            ok: false as const,
+            error: getActionErrorMessage(error, "Ошибка отмены чека")
+        }
+    }
+}
+
+export async function returnReceiptItemSafe(
+    clubId: string,
+    userId: string,
+    receiptId: number,
+    itemId: number,
+    returnQuantity: number,
+    reason: string
+) {
+    try {
+        const result = await returnReceiptItem(clubId, userId, receiptId, itemId, returnQuantity, reason)
+        return {
+            ok: true as const,
+            refundAmount: result.refundAmount
+        }
+    } catch (error) {
+        return {
+            ok: false as const,
+            error: getActionErrorMessage(error, "Ошибка возврата")
+        }
+    }
+}
+
+export async function createTransferSafe(
+    clubId: string,
+    userId: string,
+    data: { source_warehouse_id: number, target_warehouse_id: number, items: { product_id: number, quantity: number }[], notes?: string, shift_id?: string }
+) {
+    try {
+        await createTransfer(clubId, userId, data)
+        return { ok: true as const }
+    } catch (error) {
+        return {
+            ok: false as const,
+            error: getActionErrorMessage(error, "Ошибка при оформлении перемещения")
+        }
+    }
+}
+
+export async function createWriteOffSafe(
+    clubId: string,
+    userId: string,
+    data: { items: { product_id: number, quantity: number, type: 'WASTE' | 'SALARY_DEDUCTION', custom_price?: number }[], notes: string, shift_id?: string, warehouse_id?: number }
+) {
+    try {
+        await createWriteOff(clubId, userId, data)
+        return { ok: true as const }
+    } catch (error) {
+        return {
+            ok: false as const,
+            error: getActionErrorMessage(error, "Ошибка при оформлении списания")
+        }
+    }
+}
+
+export async function createSupplySafe(
+    clubId: string,
+    userId: string,
+    data: { supplier_name: string, notes: string, items: { product_id: number, quantity: number, cost_price: number }[], warehouse_id?: number, status?: 'DRAFT' | 'COMPLETED', shift_id?: string }
+) {
+    try {
+        await createSupply(clubId, userId, data)
+        return { ok: true as const }
+    } catch (error) {
+        return {
+            ok: false as const,
+            error: getActionErrorMessage(error, "Ошибка при оформлении поставки")
+        }
+    }
+}
+
+export async function createInventorySafe(
+    clubId: string,
+    userId: string,
+    targetMetricKey: string | null,
+    categoryId?: number | null,
+    warehouseId?: number | null,
+    shiftId: string | null = null
+) {
+    try {
+        const inventoryId = await createInventory(clubId, userId, targetMetricKey, categoryId, warehouseId, shiftId)
+        return {
+            ok: true as const,
+            inventoryId
+        }
+    } catch (error) {
+        return {
+            ok: false as const,
+            error: getActionErrorMessage(error, "Ошибка запуска инвентаризации")
+        }
+    }
+}
+
+export async function addProductToInventorySafe(inventoryId: number, productId: number) {
+    try {
+        await addProductToInventory(inventoryId, productId)
+        return { ok: true as const }
+    } catch (error) {
+        return {
+            ok: false as const,
+            error: getActionErrorMessage(error, "Ошибка добавления товара в инвентаризацию")
+        }
+    }
+}
+
+export async function bulkUpdateInventoryItemsSafe(items: { id: number, actual_stock: number | null }[], clubId: string) {
+    try {
+        await bulkUpdateInventoryItems(items, clubId)
+        return { ok: true as const }
+    } catch (error) {
+        return {
+            ok: false as const,
+            error: getActionErrorMessage(error, "Ошибка сохранения инвентаризации")
+        }
+    }
+}
+
+export async function closeInventorySafe(
+    inventoryId: number,
+    clubId: string,
+    reportedRevenue: number,
+    unaccountedSales: { product_id: number, quantity: number, selling_price: number, cost_price: number }[] = [],
+    options?: { salesRecognition?: 'INVENTORY' | 'NONE' }
+) {
+    try {
+        await closeInventory(inventoryId, clubId, reportedRevenue, unaccountedSales, options)
+        return { ok: true as const }
+    } catch (error) {
+        return {
+            ok: false as const,
+            error: getActionErrorMessage(error, "Ошибка завершения инвентаризации")
         }
     }
 }
@@ -2496,6 +3959,9 @@ async function buildShiftReceiptsFromRows(receiptRows: any[]) {
         warehouse_id: Number(r.warehouse_id),
         warehouse_name: String(r.warehouse_name),
         payment_type: r.payment_type as ShiftReceiptPaymentType,
+        counts_in_revenue: typeof r.counts_in_revenue === 'boolean' ? r.counts_in_revenue : true,
+        salary_target_user_id: r.salary_target_user_id ? String(r.salary_target_user_id) : null,
+        salary_target_shift_id: r.salary_target_shift_id ? String(r.salary_target_shift_id) : null,
         cash_amount: Number(r.cash_amount || 0),
         card_amount: Number(r.card_amount || 0),
         total_amount: Number(r.total_amount || 0),
@@ -2932,7 +4398,7 @@ export async function createWriteOff(clubId: string, userId: string, data: { ite
 
             // 4. Log movement
             const reason = item.type === 'SALARY_DEDUCTION' ? `В счет ЗП: ${data.notes}` : `Списание: ${data.notes}`
-            const movementType = item.type === 'SALARY_DEDUCTION' ? 'SALE' : 'ADJUSTMENT' // SALARY_DEDUCTION is essentially a sale to employee
+            const movementType = item.type === 'SALARY_DEDUCTION' ? 'SALE' : 'WRITE_OFF'
             
             // If custom price is provided, we use it for logging the movement
             const priceToUse = item.custom_price ?? null
@@ -3376,7 +4842,7 @@ export async function getSupplies(clubId: string) {
     return res.rows as Supply[]
 }
 
-export async function createSupply(clubId: string, userId: string, data: { supplier_name: string, notes: string, items: { product_id: number, quantity: number, cost_price: number }[], warehouse_id?: number, status?: 'DRAFT' | 'COMPLETED' }) {
+export async function createSupply(clubId: string, userId: string, data: { supplier_name: string, notes: string, items: { product_id: number, quantity: number, cost_price: number }[], warehouse_id?: number, status?: 'DRAFT' | 'COMPLETED', shift_id?: string }) {
     await assertUserCanAccessClub(clubId, userId)
     const client = await import("@/db").then(m => m.getClient())
     try {
@@ -3456,7 +4922,7 @@ export async function createSupply(clubId: string, userId: string, data: { suppl
                     `Supply #${supplyId}`,
                     'SUPPLY',
                     supplyId,
-                    null,
+                    data.shift_id || null,
                     warehouseId
                 )
             }
@@ -3608,16 +5074,21 @@ export async function getInventory(id: number) {
     const client = await import("@/db").then(m => m.getClient())
     try {
         const inventoryRes = await client.query(
-            `SELECT i.*, u.full_name as created_by_name
+            `SELECT i.*, u.full_name as created_by_name,
+                    COALESCE(i.sales_capture_mode_snapshot, (c.inventory_settings->>'sales_capture_mode')) as sales_capture_mode
              FROM warehouse_inventories i
              LEFT JOIN users u ON i.created_by = u.id
+             LEFT JOIN clubs c ON i.club_id = c.id
              WHERE i.id = $1 AND i.club_id = $2`,
             [id, clubId]
         )
         const inventory = inventoryRes.rows[0]
         if (!inventory) throw new Error("Инвентаризация не найдена")
         await assertUserCanUseWarehouses(client, clubId, sessionUserId, [inventory.warehouse_id])
-        return inventory as Inventory
+        return {
+            ...inventory,
+            created_by: inventory.created_by?.toString()
+        } as Inventory
     } finally {
         client.release()
     }
@@ -3701,6 +5172,7 @@ export async function getClubSettings(clubId: string) {
             blind_inventory_enabled?: boolean,
             sales_capture_mode?: 'INVENTORY' | 'SHIFT',
             inventory_timing?: 'END_SHIFT' | 'START_SHIFT',
+            shift_accountability_mode?: 'DISABLED' | 'WAREHOUSE',
             allow_salary_deduction?: boolean,
             employee_discount_percent?: number,
             allow_cost_price_sale?: boolean,
@@ -3938,12 +5410,15 @@ export async function addProductToInventory(inventoryId: number, productId: numb
         // Get product details and current stock in that warehouse (even if 0)
         // We need to know which warehouse this inventory is for
         const sessionUserId = await requireSessionUserId()
-        const inv = await client.query(`SELECT warehouse_id, club_id FROM warehouse_inventories WHERE id = $1`, [inventoryId])
+        const inv = await client.query(`SELECT warehouse_id, club_id, status FROM warehouse_inventories WHERE id = $1`, [inventoryId])
         let warehouseId = inv.rows[0]?.warehouse_id
         const currentClubId = inv.rows[0]?.club_id
+        const inventoryStatus = inv.rows[0]?.status
 
         if (!currentClubId) throw new Error("Инвентаризация не найдена")
         await assertSessionUserCanAccessClub(String(currentClubId), sessionUserId)
+        if (inventoryStatus !== 'OPEN') throw new Error("Добавлять товары можно только в открытую инвентаризацию")
+        await assertUserCanUseWarehouses(client, String(currentClubId), sessionUserId, [warehouseId])
 
         // Check if already exists
         const existing = await client.query(`SELECT 1 FROM warehouse_inventory_items WHERE inventory_id = $1 AND product_id = $2`, [inventoryId, productId])
@@ -3971,10 +5446,17 @@ export async function addProductToInventory(inventoryId: number, productId: numb
 
         // Add item
         await client.query(`
-            INSERT INTO warehouse_inventory_items (inventory_id, product_id, expected_stock, actual_stock, cost_price_snapshot, selling_price_snapshot)
-            VALUES ($1, $2, $3, 0, $4, $5) 
+            INSERT INTO warehouse_inventory_items (
+                inventory_id,
+                product_id,
+                expected_stock,
+                actual_stock,
+                cost_price_snapshot,
+                selling_price_snapshot,
+                added_manually
+            )
+            VALUES ($1, $2, $3, NULL, $4, $5, TRUE) 
         `, [inventoryId, productId, product.current_stock, product.cost_price, product.selling_price])
-        // Default actual_stock to 0 so it's immediately counted as "found 0" (user can change)
 
         await client.query('COMMIT')
         revalidatePath(`/clubs/${inv.rows[0].club_id}/inventory`)
@@ -3986,11 +5468,86 @@ export async function addProductToInventory(inventoryId: number, productId: numb
     }
 }
 
-export async function deleteInventory(inventoryId: number, clubId: string, userId: string) {
+export async function cancelInventory(inventoryId: number, clubId: string, userId: string) {
     await assertUserCanAccessClub(clubId, userId)
-    await query(`DELETE FROM warehouse_inventories WHERE id = $1 AND club_id = $2`, [inventoryId, clubId])
-    await logOperation(clubId, userId, 'DELETE_INVENTORY', 'INVENTORY', inventoryId)
+    const client = await import("@/db").then(m => m.getClient())
+    try {
+        await client.query('BEGIN')
+        const scope = await getInventoryAccessScope(client, clubId, userId)
+        const invRes = await client.query(
+            `
+            SELECT id, status, warehouse_id, created_by
+            FROM warehouse_inventories
+            WHERE id = $1 AND club_id = $2
+            FOR UPDATE
+            `,
+            [inventoryId, clubId]
+        )
+        const inventory = invRes.rows[0]
+        if (!inventory) throw new Error("Инвентаризация не найдена")
+        await assertUserCanUseWarehouses(client, clubId, userId, [inventory.warehouse_id])
+        if (inventory.status !== 'OPEN') {
+            throw new Error("Отменять можно только открытую инвентаризацию")
+        }
+        if (!scope.canManageInventory && String(inventory.created_by) !== String(userId)) {
+            throw new Error("Отменять чужую инвентаризацию нельзя")
+        }
+
+        await client.query(
+            `
+            UPDATE warehouse_inventories
+            SET status = 'CANCELED',
+                canceled_at = NOW(),
+                canceled_by = $3::uuid
+            WHERE id = $1 AND club_id = $2
+            `,
+            [inventoryId, clubId, userId]
+        )
+        await logOperation(clubId, userId, 'CANCEL_INVENTORY', 'INVENTORY', inventoryId)
+        await client.query('COMMIT')
+    } catch (e) {
+        await client.query('ROLLBACK')
+        throw e
+    } finally {
+        client.release()
+    }
     revalidatePath(`/clubs/${clubId}/inventory`)
+}
+
+export async function deleteInventory(inventoryId: number, clubId: string, userId: string) {
+    return cancelInventory(inventoryId, clubId, userId)
+}
+
+export async function getInventoryPostCloseCorrections(inventoryId: number) {
+    const client = await import("@/db").then(m => m.getClient())
+    try {
+        const sessionUserId = await requireSessionUserId()
+        const invRes = await client.query(
+            `SELECT club_id, warehouse_id FROM warehouse_inventories WHERE id = $1`,
+            [inventoryId]
+        )
+        const inventory = invRes.rows[0]
+        if (!inventory) throw new Error("Инвентаризация не найдена")
+        await assertSessionUserCanAccessClub(String(inventory.club_id), sessionUserId)
+        await assertUserCanUseWarehouses(client, String(inventory.club_id), sessionUserId, [inventory.warehouse_id])
+
+        const res = await client.query(
+            `
+            SELECT c.*,
+                   p.name as product_name,
+                   u.full_name as created_by_name
+            FROM inventory_post_close_corrections c
+            JOIN warehouse_products p ON p.id = c.product_id
+            LEFT JOIN users u ON u.id = c.created_by
+            WHERE c.inventory_id = $1
+            ORDER BY c.created_at DESC, c.id DESC
+            `,
+            [inventoryId]
+        )
+        return res.rows as InventoryPostCloseCorrection[]
+    } finally {
+        client.release()
+    }
 }
 
 export async function getAbcAnalysisData(clubId: string) {
@@ -4044,8 +5601,10 @@ export async function getAbcAnalysisData(clubId: string) {
                 LEFT JOIN warehouse_stock_movements m ON p.id = m.product_id 
                     AND m.type IN ('SALE', 'RETURN')
                     AND m.created_at > NOW() - INTERVAL '30 days'
+                LEFT JOIN shift_receipts sr ON m.related_entity_type = 'SHIFT_RECEIPT' AND m.related_entity_id = sr.id
                 LEFT JOIN ReceiptCosts rc ON rc.receipt_id = m.related_entity_id AND rc.product_id = p.id
                 WHERE p.club_id = $1 AND p.is_active = true
+                  AND COALESCE(sr.counts_in_revenue, true) = true
                 GROUP BY p.id, p.name, p.abc_category, p.current_stock, p.sales_velocity
             ),
             TotalStats AS (
@@ -4163,32 +5722,73 @@ export async function getProductByBarcode(clubId: string, barcode: string) {
 }
 
 export async function updateInventoryItem(itemId: number, actualStock: number | null, clubId: string) {
-    // Just update the actual count
-    await requireClubAccess(clubId)
+    const sessionUserId = await requireClubAccess(clubId)
+    const client = await import("@/db").then(m => m.getClient())
     const normalizedActualStock = normalizeInventoryActualStock(actualStock)
-    await query(`
-        UPDATE warehouse_inventory_items ii
-        SET actual_stock = $1
-        FROM warehouse_inventories i
-        WHERE ii.id = $2 AND ii.inventory_id = i.id AND i.club_id = $3
-    `, [normalizedActualStock, itemId, clubId])
+    try {
+        const itemRes = await client.query(
+            `
+            SELECT i.status, i.warehouse_id
+            FROM warehouse_inventory_items ii
+            JOIN warehouse_inventories i ON ii.inventory_id = i.id
+            WHERE ii.id = $1 AND i.club_id = $2
+            LIMIT 1
+            `,
+            [itemId, clubId]
+        )
+        const inventory = itemRes.rows[0]
+        if (!inventory) throw new Error("Позиция инвентаризации не найдена")
+        await assertUserCanUseWarehouses(client, clubId, sessionUserId, [inventory.warehouse_id])
+        if (inventory.status !== 'OPEN') {
+            throw new Error("Редактировать можно только открытую инвентаризацию")
+        }
+
+        await client.query(`
+            UPDATE warehouse_inventory_items ii
+            SET actual_stock = $1,
+                counted_at = CASE WHEN $1 IS NULL THEN NULL ELSE NOW() END,
+                counted_by = CASE WHEN $1 IS NULL THEN NULL ELSE $4::uuid END
+            FROM warehouse_inventories i
+            WHERE ii.id = $2 AND ii.inventory_id = i.id AND i.club_id = $3
+        `, [normalizedActualStock, itemId, clubId, sessionUserId])
+    } finally {
+        client.release()
+    }
 
     revalidatePath(`/clubs/${clubId}/inventory`)
 }
 
 export async function bulkUpdateInventoryItems(items: { id: number, actual_stock: number | null }[], clubId: string) {
-    await requireClubAccess(clubId)
+    const sessionUserId = await requireClubAccess(clubId)
     const client = await import("@/db").then(m => m.getClient())
     try {
         await client.query('BEGIN')
         for (const item of items) {
             const normalizedActualStock = normalizeInventoryActualStock(item.actual_stock)
+            const itemRes = await client.query(
+                `
+                SELECT i.status, i.warehouse_id
+                FROM warehouse_inventory_items ii
+                JOIN warehouse_inventories i ON ii.inventory_id = i.id
+                WHERE ii.id = $1 AND i.club_id = $2
+                LIMIT 1
+                `,
+                [item.id, clubId]
+            )
+            const inventory = itemRes.rows[0]
+            if (!inventory) throw new Error("Позиция инвентаризации не найдена")
+            await assertUserCanUseWarehouses(client, clubId, sessionUserId, [inventory.warehouse_id])
+            if (inventory.status !== 'OPEN') {
+                throw new Error("Редактировать можно только открытую инвентаризацию")
+            }
             await client.query(`
                 UPDATE warehouse_inventory_items ii
-                SET actual_stock = $1
+                SET actual_stock = $1,
+                    counted_at = CASE WHEN $1 IS NULL THEN NULL ELSE NOW() END,
+                    counted_by = CASE WHEN $1 IS NULL THEN NULL ELSE $4::uuid END
                 FROM warehouse_inventories i
                 WHERE ii.id = $2 AND ii.inventory_id = i.id AND i.club_id = $3
-            `, [normalizedActualStock, item.id, clubId])
+            `, [normalizedActualStock, item.id, clubId, sessionUserId])
         }
         await client.query('COMMIT')
     } catch (e) {
@@ -4233,6 +5833,7 @@ export async function closeInventory(
         const inv = invHeader.rows[0]
         if (!inv) throw new Error("Инвентаризация не найдена")
         if (inv.status === 'CLOSED') throw new Error("Инвентаризация уже закрыта")
+        if (inv.status === 'CANCELED') throw new Error("Отмененную инвентаризацию нельзя закрыть")
 
         let warehouseId = inv.warehouse_id
         const shiftId = inv.shift_id
@@ -4275,89 +5876,74 @@ export async function closeInventory(
         }
         const salesRecognition = options?.salesRecognition ?? defaultSalesRecognition
 
-        // 2. Update Stats & Group for Auto-Supply
-        const itemsForAutoSupply: { product_id: number, quantity: number, cost_price: number }[] = []
+        // 2. Reconcile counted rows against current stock and store audit deltas.
         const isRevision = !shiftId
         const recognizeAsSales = !isRevision && salesRecognition === 'INVENTORY'
         const reasonPrefix = isRevision
-            ? `Ревизия (инвентаризация #${inventoryId})`
+            ? `Ревизия #${inventoryId}`
             : recognizeAsSales
-                ? `Продажа за смену (инвентаризация #${inventoryId})`
+                ? `Закрытие сменной инвентаризации #${inventoryId}`
                 : `Корректировка по инвентаризации #${inventoryId}`
-        const movementType = recognizeAsSales ? 'SALE' : 'ADJUSTMENT'
 
         let standardCalculatedRevenue = 0
         let hasNullStock = false
 
         for (const item of itemsRes.rows) {
-            // FIX #5: Track items with NULL actual_stock
             if (item.actual_stock === null) {
                 hasNullStock = true
-                // Set difference and revenue to NULL for incomplete items
                 await client.query(`
                     UPDATE warehouse_inventory_items
-                    SET difference = NULL, calculated_revenue = NULL
+                    SET difference = NULL,
+                        calculated_revenue = NULL,
+                        adjusted_expected_stock = NULL,
+                        stock_before_close = NULL,
+                        applied_stock_delta = NULL
                     WHERE id = $1
                 `, [item.id])
                 continue
             }
 
-            // IMPORTANT: Adjusted Expected Stock = Original Snapshot + Movements during inventory
-            // Example: Snapshot was 10. Supply +5 happened. Adjusted Expected is 15.
-            // If employee counted 15, then 15 - 15 = 0. Perfect.
-            const adjustedExpected = Number(item.expected_stock) + Number(item.movements_during_inventory)
-            
-            // FIX #6: Protect against negative adjustedExpected
-            if (adjustedExpected < 0) {
-                console.error(`Negative adjustedExpected for product ${item.product_id}: ${adjustedExpected}. Setting to 0.`)
-                // Log warning but continue with 0
-            }
-            const safeAdjustedExpected = Math.max(0, adjustedExpected)
-            
-            // FIX #10: Unified difference calculation (actual - expected, consistent throughout)
+            const safeAdjustedExpected = Math.max(0, Number(item.expected_stock) + Number(item.movements_during_inventory))
             const diffAmount = item.actual_stock - safeAdjustedExpected
-
-            // Calculate revenue for this item (only when inventory recognizes deficit as sales)
             const itemRevenue = recognizeAsSales && item.actual_stock < safeAdjustedExpected
                 ? (safeAdjustedExpected - item.actual_stock) * Number(item.selling_price_snapshot)
                 : 0
             standardCalculatedRevenue += itemRevenue
 
+            const currentWarehouseStock = await getLockedWarehouseStock(client, warehouseId, item.product_id)
+            const stockDelta = Number(item.actual_stock) - currentWarehouseStock
+
             // Update item record with calculated results
             await client.query(`
                 UPDATE warehouse_inventory_items
                 SET difference = $2,
-                    calculated_revenue = $3
+                    calculated_revenue = $3,
+                    adjusted_expected_stock = $4,
+                    stock_before_close = $5,
+                    applied_stock_delta = $6,
+                    counted_at = COALESCE(counted_at, NOW()),
+                    counted_by = COALESCE(counted_by, $7::uuid)
                 WHERE id = $1
-            `, [item.id, diffAmount, itemRevenue])
-
-            if (diffAmount === 0) continue
-
-            if (diffAmount > 0) {
-                // Excess found
-                itemsForAutoSupply.push({
-                    product_id: item.product_id,
-                    quantity: diffAmount,
-                    cost_price: item.cost_price_snapshot || 0
-                })
-            } else {
-                // Deficit found - Update Stock
+            `, [item.id, diffAmount, itemRevenue, safeAdjustedExpected, currentWarehouseStock, stockDelta, actorUserId])
+            if (stockDelta !== 0) {
                 const { previousStock, newStock } = await applyWarehouseStockDelta(
                     client,
                     warehouseId,
                     item.product_id,
-                    diffAmount
+                    stockDelta
                 )
                 await logStockMovement(
                     client,
                     clubId,
                     actorUserId,
                     item.product_id,
-                    diffAmount,
+                    stockDelta,
                     previousStock,
                     newStock,
-                    movementType,
-                    reasonPrefix,
+                    stockDelta > 0 ? 'INVENTORY_GAIN' : 'INVENTORY_LOSS',
+                    stockDelta > 0
+                        ? `${reasonPrefix}: найден излишек`
+                        : `${reasonPrefix}: подтверждена недостача`,
                     'INVENTORY',
                     inventoryId,
                     shiftId,
@@ -4373,8 +5959,6 @@ export async function closeInventory(
             const nullStockItems = itemsRes.rows
                 .filter((r: any) => r.actual_stock === null)
                 .map((r: any) => `${r.product_name} (ID: ${r.product_id})`)
-            
-            await client.query('ROLLBACK')
             throw new Error(
                 `Не все товары посчитаны. Заполните фактический остаток для:\n\n` +
                 `${nullStockItems.slice(0, 10).join('\n')}` +
@@ -4382,7 +5966,6 @@ export async function closeInventory(
             )
         }
 
-        // FIX #3: Softer validation for unaccounted sales - allow duplicates with warning logged
         const effectiveUnaccountedSalesRaw = recognizeAsSales ? unaccountedSales : []
         const invProductIds = new Set<number>(itemsRes.rows.map((r: any) => Number(r.product_id)))
         const unaccountedSalesMap = new Map<number, { product_id: number, quantity: number, selling_price: number, cost_price: number }>()
@@ -4418,26 +6001,12 @@ export async function closeInventory(
         }
         const effectiveUnaccountedSales = Array.from(unaccountedSalesMap.values())
         
-        // FIX #7: Verify warehouse has the products for unaccounted sales
         if (effectiveUnaccountedSales.length > 0) {
             await assertProductsBelongToClub(client, clubId, effectiveUnaccountedSales.map(s => s.product_id))
-            
-            // Check products exist on this warehouse
-            const warehouseProductCheck = await client.query(`
-                SELECT p.id
-                FROM warehouse_products p
-                LEFT JOIN warehouse_stock ws ON p.id = ws.product_id AND ws.warehouse_id = $2
-                WHERE p.id = ANY($1) AND p.club_id = $3
-            `, [effectiveUnaccountedSales.map(s => s.product_id), warehouseId, clubId])
-            
-            if (warehouseProductCheck.rows.length !== effectiveUnaccountedSales.length) {
-                console.warn(`Some unaccounted sale products are not on warehouse ${warehouseId}`)
-            }
         }
         
         const unaccountedRevenue = effectiveUnaccountedSales.reduce((acc, s) => acc + (s.quantity * s.selling_price), 0)
-        
-        // FIX #2: Calculate shift revenue and ADD unaccountedRevenue
+
         let shiftCalculatedRevenue: number | null = null
         if (!isRevision && salesRecognition === 'NONE') {
             const revRes = await client.query(
@@ -4461,7 +6030,6 @@ export async function closeInventory(
             shiftCalculatedRevenue = Number(revRes.rows[0]?.revenue || 0)
         }
 
-        // FIX #2: Add unaccountedRevenue to shiftCalculatedRevenue in NONE mode
         const totalCalculatedRevenue = recognizeAsSales
             ? (standardCalculatedRevenue + unaccountedRevenue)
             : ((shiftCalculatedRevenue ?? 0) + unaccountedRevenue)
@@ -4469,60 +6037,34 @@ export async function closeInventory(
         const effectiveReportedRevenue = recognizeAsSales ? reportedRevenue : (!isRevision ? reportedRevenue : 0)
         const diff = effectiveReportedRevenue - totalCalculatedRevenue
 
-        // --- PART B: Handle Unaccounted Sales ---
-        // FIX #1: Only add to auto-supply, don't do net-zero dance
-        // Unaccounted sales are ADDED back to inventory (they were sold but not recorded)
         for (const sale of effectiveUnaccountedSales) {
-            itemsForAutoSupply.push({
-                product_id: sale.product_id,
-                quantity: sale.quantity,
-                cost_price: sale.cost_price
-            })
-        }
-
-        // --- PART C: Create Auto-Supply for Excesses and Unaccounted Sales ---
-        if (itemsForAutoSupply.length > 0) {
-            const totalAutoCost = itemsForAutoSupply.reduce((acc, item) => acc + (item.quantity * item.cost_price), 0)
-            const supplyRes = await client.query(`
-                INSERT INTO warehouse_supplies (club_id, supplier_name, notes, total_cost, created_by, status, warehouse_id)
-                VALUES ($1, 'Авто-поступление (Инвентаризация)', $2, $3, $4, 'COMPLETED', $5)
-                RETURNING id
-            `, [clubId, `Автоматически создано при закрытии инвентаризации #${inventoryId}. Включает излишки и неучтенные продажи.`, totalAutoCost, actorUserId, warehouseId])
-            const supplyId = supplyRes.rows[0].id
-
-            for (const item of itemsForAutoSupply) {
-                await client.query(`
-                    INSERT INTO warehouse_supply_items (supply_id, product_id, quantity, cost_price, total_cost)
-                    VALUES ($1, $2, $3, $4, $5)
-                `, [supplyId, item.product_id, item.quantity, item.cost_price, item.quantity * item.cost_price])
-
-                const { previousStock, newStock } = await applyWarehouseStockDelta(
-                    client,
-                    warehouseId,
-                    item.product_id,
-                    item.quantity
-                )
-
-                await logStockMovement(
-                    client,
-                    clubId,
-                    actorUserId,
-                    item.product_id,
-                    item.quantity,
-                    previousStock,
-                    newStock,
-                    'SUPPLY',
-                    `Авто-поступление #${supplyId} (Инвентаризация #${inventoryId})`,
-                    'SUPPLY',
-                    supplyId,
-                    shiftId,
-                    warehouseId
-                )
+            const currentWarehouseStock = await getLockedWarehouseStock(client, warehouseId, sale.product_id)
+            if (currentWarehouseStock < sale.quantity) {
+                throw new Error(`Неучтенная продажа "${sale.product_id}" превышает текущий остаток на складе`)
             }
+            const { previousStock, newStock } = await applyWarehouseStockDelta(
+                client,
+                warehouseId,
+                sale.product_id,
+                -sale.quantity
+            )
+            await logStockMovement(
+                client,
+                clubId,
+                actorUserId,
+                sale.product_id,
+                -sale.quantity,
+                previousStock,
+                newStock,
+                'SALE',
+                `Неучтенная продажа при закрытии инвентаризации #${inventoryId}`,
+                'INVENTORY',
+                inventoryId,
+                shiftId,
+                warehouseId,
+                sale.selling_price
+            )
         }
-
-        // FIX #1: REMOVED PART D - No longer doing net-zero dance for unaccounted sales
-        // The auto-supply above already handles returning the goods to inventory
 
         // 4. Update Cache for all involved products
         const allProductIds = [
@@ -4545,11 +6087,20 @@ export async function closeInventory(
         await client.query(`
             UPDATE warehouse_inventories
             SET status = 'CLOSED', closed_at = NOW(),
+                closed_by = $5::uuid,
+                sales_capture_mode_snapshot = $6,
                 reported_revenue = $2,
                 calculated_revenue = $3,
                 revenue_difference = $4
             WHERE id = $1
-        `, [inventoryId, effectiveReportedRevenue, totalCalculatedRevenue, diff])
+        `, [
+            inventoryId,
+            effectiveReportedRevenue,
+            totalCalculatedRevenue,
+            diff,
+            actorUserId,
+            !isRevision ? (salesRecognition === 'NONE' ? 'SHIFT' : 'INVENTORY') : null
+        ])
 
         await client.query('COMMIT')
         await checkReplenishmentNeeds(clubId)

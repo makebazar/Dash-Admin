@@ -1,5 +1,5 @@
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { getProducts, getCategories, getSupplies, getInventories, getWarehouses, getEmployees, getClubTasks, getProcurementLists, getSuppliersForSelect, getClubSettings, getSalesAnalytics, getActiveShiftsForClub, getInventoryPageAccess } from "./actions"
+import { TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { getProducts, getCategories, getSupplies, getInventories, getWarehouses, getEmployees, getClubTasks, getProcurementLists, getSuppliersForSelect, getClubSettings, getSalesAnalytics, getActiveShiftsForClub, getInventoryPageAccess, getShiftZoneOverview } from "./actions"
 import { ProductsTab } from "./_components/ProductsTab"
 import { SalesTab } from "./_components/SalesTab"
 import { TasksTab } from "./_components/TasksTab"
@@ -10,6 +10,7 @@ import { InventoryTab } from "./_components/InventoryTab"
 import { SettingsTab } from "./_components/SettingsTab"
 import { AbcAnalysisTab } from "./_components/AbcAnalysisTab"
 import { InventoryTabsWrapper } from "./_components/InventoryTabsWrapper"
+import { ShiftZonesOverviewTab } from "./_components/ShiftZonesOverviewTab"
 import { cookies } from "next/headers"
 
 export default async function InventoryPage({ params, searchParams }: { params: Promise<{ clubId: string }>, searchParams: Promise<{ tab?: string }> }) {
@@ -25,7 +26,7 @@ export default async function InventoryPage({ params, searchParams }: { params: 
         return <div className="p-8 text-red-500">Доступ к управлению складом закрыт для вашей роли.</div>
     }
 
-    const [products, categories, supplies, inventories, warehouses, employees, tasks, procurementLists, suppliers, clubSettings, sales, shifts] = await Promise.all([
+    const [products, categories, supplies, inventories, warehouses, employees, tasks, procurementLists, suppliers, clubSettings, sales, shifts, shiftZoneOverview] = await Promise.all([
         getProducts(clubId),
         getCategories(clubId),
         getSupplies(clubId),
@@ -37,10 +38,10 @@ export default async function InventoryPage({ params, searchParams }: { params: 
         getSuppliersForSelect(clubId),
         getClubSettings(clubId),
         getSalesAnalytics(clubId),
-        getActiveShiftsForClub(clubId)
+        getActiveShiftsForClub(clubId),
+        getShiftZoneOverview(clubId)
     ])
 
-    const isOwner = clubSettings.owner_id === userId
     const hasAdminPrivileges = access.isFullAccess
     const activeTab = tab || "stock"
 
@@ -91,6 +92,12 @@ export default async function InventoryPage({ params, searchParams }: { params: 
                             className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:shadow-none px-0 py-3 bg-transparent font-medium"
                         >
                             Закупки
+                        </TabsTrigger>
+                        <TabsTrigger 
+                            value="zones" 
+                            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:shadow-none px-0 py-3 bg-transparent font-medium"
+                        >
+                            Передача
                         </TabsTrigger>
                         <TabsTrigger 
                             value="inventory" 
@@ -148,6 +155,10 @@ export default async function InventoryPage({ params, searchParams }: { params: 
 
                 <TabsContent value="procurement" className="mt-0">
                     <ProcurementTab lists={procurementLists} products={products} currentUserId={userId} />
+                </TabsContent>
+
+                <TabsContent value="zones" className="mt-0">
+                    <ShiftZonesOverviewTab clubId={clubId} overview={shiftZoneOverview} />
                 </TabsContent>
 
                 <TabsContent value="inventory" className="mt-0">

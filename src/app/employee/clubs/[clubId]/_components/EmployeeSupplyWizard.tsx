@@ -8,15 +8,15 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { 
-    Loader2, Plus, Trash2, Search, Camera, Package, 
+    Loader2, Trash2, Search, Camera, Package, 
     ArrowLeft, ArrowRight, CheckCircle2, ShoppingCart, Warehouse
 } from "lucide-react"
-import { getProducts, createSupply, getProductByBarcode, getWarehouses, type Warehouse as WarehouseType } from "@/app/clubs/[clubId]/inventory/actions"
+import { getProducts, createSupplySafe, getProductByBarcode, getWarehouses, type Warehouse as WarehouseType } from "@/app/clubs/[clubId]/inventory/actions"
 import { 
-    Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
+    Table, TableBody, TableCell, TableRow 
 } from "@/components/ui/table"
-import { Badge } from "@/components/ui/badge"
 import { BarcodeScanner } from "@/app/clubs/[clubId]/inventory/_components/BarcodeScanner"
+import { useUiDialogs } from "@/app/clubs/[clubId]/inventory/_components/useUiDialogs"
 import { cn } from "@/lib/utils"
 
 interface EmployeeSupplyWizardProps {
@@ -35,6 +35,7 @@ interface SupplyItem {
 }
 
 export function EmployeeSupplyWizard({ isOpen, onClose, clubId, userId, activeShiftId }: EmployeeSupplyWizardProps) {
+    const { showMessage, Dialogs } = useUiDialogs()
     const [step, setStep] = useState(1) // 1: Items List, 2: Final Details
     const [items, setItems] = useState<SupplyItem[]>([])
     const [allProducts, setAllProducts] = useState<any[]>([])
@@ -151,26 +152,31 @@ export function EmployeeSupplyWizard({ isOpen, onClose, clubId, userId, activeSh
     const handleFinalize = () => {
         if (items.length === 0) return
         if (!selectedWarehouseId) {
-            alert("Выберите склад")
+            showMessage({ title: "Проверьте данные", description: "Выберите склад" })
             return
         }
         startTransition(async () => {
             try {
-                await createSupply(clubId, userId, {
+                const result = await createSupplySafe(clubId, userId, {
                     supplier_name: supplierName || "Сотрудник (самовывоз)",
                     notes: notes + (activeShiftId ? ` (Смена #${activeShiftId})` : ""),
                     warehouse_id: Number(selectedWarehouseId),
+                    shift_id: activeShiftId,
                     items: items.map(i => ({
                         product_id: i.product_id,
                         quantity: i.quantity,
                         cost_price: i.cost_price
                     }))
                 })
-                alert("Поставка успешно оформлена")
+                if (!result.ok) {
+                    showMessage({ title: "Ошибка", description: result.error })
+                    return
+                }
+                showMessage({ title: "Готово", description: "Поставка успешно оформлена" })
                 handleClose()
             } catch (e) {
                 console.error(e)
-                alert("Ошибка при оформлении поставки")
+                showMessage({ title: "Ошибка", description: "Ошибка при оформлении поставки" })
             }
         })
     }
@@ -475,6 +481,7 @@ export function EmployeeSupplyWizard({ isOpen, onClose, clubId, userId, activeSh
                 onClose={() => setIsScannerOpen(false)}
                 onScan={handleBarcodeScan}
             />
+            {Dialogs}
         </>
     )
 }

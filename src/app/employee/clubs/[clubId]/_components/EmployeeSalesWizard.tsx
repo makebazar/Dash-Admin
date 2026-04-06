@@ -9,17 +9,19 @@ import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
-import { Loader2, ShoppingCart, Trash2, CreditCard, Banknote, History, X, Search, Keyboard, ArrowLeft } from "lucide-react"
+import { Loader2, ShoppingCart, Trash2, CreditCard, Banknote, History, X, Search, Keyboard, ArrowLeft, Wallet } from "lucide-react"
 import { useUiDialogs } from "@/app/clubs/[clubId]/inventory/_components/useUiDialogs"
 import { useSSE } from "@/hooks/usePOSWebSocket"
 import {
     createShiftReceiptSafe,
     getProductByBarcode,
     getProducts,
+    getSalarySaleCandidates,
     getShiftReceipts,
-    voidShiftReceipt,
-    returnReceiptItem,
+    voidShiftReceiptSafe,
+    returnReceiptItemSafe,
     type Product,
+    type SalarySaleCandidate,
     type ShiftReceipt,
     type ShiftReceiptPaymentType
 } from "@/app/clubs/[clubId]/inventory/actions"
@@ -38,6 +40,7 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
     const [isPending, startTransition] = useTransition()
     const [allProducts, setAllProducts] = useState<Product[]>([])
     const [receipts, setReceipts] = useState<ShiftReceipt[]>([])
+    const [salarySaleCandidates, setSalarySaleCandidates] = useState<SalarySaleCandidate[]>([])
     const { confirmAction, showMessage, Dialogs } = useUiDialogs()
 
     const inputRef = useRef<HTMLInputElement | null>(null)
@@ -52,6 +55,7 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
     const [cardAmount, setCardAmount] = useState<string>("")
     const [cashReceived, setCashReceived] = useState<string>("")
     const [receiptNotes, setReceiptNotes] = useState<string>("")
+    const [salaryTargetUserId, setSalaryTargetUserId] = useState<string>("")
 
     // Return/Refund State
     const [isReturnDialogOpen, setIsReturnDialogOpen] = useState(false)
@@ -101,12 +105,14 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
 
     const refresh = useCallback(async () => {
         if (!activeShiftId) return
-        const [p, r] = await Promise.all([
+        const [p, r, candidates] = await Promise.all([
             getProducts(clubId),
-            getShiftReceipts(clubId, userId, activeShiftId)
+            getShiftReceipts(clubId, userId, activeShiftId),
+            getSalarySaleCandidates(clubId)
         ])
         setAllProducts(p)
         setReceipts(r)
+        setSalarySaleCandidates(candidates)
     }, [activeShiftId, clubId, userId])
 
     // Обработка WebSocket сообщений
@@ -165,7 +171,7 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
 
     const receiptTotalForShift = useMemo(() => {
         return receipts
-            .filter(r => !r.voided_at)
+            .filter(r => !r.voided_at && r.counts_in_revenue !== false)
             .reduce((acc, r) => acc + (Number(r.total_amount || 0) - Number(r.total_refund_amount || 0)), 0)
     }, [receipts])
 
@@ -383,7 +389,12 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
         let cash = Number(cashAmount || 0)
         let card = Number(cardAmount || 0)
 
-        if (paymentType === 'mixed') {
+        if (paymentType === 'salary') {
+            if (!salaryTargetUserId) {
+                showMessage({ title: "Выберите сотрудника", description: "Для продажи в счет ЗП нужно выбрать сотрудника с активной сменой" })
+                return
+            }
+        } else if (paymentType === 'mixed') {
             const hasCash = cashAmount.trim() !== ""
             const hasCard = cardAmount.trim() !== ""
             if (!hasCash && !hasCard) {
@@ -409,7 +420,8 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
                 items: cart.map(i => ({ product_id: i.product_id, quantity: i.quantity })),
                 cash_amount: paymentType === 'mixed' ? cash : undefined,
                 card_amount: paymentType === 'mixed' ? card : undefined,
-                notes: receiptNotes || undefined
+                notes: receiptNotes || undefined,
+                salary_target_user_id: paymentType === 'salary' ? salaryTargetUserId : undefined
             })
             if (!result.ok) {
                 showMessage({ title: "Ошибка", description: result.error || "Ошибка пробития" })
@@ -422,6 +434,7 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
                 setCashAmount("")
                 setCardAmount("")
                 setCashReceived("")
+                setSalaryTargetUserId("")
                 await refresh()
                 inputRef.current?.focus()
             } catch (e: any) {
@@ -441,8 +454,13 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
             })
             if (!ok) return
 
+            const result = await voidShiftReceiptSafe(clubId, userId, id)
+            if (!result.ok) {
+                showMessage({ title: "Ошибка", description: result.error || "Ошибка отмены" })
+                return
+            }
+
             try {
-                await voidShiftReceipt(clubId, userId, id)
                 await refresh()
             } catch (e: any) {
                 showMessage({ title: "Ошибка", description: e?.message || "Ошибка отмены" })
@@ -462,20 +480,25 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
         if (!selectedReceipt || !returnItemId || !returnQuantity) return
         
         startTransition(async () => {
+            const result = await returnReceiptItemSafe(
+                clubId,
+                userId,
+                selectedReceipt.id,
+                returnItemId,
+                Number(returnQuantity),
+                returnReason || "Возврат товара"
+            )
+            if (!result.ok) {
+                showMessage({ title: "Ошибка", description: result.error || "Ошибка возврата" })
+                return
+            }
+
             try {
-                await returnReceiptItem(
-                    clubId,
-                    userId,
-                    selectedReceipt.id,
-                    returnItemId,
-                    Number(returnQuantity),
-                    returnReason || "Возврат товара"
-                )
                 setIsReturnDialogOpen(false)
                 await refresh()
                 showMessage({ 
                     title: "Возврат оформлен", 
-                    description: `Товар возвращен на склад. Сумма возврата: ${(Number(returnQuantity) * (selectedReceipt.items?.find(i => i.id === returnItemId)?.selling_price_snapshot || 0)).toLocaleString('ru-RU')} ₽` 
+                    description: `Товар возвращен на склад. Сумма возврата: ${Number(result.refundAmount || 0).toLocaleString('ru-RU')} ₽` 
                 })
             } catch (e: any) {
                 showMessage({ title: "Ошибка", description: e?.message || "Ошибка возврата" })
@@ -794,7 +817,19 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                             <div className="space-y-2">
                                                 <Label className="text-sm text-slate-300">Тип оплаты</Label>
-                                                <Select value={paymentType} onValueChange={(v: any) => setPaymentType(v)}>
+                                                <Select value={paymentType} onValueChange={(v: any) => {
+                                                    setPaymentType(v)
+                                                    if (v !== 'mixed') {
+                                                        setCashAmount("")
+                                                        setCardAmount("")
+                                                    }
+                                                    if (v !== 'cash') {
+                                                        setCashReceived("")
+                                                    }
+                                                    if (v !== 'salary') {
+                                                        setSalaryTargetUserId("")
+                                                    }
+                                                }}>
                                                     <SelectTrigger className="bg-slate-950 border-slate-800 h-12 rounded-xl text-base">
                                                         <SelectValue />
                                                     </SelectTrigger>
@@ -807,6 +842,9 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
                                                         </SelectItem>
                                                         <SelectItem value="mixed">
                                                             <div className="flex items-center gap-2"><CreditCard className="h-4 w-4" /> Смешанная</div>
+                                                        </SelectItem>
+                                                        <SelectItem value="salary">
+                                                            <div className="flex items-center gap-2"><Wallet className="h-4 w-4" /> В счет ЗП</div>
                                                         </SelectItem>
                                                         <SelectItem value="other">Другое</SelectItem>
                                                     </SelectContent>
@@ -822,6 +860,28 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
                                                 />
                                             </div>
                                         </div>
+                                        {paymentType === 'salary' && (
+                                            <div className="space-y-3">
+                                                <div className="space-y-2">
+                                                    <Label className="text-sm text-slate-300">На кого записать покупку</Label>
+                                                    <Select value={salaryTargetUserId} onValueChange={setSalaryTargetUserId}>
+                                                        <SelectTrigger className="bg-slate-950 border-slate-800 h-12 rounded-xl text-base">
+                                                            <SelectValue placeholder="Выберите сотрудника со сменами в этом месяце" />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            {salarySaleCandidates.map((candidate) => (
+                                                                <SelectItem key={candidate.id} value={candidate.id}>
+                                                                    {candidate.full_name} · {candidate.role} · доступно {candidate.available_amount.toLocaleString('ru-RU')} ₽
+                                                                </SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
+                                                <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-xs text-amber-100">
+                                                    Этот чек спишет товар как продажу, но не попадет в обычную выручку. Сумма запишется в покупки бара выбранного сотрудника за текущий месяц.
+                                                </div>
+                                            </div>
+                                        )}
                                         {paymentType === 'cash' && (
                                             <div className="grid grid-cols-2 gap-3">
                                                 <div className="space-y-2">
@@ -914,7 +974,7 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
                                                                 <div className="min-w-0">
                                                                     <div className="text-[11px] font-bold truncate">Чек #{r.id}</div>
                                                                     <div className="text-[9px] text-slate-500 truncate">
-                                                                        {new Date(r.created_at).toLocaleTimeString()} · {r.payment_type.toUpperCase()} · {r.total_amount} ₽
+                                                                        {new Date(r.created_at).toLocaleTimeString()} · {r.payment_type === 'salary' ? 'В СЧЕТ ЗП' : r.payment_type.toUpperCase()} · {r.total_amount} ₽
                                                                         {(r.total_refund_amount || 0) > 0 && (
                                                                              <span className="text-amber-400 ml-1">
                                                                                  (возврат: {(r.total_refund_amount || 0)} ₽, итог: {r.total_amount - (r.total_refund_amount || 0)} ₽)

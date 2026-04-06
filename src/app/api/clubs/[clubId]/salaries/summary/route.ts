@@ -251,19 +251,20 @@ export async function GET(
             // Fetch detailed bar purchases for this employee and month
             const barPurchasesRes = await query(`
                 SELECT 
-                    m.id, 
-                    m.created_at as date, 
+                    r.id,
+                    r.created_at as date,
                     p.name as product_name, 
-                    ABS(m.change_amount) as quantity,
-                    m.shift_id,
-                    p.selling_price as price
-                FROM warehouse_stock_movements m
-                JOIN warehouse_products p ON m.product_id = p.id
-                WHERE m.user_id = $1 
-                  AND m.type = 'SALE' 
-                  AND m.reason LIKE 'В счет ЗП%'
-                  AND m.created_at >= $2 AND m.created_at <= $3
-                ORDER BY m.created_at DESC
+                    i.quantity,
+                    r.salary_target_shift_id as shift_id,
+                    i.selling_price_snapshot as price
+                FROM shift_receipts r
+                JOIN shift_receipt_items i ON i.receipt_id = r.id
+                JOIN warehouse_products p ON p.id = i.product_id
+                WHERE r.salary_target_user_id = $1
+                  AND r.payment_type = 'salary'
+                  AND r.voided_at IS NULL
+                  AND r.created_at >= $2 AND r.created_at <= $3
+                ORDER BY r.created_at DESC, r.id DESC
             `, [emp.id, startOfMonth.toISOString(), endOfMonth.toISOString()]);
 
             const empShifts = shiftsRes.rows.filter((s: any) => s.user_id === emp.id);

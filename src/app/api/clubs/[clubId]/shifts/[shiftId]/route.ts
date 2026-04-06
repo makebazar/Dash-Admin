@@ -4,6 +4,7 @@ import { cookies } from 'next/headers';
 import { calculateSalary } from '@/lib/salary-calculator';
 import { ensureOwnerSubscriptionActive } from '@/lib/club-subscription-guard';
 import { requireClubApiAccess } from '@/lib/club-api-access';
+import { getShiftZoneDiscrepancyReport } from '@/app/clubs/[clubId]/inventory/actions';
 
 type OwnerCorrectionChange = {
     field: string;
@@ -280,9 +281,23 @@ async function createFinanceTransactionsFromShift(
     }
 }
 
+async function getExpenseCategoryId(clubId: string) {
+    const expenseCategoryResult = await query(
+        `SELECT id
+         FROM finance_categories
+         WHERE name = 'Прочие расходы'
+           AND type = 'expense'
+           AND (club_id = $1 OR club_id IS NULL)
+         ORDER BY club_id DESC NULLS LAST
+         LIMIT 1`,
+        [clubId]
+    )
+    return expenseCategoryResult.rows[0]?.id ? Number(expenseCategoryResult.rows[0].id) : null
+}
+
 // GET: Get single shift details
 export async function GET(
-    request: Request,
+    _request: Request,
     { params }: { params: Promise<{ clubId: string; shiftId: string }> }
 ) {
     try {
@@ -303,8 +318,27 @@ export async function GET(
 
         const shift = shiftResult.rows[0];
 
+        const handoverSourceRes = await query(
+            `SELECT DISTINCT ON (ss.shift_id)
+                ss.accepted_from_shift_id,
+                ss.accepted_from_employee_id,
+                prev_u.full_name as accepted_from_employee_name,
+                prev_s.check_in as accepted_from_shift_check_in,
+                prev_s.check_out as accepted_from_shift_check_out
+             FROM shift_zone_snapshots ss
+             LEFT JOIN shifts prev_s ON prev_s.id = ss.accepted_from_shift_id
+             LEFT JOIN users prev_u ON prev_u.id = ss.accepted_from_employee_id
+             WHERE ss.club_id = $1
+               AND ss.shift_id = $2
+               AND ss.snapshot_type = 'OPEN'
+               AND ss.accepted_from_shift_id IS NOT NULL
+             ORDER BY ss.shift_id, ss.created_at DESC`,
+            [clubId, shiftId]
+        )
+        const handoverSource = handoverSourceRes.rows[0] || null
+
         // Fetch related data in parallel
-        const [checklistsRes, transactionsRes, inventoryRes, maintenanceRes, metricsRes, productSalesRes, inventoryDiscrepanciesRes] = await Promise.all([
+        const [checklistsRes, transactionsRes, inventoryRes, maintenanceRes, metricsRes, productSalesRes, inventoryDiscrepanciesRes, shiftZoneDiscrepancies, shiftZoneResolutionsRes] = await Promise.all([
             // 1. Checklists (by shift_id OR (employee_id + time range))
             query(
                 `SELECT e.*, t.name as template_name, u.full_name as evaluator_name
@@ -359,8 +393,10 @@ export async function GET(
                 `SELECT sm.*, p.name as product_name
                  FROM warehouse_stock_movements sm
                  JOIN warehouse_products p ON sm.product_id = p.id
+                 LEFT JOIN shift_receipts sr ON sm.related_entity_type = 'SHIFT_RECEIPT' AND sm.related_entity_id = sr.id
                  WHERE sm.club_id = $1 
                  AND sm.type = 'SALE'
+                 AND COALESCE(sr.counts_in_revenue, true) = true
                  AND (
                      sm.shift_id = $2 
                      OR (
@@ -384,8 +420,43 @@ export async function GET(
                  AND ii.difference != 0
                  ORDER BY ii.difference ASC`,
                 [shift.user_id, shift.check_in, shift.check_out]
+            ),
+            getShiftZoneDiscrepancyReport(String(clubId), String(shiftId)),
+            query(
+                `SELECT
+                    r.*,
+                    u.full_name as resolved_by_name
+                 FROM shift_zone_discrepancy_resolutions r
+                 LEFT JOIN users u ON u.id = r.resolved_by
+                 WHERE r.club_id = $1
+                   AND r.shift_id = $2`,
+                [clubId, shiftId]
             )
         ]);
+
+        const resolutionMap = new Map(
+            shiftZoneResolutionsRes.rows.map((row: any) => [
+                `${row.warehouse_id}:${row.product_id}`,
+                {
+                    id: row.id,
+                    resolution_type: row.resolution_type,
+                    resolution_amount: Number(row.resolution_amount || 0),
+                    discrepancy_quantity: Number(row.discrepancy_quantity || 0),
+                    unit_price: Number(row.unit_price || 0),
+                    notes: row.notes || null,
+                    salary_payment_id: row.salary_payment_id || null,
+                    finance_transaction_id: row.finance_transaction_id || null,
+                    resolved_by: row.resolved_by,
+                    resolved_by_name: row.resolved_by_name || null,
+                    resolved_at: row.resolved_at,
+                }
+            ])
+        );
+
+        const enrichedShiftZoneDiscrepancies = shiftZoneDiscrepancies.map((row: any) => ({
+            ...row,
+            resolution: resolutionMap.get(`${row.warehouse_id}:${row.product_id}`) || null,
+        }))
 
         // Create a map of metric key -> label
         const metricLabels: Record<string, string> = {};
@@ -418,7 +489,9 @@ export async function GET(
             maintenance_tasks: maintenanceRes.rows,
             product_sales: productSalesRes.rows,
             inventory_discrepancies: inventoryDiscrepanciesRes.rows,
-            metric_labels: metricLabels
+            shift_zone_discrepancies: enrichedShiftZoneDiscrepancies,
+            metric_labels: metricLabels,
+            handover_source: handoverSource
         });
 
     } catch (error: any) {
@@ -428,6 +501,178 @@ export async function GET(
         }
         console.error('Get Shift Error:', error);
         return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+}
+
+export async function POST(
+    request: Request,
+    { params }: { params: Promise<{ clubId: string; shiftId: string }> }
+) {
+    try {
+        const userId = (await cookies()).get('session_user_id')?.value;
+        const { clubId, shiftId } = await params;
+
+        if (!userId) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
+        const guard = await ensureOwnerSubscriptionActive(clubId, userId)
+        if (!guard.ok) return guard.response
+
+        const body = await request.json();
+        if (body?.action !== 'resolve_zone_discrepancy') {
+            return NextResponse.json({ error: 'Unsupported action' }, { status: 400 });
+        }
+
+        const warehouseId = Number(body.warehouse_id)
+        const productId = Number(body.product_id)
+        const resolutionType = String(body.resolution_type || '')
+        const note = typeof body.note === 'string' ? body.note.trim() : ''
+
+        if (!Number.isInteger(warehouseId) || warehouseId <= 0 || !Number.isInteger(productId) || productId <= 0) {
+            return NextResponse.json({ error: 'Некорректная строка расхождения' }, { status: 400 });
+        }
+        if (resolutionType !== 'SALARY_DEDUCTION' && resolutionType !== 'LOSS') {
+            return NextResponse.json({ error: 'Некорректный тип решения' }, { status: 400 });
+        }
+
+        const shiftRes = await query(
+            `SELECT id, user_id, check_in, check_out
+             FROM shifts
+             WHERE id = $1 AND club_id = $2
+             LIMIT 1`,
+            [shiftId, clubId]
+        )
+        if ((shiftRes.rowCount || 0) === 0) {
+            return NextResponse.json({ error: 'Shift not found' }, { status: 404 });
+        }
+        const shift = shiftRes.rows[0]
+
+        const existingResolutionRes = await query(
+            `SELECT id
+             FROM shift_zone_discrepancy_resolutions
+             WHERE club_id = $1
+               AND shift_id = $2
+               AND warehouse_id = $3
+               AND product_id = $4
+             LIMIT 1`,
+            [clubId, shiftId, warehouseId, productId]
+        )
+        if ((existingResolutionRes.rowCount || 0) > 0) {
+            return NextResponse.json({ error: 'Для этой строки уже принято решение' }, { status: 409 });
+        }
+
+        const discrepancies = await getShiftZoneDiscrepancyReport(String(clubId), String(shiftId))
+        const row = discrepancies.find((item) => Number(item.warehouse_id) === warehouseId && Number(item.product_id) === productId)
+        if (!row) {
+            return NextResponse.json({ error: 'Расхождение не найдено или уже исчезло после пересчета' }, { status: 404 });
+        }
+
+        const rawDifferenceQuantity = Number(row.difference_quantity || 0)
+        if (rawDifferenceQuantity >= 0) {
+            return NextResponse.json({ error: 'Излишек не удерживается из ЗП и не списывается как потери клуба' }, { status: 400 });
+        }
+
+        const discrepancyQuantity = Math.abs(rawDifferenceQuantity)
+        const unitPrice = Number(row.selling_price || 0)
+        const maxResolutionAmount = Math.max(0, Number((discrepancyQuantity * unitPrice).toFixed(2)))
+        if (maxResolutionAmount <= 0) {
+            return NextResponse.json({ error: 'Для этой строки нет денежной суммы для обработки' }, { status: 400 });
+        }
+
+        let resolutionAmount = maxResolutionAmount
+        if (resolutionType === 'SALARY_DEDUCTION') {
+            resolutionAmount = Number(body.amount)
+            if (!Number.isFinite(resolutionAmount) || resolutionAmount <= 0) {
+                return NextResponse.json({ error: 'Сумма удержания должна быть больше 0' }, { status: 400 });
+            }
+            if (resolutionAmount > maxResolutionAmount) {
+                return NextResponse.json({ error: 'Сумма удержания не может быть больше полной суммы расхождения' }, { status: 400 });
+            }
+            resolutionAmount = Number(resolutionAmount.toFixed(2))
+        }
+
+        let salaryPaymentId: number | null = null
+        let financeTransactionId: number | null = null
+
+        if (resolutionType === 'SALARY_DEDUCTION') {
+            const salaryPaymentRes = await query(
+                `INSERT INTO salary_payments
+                    (club_id, user_id, amount, payment_type, comment, created_by)
+                 VALUES ($1, $2, $3, 'penalty', $4, $5)
+                 RETURNING id`,
+                [
+                    clubId,
+                    shift.user_id,
+                    resolutionAmount,
+                    note || `Удержание по расхождению зоны: ${row.warehouse_name} / ${row.product_name}`,
+                    userId
+                ]
+            )
+            salaryPaymentId = Number(salaryPaymentRes.rows[0].id)
+        } else if (resolutionType === 'LOSS') {
+            const expenseCategoryId = await getExpenseCategoryId(clubId)
+            if (!expenseCategoryId) {
+                return NextResponse.json({ error: 'Не найдена категория "Прочие расходы" для списания потерь' }, { status: 400 });
+            }
+            const financeTransactionRes = await query(
+                `INSERT INTO finance_transactions
+                    (club_id, category_id, amount, type, payment_method, account_id, related_shift_report_id, transaction_date, description, status, created_by, notes)
+                 VALUES ($1, $2, $3, 'expense', 'other', NULL, $4, $5, $6, 'completed', $7, $8)
+                 RETURNING id`,
+                [
+                    clubId,
+                    expenseCategoryId,
+                    resolutionAmount,
+                    shiftId,
+                    shift.check_out || shift.check_in,
+                    `Потери по расхождению зоны: ${row.warehouse_name} / ${row.product_name}`,
+                    userId,
+                    note || null
+                ]
+            )
+            financeTransactionId = Number(financeTransactionRes.rows[0].id)
+        }
+
+        const resolutionRes = await query(
+            `INSERT INTO shift_zone_discrepancy_resolutions
+                (club_id, shift_id, warehouse_id, product_id, resolution_type, resolution_amount, discrepancy_quantity, unit_price, notes, salary_payment_id, finance_transaction_id, resolved_by)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+             RETURNING id, resolved_at`,
+            [
+                clubId,
+                shiftId,
+                warehouseId,
+                productId,
+                resolutionType,
+                resolutionAmount,
+                discrepancyQuantity,
+                unitPrice,
+                note || null,
+                salaryPaymentId,
+                financeTransactionId,
+                userId
+            ]
+        )
+
+        return NextResponse.json({
+            success: true,
+            resolution: {
+                id: resolutionRes.rows[0].id,
+                resolution_type: resolutionType,
+                resolution_amount: resolutionAmount,
+                discrepancy_quantity: discrepancyQuantity,
+                unit_price: unitPrice,
+                notes: note || null,
+                salary_payment_id: salaryPaymentId,
+                finance_transaction_id: financeTransactionId,
+                resolved_by: userId,
+                resolved_at: resolutionRes.rows[0].resolved_at,
+            }
+        })
+    } catch (error: any) {
+        console.error('Resolve Shift Zone Discrepancy Error:', error);
+        return NextResponse.json({ error: error.message || 'Internal Server Error' }, { status: 500 });
     }
 }
 
@@ -711,7 +956,6 @@ export async function PATCH(
 
 // DELETE: Remove shift (owner only)
 export async function DELETE(
-    request: Request,
     { params }: { params: Promise<{ clubId: string; shiftId: string }> }
 ) {
     try {

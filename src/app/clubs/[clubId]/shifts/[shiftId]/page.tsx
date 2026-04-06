@@ -26,6 +26,7 @@ import { PageHeader, PageShell } from "@/components/layout/PageShell"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -64,8 +65,42 @@ interface ShiftDetails {
     product_sales: any[]
     inventory_checks: any[]
     inventory_discrepancies: any[]
+    shift_zone_discrepancies: ShiftZoneDiscrepancy[]
     maintenance_tasks: any[]
     metric_labels?: Record<string, string>
+}
+
+interface ShiftZoneResolution {
+    id: number
+    resolution_type: "SALARY_DEDUCTION" | "LOSS"
+    resolution_amount: number
+    discrepancy_quantity: number
+    unit_price: number
+    notes?: string | null
+    salary_payment_id?: number | null
+    finance_transaction_id?: number | null
+    resolved_by?: string
+    resolved_by_name?: string | null
+    resolved_at: string
+}
+
+interface ShiftZoneDiscrepancy {
+    warehouse_id: number
+    warehouse_name: string
+    shift_zone_label: string
+    product_id: number
+    product_name: string
+    selling_price: number
+    opening_counted_quantity: number | null
+    inflow_quantity: number
+    outflow_quantity: number
+    expected_closing_quantity: number | null
+    actual_closing_quantity: number | null
+    difference_quantity: number | null
+    responsibility_type: string
+    responsibility_label: string
+    explanation: string
+    resolution?: ShiftZoneResolution | null
 }
 
 interface ShiftReportField {
@@ -258,6 +293,13 @@ export default function ShiftDetailsPage() {
     const [editCheckOutDisplay, setEditCheckOutDisplay] = useState("")
     const [editCustomFields, setEditCustomFields] = useState<Record<string, any>>({})
     const [editShiftType, setEditShiftType] = useState<"DAY" | "NIGHT">("DAY")
+    const [isZoneResolutionDialogOpen, setIsZoneResolutionDialogOpen] = useState(false)
+    const [zoneResolutionTarget, setZoneResolutionTarget] = useState<ShiftZoneDiscrepancy | null>(null)
+    const [zoneResolutionType, setZoneResolutionType] = useState<"SALARY_DEDUCTION" | "LOSS">("SALARY_DEDUCTION")
+    const [zoneResolutionMode, setZoneResolutionMode] = useState<"full" | "custom">("full")
+    const [zoneResolutionAmount, setZoneResolutionAmount] = useState("")
+    const [zoneResolutionNote, setZoneResolutionNote] = useState("")
+    const [isZoneResolutionSaving, setIsZoneResolutionSaving] = useState(false)
 
     const shift = details?.shift ?? null
 
@@ -403,6 +445,77 @@ export default function ShiftDetailsPage() {
         const num = Number(amount || 0)
         return `${num.toLocaleString("ru-RU", { maximumFractionDigits: 0 })} ₽`
     }, [])
+
+    const getZoneResolutionMaxAmount = useCallback((row: ShiftZoneDiscrepancy | null) => {
+        if (!row) return 0
+        return Number((Math.abs(Number(row.difference_quantity || 0)) * Number(row.selling_price || 0)).toFixed(2))
+    }, [])
+
+    const openZoneResolutionDialog = useCallback((row: ShiftZoneDiscrepancy, resolutionType: "SALARY_DEDUCTION" | "LOSS") => {
+        const maxAmount = getZoneResolutionMaxAmount(row)
+        setZoneResolutionTarget(row)
+        setZoneResolutionType(resolutionType)
+        setZoneResolutionMode("full")
+        setZoneResolutionAmount(maxAmount > 0 ? String(maxAmount) : "")
+        setZoneResolutionNote("")
+        setIsZoneResolutionDialogOpen(true)
+    }, [getZoneResolutionMaxAmount])
+
+    const closeZoneResolutionDialog = useCallback(() => {
+        if (isZoneResolutionSaving) return
+        setIsZoneResolutionDialogOpen(false)
+        setZoneResolutionTarget(null)
+        setZoneResolutionNote("")
+        setZoneResolutionAmount("")
+        setZoneResolutionMode("full")
+        setZoneResolutionType("SALARY_DEDUCTION")
+    }, [isZoneResolutionSaving])
+
+    const handleResolveZoneDiscrepancy = useCallback(async () => {
+        if (!zoneResolutionTarget || !shift) return
+        const maxAmount = getZoneResolutionMaxAmount(zoneResolutionTarget)
+        const payload: Record<string, any> = {
+            action: "resolve_zone_discrepancy",
+            warehouse_id: zoneResolutionTarget.warehouse_id,
+            product_id: zoneResolutionTarget.product_id,
+            resolution_type: zoneResolutionType,
+            note: zoneResolutionNote.trim() || undefined
+        }
+
+        if (zoneResolutionType === "SALARY_DEDUCTION") {
+            const amount = zoneResolutionMode === "full" ? maxAmount : Number(zoneResolutionAmount)
+            if (!Number.isFinite(amount) || amount <= 0) {
+                alert("Укажите корректную сумму удержания")
+                return
+            }
+            if (amount > maxAmount) {
+                alert("Сумма удержания не может быть больше полной суммы расхождения")
+                return
+            }
+            payload.amount = Number(amount.toFixed(2))
+        }
+
+        setIsZoneResolutionSaving(true)
+        try {
+            const res = await fetch(`/api/clubs/${clubId}/shifts/${shift.id}`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload)
+            })
+            const data = await res.json()
+            if (!res.ok) {
+                alert(data.error || "Ошибка сохранения решения")
+                return
+            }
+            await fetchShiftDetails()
+            closeZoneResolutionDialog()
+        } catch (error) {
+            console.error("Error resolving zone discrepancy:", error)
+            alert("Ошибка сохранения решения")
+        } finally {
+            setIsZoneResolutionSaving(false)
+        }
+    }, [zoneResolutionTarget, shift, getZoneResolutionMaxAmount, zoneResolutionType, zoneResolutionNote, zoneResolutionMode, zoneResolutionAmount, clubId, fetchShiftDetails, closeZoneResolutionDialog])
 
     const renderOwnerCorrectionValue = useCallback((change: OwnerCorrectionChange, value: any) => {
         if (value === null || value === undefined || value === "") {
@@ -1109,6 +1222,7 @@ export default function ShiftDetailsPage() {
                             </TabsContent>
 
                             <TabsContent value="inventory">
+                                <div className="space-y-4">
                                 <Card>
                                     <CardHeader><CardTitle className="text-base">Инвентаризации</CardTitle></CardHeader>
                                     <CardContent className="bg-muted/5 p-0">
@@ -1198,6 +1312,120 @@ export default function ShiftDetailsPage() {
                                         )}
                                     </CardContent>
                                 </Card>
+
+                                <Card>
+                                    <CardHeader><CardTitle className="text-base">Передача остатков по смене</CardTitle></CardHeader>
+                                    <CardContent className="p-0">
+                                        {(!details?.shift_zone_discrepancies || details.shift_zone_discrepancies.length === 0) ? (
+                                            <div className="py-12 text-center text-muted-foreground">
+                                                По передаче остатков расхождений не найдено или склады ответственности не настроены.
+                                            </div>
+                                        ) : (
+                                            <Table>
+                                                <TableHeader>
+                                                    <TableRow>
+                                                        <TableHead>Склад</TableHead>
+                                                        <TableHead>Товар</TableHead>
+                                                        <TableHead className="text-right">Старт</TableHead>
+                                                        <TableHead className="text-right">Приход</TableHead>
+                                                        <TableHead className="text-right">Расход</TableHead>
+                                                        <TableHead className="text-right">Ожидалось</TableHead>
+                                                        <TableHead className="text-right">Факт</TableHead>
+                                                        <TableHead className="text-right">Разница</TableHead>
+                                                        <TableHead>Статус</TableHead>
+                                                        <TableHead>Решение</TableHead>
+                                                        <TableHead className="text-right">Действия</TableHead>
+                                                    </TableRow>
+                                                </TableHeader>
+                                                <TableBody>
+                                                    {details.shift_zone_discrepancies.map((row, index: number) => (
+                                                        <TableRow key={`${row.warehouse_id}-${row.product_id}-${index}`} className="align-top">
+                                                            <TableCell>
+                                                                <div className="font-medium">{row.warehouse_name}</div>
+                                                                <div className="text-xs text-muted-foreground">{row.shift_zone_label}</div>
+                                                            </TableCell>
+                                                            <TableCell className="font-medium">{row.product_name}</TableCell>
+                                                            <TableCell className="text-right tabular-nums">{row.opening_counted_quantity ?? "—"}</TableCell>
+                                                            <TableCell className="text-right tabular-nums text-green-600">+{row.inflow_quantity}</TableCell>
+                                                            <TableCell className="text-right tabular-nums text-red-600">-{row.outflow_quantity}</TableCell>
+                                                            <TableCell className="text-right tabular-nums">{row.expected_closing_quantity ?? "—"}</TableCell>
+                                                            <TableCell className="text-right tabular-nums">{row.actual_closing_quantity ?? "—"}</TableCell>
+                                                            <TableCell className={cn("text-right font-semibold tabular-nums", Number(row.difference_quantity || 0) > 0 ? "text-green-600" : "text-red-600")}>
+                                                                {Number(row.difference_quantity || 0) > 0 ? "+" : ""}{row.difference_quantity}
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <div className="space-y-1">
+                                                                    <Badge variant="outline" className={cn(
+                                                                        row.responsibility_type === "SHIFT_RESPONSIBILITY" ? "border-red-200 bg-red-50 text-red-700" :
+                                                                        row.responsibility_type === "INHERITED_FROM_PREVIOUS_SHIFT" ? "border-amber-200 bg-amber-50 text-amber-700" :
+                                                                        "border-slate-200 bg-slate-50 text-slate-700"
+                                                                    )}>
+                                                                        {row.responsibility_label}
+                                                                    </Badge>
+                                                                    <div className="text-xs text-muted-foreground">{row.explanation}</div>
+                                                                </div>
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                {row.resolution ? (
+                                                                    <div className="space-y-1">
+                                                                        <Badge
+                                                                            variant="outline"
+                                                                            className={cn(
+                                                                                row.resolution.resolution_type === "SALARY_DEDUCTION"
+                                                                                    ? "border-rose-200 bg-rose-50 text-rose-700"
+                                                                                    : "border-slate-200 bg-slate-50 text-slate-700"
+                                                                            )}
+                                                                        >
+                                                                            {row.resolution.resolution_type === "SALARY_DEDUCTION"
+                                                                                ? `В счет ЗП · ${formatMoney(row.resolution.resolution_amount)}`
+                                                                                : `Потери клуба · ${formatMoney(row.resolution.resolution_amount)}`}
+                                                                        </Badge>
+                                                                        <div className="text-xs text-muted-foreground">
+                                                                            {new Date(row.resolution.resolved_at).toLocaleString("ru-RU")}
+                                                                            {row.resolution.resolved_by_name ? ` · ${row.resolution.resolved_by_name}` : ""}
+                                                                        </div>
+                                                                        {row.resolution.notes && (
+                                                                            <div className="text-xs text-muted-foreground whitespace-pre-wrap">
+                                                                                {row.resolution.notes}
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                ) : (
+                                                                    <span className="text-xs text-muted-foreground">Не обработано</span>
+                                                                )}
+                                                            </TableCell>
+                                                            <TableCell className="text-right">
+                                                                {row.resolution ? (
+                                                                    <span className="text-xs text-muted-foreground">Решение сохранено</span>
+                                                                ) : (
+                                                                    <div className="flex justify-end gap-2">
+                                                                        <Button
+                                                                            variant="outline"
+                                                                            size="sm"
+                                                                            className="h-8"
+                                                                            onClick={() => openZoneResolutionDialog(row, "SALARY_DEDUCTION")}
+                                                                        >
+                                                                            В счет ЗП
+                                                                        </Button>
+                                                                        <Button
+                                                                            variant="outline"
+                                                                            size="sm"
+                                                                            className="h-8"
+                                                                            onClick={() => openZoneResolutionDialog(row, "LOSS")}
+                                                                        >
+                                                                            В потери
+                                                                        </Button>
+                                                                    </div>
+                                                                )}
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    ))}
+                                                </TableBody>
+                                            </Table>
+                                        )}
+                                    </CardContent>
+                                </Card>
+                                </div>
                             </TabsContent>
 
                             <TabsContent value="maintenance">
@@ -1299,6 +1527,101 @@ export default function ShiftDetailsPage() {
                         )}
                     </div>
                 </div>
+
+                <Dialog open={isZoneResolutionDialogOpen} onOpenChange={(open) => !open && closeZoneResolutionDialog()}>
+                    <DialogContent className="sm:max-w-[560px]">
+                        <DialogHeader>
+                            <DialogTitle>
+                                {zoneResolutionType === "SALARY_DEDUCTION" ? "Решение: в счет ЗП" : "Решение: списать как потери"}
+                            </DialogTitle>
+                        </DialogHeader>
+                        {zoneResolutionTarget && (
+                            <div className="space-y-4">
+                                <div className="rounded-xl border bg-slate-50/70 p-4">
+                                    <div className="font-medium">{zoneResolutionTarget.warehouse_name} · {zoneResolutionTarget.product_name}</div>
+                                    <div className="mt-1 text-sm text-muted-foreground">
+                                        Расхождение: {Number(zoneResolutionTarget.difference_quantity || 0) > 0 ? "+" : ""}{Number(zoneResolutionTarget.difference_quantity || 0)} шт. · Цена: {formatMoney(zoneResolutionTarget.selling_price)}
+                                    </div>
+                                    <div className="mt-1 text-sm font-semibold">
+                                        Полная сумма: {formatMoney(getZoneResolutionMaxAmount(zoneResolutionTarget))}
+                                    </div>
+                                </div>
+
+                                {zoneResolutionType === "SALARY_DEDUCTION" ? (
+                                    <div className="space-y-4">
+                                        <div className="space-y-2">
+                                            <Label>Сколько удержать</Label>
+                                            <div className="flex gap-2">
+                                                <Button
+                                                    type="button"
+                                                    variant={zoneResolutionMode === "full" ? "default" : "outline"}
+                                                    onClick={() => {
+                                                        setZoneResolutionMode("full")
+                                                        setZoneResolutionAmount(String(getZoneResolutionMaxAmount(zoneResolutionTarget)))
+                                                    }}
+                                                >
+                                                    Всю сумму
+                                                </Button>
+                                                <Button
+                                                    type="button"
+                                                    variant={zoneResolutionMode === "custom" ? "default" : "outline"}
+                                                    onClick={() => {
+                                                        setZoneResolutionMode("custom")
+                                                        setZoneResolutionAmount("")
+                                                    }}
+                                                >
+                                                    Произвольную
+                                                </Button>
+                                            </div>
+                                        </div>
+
+                                        {zoneResolutionMode === "custom" && (
+                                            <div className="space-y-2">
+                                                <Label>Сумма удержания</Label>
+                                                <Input
+                                                    type="number"
+                                                    min="0"
+                                                    max={getZoneResolutionMaxAmount(zoneResolutionTarget)}
+                                                    step="0.01"
+                                                    value={zoneResolutionAmount}
+                                                    onChange={(e) => setZoneResolutionAmount(e.target.value)}
+                                                />
+                                                <div className="text-xs text-muted-foreground">
+                                                    Максимум: {formatMoney(getZoneResolutionMaxAmount(zoneResolutionTarget))}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                ) : (
+                                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                                        Сумма будет списана на потери клуба. Сотруднику удержание по этой строке не создается.
+                                    </div>
+                                )}
+
+                                <div className="space-y-2">
+                                    <Label>Комментарий</Label>
+                                    <Textarea
+                                        value={zoneResolutionNote}
+                                        onChange={(e) => setZoneResolutionNote(e.target.value)}
+                                        placeholder={zoneResolutionType === "SALARY_DEDUCTION"
+                                            ? "Например: удержать частично, остальное простить"
+                                            : "Например: списано как бой/усушка/операционная потеря"}
+                                        rows={3}
+                                    />
+                                </div>
+                            </div>
+                        )}
+                        <DialogFooter>
+                            <Button variant="outline" onClick={closeZoneResolutionDialog} disabled={isZoneResolutionSaving}>
+                                Отмена
+                            </Button>
+                            <Button onClick={handleResolveZoneDiscrepancy} disabled={isZoneResolutionSaving}>
+                                {isZoneResolutionSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                Сохранить решение
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
             </div>
         </PageShell>
     )

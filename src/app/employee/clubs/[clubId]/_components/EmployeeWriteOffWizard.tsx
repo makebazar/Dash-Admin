@@ -10,10 +10,10 @@ import { Label } from "@/components/ui/label"
 import { 
     Loader2, Trash2, Search, Camera, 
     ArrowLeft, ArrowRight, CheckCircle2, ShoppingCart, 
-    Ban, Wallet, Warehouse, Plus, Percent
+    Ban, Warehouse, Plus
 } from "lucide-react"
 import { 
-    getProducts, createWriteOff, getProductByBarcode, getWarehouses, getClubSettings, 
+    getProducts, createWriteOffSafe, getProductByBarcode, getWarehouses, getClubSettings, 
     type Warehouse as WarehouseType 
 } from "@/app/clubs/[clubId]/inventory/actions"
 import { 
@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { BarcodeScanner } from "@/app/clubs/[clubId]/inventory/_components/BarcodeScanner"
+import { useUiDialogs } from "@/app/clubs/[clubId]/inventory/_components/useUiDialogs"
 import { cn } from "@/lib/utils"
 
 interface EmployeeWriteOffWizardProps {
@@ -29,19 +30,19 @@ interface EmployeeWriteOffWizardProps {
     clubId: string
     userId: string
     activeShiftId?: string
-    currentSalary?: number // Added to check limits
 }
 
 interface WriteOffItem {
     product_id: number
     name: string
     quantity: number
-    type: 'WASTE' | 'SALARY_DEDUCTION'
+    type: 'WASTE'
     price: number
     custom_price?: number
 }
 
-export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, activeShiftId, currentSalary = 0 }: EmployeeWriteOffWizardProps) {
+export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, activeShiftId }: EmployeeWriteOffWizardProps) {
+    const { showMessage, Dialogs } = useUiDialogs()
     const [step, setStep] = useState(1) // 1: Items, 2: Final Details
     const [items, setItems] = useState<WriteOffItem[]>([])
     const [allProducts, setAllProducts] = useState<any[]>([])
@@ -57,7 +58,6 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
     const [selectedProductId, setSelectedProductId] = useState<string>("")
     const [itemQty, setItemQty] = useState("1")
     const [itemCustomPrice, setItemCustomPrice] = useState<string>("")
-    const [writeOffType, setWriteOffType] = useState<'WASTE' | 'SALARY_DEDUCTION'>('WASTE')
     const [notes, setNotes] = useState("")
 
     // iOS Scroll Lock
@@ -100,19 +100,13 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
         let priceToRecord = product.selling_price || 0
         let customPrice: number | undefined = undefined
 
-        if (writeOffType === 'SALARY_DEDUCTION') {
-            const discountPercent = inventorySettings?.employee_discount_percent || 0
-            if (discountPercent > 0) {
-                priceToRecord = Math.round(priceToRecord * (1 - discountPercent / 100))
-                customPrice = priceToRecord
-            }
-        } else if (itemCustomPrice) {
+        if (itemCustomPrice) {
             // This case might still happen if cost_price_sale is allowed
             priceToRecord = Number(itemCustomPrice)
             customPrice = priceToRecord
         }
 
-        const existingIdx = items.findIndex(i => i.product_id === product.id && i.type === writeOffType)
+        const existingIdx = items.findIndex(i => i.product_id === product.id && i.type === 'WASTE')
         if (existingIdx > -1) {
             const newItems = [...items]
             newItems[existingIdx].quantity += Number(itemQty)
@@ -124,7 +118,7 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
                 product_id: product.id,
                 name: product.name,
                 quantity: Number(itemQty),
-                type: writeOffType,
+                type: 'WASTE',
                 price: priceToRecord,
                 custom_price: customPrice
             }])
@@ -170,12 +164,12 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
     const handleFinalize = () => {
         if (items.length === 0) return
         if (!selectedWarehouseId) {
-            alert("Выберите склад")
+            showMessage({ title: "Проверьте данные", description: "Выберите склад" })
             return
         }
         startTransition(async () => {
             try {
-                await createWriteOff(clubId, userId, {
+                const result = await createWriteOffSafe(clubId, userId, {
                     items: items.map(i => ({
                         product_id: i.product_id,
                         quantity: i.quantity,
@@ -186,11 +180,15 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
                     shift_id: activeShiftId,
                     warehouse_id: Number(selectedWarehouseId)
                 })
-                alert("Списание успешно оформлено")
+                if (!result.ok) {
+                    showMessage({ title: "Ошибка", description: result.error })
+                    return
+                }
+                showMessage({ title: "Готово", description: "Списание успешно оформлено" })
                 handleClose()
             } catch (e) {
                 console.error(e)
-                alert("Ошибка при оформлении списания")
+                showMessage({ title: "Ошибка", description: "Ошибка при оформлении списания" })
             }
         })
     }
@@ -208,12 +206,6 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
         p.barcodes?.some((bc: string) => bc.includes(searchQuery))
     )
 
-    const totalDeduction = items
-        .filter(i => i.type === 'SALARY_DEDUCTION')
-        .reduce((acc, i) => acc + (i.quantity * i.price), 0)
-
-    const isOverSalaryLimit = totalDeduction > currentSalary
-
     return (
         <>
             <Dialog open={isOpen} onOpenChange={handleClose}>
@@ -225,12 +217,7 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
                                 {step === 1 ? "Списание товара" : "Причина списания"}
                             </DialogTitle>
                             <DialogDescription className="text-slate-400 text-[10px] leading-tight">
-                                {step === 1 ? (
-                                    <span className="flex flex-wrap items-center gap-x-1">
-                                        Выберите товары. 
-                                        {currentSalary > 0 && <span className="text-emerald-400 font-medium">Доступно: {currentSalary.toLocaleString()} ₽</span>}
-                                    </span>
-                                ) : "Укажите причину (брак, просрочка и т.д.)"}
+                                {step === 1 ? "Выберите товары для списания." : "Укажите причину (брак, просрочка и т.д.)"}
                             </DialogDescription>
                         </div>
                     </DialogHeader>
@@ -289,14 +276,6 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
                                             <ShoppingCart className="h-3 w-3" />
                                             Список списания ({items.length})
                                         </div>
-                                        {totalDeduction > 0 && (
-                                            <span className={cn(
-                                                "text-[10px]",
-                                                isOverSalaryLimit ? "text-red-400" : "text-emerald-400"
-                                            )}>
-                                                Итого в счет ЗП: {totalDeduction.toLocaleString()} ₽
-                                            </span>
-                                        )}
                                     </h4>
                                     
                                     {items.length === 0 ? (
@@ -314,11 +293,7 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
                                                                 <div className="flex flex-col">
                                                                     <span className="text-sm font-medium text-slate-200">{item.name}</span>
                                                                     <div className="flex items-center gap-2 mt-1">
-                                                                        {item.type === 'SALARY_DEDUCTION' ? (
-                                                                            <Badge className="bg-amber-500/10 text-amber-500 border-none text-[9px] px-1.5 h-4">В счет ЗП</Badge>
-                                                                        ) : (
-                                                                            <Badge className="bg-red-500/10 text-red-500 border-none text-[9px] px-1.5 h-4">Списание</Badge>
-                                                                        )}
+                                                                        <Badge className="bg-red-500/10 text-red-500 border-none text-[9px] px-1.5 h-4">Списание</Badge>
                                                                         <span className="text-[10px] text-slate-500">{item.price} ₽</span>
                                                                     </div>
                                                                 </div>
@@ -356,27 +331,6 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
                                     />
                                 </div>
 
-                                {totalDeduction > 0 && (
-                                    <div className={cn(
-                                        "p-4 border rounded-2xl flex items-center gap-3",
-                                        isOverSalaryLimit 
-                                            ? "bg-red-500/10 border-red-500/20" 
-                                            : "bg-amber-500/10 border-amber-500/20"
-                                    )}>
-                                        <Wallet className={cn("h-6 w-6", isOverSalaryLimit ? "text-red-500" : "text-amber-500")} />
-                                        <div className="flex-1">
-                                            <p className={cn("text-sm font-bold", isOverSalaryLimit ? "text-red-500" : "text-amber-500")}>
-                                                {isOverSalaryLimit ? "Лимит превышен!" : "Будет вычтено из зарплаты:"}
-                                            </p>
-                                            <p className="text-xl font-black text-white">{totalDeduction.toLocaleString()} ₽</p>
-                                            {isOverSalaryLimit && (
-                                                <p className="text-[10px] text-red-400 mt-1">
-                                                    Максимально доступно: {currentSalary.toLocaleString()} ₽ (текущая ЗП за месяц)
-                                                </p>
-                                            )}
-                                        </div>
-                                    </div>
-                                )}
                             </div>
                         )}
                     </div>
@@ -386,9 +340,9 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
                             <Button 
                                 className={cn(
                                     "w-full h-12 font-bold rounded-xl shadow-lg",
-                                    isOverSalaryLimit ? "bg-slate-800 text-slate-500 cursor-not-allowed" : "bg-red-600 hover:bg-red-700 text-white shadow-red-900/20"
+                                    "bg-red-600 hover:bg-red-700 text-white shadow-red-900/20"
                                 )}
-                                disabled={items.length === 0 || isOverSalaryLimit}
+                                disabled={items.length === 0}
                                 onClick={() => setStep(2)}
                             >
                                 Далее
@@ -406,7 +360,7 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
                                 <Button 
                                     className="flex-1 h-12 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl shadow-lg shadow-green-900/20"
                                     onClick={handleFinalize}
-                                    disabled={isPending || isOverSalaryLimit}
+                                    disabled={isPending}
                                 >
                                     {isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <CheckCircle2 className="h-4 w-4 mr-2" />}
                                     Подтвердить
@@ -463,35 +417,9 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
                                     </div>
                                     <div className="space-y-2">
                                         <Label className="text-[10px] uppercase text-slate-500 font-bold tracking-wider">Тип операции</Label>
-                                        <div className="grid grid-cols-1 gap-2">
-                                            {(!inventorySettings || inventorySettings.allow_salary_deduction !== false) ? (
-                                                <button
-                                                    onClick={() => setWriteOffType(writeOffType === 'WASTE' ? 'SALARY_DEDUCTION' : 'WASTE')}
-                                                    className={cn(
-                                                        "h-14 rounded-2xl border transition-all flex items-center justify-center gap-3 px-4",
-                                                        writeOffType === 'WASTE' 
-                                                            ? "bg-red-500/10 border-red-500/50 text-red-400" 
-                                                            : "bg-amber-500/10 border-amber-500/50 text-amber-400"
-                                                    )}
-                                                >
-                                                    {writeOffType === 'WASTE' ? (
-                                                        <>
-                                                            <Trash2 className="h-4 w-4" />
-                                                            <span className="text-xs font-bold uppercase">Списание (брак)</span>
-                                                        </>
-                                                    ) : (
-                                                        <>
-                                                            <Wallet className="h-4 w-4" />
-                                                            <span className="text-xs font-bold uppercase">В счет ЗП</span>
-                                                        </>
-                                                    )}
-                                                </button>
-                                            ) : (
-                                                <div className="h-14 rounded-2xl border border-red-500/50 bg-red-500/10 text-red-400 flex items-center justify-center gap-3 px-4">
-                                                    <Trash2 className="h-4 w-4" />
-                                                    <span className="text-xs font-bold uppercase">Только списание</span>
-                                                </div>
-                                            )}
+                                        <div className="h-14 rounded-2xl border border-red-500/50 bg-red-500/10 text-red-400 flex items-center justify-center gap-3 px-4">
+                                            <Trash2 className="h-4 w-4" />
+                                            <span className="text-xs font-bold uppercase">Списание</span>
                                         </div>
                                     </div>
                                 </div>
@@ -535,15 +463,6 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
                                     </div>
                                 )}
                                 
-                                {writeOffType === 'SALARY_DEDUCTION' && (inventorySettings?.employee_discount_percent || 0) > 0 && (
-                                    <div className="bg-blue-500/10 border border-blue-500/20 p-3 rounded-xl flex items-center justify-between">
-                                        <div className="flex items-center gap-2">
-                                            <Percent className="h-4 w-4 text-blue-400" />
-                                            <span className="text-xs text-blue-100 font-bold">Скидка сотрудника:</span>
-                                        </div>
-                                        <span className="text-sm font-black text-blue-400">-{inventorySettings.employee_discount_percent}%</span>
-                                    </div>
-                                )}
                             </div>
                         )}
                     </div>
@@ -572,6 +491,7 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
                 onClose={() => setIsScannerOpen(false)}
                 onScan={handleBarcodeScan}
             />
+            {Dialogs}
         </>
     )
 }
