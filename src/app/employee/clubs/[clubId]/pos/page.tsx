@@ -5,7 +5,6 @@ import { useParams } from "next/navigation"
 import { Loader2 } from "lucide-react"
 import { SSEProvider } from "@/hooks/usePOSWebSocket"
 import { EmployeeSalesWizard } from "../_components/EmployeeSalesWizard"
-import { getOpenShiftInventory } from "@/app/clubs/[clubId]/inventory/actions"
 
 export default function EmployeePosPage() {
     const { clubId } = useParams<{ clubId: string }>()
@@ -43,8 +42,15 @@ export default function EmployeePosPage() {
                     )
 
                     if (requiresStartAcceptance) {
-                        const openInventory = await getOpenShiftInventory(String(clubId), shiftId)
-                        setIsBlockedByAcceptance(Boolean(openInventory))
+                        const inventoryRes = await fetch(
+                            `/api/employee/clubs/${clubId}/shifts/${shiftId}/open-inventory`,
+                            { cache: "no-store" }
+                        )
+                        const inventoryData = await inventoryRes.json().catch(() => ({}))
+                        if (!inventoryRes.ok) {
+                            throw new Error(inventoryData.error || "Не удалось проверить приемку остатков")
+                        }
+                        setIsBlockedByAcceptance(Boolean(inventoryData.inventory))
                     } else {
                         setIsBlockedByAcceptance(false)
                     }

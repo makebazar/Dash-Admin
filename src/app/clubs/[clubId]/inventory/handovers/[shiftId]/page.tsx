@@ -97,6 +97,18 @@ function getRowMode(row: ShiftZoneDiscrepancy) {
     return "unknown"
 }
 
+function hasOpeningDiscrepancy(row: ShiftZoneDiscrepancy) {
+    return row.opening_counted_quantity !== null
+        && row.opening_system_quantity !== null
+        && Number(row.opening_counted_quantity) !== Number(row.opening_system_quantity)
+}
+
+function hasClosingDiscrepancy(row: ShiftZoneDiscrepancy) {
+    return row.actual_closing_quantity !== null
+        && row.expected_closing_quantity !== null
+        && Number(row.actual_closing_quantity) !== Number(row.expected_closing_quantity)
+}
+
 function getDiscrepancyValue(row: ShiftZoneDiscrepancy) {
     return Number(row.difference_quantity || 0)
 }
@@ -164,13 +176,13 @@ export default function InventoryHandoverDetailsPage() {
         (details?.shift_zone_discrepancies || []).filter((row) => isShortage(row) && !row.resolution).length
     ), [details])
 
-    const openOnlyRows = useMemo(
-        () => (details?.shift_zone_discrepancies || []).filter((row) => getRowMode(row) === "open_only"),
+    const openingDiscrepancyRows = useMemo(
+        () => (details?.shift_zone_discrepancies || []).filter((row) => hasOpeningDiscrepancy(row)),
         [details]
     )
 
-    const closeOnlyRows = useMemo(
-        () => (details?.shift_zone_discrepancies || []).filter((row) => getRowMode(row) === "close_only"),
+    const closingDiscrepancyRows = useMemo(
+        () => (details?.shift_zone_discrepancies || []).filter((row) => hasClosingDiscrepancy(row)),
         [details]
     )
 
@@ -261,6 +273,9 @@ export default function InventoryHandoverDetailsPage() {
             )}>
                 {row.responsibility_label}
             </Badge>
+            <div className="text-xs text-muted-foreground whitespace-pre-wrap">
+                {row.explanation}
+            </div>
         </div>
     ), [])
 
@@ -425,6 +440,14 @@ export default function InventoryHandoverDetailsPage() {
                         </CardContent>
                     </Card>
 
+                    <Card className="border-dashed shadow-none">
+                        <CardContent className="py-4 text-sm text-muted-foreground">
+                            `Приемка остатков` теперь показывает строки, где расхождение уже было в момент старта смены.
+                            `Сдача остатков` показывает строки, где отклонение возникло к концу смены.
+                            `Полный цикл передачи` оставляет сквозную картину по тем товарам, где есть и стартовый, и финальный snapshot.
+                        </CardContent>
+                    </Card>
+
                     {(!details?.shift_zone_discrepancies || details.shift_zone_discrepancies.length === 0) ? (
                         <Card className="shadow-sm">
                             <CardContent className="py-14 text-center text-muted-foreground">
@@ -438,9 +461,9 @@ export default function InventoryHandoverDetailsPage() {
                                     <CardTitle className="text-base">Приемка остатков</CardTitle>
                                 </CardHeader>
                                 <CardContent className="p-0">
-                                    {openOnlyRows.length === 0 ? (
+                                    {openingDiscrepancyRows.length === 0 ? (
                                         <div className="py-10 text-center text-sm text-muted-foreground">
-                                            Отдельных отклонений на приемке нет.
+                                            На приемке отклонений нет: стартовые остатки совпали с системой.
                                         </div>
                                     ) : (
                                         <Table>
@@ -457,7 +480,7 @@ export default function InventoryHandoverDetailsPage() {
                                                 </TableRow>
                                             </TableHeader>
                                             <TableBody>
-                                                {openOnlyRows.map((row, index) => {
+                                                {openingDiscrepancyRows.map((row, index) => {
                                                     const discrepancyValue = getDiscrepancyValue(row)
                                                     return (
                                                         <TableRow key={`open-${row.warehouse_id}-${row.product_id}-${index}`} className="align-top">
@@ -494,9 +517,9 @@ export default function InventoryHandoverDetailsPage() {
                                     <CardTitle className="text-base">Сдача остатков</CardTitle>
                                 </CardHeader>
                                 <CardContent className="p-0">
-                                    {closeOnlyRows.length === 0 ? (
+                                    {closingDiscrepancyRows.length === 0 ? (
                                         <div className="py-10 text-center text-sm text-muted-foreground">
-                                            Отдельных отклонений на сдаче нет.
+                                            На сдаче отклонений нет: финальные остатки сошлись с ожидаемыми.
                                         </div>
                                     ) : (
                                         <Table>
@@ -513,7 +536,7 @@ export default function InventoryHandoverDetailsPage() {
                                                 </TableRow>
                                             </TableHeader>
                                             <TableBody>
-                                                {closeOnlyRows.map((row, index) => {
+                                                {closingDiscrepancyRows.map((row, index) => {
                                                     const discrepancyValue = getDiscrepancyValue(row)
                                                     return (
                                                         <TableRow key={`close-${row.warehouse_id}-${row.product_id}-${index}`} className="align-top">

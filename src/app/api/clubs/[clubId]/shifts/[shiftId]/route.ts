@@ -956,6 +956,7 @@ export async function PATCH(
 
 // DELETE: Remove shift (owner only)
 export async function DELETE(
+    _request: Request,
     { params }: { params: Promise<{ clubId: string; shiftId: string }> }
 ) {
     try {

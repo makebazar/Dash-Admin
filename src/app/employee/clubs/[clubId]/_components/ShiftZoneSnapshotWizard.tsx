@@ -60,7 +60,9 @@ export function ShiftZoneSnapshotWizard({
             .then(([rows, availableWarehouses, sourceCandidates]) => {
                 if (!disposed) {
                     let nextItems = rows
-                    let nextSelectedSourceShiftId = sourceCandidates?.[0]?.shift_id || ""
+                    let nextSelectedSourceShiftId = sourceCandidates?.find((candidate) => !candidate.is_self_handover)?.shift_id
+                        || sourceCandidates?.[0]?.shift_id
+                        || ""
 
                     try {
                         const savedDraftRaw = window.localStorage.getItem(draftStorageKey)
@@ -287,7 +289,10 @@ export function ShiftZoneSnapshotWizard({
                                             <SelectContent>
                                                 {handoverSourceCandidates.map((candidate) => (
                                                     <SelectItem key={candidate.shift_id} value={candidate.shift_id}>
-                                                        {candidate.employee_name} · закрыта {new Date(candidate.check_out).toLocaleString("ru-RU")}
+                                                        {candidate.employee_name}
+                                                        {candidate.is_self_handover ? " · самоприемка" : ""}
+                                                        {" · закрыта "}
+                                                        {new Date(candidate.check_out).toLocaleString("ru-RU")}
                                                     </SelectItem>
                                                 ))}
                                             </SelectContent>

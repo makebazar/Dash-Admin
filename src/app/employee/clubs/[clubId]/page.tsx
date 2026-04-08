@@ -26,7 +26,20 @@ import { EmployeeTransferWizard } from "./_components/EmployeeTransferWizard"
 import { EmployeeRequestWizard } from "./_components/EmployeeRequestWizard"
 import { ShiftZoneSnapshotWizard } from "./_components/ShiftZoneSnapshotWizard"
 import { getEmployeeRequests } from "./requests-actions"
-import { getOpenShiftInventory, getShiftAccountabilitySetupStatus } from "@/app/clubs/[clubId]/inventory/actions"
+
+type ShiftAccountabilityStatusResponse = {
+    mode: 'DISABLED' | 'WAREHOUSE'
+    enabled: boolean
+    ready: boolean
+    warehouses_count: number
+    configured_warehouses: Array<{
+        id: number
+        name: string
+        shift_zone_key: 'BAR' | 'FRIDGE' | 'SHOWCASE' | 'BACKROOM'
+        shift_zone_label: string
+    }>
+    issues: string[]
+}
 
 interface ClubInfo {
     id: number
@@ -136,6 +149,33 @@ interface RecentShift {
     earnings: number
 }
 
+async function fetchShiftAccountabilityStatus(clubId: string): Promise<ShiftAccountabilityStatusResponse> {
+    const res = await fetch(`/api/employee/clubs/${clubId}/shift-accountability`, { cache: 'no-store' })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) {
+        throw new Error(data.error || 'Не удалось загрузить статус сменной ответственности')
+    }
+    return data as ShiftAccountabilityStatusResponse
+}
+
+async function fetchOpenShiftInventory(clubId: string, shiftId: string | number) {
+    const res = await fetch(`/api/employee/clubs/${clubId}/shifts/${shiftId}/open-inventory`, { cache: 'no-store' })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) {
+        throw new Error(data.error || 'Не удалось проверить открытую инвентаризацию')
+    }
+    return (data.inventory || null) as { id: number; warehouse_id: number | null; started_at: string } | null
+}
+
+async function fetchHasOpenZoneSnapshot(clubId: string, shiftId: string | number) {
+    const res = await fetch(`/api/employee/clubs/${clubId}/shifts/${shiftId}/open-snapshot`, { cache: 'no-store' })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) {
+        throw new Error(data.error || 'Не удалось проверить приемку остатков')
+    }
+    return Boolean(data.has_snapshot)
+}
+
 export default function EmployeeClubPage({ params }: { params: Promise<{ clubId: string }> }) {
     const router = useRouter()
     const [clubId, setClubId] = useState<string>('')
@@ -171,6 +211,7 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
     const [isCloseZoneSnapshotModalOpen, setIsCloseZoneSnapshotModalOpen] = useState(false)
     const [hasShiftAccountability, setHasShiftAccountability] = useState<boolean | null>(null)
     const [hasOpenZoneSnapshotDraft, setHasOpenZoneSnapshotDraft] = useState(false)
+    const [hasPendingZoneStartAcceptance, setHasPendingZoneStartAcceptance] = useState(false)
     const [pendingShiftCloseData, setPendingShiftCloseData] = useState<any>(null)
     const [reportTemplate, setReportTemplate] = useState<any>(null)
     const [reportData, setReportData] = useState<Record<string, any>>({})
@@ -271,6 +312,35 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
         }
     }, [activeShift?.id, clubId, isOpenZoneSnapshotModalOpen, hasPendingStartAcceptance])
 
+    useEffect(() => {
+        if (!clubId || !activeShift?.id || !hasShiftAccountability) {
+            setHasPendingZoneStartAcceptance(false)
+            return
+        }
+
+        let cancelled = false
+
+        fetchHasOpenZoneSnapshot(clubId, activeShift.id)
+            .then((hasOpenSnapshot) => {
+                if (cancelled) return
+                const pendingAcceptance = !hasOpenSnapshot
+                setHasPendingZoneStartAcceptance(pendingAcceptance)
+                if (pendingAcceptance) {
+                    setStartedShiftId(activeShift.id)
+                }
+            })
+            .catch((error) => {
+                if (!cancelled) {
+                    console.error('Failed to inspect zone start acceptance:', error)
+                    setHasPendingZoneStartAcceptance(false)
+                }
+            })
+
+        return () => {
+            cancelled = true
+        }
+    }, [activeShift?.id, clubId, hasShiftAccountability, isOpenZoneSnapshotModalOpen])
+
     const maintenanceComponent = useMemo(() => {
         if (!kpiData?.maintenance) return null
         return (
@@ -353,7 +423,7 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
         if (!clubId || !currentUserId) return
         let cancelled = false
 
-        getShiftAccountabilitySetupStatus(clubId)
+        fetchShiftAccountabilityStatus(clubId)
             .then((status) => {
                 if (!cancelled) setHasShiftAccountability(status.enabled && status.ready)
             })
@@ -380,7 +450,7 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
 
         const restoreOpenInventory = async () => {
             try {
-                const openInventory = await getOpenShiftInventory(clubId, activeShift.id)
+                const openInventory = await fetchOpenShiftInventory(clubId, activeShift.id)
                 if (!cancelled && openInventory) {
                     setHasPendingStartAcceptance(true)
                     setStartedShiftId(activeShift.id)
@@ -412,7 +482,7 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
 
         let cancelled = false
 
-        getOpenShiftInventory(clubId, activeShift.id)
+        fetchOpenShiftInventory(clubId, activeShift.id)
             .then((openInventory) => {
                 if (!cancelled) {
                     setHasPendingStartAcceptance(Boolean(openInventory))
@@ -610,7 +680,7 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
             if (res.ok) {
                 const inventoryTiming = club?.inventory_settings?.inventory_timing || 'END_SHIFT'
                 const shouldRequireInventoryAtStart = Boolean(club?.inventory_required) && inventoryTiming === 'START_SHIFT'
-                const accountabilityStatus = await getShiftAccountabilitySetupStatus(clubId)
+                const accountabilityStatus = await fetchShiftAccountabilityStatus(clubId)
                 const hasShiftZones = accountabilityStatus.enabled && accountabilityStatus.ready
                 setHasShiftAccountability(hasShiftZones)
 
@@ -645,7 +715,7 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                 setIsReportModalOpen(true)
             } else {
                 if (confirm('Завершить смену?')) {
-                    const accountabilityStatus = await getShiftAccountabilitySetupStatus(clubId)
+                    const accountabilityStatus = await fetchShiftAccountabilityStatus(clubId)
                     const hasShiftZones = accountabilityStatus.enabled && accountabilityStatus.ready
                     setHasShiftAccountability(hasShiftZones)
                     if (activeShift?.id && hasShiftZones) {
@@ -659,7 +729,7 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
         } catch (e) {
             console.error(e)
             if (confirm('Завершить смену?')) {
-                const accountabilityStatus = await getShiftAccountabilitySetupStatus(clubId)
+                const accountabilityStatus = await fetchShiftAccountabilityStatus(clubId)
                 const hasShiftZones = accountabilityStatus.enabled && accountabilityStatus.ready
                 setHasShiftAccountability(hasShiftZones)
                 if (activeShift?.id && hasShiftZones) {
@@ -783,7 +853,7 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
     }
 
     const handleShiftClosingWizardComplete = useCallback(async (data: any) => {
-        const accountabilityStatus = await getShiftAccountabilitySetupStatus(clubId)
+        const accountabilityStatus = await fetchShiftAccountabilityStatus(clubId)
         const hasShiftZones = accountabilityStatus.enabled && accountabilityStatus.ready
         setHasShiftAccountability(hasShiftZones)
         if (activeShift?.id && hasShiftZones) {
@@ -952,7 +1022,7 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                                                         Сначала завершите приемку остатков. Пока приемка не закрыта, продажи и действия по бару заблокированы.
                                                     </div>
                                                 )}
-                                                {(hasPendingStartAcceptance || hasOpenZoneSnapshotDraft) && activeShift?.id && (
+                                                {(hasPendingStartAcceptance || hasOpenZoneSnapshotDraft || hasPendingZoneStartAcceptance) && activeShift?.id && (
                                                     <Button
                                                         variant="outline"
                                                         className="col-span-full h-11 rounded-xl border-amber-400/40 bg-amber-500/10 text-amber-100 hover:bg-amber-500/20 hover:text-white"
@@ -961,7 +1031,7 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                                                             setIsOpenZoneSnapshotModalOpen(true)
                                                         }}
                                                     >
-                                                        Вернуться к приемке
+                                                        {hasPendingZoneStartAcceptance && !hasOpenZoneSnapshotDraft ? "Начать приемку остатков" : "Вернуться к приемке"}
                                                     </Button>
                                                 )}
                                                 <Button

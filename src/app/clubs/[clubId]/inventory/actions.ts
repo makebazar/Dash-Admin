@@ -779,12 +779,35 @@ export async function getShiftZoneSnapshotDraft(clubId: string, shiftId: string,
     }
 }
 
+export async function hasSavedShiftZoneSnapshot(clubId: string, shiftId: string, snapshotType: ShiftZoneSnapshotType) {
+    const sessionUserId = await requireClubAccess(clubId)
+    const client = await import("@/db").then(m => m.getClient())
+    try {
+        await getShiftForZoneAccountability(client, clubId, shiftId, sessionUserId)
+        const res = await client.query(
+            `
+            SELECT 1
+            FROM shift_zone_snapshots
+            WHERE club_id = $1
+              AND shift_id = $2
+              AND snapshot_type = $3
+            LIMIT 1
+            `,
+            [clubId, shiftId, snapshotType]
+        )
+        return (res.rowCount || 0) > 0
+    } finally {
+        client.release()
+    }
+}
+
 export type HandoverSourceCandidate = {
     shift_id: string
     employee_id: string | null
     employee_name: string
     check_in: string
     check_out: string
+    is_self_handover: boolean
 }
 
 export async function getHandoverSourceCandidates(clubId: string, shiftId: string) {
@@ -792,6 +815,9 @@ export async function getHandoverSourceCandidates(clubId: string, shiftId: strin
     const client = await import("@/db").then(m => m.getClient())
     try {
         const shift = await getShiftForZoneAccountability(client, clubId, shiftId, sessionUserId)
+        await ensurePreviousShiftClosureCompleted(client, clubId, shiftId, String(shift.check_in))
+        const referenceTime = new Date().toISOString()
+        const currentShiftUserId = shift.user_id ? String(shift.user_id) : null
         const res = await client.query(
             `
             SELECT
@@ -799,17 +825,28 @@ export async function getHandoverSourceCandidates(clubId: string, shiftId: strin
                 s.user_id as employee_id,
                 COALESCE(u.full_name, 'Неизвестный сотрудник') as employee_name,
                 s.check_in,
-                s.check_out
+                s.check_out,
+                CASE
+                    WHEN $4::text IS NOT NULL AND s.user_id::text = $4::text THEN true
+                    ELSE false
+                END as is_self_handover
             FROM shifts s
             LEFT JOIN users u ON u.id = s.user_id
             WHERE s.club_id = $1
               AND s.id <> $2
               AND s.check_out IS NOT NULL
               AND s.check_out <= $3
-            ORDER BY s.check_out DESC, s.check_in DESC, s.id DESC
+            ORDER BY
+                CASE
+                    WHEN $4::text IS NOT NULL AND s.user_id::text = $4::text THEN 1
+                    ELSE 0
+                END ASC,
+                s.check_out DESC,
+                s.check_in DESC,
+                s.id DESC
             LIMIT 20
             `,
-            [clubId, shiftId, shift.check_in]
+            [clubId, shiftId, referenceTime, currentShiftUserId]
         )
 
         return res.rows.map((row: any) => ({
@@ -818,6 +855,7 @@ export async function getHandoverSourceCandidates(clubId: string, shiftId: strin
             employee_name: String(row.employee_name || 'Неизвестный сотрудник'),
             check_in: String(row.check_in),
             check_out: String(row.check_out),
+            is_self_handover: Boolean(row.is_self_handover),
         })) as HandoverSourceCandidate[]
     } finally {
         client.release()
@@ -855,8 +893,19 @@ export async function saveShiftZoneSnapshot(
         }
 
         const touchedProductIds = new Set<number>()
+        const snapshotReferenceTime = new Date().toISOString()
+        if (snapshotType === 'OPEN') {
+            await ensurePreviousShiftClosureCompleted(client, clubId, shiftId, String(shift.check_in))
+        }
         const acceptedFrom = snapshotType === 'OPEN'
-            ? await findAcceptedFromShift(client, clubId, shiftId, shift.check_in, options?.accepted_from_shift_id || null)
+            ? await findAcceptedFromShift(
+                client,
+                clubId,
+                shiftId,
+                shift.user_id ? String(shift.user_id) : null,
+                snapshotReferenceTime,
+                options?.accepted_from_shift_id || null
+            )
             : { accepted_from_shift_id: null as string | null, accepted_from_employee_id: null as string | null }
 
         const shouldSyncStock = snapshotType === 'OPEN' || snapshotType === 'CLOSE'
@@ -2532,10 +2581,11 @@ async function findAcceptedFromShift(
     client: any,
     clubId: string,
     currentShiftId: string,
-    currentCheckIn: string,
+    currentShiftUserId: string | null,
+    referenceTime: string,
     selectedShiftId: string | null
 ) {
-    const previousShiftRes = selectedShiftId
+    const selectedShiftRes = selectedShiftId
         ? await client.query(
             `
             SELECT id, user_id
@@ -2547,23 +2597,35 @@ async function findAcceptedFromShift(
               AND check_out <= $4
             LIMIT 1
             `,
-            [clubId, selectedShiftId, currentShiftId, currentCheckIn]
+            [clubId, selectedShiftId, currentShiftId, referenceTime]
         )
-        : await client.query(
-            `
-            SELECT id, user_id
-            FROM shifts
-            WHERE club_id = $1
-              AND id <> $2
-              AND check_out IS NOT NULL
-              AND check_out <= $3
-            ORDER BY check_out DESC, check_in DESC, id DESC
-            LIMIT 1
-            `,
-            [clubId, currentShiftId, currentCheckIn]
-        )
+        : { rows: [] }
 
-    const previousShift = previousShiftRes.rows[0]
+    const selectedShift = selectedShiftRes.rows[0] || null
+    const selectedShiftUserId = selectedShift?.user_id ? String(selectedShift.user_id) : null
+    if (selectedShift && (!currentShiftUserId || selectedShiftUserId !== currentShiftUserId)) {
+        return {
+            accepted_from_shift_id: String(selectedShift.id),
+            accepted_from_employee_id: selectedShiftUserId,
+        }
+    }
+
+    const preferredPreviousShiftRes = await client.query(
+        `
+        SELECT id, user_id
+        FROM shifts
+        WHERE club_id = $1
+          AND id <> $2
+          AND check_out IS NOT NULL
+          AND check_out <= $3
+          AND ($4::text IS NULL OR user_id::text <> $4::text)
+        ORDER BY check_out DESC, check_in DESC, id DESC
+        LIMIT 1
+        `,
+        [clubId, currentShiftId, referenceTime, currentShiftUserId]
+    )
+
+    const previousShift = preferredPreviousShiftRes.rows[0] || selectedShift
     if (!previousShift) {
         return {
             accepted_from_shift_id: null as string | null,
@@ -2575,6 +2637,40 @@ async function findAcceptedFromShift(
         accepted_from_shift_id: String(previousShift.id),
         accepted_from_employee_id: previousShift.user_id ? String(previousShift.user_id) : null,
     }
+}
+
+async function ensurePreviousShiftClosureCompleted(
+    client: any,
+    clubId: string,
+    currentShiftId: string,
+    currentShiftCheckIn: string
+) {
+    const blockingShiftRes = await client.query(
+        `
+        SELECT
+            s.id,
+            s.user_id,
+            s.check_in,
+            u.full_name
+        FROM shifts s
+        LEFT JOIN users u ON u.id = s.user_id
+        WHERE s.club_id = $1
+          AND s.id <> $2
+          AND s.check_out IS NULL
+          AND s.check_in <= $3
+        ORDER BY s.check_in DESC, s.id DESC
+        LIMIT 1
+        `,
+        [clubId, currentShiftId, currentShiftCheckIn]
+    )
+
+    const blockingShift = blockingShiftRes.rows[0]
+    if (!blockingShift) return
+
+    const employeeName = blockingShift.full_name || 'предыдущего сотрудника'
+    throw new Error(
+        `Нельзя начать приемку остатков, пока не завершено закрытие предыдущей смены (${employeeName}). Сначала закройте прошлую смену, затем начните приемку.`
+    )
 }
 
 async function applyWarehouseStockDelta(
