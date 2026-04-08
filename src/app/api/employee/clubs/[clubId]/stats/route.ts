@@ -6,7 +6,7 @@ import { calculateMaintenanceQualityMetrics } from '@/lib/maintenance-kpi-qualit
 import { getClubEmployeeLeaderboardState, getLeaderboardBonusAmount } from '@/lib/employee-leaderboard';
 
 export async function GET(
-    request: Request,
+    _request: Request,
     { params }: { params: Promise<{ clubId: string }> }
 ) {
     try {
@@ -33,6 +33,8 @@ export async function GET(
         const year = now.getFullYear();
         const startOfMonth = new Date(year, month - 1, 1);
         const endOfMonth = new Date(year, month, 0, 23, 59, 59);
+        const startOfMonthIso = startOfMonth.toISOString();
+        const endOfMonthIso = endOfMonth.toISOString();
 
         // 1. Fetch metric categories to correctly calculate "Total Income"
         const templateRes = await query(
@@ -112,7 +114,7 @@ export async function GET(
              WHERE user_id = $1 AND club_id = $2
                AND check_in >= $3 AND check_in <= $4
                AND status IN ('CLOSED', 'PAID', 'VERIFIED', 'ACTIVE')`,
-            [userId, clubId, startOfMonth, endOfMonth]
+            [userId, clubId, startOfMonthIso, endOfMonthIso]
         );
 
         const finishedShifts = shiftsRes.rows;
@@ -122,7 +124,7 @@ export async function GET(
             `SELECT AVG((total_score/max_score)*100) as avg_score 
              FROM evaluations 
              WHERE employee_id = $1 AND evaluation_date >= $2 AND evaluation_date <= $3`,
-            [userId, startOfMonth, endOfMonth]
+            [userId, startOfMonthIso, endOfMonthIso]
         );
         const avgScore = parseFloat(evalRes.rows[0]?.avg_score || '0');
 
@@ -179,7 +181,7 @@ export async function GET(
                 ) as stale_rework_tasks,
                 COALESCE(SUM(bonus_earned) FILTER (WHERE status = 'COMPLETED' AND completed_at >= $2 AND completed_at <= $3), 0) as bonus
              FROM scoped_tasks`,
-            [userId, startOfMonth, endOfMonth]
+            [userId, startOfMonthIso, endOfMonthIso]
         );
         const maintTasksTotal = parseInt(maintRes.rows[0]?.total_tasks || '0');
         const maintTasksCompleted = parseInt(maintRes.rows[0]?.completed_tasks || '0');
@@ -204,7 +206,7 @@ export async function GET(
                AND status = 'COMPLETED'
                AND completed_at >= $2
                AND completed_at <= $3`,
-            [userId, startOfMonth, endOfMonth]
+            [userId, startOfMonthIso, endOfMonthIso]
         );
 
         const monthlyBonusRes = await query(
@@ -225,7 +227,7 @@ export async function GET(
                AND r.voided_at IS NULL
                AND r.created_at >= $3
                AND r.created_at <= $4`,
-            [clubId, userId, startOfMonth, endOfMonth]
+            [clubId, userId, startOfMonthIso, endOfMonthIso]
         );
         const totalBarDeductions = parseFloat(barDeductionsRes.rows[0]?.total || '0');
 

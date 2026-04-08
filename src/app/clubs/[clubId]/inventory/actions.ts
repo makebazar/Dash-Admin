@@ -815,7 +815,7 @@ export async function getHandoverSourceCandidates(clubId: string, shiftId: strin
     const client = await import("@/db").then(m => m.getClient())
     try {
         const shift = await getShiftForZoneAccountability(client, clubId, shiftId, sessionUserId)
-        await ensurePreviousShiftClosureCompleted(client, clubId, shiftId, String(shift.check_in))
+        await ensurePreviousShiftClosureCompleted(client, clubId, shiftId, new Date(shift.check_in).toISOString())
         const referenceTime = new Date().toISOString()
         const currentShiftUserId = shift.user_id ? String(shift.user_id) : null
         const res = await client.query(
@@ -895,7 +895,7 @@ export async function saveShiftZoneSnapshot(
         const touchedProductIds = new Set<number>()
         const snapshotReferenceTime = new Date().toISOString()
         if (snapshotType === 'OPEN') {
-            await ensurePreviousShiftClosureCompleted(client, clubId, shiftId, String(shift.check_in))
+            await ensurePreviousShiftClosureCompleted(client, clubId, shiftId, new Date(shift.check_in).toISOString())
         }
         const acceptedFrom = snapshotType === 'OPEN'
             ? await findAcceptedFromShift(
