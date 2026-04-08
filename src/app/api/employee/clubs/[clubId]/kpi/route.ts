@@ -6,7 +6,7 @@ import { calculateMaintenanceQualityMetrics } from '@/lib/maintenance-kpi-qualit
 
 // GET: Get employee's KPI progress for current period
 export async function GET(
-    request: Request,
+    _request: Request,
     { params }: { params: Promise<{ clubId: string }> }
 ) {
     try {
@@ -25,6 +25,8 @@ export async function GET(
         // Date boundaries
         const startOfMonth = new Date(year, month - 1, 1);
         const endOfMonth = new Date(year, month, 0, 23, 59, 59);
+        const startOfMonthIso = startOfMonth.toISOString();
+        const endOfMonthIso = endOfMonth.toISOString();
 
         // 1. Fetch metric categories to correctly calculate "Total Income"
         const templateRes = await query(
@@ -130,7 +132,7 @@ export async function GET(
                    OR 
                    (status = 'ACTIVE')
                )`,
-            [userId, clubId, startOfMonth, endOfMonth]
+            [userId, clubId, startOfMonthIso, endOfMonthIso]
         );
 
         const finishedShifts = shiftsRes.rows;
@@ -155,7 +157,7 @@ export async function GET(
             `SELECT COUNT(*) as count, AVG((total_score/max_score)*100) as avg_score 
              FROM evaluations 
              WHERE employee_id = $1 AND evaluation_date >= $2 AND evaluation_date <= $3`,
-            [userId, startOfMonth, endOfMonth]
+            [userId, startOfMonthIso, endOfMonthIso]
         );
         
         const maintRes = await query(
@@ -215,7 +217,7 @@ export async function GET(
                 COALESCE(SUM(overdue_days_at_completion) FILTER (WHERE responsible_user_id_at_completion = $1 AND was_overdue = TRUE AND completed_at >= $2 AND completed_at <= $3), 0) as overdue_completed_days,
                 COALESCE(SUM(bonus_earned) FILTER (WHERE status = 'COMPLETED' AND completed_at >= $2 AND completed_at <= $3), 0) as bonus
              FROM scoped_tasks`,
-            [userId, startOfMonth, endOfMonth]
+            [userId, startOfMonthIso, endOfMonthIso]
         );
 
         const overdueHistoryRes = await query(
@@ -224,7 +226,7 @@ export async function GET(
              WHERE responsible_user_id_at_completion = $1
                AND status = 'COMPLETED'
                AND completed_at >= $2 AND completed_at <= $3`,
-            [userId, startOfMonth, endOfMonth]
+            [userId, startOfMonthIso, endOfMonthIso]
         );
 
         // Fetch monthly bonuses from maintenance_monthly_bonuses (legacy/manual)

@@ -25,7 +25,6 @@ import { EmployeeWriteOffWizard } from "./_components/EmployeeWriteOffWizard"
 import { EmployeeTransferWizard } from "./_components/EmployeeTransferWizard"
 import { EmployeeRequestWizard } from "./_components/EmployeeRequestWizard"
 import { ShiftZoneSnapshotWizard } from "./_components/ShiftZoneSnapshotWizard"
-import { getEmployeeRequests } from "./requests-actions"
 
 type ShiftAccountabilityStatusResponse = {
     mode: 'DISABLED' | 'WAREHOUSE'
@@ -174,6 +173,15 @@ async function fetchHasOpenZoneSnapshot(clubId: string, shiftId: string | number
         throw new Error(data.error || 'Не удалось проверить приемку остатков')
     }
     return Boolean(data.has_snapshot)
+}
+
+async function fetchEmployeeRequests(clubId: string) {
+    const res = await fetch(`/api/employee/clubs/${clubId}/requests`, { cache: 'no-store' })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) {
+        throw new Error(data.error || 'Не удалось загрузить заявки')
+    }
+    return Array.isArray(data.requests) ? data.requests : []
 }
 
 export default function EmployeeClubPage({ params }: { params: Promise<{ clubId: string }> }) {
@@ -505,7 +513,7 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
         // Оптимизация: не создаем SSE если страница не активна
         const fetchUnreadRequests = async () => {
             try {
-                const requests = await getEmployeeRequests(clubId, currentUserId)
+                const requests = await fetchEmployeeRequests(clubId)
                 const unreadCount = requests.filter((r: any) => !r.is_read_by_employee).length
                 setUnreadRequestsCount(unreadCount)
             } catch (error) {
