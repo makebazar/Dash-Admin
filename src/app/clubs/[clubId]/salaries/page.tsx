@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import PayrollDashboard from '@/components/payroll/PayrollDashboard';
+import { PageShell } from '@/components/layout/PageShell';
 
 export default function SalariesPage({ params }: { params: Promise<{ clubId: string }> }) {
     const [clubId, setClubId] = useState<string>('');
@@ -18,5 +19,9 @@ export default function SalariesPage({ params }: { params: Promise<{ clubId: str
         );
     }
 
-    return <PayrollDashboard clubId={clubId} />;
+    return (
+        <PageShell maxWidth="5xl">
+            <PayrollDashboard clubId={clubId} />
+        </PageShell>
+    );
 }

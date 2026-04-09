@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect } from 'react'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
@@ -154,8 +153,8 @@ export default function FinanceReports({ clubId }: FinanceReportsProps) {
             </div>
 
             {/* Filters Redesign */}
-            <Card className="border-none shadow-sm bg-white overflow-hidden">
-                <CardContent className="p-6">
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+                <div className="p-6 sm:p-8">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                         <div className="space-y-2">
                             <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Начало периода</Label>
@@ -202,8 +201,8 @@ export default function FinanceReports({ clubId }: FinanceReportsProps) {
                             </Select>
                         </div>
                     </div>
-                </CardContent>
-            </Card>
+                </div>
+            </div>
 
             {/* DDS Report Integration */}
             {analytics && reportType === 'dds' && analytics.dds_breakdown && (

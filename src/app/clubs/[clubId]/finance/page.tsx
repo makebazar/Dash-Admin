@@ -11,6 +11,7 @@ import {
 } from "lucide-react"
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
+import { PageShell } from '@/components/layout/PageShell'
 import TransactionList from '@/components/finance/TransactionList'
 import FinanceReports from '@/components/finance/FinanceReports'
 import { AccountBalances } from '@/components/finance/AccountBalances'
@@ -270,17 +271,17 @@ export default function FinancePage() {
     const COLORS = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316'];
 
     return (
-        <div className="p-4 md:p-8 space-y-8 bg-slate-50/50 min-h-screen">
+        <PageShell maxWidth="5xl">
             {/* Header Redesign */}
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+            <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between mb-8">
                 <div className="space-y-1">
-                    <h1 className="text-2xl md:text-3xl font-black tracking-tight text-slate-900">Управление финансами</h1>
-                    <p className="text-slate-500 text-xs md:text-sm font-medium">Аналитика, ДДС и планирование платежей</p>
+                    <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-slate-900 truncate">Финансы</h1>
+                    <p className="text-slate-500 text-lg mt-2">Аналитика, ДДС и планирование платежей</p>
                 </div>
                 
                 <div className="flex flex-col sm:flex-row items-center gap-4 w-full lg:w-auto">
-                    <div className="flex items-center gap-1 bg-white p-1 rounded-2xl shadow-sm border w-full sm:w-auto justify-between sm:justify-start">
-                        <Button variant="ghost" size="icon" onClick={() => navigateMonth(-1)} className="hover:bg-slate-100 rounded-xl h-9 w-9 shrink-0">
+                    <div className="flex items-center gap-2 bg-white p-2 rounded-2xl shadow-sm border border-slate-200 w-full sm:w-auto justify-between sm:justify-start">
+                        <Button variant="ghost" size="icon" onClick={() => navigateMonth(-1)} className="hover:bg-slate-50 rounded-xl h-10 w-10 shrink-0 border border-slate-200">
                             <ChevronLeft className="h-4 w-4" />
                         </Button>
                         <div className="flex items-center gap-2 px-4 py-1 font-bold text-slate-700 whitespace-nowrap">
@@ -289,14 +290,14 @@ export default function FinancePage() {
                                 {monthNames[selectedMonth - 1]} {selectedYear}
                             </span>
                         </div>
-                        <Button variant="ghost" size="icon" onClick={() => navigateMonth(1)} className="hover:bg-slate-100 rounded-xl h-9 w-9 shrink-0">
+                        <Button variant="ghost" size="icon" onClick={() => navigateMonth(1)} className="hover:bg-slate-50 rounded-xl h-10 w-10 shrink-0 border border-slate-200">
                             <ChevronRight className="h-4 w-4" />
                         </Button>
                     </div>
 
                     <div className="flex items-center gap-2 w-full sm:w-auto">
                         <Link href={`/clubs/${clubId}/finance/settings`} className="flex-1 sm:flex-none">
-                            <Button variant="outline" className="w-full rounded-2xl border-slate-200 hover:bg-slate-50 font-bold text-xs h-11 px-4">
+                            <Button variant="outline" className="w-full rounded-xl border-slate-200 hover:bg-slate-50 font-medium h-12 px-6 shadow-sm">
                                 <Settings className="h-4 w-4 mr-2 text-slate-500" />
                                 <span className="hidden sm:inline">Настройки</span>
                                 <span className="sm:hidden">Настройки</span>
@@ -304,7 +305,7 @@ export default function FinancePage() {
                         </Link>
                         <Button 
                             onClick={() => { setActiveTab('transactions'); setTimeout(() => setTransactionDialogOpen(true), 100); }}
-                            className="flex-[2] sm:flex-none rounded-2xl shadow-lg shadow-primary/20 font-black text-xs h-11 px-6"
+                            className="flex-[2] sm:flex-none rounded-xl bg-slate-900 text-white shadow-sm hover:bg-slate-800 font-medium h-12 px-6"
                         >
                             <Plus className="h-4 w-4 mr-2" />
                             Новая операция
@@ -314,10 +315,10 @@ export default function FinancePage() {
             </div>
 
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                <TabsList className="w-full md:w-auto bg-white border p-1 rounded-xl mb-6 shadow-sm">
-                    <TabsTrigger value="dashboard" className="rounded-lg px-6 font-medium data-[state=active]:bg-slate-100 data-[state=active]:text-primary">📊 Дашборд</TabsTrigger>
-                    <TabsTrigger value="transactions" className="rounded-lg px-6 font-medium data-[state=active]:bg-slate-100 data-[state=active]:text-primary">📝 Операции</TabsTrigger>
-                    <TabsTrigger value="reports" className="rounded-lg px-6 font-medium data-[state=active]:bg-slate-100 data-[state=active]:text-primary">📈 Отчеты ДДС</TabsTrigger>
+                <TabsList className="w-full md:w-auto bg-slate-100/50 border border-slate-200 p-1.5 rounded-2xl mb-8 shadow-sm">
+                    <TabsTrigger value="dashboard" className="rounded-xl px-6 py-2.5 font-medium text-slate-500 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm transition-all">Дашборд</TabsTrigger>
+                    <TabsTrigger value="transactions" className="rounded-xl px-6 py-2.5 font-medium text-slate-500 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm transition-all">Операции</TabsTrigger>
+                    <TabsTrigger value="reports" className="rounded-xl px-6 py-2.5 font-medium text-slate-500 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm transition-all">Отчеты ДДС</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="dashboard" className="space-y-6 focus-visible:outline-none">
@@ -341,12 +342,13 @@ export default function FinancePage() {
                     {/* Key Metrics Redesign */}
                     <div className="grid gap-4 md:grid-cols-4">
                         <TooltipProvider>
-                            <Card className="border-none shadow-sm bg-white overflow-hidden relative group">
+                            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden relative group">
                                 <div className="absolute top-0 left-0 w-1 h-full bg-emerald-500" />
-                                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                    <CardTitle className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                                <div className="flex flex-row items-center justify-between space-y-0 p-6 pb-2">
+                                    <h3 className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
+
                                         Доходы
-                                    </CardTitle>
+                                    </h3>
                                     <UITooltip>
                                         <TooltipTrigger>
                                             <TrendingUp className="h-4 w-4 text-emerald-500 cursor-help" />
@@ -355,23 +357,24 @@ export default function FinancePage() {
                                             Сумма всех поступлений за выбранный месяц: выручка от смен, продажи на баре и прочие доходы.
                                         </TooltipContent>
                                     </UITooltip>
-                                </CardHeader>
-                                <CardContent>
+                                </div>
+                                <div className="p-6 pt-0">
                                     <div className="text-2xl font-black text-slate-900">
                                         {formatCurrency(summary.total_income)}
                                     </div>
                                     <div className="flex items-center gap-1 mt-1">
                                         <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 rounded uppercase">За месяц</span>
                                     </div>
-                                </CardContent>
-                            </Card>
+                                </div>
+                            </div>
 
-                            <Card className="border-none shadow-sm bg-white overflow-hidden relative group">
+                            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden relative group">
                                 <div className="absolute top-0 left-0 w-1 h-full bg-rose-500" />
-                                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                    <CardTitle className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                                <div className="flex flex-row items-center justify-between space-y-0 p-6 pb-2">
+                                    <h3 className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
+
                                         Расходы
-                                    </CardTitle>
+                                    </h3>
                                     <UITooltip>
                                         <TooltipTrigger>
                                             <TrendingDown className="h-4 w-4 text-rose-500 cursor-help" />
@@ -380,23 +383,24 @@ export default function FinancePage() {
                                             Все выплаты: зарплаты, закупка товаров, аренда и коммуналка. Показывает реальный отток денег.
                                         </TooltipContent>
                                     </UITooltip>
-                                </CardHeader>
-                                <CardContent>
+                                </div>
+                                <div className="p-6 pt-0">
                                     <div className="text-2xl font-black text-slate-900">
                                         {formatCurrency(summary.total_expense)}
                                     </div>
                                     <div className="flex items-center gap-1 mt-1">
                                         <span className="text-[10px] font-bold text-rose-600 bg-rose-50 px-1.5 rounded uppercase">Оплачено</span>
                                     </div>
-                                </CardContent>
-                            </Card>
+                                </div>
+                            </div>
 
-                            <Card className="border-none shadow-sm bg-white overflow-hidden relative group">
+                            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden relative group">
                                 <div className="absolute top-0 left-0 w-1 h-full bg-blue-500" />
-                                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                    <CardTitle className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                                <div className="flex flex-row items-center justify-between space-y-0 p-6 pb-2">
+                                    <h3 className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
+
                                         Чистая прибыль
-                                    </CardTitle>
+                                    </h3>
                                     <UITooltip>
                                         <TooltipTrigger>
                                             <DollarSign className="h-4 w-4 text-blue-500 cursor-help" />
@@ -405,8 +409,8 @@ export default function FinancePage() {
                                             Остаток после вычета всех расходов из доходов. Если число отрицательное — клуб работает в убыток.
                                         </TooltipContent>
                                     </UITooltip>
-                                </CardHeader>
-                                <CardContent>
+                                </div>
+                                <div className="p-6 pt-0">
                                     <div className={`text-2xl font-black ${summary.profit >= 0 ? 'text-slate-900' : 'text-rose-600'}`}>
                                         {formatCurrency(summary.profit)}
                                     </div>
@@ -415,14 +419,14 @@ export default function FinancePage() {
                                             {summary.profit >= 0 ? 'Профит' : 'Убыток'}
                                         </span>
                                     </div>
-                                </CardContent>
-                            </Card>
+                                </div>
+                            </div>
 
-                            <Card className="border-none shadow-sm bg-primary text-primary-foreground overflow-hidden relative group">
-                                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                    <CardTitle className="text-xs font-bold uppercase tracking-wider opacity-80">
+                            <div className="bg-slate-900 rounded-3xl border border-slate-800 shadow-sm text-white overflow-hidden relative group">
+                                <div className="flex flex-row items-center justify-between space-y-0 p-6 pb-2">
+                                    <h3 className="text-[10px] font-bold uppercase tracking-widest opacity-80">
                                         Рентабельность
-                                    </CardTitle>
+                                    </h3>
                                     <UITooltip>
                                         <TooltipTrigger>
                                             <Percent className="h-4 w-4 opacity-80 cursor-help" />
@@ -431,27 +435,27 @@ export default function FinancePage() {
                                             Процент прибыли от выручки. Показывает эффективность бизнеса. Хороший показатель для клуба — от 20%.
                                         </TooltipContent>
                                     </UITooltip>
-                                </CardHeader>
-                                <CardContent>
+                                </div>
+                                <div className="p-6 pt-0">
                                     <div className="text-3xl font-black">
                                         {summary.profitability.toFixed(1)}%
                                     </div>
                                     <p className="text-[10px] font-bold uppercase opacity-80 mt-1 text-primary-foreground/70">
                                         Эффективность клуба
                                     </p>
-                                </CardContent>
-                            </Card>
+                                </div>
+                            </div>
                         </TooltipProvider>
                     </div>
 
                     {/* Main Charts & Accounts Grid */}
                     <div className="grid gap-6 lg:grid-cols-3">
                         {/* Area Chart - Trend */}
-                        <Card className="lg:col-span-2 border-none shadow-sm">
-                            <CardHeader className="flex flex-row items-center justify-between">
+                        <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-8 lg:col-span-2 shadow-sm">
+                            <div className="flex flex-row items-center justify-between mb-6">
                                 <div>
                                     <div className="flex items-center gap-2">
-                                        <CardTitle className="text-lg font-bold">Динамика потоков</CardTitle>
+                                        <h2 className="text-2xl font-bold tracking-tight text-slate-900">Динамика потоков</h2>
                                         <TooltipProvider>
                                             <UITooltip>
                                                 <TooltipTrigger>
@@ -463,7 +467,7 @@ export default function FinancePage() {
                                             </UITooltip>
                                         </TooltipProvider>
                                     </div>
-                                    <CardDescription className="text-xs font-medium">Доходы и расходы за последние 6 месяцев</CardDescription>
+                                    <p className="text-sm font-medium text-slate-500 mt-1">Доходы и расходы за последние 6 месяцев</p>
                                 </div>
                                 <div className="flex gap-4 text-[10px] font-bold uppercase">
                                     <div className="flex items-center gap-1.5">
@@ -475,8 +479,8 @@ export default function FinancePage() {
                                         <span>Расход</span>
                                     </div>
                                 </div>
-                            </CardHeader>
-                            <CardContent className="h-[300px] mt-4">
+                            </div>
+                            <div className="h-[300px]">
                                 <ResponsiveContainer width="100%" height="100%">
                                     <AreaChart data={analytics?.monthly_trend || []}>
                                         <defs>
@@ -512,14 +516,14 @@ export default function FinancePage() {
                                         <Area type="monotone" dataKey="expense" stroke="#ef4444" strokeWidth={3} fillOpacity={1} fill="url(#colorExpense)" />
                                     </AreaChart>
                                 </ResponsiveContainer>
-                            </CardContent>
-                        </Card>
+                            </div>
+                        </div>
 
                         {/* Account Balances Widget */}
-                        <Card className="border-none shadow-sm flex flex-col">
-                            <CardHeader className="pb-2">
+                        <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-8 flex flex-col shadow-sm">
+                            <div className="mb-4">
                                 <div className="flex items-center justify-between">
-                                    <CardTitle className="text-lg font-bold">Счета и остатки</CardTitle>
+                                    <h2 className="text-2xl font-bold tracking-tight text-slate-900">Счета и остатки</h2>
                                     <TooltipProvider>
                                         <UITooltip>
                                             <TooltipTrigger>
@@ -531,26 +535,26 @@ export default function FinancePage() {
                                         </UITooltip>
                                     </TooltipProvider>
                                 </div>
-                            </CardHeader>
-                            <CardContent className="flex-1 overflow-auto max-h-[380px] scrollbar-hide">
+                            </div>
+                            <div className="flex-1 overflow-auto max-h-[380px] scrollbar-hide">
                                 <AccountBalances clubId={clubId} />
-                            </CardContent>
-                        </Card>
+                            </div>
+                        </div>
                     </div>
 
                     <div className="grid gap-6 lg:grid-cols-3">
                         {/* DDS Mini Summary */}
-                        <Card className="lg:col-span-2 border-none shadow-sm">
-                            <CardHeader className="pb-0">
+                        <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-8 lg:col-span-2 shadow-sm">
+                            <div className="mb-6">
                                 <div className="flex items-center justify-between">
                                     <div>
-                                        <CardTitle className="text-lg font-bold">Сводка ДДС</CardTitle>
-                                        <CardDescription className="text-xs font-medium">Чистый поток по видам деятельности</CardDescription>
+                                        <h2 className="text-2xl font-bold tracking-tight text-slate-900">Сводка ДДС</h2>
+                                        <p className="text-sm font-medium text-slate-500 mt-1">Чистый поток по видам деятельности</p>
                                     </div>
                                     <Link href="#" onClick={(e) => { e.preventDefault(); setActiveTab('reports'); }} className="text-xs font-bold text-primary hover:underline">Детальный отчет</Link>
                                 </div>
-                            </CardHeader>
-                            <CardContent className="pt-6">
+                            </div>
+                            <div>
                                 {analytics?.dds_breakdown && (
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                         <TooltipProvider>
@@ -625,14 +629,14 @@ export default function FinancePage() {
                                         </TooltipProvider>
                                     </div>
                                 )}
-                            </CardContent>
-                        </Card>
+                            </div>
+                        </div>
 
                         {/* Top Expenses Redesign */}
-                        <Card className="border-none shadow-sm">
-                            <CardHeader>
+                        <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-8 shadow-sm">
+                            <div className="mb-6">
                                 <div className="flex items-center gap-2">
-                                    <CardTitle className="text-lg font-bold">Основные расходы</CardTitle>
+                                    <h2 className="text-2xl font-bold tracking-tight text-slate-900">Основные расходы</h2>
                                     <TooltipProvider>
                                         <UITooltip>
                                             <TooltipTrigger>
@@ -644,9 +648,9 @@ export default function FinancePage() {
                                         </UITooltip>
                                     </TooltipProvider>
                                 </div>
-                                <CardDescription className="text-xs font-medium">Топ категорий за текущий месяц</CardDescription>
-                            </CardHeader>
-                            <CardContent>
+                                <p className="text-sm font-medium text-slate-500 mt-1">Топ категорий за текущий месяц</p>
+                            </div>
+                            <div className="p-6 pt-0">
                                 <div className="space-y-4">
                                     {analytics?.top_expenses.length === 0 ? (
                                         <div className="text-center py-8 text-slate-400 font-medium">Расходы не найдены</div>
@@ -654,8 +658,8 @@ export default function FinancePage() {
                                         analytics?.top_expenses.slice(0, 5).map((expense, idx) => (
                                             <div key={idx} className="space-y-1.5">
                                                 <div className="flex items-center justify-between text-xs font-bold">
-                                                    <span className="flex items-center gap-2 text-slate-600">
-                                                        <span className="text-lg">{expense.icon}</span>
+                                                    <span className="flex items-center gap-3 text-slate-700 font-medium">
+                                                        <div className="w-8 h-8 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center text-sm">{expense.icon}</div>
                                                         {expense.category_name}
                                                     </span>
                                                     <span className="text-slate-900">{formatCurrency(expense.total_amount)}</span>
@@ -673,23 +677,23 @@ export default function FinancePage() {
                                         ))
                                     )}
                                 </div>
-                            </CardContent>
-                        </Card>
+                            </div>
+                        </div>
                     </div>
 
                     <div className="grid gap-6 lg:grid-cols-3">
                         {/* Monthly Bills Widget Redesign */}
-                        <Card className="lg:col-span-3 border-none shadow-sm">
-                            <CardHeader className="flex flex-row items-center justify-between">
+                        <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-8 lg:col-span-3 shadow-sm">
+                            <div className="flex flex-row items-center justify-between mb-6">
                                 <div>
-                                    <CardTitle className="text-lg font-bold">Планируемые платежи</CardTitle>
-                                    <CardDescription className="text-xs font-medium">Регулярные обязательства этого месяца</CardDescription>
+                                    <h2 className="text-2xl font-bold tracking-tight text-slate-900">Планируемые платежи</h2>
+                                    <p className="text-sm font-medium text-slate-500 mt-1">Регулярные обязательства этого месяца</p>
                                 </div>
                                 <Link href={`/clubs/${clubId}/finance/settings`}>
                                     <Button variant="ghost" size="sm" className="text-xs font-bold text-primary">Настроить</Button>
                                 </Link>
-                            </CardHeader>
-                            <CardContent>
+                            </div>
+                            <div className="p-6 pt-0">
                                 {recurringPayments.length === 0 ? (
                                     <div className="text-center py-12 bg-slate-50 rounded-2xl border border-dashed">
                                         <p className="text-slate-400 font-medium text-sm">Нет регулярных платежей</p>
@@ -752,14 +756,14 @@ export default function FinancePage() {
                                         })}
                                     </div>
                                 )}
-                            </CardContent>
-                        </Card>
+                            </div>
+                        </div>
                     </div>
                 </TabsContent>
 
                 <TabsContent value="transactions" className="space-y-4 focus-visible:outline-none">
-                    <Card className="border-none shadow-sm overflow-hidden">
-                        <CardContent className="p-0">
+                    <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+                        <div>
                             <TransactionList
                                 clubId={clubId as string}
                                 startDate={startDateStr}
@@ -767,8 +771,8 @@ export default function FinancePage() {
                                 dialogOpen={transactionDialogOpen}
                                 onDialogOpenChange={setTransactionDialogOpen}
                             />
-                        </CardContent>
-                    </Card>
+                        </div>
+                    </div>
                 </TabsContent>
 
                 <TabsContent value="reports" className="focus-visible:outline-none">
@@ -783,6 +787,6 @@ export default function FinancePage() {
                 accounts={accounts}
                 onConfirm={handleConfirmPayment}
             />
-        </div>
+        </PageShell>
     )
 }

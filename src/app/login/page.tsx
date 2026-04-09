@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
+import { motion, AnimatePresence } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -113,10 +114,8 @@ export default function LoginPage() {
                 const hasPassword = data.userExists && !data.requiresPassword
 
                 if (hasPassword) {
-                    // У пользователя есть пароль — сразу показываем ввод пароля, OTP не нужно
                     setStep('password')
                 } else {
-                    // Нет пароля (существующий или новый) — сначала OTP, потом установка пароля или ввод имени
                     setStep('otp')
                 }
                 setDebugCode(data.debugCode)
@@ -211,15 +210,12 @@ export default function LoginPage() {
 
             if (data.success) {
                 if (data.requiresPasswordSetup) {
-                    // Существующий пользователь без пароля — после OTP просим установить пароль
                     setIsNewUser(false)
                     setStep('password-setup')
                 } else if (data.isNewUser) {
-                    // Новый пользователь — после OTP просим ввести имя
                     setIsNewUser(true)
                     setStep('name')
                 } else {
-                    // Существующий пользователь с паролем — уже вошёл, редирект
                     await redirectBasedOnRole()
                 }
             } else {
@@ -255,7 +251,6 @@ export default function LoginPage() {
             })
 
             if (res.ok) {
-                // После ввода имени предлагаем установить пароль
                 setStep('password-setup')
             } else {
                 alert('Ошибка сохранения имени')
@@ -316,8 +311,6 @@ export default function LoginPage() {
                         return
                     }
                 }
-
-                // После установки пароля — сразу редирект
                 await redirectBasedOnRole()
             } else {
                 alert(data.error || 'Ошибка установки пароля')
@@ -374,316 +367,381 @@ export default function LoginPage() {
         }
     }
 
+    // Map steps to clear headings and descriptions
+    const stepContent = {
+        'phone': {
+            title: 'Вход в систему',
+            description: 'Введите номер телефона для авторизации'
+        },
+        'otp': {
+            title: 'Код подтверждения',
+            description: `Отправили код на номер ${phone}`
+        },
+        'reset-otp': {
+            title: 'Сброс пароля',
+            description: `Отправили код для сброса на ${phone}`
+        },
+        'reset-password': {
+            title: 'Новый пароль',
+            description: 'Введите новый пароль и подтвердите его'
+        },
+        'password-setup': {
+            title: isNewUser ? 'Придумайте пароль' : 'Установите пароль',
+            description: 'Пароль нужен для быстрого входа в будущем'
+        },
+        'password': {
+            title: 'Вход по паролю',
+            description: `Введите пароль для ${phone}`
+        },
+        'name': {
+            title: 'Как к вам обращаться?',
+            description: 'Введите ваше имя и фамилию'
+        }
+    }
+
+    const currentContent = stepContent[step]
+
     return (
-        <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-4">
-            <Link href="/" className="mb-8 flex items-center gap-2">
-                <div className="w-10 h-10 bg-gradient-to-tr from-purple-500 to-blue-500 rounded-lg flex items-center justify-center">
-                    <Zap className="text-white w-6 h-6 fill-current" />
+        <div className="min-h-screen bg-black text-white flex flex-col md:flex-row font-sans selection:bg-purple-500/30">
+            {/* Visual Anchor (Left Side) */}
+            <div className="hidden md:flex md:w-1/2 relative flex-col justify-between p-12 overflow-hidden border-r border-white/10">
+                <div className="absolute inset-0 z-0">
+                    <motion.div 
+                        initial={{ opacity: 0, scale: 0.8 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ duration: 2, ease: "easeOut" }}
+                        className="absolute -top-1/4 -left-1/4 w-[80vw] h-[80vw] bg-blue-600/10 rounded-full blur-[120px] pointer-events-none" 
+                    />
                 </div>
-                <span className="font-bold text-2xl tracking-tight">DashAdmin</span>
-            </Link>
-
-            <Card className="w-full max-w-md bg-gray-900/50 border-white/10 backdrop-blur-md">
-                <CardHeader>
-                    <CardTitle className="text-2xl text-white">
-                        {step === 'phone'
-                            ? 'С возвращением'
-                            : step === 'otp'
-                                ? 'Введите код'
-                                : step === 'reset-otp'
-                                    ? 'Сброс пароля'
-                                    : step === 'reset-password'
-                                        ? 'Новый пароль'
-                                : step === 'password-setup'
-                                    ? isNewUser
-                                        ? 'Придумайте пароль'
-                                        : 'Установите пароль'
-                                    : step === 'password'
-                                        ? 'Введите пароль'
-                                        : 'Как вас зовут?'
-                        }
-                    </CardTitle>
-                    <CardDescription className="text-gray-400">
-                        {step === 'phone'
-                            ? 'Введите номер телефона для входа'
-                            : step === 'otp'
-                                ? `Мы отправили код на ${phone}`
-                            : step === 'reset-otp'
-                                ? `Мы отправили код для сброса на ${phone}`
-                                : step === 'reset-password'
-                                    ? 'Введите новый пароль и подтвердите его'
-                            : step === 'password-setup'
-                                    ? isNewUser
-                                        ? 'Создайте пароль для быстрого входа в будущем'
-                                        : 'Придумайте пароль для быстрого входа в будущем'
-                                    : step === 'password'
-                                        ? `Введите пароль для ${phone}`
-                                        : 'Расскажите нам, как к вам обращаться'
-                        }
-                    </CardDescription>
-                </CardHeader>
-                <CardContent>
-                    {isCheckingSession ? (
-                        <div className="flex items-center justify-center py-10 text-gray-400">
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            Проверяем сессию…
-                        </div>
-                    ) : (
-                    step === 'phone' ? (
-                        <form onSubmit={handleSendOtp} className="space-y-4" noValidate>
-                            <div className="space-y-2">
-                                <Label htmlFor="phone" className="text-gray-300">Номер телефона</Label>
-                                <PhoneInput
-                                    id="phone"
-                                    placeholder="Введите 10 цифр номера"
-                                    value={phone}
-                                    onChange={setPhone}
-                                    className="bg-black/50 border-white/10 text-white placeholder:text-gray-600 focus-visible:ring-purple-500"
-                                    aria-label="Номер телефона"
-                                />
-                                <p className="text-xs text-gray-500">Введите 10 цифр после +7</p>
-                            </div>
-
-                            <Button
-                                type="submit"
-                                className="w-full bg-white text-black hover:bg-gray-200 hover:text-black"
-                                disabled={isLoading}
-                            >
-                                {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                                Продолжить <ArrowRight className="ml-2 w-4 h-4" />
-                            </Button>
-                        </form>
-                    ) : step === 'password' ? (
-                        <form onSubmit={handlePasswordLogin} className="space-y-4">
-                            <div className="space-y-2">
-                                <Label htmlFor="password" className="text-gray-300">Пароль</Label>
-                                <Input
-                                    id="password"
-                                    type="password"
-                                    placeholder="Введите пароль"
-                                    value={password}
-                                    onChange={(e) => setPassword(e.target.value)}
-                                    className="bg-black/50 border-white/10 text-white placeholder:text-gray-600 focus-visible:ring-purple-500"
-                                    required
-                                />
-                            </div>
-                            <Button type="submit" className="w-full bg-white text-black hover:bg-gray-200 hover:text-black" disabled={isLoading}>
-                                {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                                Войти
-                            </Button>
-                            <Button
-                                variant="ghost"
-                                type="button"
-                                className="w-full text-gray-400 hover:bg-white hover:text-black"
-                                onClick={handleStartPasswordReset}
-                                disabled={isLoading}
-                            >
-                                Забыли пароль?
-                            </Button>
-                            <Button
-                                variant="ghost"
-                                type="button"
-                                className="w-full text-gray-500 hover:bg-white hover:text-black"
-                                onClick={() => setStep('phone')}
-                            >
-                                Изменить номер
-                            </Button>
-                        </form>
-                    ) : step === 'otp' ? (
-                        <form onSubmit={handleVerifyOtp} className="space-y-4">
-                            {debugCode && (
-                                <div className="p-3 bg-purple-500/20 border border-purple-500/30 rounded text-purple-200 text-sm text-center">
-                                    DEV CODE: <span className="font-bold tracking-widest">{debugCode}</span>
-                                </div>
-                            )}
-                            {requiresPassword && (
-                                <div className="p-3 bg-yellow-500/20 border border-yellow-500/30 rounded text-yellow-200 text-sm text-center">
-                                    После ввода кода вам нужно будет установить пароль
-                                </div>
-                            )}
-                            <div className="space-y-2">
-                                <Label htmlFor="code" className="text-gray-300">Код подтверждения</Label>
-                                <Input
-                                    id="code"
-                                    placeholder="0000"
-                                    value={code}
-                                    onChange={(e) => setCode(e.target.value)}
-                                    className="bg-black/50 border-white/10 text-white placeholder:text-gray-600 focus-visible:ring-purple-500 text-center text-lg tracking-widest"
-                                    maxLength={4}
-                                    required
-                                />
-                            </div>
-                            <Button type="submit" className="w-full bg-white text-black hover:bg-gray-200 hover:text-black" disabled={isLoading}>
-                                {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                                Подтвердить и Войти <ArrowRight className="ml-2 w-4 h-4" />
-                            </Button>
-                            <Button
-                                variant="ghost"
-                                type="button"
-                                className="w-full text-gray-500 hover:bg-white hover:text-black"
-                                onClick={() => setStep('phone')}
-                            >
-                                Изменить номер
-                            </Button>
-                        </form>
-                    ) : step === 'reset-otp' ? (
-                        <form onSubmit={handleVerifyResetOtp} className="space-y-4">
-                            {debugCode && (
-                                <div className="p-3 bg-purple-500/20 border border-purple-500/30 rounded text-purple-200 text-sm text-center">
-                                    DEV CODE: <span className="font-bold tracking-widest">{debugCode}</span>
-                                </div>
-                            )}
-                            <div className="space-y-2">
-                                <Label htmlFor="reset-code" className="text-gray-300">Код подтверждения</Label>
-                                <Input
-                                    id="reset-code"
-                                    placeholder="0000"
-                                    value={code}
-                                    onChange={(e) => setCode(e.target.value)}
-                                    className="bg-black/50 border-white/10 text-white placeholder:text-gray-600 focus-visible:ring-purple-500 text-center text-lg tracking-widest"
-                                    maxLength={4}
-                                    required
-                                />
-                            </div>
-                            <Button type="submit" className="w-full bg-white text-black hover:bg-gray-200 hover:text-black" disabled={isLoading}>
-                                Продолжить <ArrowRight className="ml-2 w-4 h-4" />
-                            </Button>
-                            <Button
-                                variant="ghost"
-                                type="button"
-                                className="w-full text-gray-500 hover:bg-white hover:text-black"
-                                onClick={() => {
-                                    resetTransientFields()
-                                    setStep('password')
-                                }}
-                            >
-                                Назад ко входу
-                            </Button>
-                        </form>
-                    ) : step === 'reset-password' ? (
-                        <form onSubmit={handleResetPassword} className="space-y-4">
-                            <div className="space-y-2">
-                                <Label htmlFor="reset-new-password" className="text-gray-300">Новый пароль</Label>
-                                <Input
-                                    id="reset-new-password"
-                                    type="password"
-                                    placeholder="Минимум 6 символов"
-                                    value={newPassword}
-                                    onChange={(e) => setNewPassword(e.target.value)}
-                                    className="bg-black/50 border-white/10 text-white placeholder:text-gray-600 focus-visible:ring-purple-500"
-                                    required
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="reset-confirm-password" className="text-gray-300">Подтверждение пароля</Label>
-                                <Input
-                                    id="reset-confirm-password"
-                                    type="password"
-                                    placeholder="Повторите пароль"
-                                    value={confirmPassword}
-                                    onChange={(e) => setConfirmPassword(e.target.value)}
-                                    className="bg-black/50 border-white/10 text-white placeholder:text-gray-600 focus-visible:ring-purple-500"
-                                    required
-                                />
-                            </div>
-                            <Button type="submit" className="w-full bg-white text-black hover:bg-gray-200 hover:text-black" disabled={isLoading}>
-                                {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                                Сбросить пароль <ArrowRight className="ml-2 w-4 h-4" />
-                            </Button>
-                            <Button
-                                variant="ghost"
-                                type="button"
-                                className="w-full text-gray-500 hover:bg-white hover:text-black"
-                                onClick={() => setStep('reset-otp')}
-                            >
-                                Назад к коду
-                            </Button>
-                        </form>
-                    ) : step === 'password-setup' ? (
-                        <form onSubmit={handleSetPassword} className="space-y-4">
-                            <div className="space-y-2">
-                                <Label htmlFor="newPassword" className="text-gray-300">Новый пароль</Label>
-                                <Input
-                                    id="newPassword"
-                                    type="password"
-                                    placeholder="Минимум 6 символов"
-                                    value={newPassword}
-                                    onChange={(e) => setNewPassword(e.target.value)}
-                                    className="bg-black/50 border-white/10 text-white placeholder:text-gray-600 focus-visible:ring-purple-500"
-                                    required
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="confirmPassword" className="text-gray-300">Подтверждение пароля</Label>
-                                <Input
-                                    id="confirmPassword"
-                                    type="password"
-                                    placeholder="Повторите пароль"
-                                    value={confirmPassword}
-                                    onChange={(e) => setConfirmPassword(e.target.value)}
-                                    className="bg-black/50 border-white/10 text-white placeholder:text-gray-600 focus-visible:ring-purple-500"
-                                    required
-                                />
-                            </div>
-                            {isNewUser ? (
-                                <div className="rounded-lg border border-white/10 bg-black/30 p-3">
-                                    <div className="flex items-start gap-3">
-                                        <Checkbox
-                                            id="legal-consent"
-                                            checked={hasAcceptedLegal}
-                                            onCheckedChange={(checked) => setHasAcceptedLegal(checked === true)}
-                                            className="mt-0.5 border-white/20 data-[state=checked]:border-white data-[state=checked]:bg-white data-[state=checked]:text-black"
-                                        />
-                                        <Label htmlFor="legal-consent" className="text-xs leading-5 text-gray-400">
-                                            Я принимаю{" "}
-                                            <Link href="/terms" className="text-gray-200 transition-colors hover:text-white">
-                                                Пользовательское соглашение
-                                            </Link>
-                                            {" "}и{" "}
-                                            <Link href="/privacy" className="text-gray-200 transition-colors hover:text-white">
-                                                Политику конфиденциальности
-                                            </Link>
-                                        </Label>
-                                    </div>
-                                </div>
-                            ) : null}
-                            <Button type="submit" className="w-full bg-white text-black hover:bg-gray-200 hover:text-black" disabled={isLoading}>
-                                {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                                Установить пароль <ArrowRight className="ml-2 w-4 h-4" />
-                            </Button>
-                        </form>
-                    ) : (
-                        <form onSubmit={handleSaveName} className="space-y-4">
-                            <div className="space-y-2">
-                                <Label htmlFor="fullName" className="text-gray-300">Ваше имя</Label>
-                                <Input
-                                    id="fullName"
-                                    placeholder="Например, Иван Иванов"
-                                    value={fullName}
-                                    onChange={(e) => setFullName(e.target.value)}
-                                    className="bg-black/50 border-white/10 text-white placeholder:text-gray-600 focus-visible:ring-purple-500"
-                                    required
-                                />
-                            </div>
-                            <Button type="submit" className="w-full bg-white text-black hover:bg-gray-200 hover:text-black" disabled={isLoading}>
-                                {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                                Продолжить <ArrowRight className="ml-2 w-4 h-4" />
-                            </Button>
-                        </form>
-                    )
-                    )}
-                </CardContent>
-            </Card>
-
-            <div className="mt-6 text-center text-xs text-gray-500">
-                Юридические документы:{" "}
-                <Link href="/terms" className="text-gray-300 transition-colors hover:text-white">
-                    Пользовательское соглашение
+                
+                <Link href="/" className="relative z-10 flex items-center gap-2 group w-fit">
+                    <Zap className="text-white w-6 h-6 fill-current group-hover:text-blue-400 transition-colors" />
+                    <span className="font-bold text-2xl tracking-tight">DashAdmin</span>
                 </Link>
-                {" "}и{" "}
-                <Link href="/privacy" className="text-gray-300 transition-colors hover:text-white">
-                    Политика конфиденциальности
-                </Link>
+
+                <div className="relative z-10">
+                    <h2 className="text-5xl font-bold tracking-tight mb-6 leading-tight">
+                        Единая система<br/>управления<br/>клубом.
+                    </h2>
+                    <p className="text-xl text-gray-400 max-w-md leading-relaxed">
+                        Смены, деньги, склад, техника и чеклисты в одном месте.
+                    </p>
+                </div>
+            </div>
+
+            {/* Auth Form (Right Side) */}
+            <div className="flex-1 flex flex-col justify-center items-center p-6 md:p-12 relative z-10 bg-black">
+                <div className="w-full max-w-sm">
+                    {/* Mobile Header */}
+                    <div className="md:hidden flex items-center gap-2 mb-12">
+                        <Zap className="text-white w-6 h-6 fill-current" />
+                        <span className="font-bold text-xl tracking-tight">DashAdmin</span>
+                    </div>
+
+                    <AnimatePresence mode="wait">
+                        <motion.div
+                            key={step}
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -10 }}
+                            transition={{ duration: 0.3 }}
+                        >
+                            <div className="mb-10">
+                                <h1 className="text-3xl font-bold tracking-tight mb-3">{currentContent.title}</h1>
+                                <p className="text-gray-400 text-lg leading-snug">{currentContent.description}</p>
+                            </div>
+
+                            {isCheckingSession ? (
+                                <div className="flex flex-col items-center justify-center py-12 text-gray-400 gap-4">
+                                    <Loader2 className="h-6 w-6 animate-spin text-white" />
+                                    <span className="text-sm font-medium tracking-wide">Проверка сессии</span>
+                                </div>
+                            ) : (
+                                <div className="space-y-6">
+                                    {step === 'phone' && (
+                                        <form onSubmit={handleSendOtp} className="space-y-6" noValidate>
+                                            <div className="space-y-3">
+                                                <Label htmlFor="phone" className="text-sm font-medium text-gray-300">Номер телефона</Label>
+                                                <PhoneInput
+                                                    id="phone"
+                                                    placeholder="Введите номер"
+                                                    value={phone}
+                                                    onChange={setPhone}
+                                                    className="bg-white/5 border-white/10 text-white placeholder:text-gray-600 focus-visible:ring-1 focus-visible:ring-white/30 focus-visible:border-white/30 h-12 text-lg rounded-xl transition-all"
+                                                    aria-label="Номер телефона"
+                                                />
+                                            </div>
+
+                                            <Button
+                                                type="submit"
+                                                className="w-full bg-white text-black hover:bg-gray-200 h-12 rounded-full font-medium text-base transition-all"
+                                                disabled={isLoading}
+                                            >
+                                                {isLoading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : null}
+                                                Продолжить <ArrowRight className="ml-2 w-5 h-5" />
+                                            </Button>
+                                        </form>
+                                    )}
+
+                                    {step === 'password' && (
+                                        <form onSubmit={handlePasswordLogin} className="space-y-6">
+                                            <div className="space-y-3">
+                                                <Label htmlFor="password" className="text-sm font-medium text-gray-300">Пароль</Label>
+                                                <Input
+                                                    id="password"
+                                                    type="password"
+                                                    placeholder="Введите пароль"
+                                                    value={password}
+                                                    onChange={(e) => setPassword(e.target.value)}
+                                                    className="bg-white/5 border-white/10 text-white placeholder:text-gray-600 focus-visible:ring-1 focus-visible:ring-white/30 focus-visible:border-white/30 h-12 text-lg rounded-xl transition-all"
+                                                    required
+                                                />
+                                            </div>
+                                            
+                                            <Button type="submit" className="w-full bg-white text-black hover:bg-gray-200 h-12 rounded-full font-medium text-base transition-all" disabled={isLoading}>
+                                                {isLoading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : null}
+                                                Войти
+                                            </Button>
+
+                                            <div className="flex flex-col gap-2 pt-2">
+                                                <button
+                                                    type="button"
+                                                    className="text-sm text-gray-500 hover:text-white transition-colors text-left"
+                                                    onClick={handleStartPasswordReset}
+                                                    disabled={isLoading}
+                                                >
+                                                    Забыли пароль?
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className="text-sm text-gray-500 hover:text-white transition-colors text-left"
+                                                    onClick={() => setStep('phone')}
+                                                >
+                                                    Изменить номер телефона
+                                                </button>
+                                            </div>
+                                        </form>
+                                    )}
+
+                                    {step === 'otp' && (
+                                        <form onSubmit={handleVerifyOtp} className="space-y-6">
+                                            {debugCode && (
+                                                <div className="p-4 bg-white/5 border border-white/10 rounded-xl text-gray-300 text-sm font-mono">
+                                                    Код для теста: <span className="text-white font-bold tracking-widest ml-2">{debugCode}</span>
+                                                </div>
+                                            )}
+                                            {requiresPassword && (
+                                                <div className="p-4 bg-white/5 border border-white/10 rounded-xl text-gray-400 text-sm">
+                                                    Далее потребуется установить пароль
+                                                </div>
+                                            )}
+                                            
+                                            <div className="space-y-3">
+                                                <Label htmlFor="code" className="text-sm font-medium text-gray-300">Код из СМС</Label>
+                                                <Input
+                                                    id="code"
+                                                    placeholder="0000"
+                                                    value={code}
+                                                    onChange={(e) => setCode(e.target.value)}
+                                                    className="bg-white/5 border-white/10 text-white placeholder:text-gray-600 focus-visible:ring-1 focus-visible:ring-white/30 focus-visible:border-white/30 h-14 text-2xl tracking-[0.5em] text-center rounded-xl font-mono transition-all"
+                                                    maxLength={4}
+                                                    required
+                                                />
+                                            </div>
+
+                                            <Button type="submit" className="w-full bg-white text-black hover:bg-gray-200 h-12 rounded-full font-medium text-base transition-all" disabled={isLoading}>
+                                                {isLoading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : null}
+                                                Подтвердить <ArrowRight className="ml-2 w-5 h-5" />
+                                            </Button>
+
+                                            <div className="pt-2">
+                                                <button
+                                                    type="button"
+                                                    className="text-sm text-gray-500 hover:text-white transition-colors"
+                                                    onClick={() => setStep('phone')}
+                                                >
+                                                    Изменить номер
+                                                </button>
+                                            </div>
+                                        </form>
+                                    )}
+
+                                    {step === 'reset-otp' && (
+                                        <form onSubmit={handleVerifyResetOtp} className="space-y-6">
+                                            {debugCode && (
+                                                <div className="p-4 bg-white/5 border border-white/10 rounded-xl text-gray-300 text-sm font-mono">
+                                                    Код для теста: <span className="text-white font-bold tracking-widest ml-2">{debugCode}</span>
+                                                </div>
+                                            )}
+                                            
+                                            <div className="space-y-3">
+                                                <Label htmlFor="reset-code" className="text-sm font-medium text-gray-300">Код из СМС</Label>
+                                                <Input
+                                                    id="reset-code"
+                                                    placeholder="0000"
+                                                    value={code}
+                                                    onChange={(e) => setCode(e.target.value)}
+                                                    className="bg-white/5 border-white/10 text-white placeholder:text-gray-600 focus-visible:ring-1 focus-visible:ring-white/30 focus-visible:border-white/30 h-14 text-2xl tracking-[0.5em] text-center rounded-xl font-mono transition-all"
+                                                    maxLength={4}
+                                                    required
+                                                />
+                                            </div>
+
+                                            <Button type="submit" className="w-full bg-white text-black hover:bg-gray-200 h-12 rounded-full font-medium text-base transition-all" disabled={isLoading}>
+                                                Продолжить <ArrowRight className="ml-2 w-5 h-5" />
+                                            </Button>
+
+                                            <div className="pt-2">
+                                                <button
+                                                    type="button"
+                                                    className="text-sm text-gray-500 hover:text-white transition-colors"
+                                                    onClick={() => {
+                                                        resetTransientFields()
+                                                        setStep('password')
+                                                    }}
+                                                >
+                                                    Отменить сброс
+                                                </button>
+                                            </div>
+                                        </form>
+                                    )}
+
+                                    {step === 'reset-password' && (
+                                        <form onSubmit={handleResetPassword} className="space-y-6">
+                                            <div className="space-y-3">
+                                                <Label htmlFor="reset-new-password" className="text-sm font-medium text-gray-300">Новый пароль</Label>
+                                                <Input
+                                                    id="reset-new-password"
+                                                    type="password"
+                                                    placeholder="Минимум 6 символов"
+                                                    value={newPassword}
+                                                    onChange={(e) => setNewPassword(e.target.value)}
+                                                    className="bg-white/5 border-white/10 text-white placeholder:text-gray-600 focus-visible:ring-1 focus-visible:ring-white/30 focus-visible:border-white/30 h-12 text-lg rounded-xl transition-all"
+                                                    required
+                                                />
+                                            </div>
+
+                                            <div className="space-y-3">
+                                                <Label htmlFor="reset-confirm-password" className="text-sm font-medium text-gray-300">Повторите пароль</Label>
+                                                <Input
+                                                    id="reset-confirm-password"
+                                                    type="password"
+                                                    placeholder="Ещё раз"
+                                                    value={confirmPassword}
+                                                    onChange={(e) => setConfirmPassword(e.target.value)}
+                                                    className="bg-white/5 border-white/10 text-white placeholder:text-gray-600 focus-visible:ring-1 focus-visible:ring-white/30 focus-visible:border-white/30 h-12 text-lg rounded-xl transition-all"
+                                                    required
+                                                />
+                                            </div>
+
+                                            <Button type="submit" className="w-full bg-white text-black hover:bg-gray-200 h-12 rounded-full font-medium text-base transition-all" disabled={isLoading}>
+                                                {isLoading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : null}
+                                                Сохранить пароль <ArrowRight className="ml-2 w-5 h-5" />
+                                            </Button>
+
+                                            <div className="pt-2">
+                                                <button
+                                                    type="button"
+                                                    className="text-sm text-gray-500 hover:text-white transition-colors"
+                                                    onClick={() => setStep('reset-otp')}
+                                                >
+                                                    Назад к коду
+                                                </button>
+                                            </div>
+                                        </form>
+                                    )}
+
+                                    {step === 'password-setup' && (
+                                        <form onSubmit={handleSetPassword} className="space-y-6">
+                                            <div className="space-y-3">
+                                                <Label htmlFor="newPassword" className="text-sm font-medium text-gray-300">Пароль</Label>
+                                                <Input
+                                                    id="newPassword"
+                                                    type="password"
+                                                    placeholder="Минимум 6 символов"
+                                                    value={newPassword}
+                                                    onChange={(e) => setNewPassword(e.target.value)}
+                                                    className="bg-white/5 border-white/10 text-white placeholder:text-gray-600 focus-visible:ring-1 focus-visible:ring-white/30 focus-visible:border-white/30 h-12 text-lg rounded-xl transition-all"
+                                                    required
+                                                />
+                                            </div>
+
+                                            <div className="space-y-3">
+                                                <Label htmlFor="confirmPassword" className="text-sm font-medium text-gray-300">Повторите пароль</Label>
+                                                <Input
+                                                    id="confirmPassword"
+                                                    type="password"
+                                                    placeholder="Ещё раз"
+                                                    value={confirmPassword}
+                                                    onChange={(e) => setConfirmPassword(e.target.value)}
+                                                    className="bg-white/5 border-white/10 text-white placeholder:text-gray-600 focus-visible:ring-1 focus-visible:ring-white/30 focus-visible:border-white/30 h-12 text-lg rounded-xl transition-all"
+                                                    required
+                                                />
+                                            </div>
+
+                                            {isNewUser && (
+                                                <div className="rounded-xl border border-white/10 bg-white/5 p-4 mt-2">
+                                                    <div className="flex items-start gap-3">
+                                                        <Checkbox
+                                                            id="legal-consent"
+                                                            checked={hasAcceptedLegal}
+                                                            onCheckedChange={(checked) => setHasAcceptedLegal(checked === true)}
+                                                            className="mt-1 border-white/20 data-[state=checked]:border-white data-[state=checked]:bg-white data-[state=checked]:text-black"
+                                                        />
+                                                        <Label htmlFor="legal-consent" className="text-sm leading-relaxed text-gray-400">
+                                                            Я принимаю{" "}
+                                                            <Link href="/terms" className="text-gray-200 hover:text-white underline underline-offset-4 decoration-white/20 hover:decoration-white/50 transition-all">
+                                                                Пользовательское соглашение
+                                                            </Link>
+                                                            {" "}и{" "}
+                                                            <Link href="/privacy" className="text-gray-200 hover:text-white underline underline-offset-4 decoration-white/20 hover:decoration-white/50 transition-all">
+                                                                Политику конфиденциальности
+                                                            </Link>
+                                                        </Label>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            <Button type="submit" className="w-full bg-white text-black hover:bg-gray-200 h-12 rounded-full font-medium text-base transition-all" disabled={isLoading}>
+                                                {isLoading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : null}
+                                                Установить пароль <ArrowRight className="ml-2 w-5 h-5" />
+                                            </Button>
+                                        </form>
+                                    )}
+
+                                    {step === 'name' && (
+                                        <form onSubmit={handleSaveName} className="space-y-6">
+                                            <div className="space-y-3">
+                                                <Label htmlFor="fullName" className="text-sm font-medium text-gray-300">Имя и фамилия</Label>
+                                                <Input
+                                                    id="fullName"
+                                                    placeholder="Например, Иван Иванов"
+                                                    value={fullName}
+                                                    onChange={(e) => setFullName(e.target.value)}
+                                                    className="bg-white/5 border-white/10 text-white placeholder:text-gray-600 focus-visible:ring-1 focus-visible:ring-white/30 focus-visible:border-white/30 h-12 text-lg rounded-xl transition-all"
+                                                    required
+                                                />
+                                            </div>
+
+                                            <Button type="submit" className="w-full bg-white text-black hover:bg-gray-200 h-12 rounded-full font-medium text-base transition-all" disabled={isLoading}>
+                                                {isLoading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : null}
+                                                Продолжить <ArrowRight className="ml-2 w-5 h-5" />
+                                            </Button>
+                                        </form>
+                                    )}
+                                </div>
+                            )}
+                        </motion.div>
+                    </AnimatePresence>
+                </div>
+
+                {/* Footer text */}
+                <div className="absolute bottom-6 left-0 right-0 text-center text-xs text-gray-600 px-6">
+                    Авторизуясь, вы соглашаетесь с нашими{" "}
+                    <Link href="/terms" className="text-gray-500 hover:text-white transition-colors">правилами</Link>
+                    {" "}и{" "}
+                    <Link href="/privacy" className="text-gray-500 hover:text-white transition-colors">политикой конфиденциальности</Link>.
+                </div>
             </div>
         </div>
     )

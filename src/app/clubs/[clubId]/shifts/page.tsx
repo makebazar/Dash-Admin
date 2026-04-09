@@ -1081,15 +1081,15 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
     }
 
     return (
-        <div className="p-4 md:p-8 space-y-6 md:space-y-8">
+        <div className="flex min-h-screen bg-[#FAFAFA] flex-col font-sans text-slate-900 selection:bg-black/10">
+            <main className="mx-auto max-w-6xl w-full flex-1 px-6 sm:px-8 py-12 md:py-20">
             {/* Header */}
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                <div className="min-w-0">
-                    <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Смены</h1>
-                    <p className="text-muted-foreground">История смен и отчетов сотрудников</p>
-                </div>
-                <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 w-full md:w-auto">
-                    <div className="w-full sm:w-auto [&_button]:w-full sm:[&_button]:w-auto">
+            <div className="mb-12">
+                <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+                    <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-slate-900">
+                        Смены
+                    </h1>
+                    <div className="flex items-center gap-3">
                         <ShiftExcelImport
                             clubId={clubId}
                             employees={employees}
@@ -1102,574 +1102,439 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                                 fetchShifts(clubId, filterStartDate, filterEndDate)
                             }}
                         />
+                        <Button
+                            variant="outline"
+                            onClick={() => {
+                                console.log(`[Refresh] Manual refresh triggered`)
+                                fetchShifts(clubId, filterStartDate, filterEndDate)
+                            }}
+                            disabled={isLoading}
+                            title="Обновить данные"
+                            className="h-12 rounded-xl px-4 border-slate-200 text-slate-600 hover:bg-slate-50 font-medium transition-all"
+                        >
+                            <RefreshCw className={`h-5 w-5 ${isLoading ? 'animate-spin' : ''}`} />
+                        </Button>
+                        <Button onClick={openCreateModal} className="h-12 rounded-xl px-6 bg-black text-white hover:bg-slate-800 font-medium transition-all">
+                            Добавить смену
+                        </Button>
                     </div>
-                    <Button
-                        variant="outline"
-                        onClick={() => {
-                            console.log(`[Refresh] Manual refresh triggered`)
-                            fetchShifts(clubId, filterStartDate, filterEndDate)
-                        }}
-                        disabled={isLoading}
-                        title="Обновить данные"
-                        className="w-full sm:w-auto gap-2"
-                    >
-                        <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-                        Обновить
-                    </Button>
-                    <Button onClick={openCreateModal} className="gap-2 w-full sm:w-auto">
-                        <Clock className="h-4 w-4" />
-                        Добавить смену
-                    </Button>
                 </div>
             </div>
 
             {/* Date Filters */}
-            <Card className="border-dashed bg-transparent shadow-none border-none p-0">
-                <div className="flex flex-col gap-2 bg-background border rounded-lg p-3 shadow-sm lg:flex-row lg:flex-wrap lg:items-center">
-                    <div className="w-full lg:w-auto lg:min-w-[180px] lg:max-w-[200px]">
-                        <Popover>
-                            <PopoverTrigger asChild>
-                                <Button
-                                    variant="outline"
-                                    className={cn(
-                                        "justify-start text-left font-normal w-full capitalize lg:px-3",
-                                        !selectedMonth && "text-muted-foreground"
-                                    )}
-                                >
-                                    <CalendarDays className="mr-2 h-4 w-4 shrink-0" />
-                                    <span className="truncate">
-                                        {selectedMonth ? (
-                                            (() => {
-                                                const now = new Date();
-                                                const target = new Date(now.getFullYear(), now.getMonth() + parseInt(selectedMonth), 1);
-                                                return target.toLocaleString('ru-RU', { month: 'long', year: 'numeric' });
-                                            })()
-                                        ) : (
-                                            "Выберите месяц"
-                                        )}
-                                    </span>
-                                </Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-auto p-0" align="start">
-                                <div className="p-2 w-48">
-                                    <div className="grid gap-1">
-                                        {[0, -1, -2, -3].map((offset) => {
+            <div className="mb-12 flex flex-col lg:flex-row gap-4 items-start lg:items-center bg-white p-2 rounded-2xl border border-slate-200 shadow-sm">
+                <div className="w-full lg:w-auto min-w-[200px]">
+                    <Popover>
+                        <PopoverTrigger asChild>
+                            <Button
+                                variant="ghost"
+                                className={cn(
+                                    "h-12 w-full justify-start text-left font-medium text-base capitalize rounded-xl hover:bg-slate-50",
+                                    !selectedMonth && "text-slate-400"
+                                )}
+                            >
+                                <CalendarDays className="mr-3 h-5 w-5 text-slate-400 shrink-0" />
+                                <span className="truncate">
+                                    {selectedMonth ? (
+                                        (() => {
                                             const now = new Date();
-                                            const target = new Date(now.getFullYear(), now.getMonth() + offset, 1);
-                                            const label = target.toLocaleString('ru-RU', { month: 'long', year: 'numeric' });
-                                            return (
-                                                <Button
-                                                    key={offset}
-                                                    variant={selectedMonth === String(offset) ? "default" : "ghost"}
-                                                    className="justify-start w-full capitalize h-9 px-2.5 font-normal"
-                                                    onClick={() => {
-                                                        handleMonthSelect(offset);
-                                                    }}
-                                                >
-                                                    {label}
-                                                </Button>
-                                            )
-                                        })}
-                                    </div>
-                                </div>
-                            </PopoverContent>
-                        </Popover>
-                    </div>
+                                            const target = new Date(now.getFullYear(), now.getMonth() + parseInt(selectedMonth), 1);
+                                            return target.toLocaleString('ru-RU', { month: 'long', year: 'numeric' });
+                                        })()
+                                    ) : (
+                                        "Выберите месяц"
+                                    )}
+                                </span>
+                            </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[200px] p-2 rounded-xl border-slate-200 shadow-lg" align="start">
+                            <div className="grid gap-1">
+                                {[0, -1, -2, -3].map((offset) => {
+                                    const now = new Date();
+                                    const target = new Date(now.getFullYear(), now.getMonth() + offset, 1);
+                                    const label = target.toLocaleString('ru-RU', { month: 'long', year: 'numeric' });
+                                    return (
+                                        <Button
+                                            key={offset}
+                                            variant={selectedMonth === String(offset) ? "secondary" : "ghost"}
+                                            className="justify-start w-full capitalize h-10 px-3 font-medium rounded-lg"
+                                            onClick={() => {
+                                                handleMonthSelect(offset);
+                                            }}
+                                        >
+                                            {label}
+                                        </Button>
+                                    )
+                                })}
+                            </div>
+                        </PopoverContent>
+                    </Popover>
+                </div>
 
-                    <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center lg:w-auto lg:flex-nowrap">
-                        <MaskedDateInput
-                            value={filterStartDateDisplay}
-                            onValueChange={(displayValue, internalValue) => {
-                                setFilterStartDateDisplay(displayValue)
-                                setFilterStartDate(internalValue)
-                            }}
-                            className="w-full sm:w-[116px]"
-                        />
-                        <MaskedDateInput
-                            value={filterEndDateDisplay}
-                            onValueChange={(displayValue, internalValue) => {
-                                setFilterEndDateDisplay(displayValue)
-                                setFilterEndDate(internalValue)
-                            }}
-                            className="w-full sm:w-[116px]"
-                        />
-                        <Button
-                            variant="secondary"
-                            size="sm"
-                            onClick={handleCustomDateFilter}
-                            className="h-10 sm:h-9 w-full sm:w-auto sm:px-4 lg:shrink-0"
-                        >
-                            Применить
-                        </Button>
-                    </div>
+                <div className="h-8 w-px bg-slate-200 hidden lg:block" />
 
+                <div className="flex flex-col sm:flex-row flex-1 w-full lg:w-auto gap-2">
+                    <MaskedDateInput
+                        value={filterStartDateDisplay}
+                        onValueChange={(displayValue, internalValue) => {
+                            setFilterStartDateDisplay(displayValue)
+                            setFilterStartDate(internalValue)
+                        }}
+                        className="h-12 rounded-xl border-slate-200 bg-slate-50 focus-visible:ring-1 focus-visible:ring-black focus-visible:bg-white text-base transition-all w-full"
+                        placeholder="С (ДД.ММ.ГГГГ)"
+                    />
+                    <MaskedDateInput
+                        value={filterEndDateDisplay}
+                        onValueChange={(displayValue, internalValue) => {
+                            setFilterEndDateDisplay(displayValue)
+                            setFilterEndDate(internalValue)
+                        }}
+                        className="h-12 rounded-xl border-slate-200 bg-slate-50 focus-visible:ring-1 focus-visible:ring-black focus-visible:bg-white text-base transition-all w-full"
+                        placeholder="По (ДД.ММ.ГГГГ)"
+                    />
+                    <Button
+                        variant="secondary"
+                        onClick={handleCustomDateFilter}
+                        className="h-12 rounded-xl px-6 bg-slate-100 text-slate-700 hover:bg-slate-200 font-medium transition-all w-full sm:w-auto"
+                    >
+                        Найти
+                    </Button>
+                </div>
+
+                <div className="h-8 w-px bg-slate-200 hidden lg:block" />
+
+                <div className="flex-1 w-full lg:w-auto min-w-[200px]">
                     <Select value={filterEmployee || "all"} onValueChange={(value) => setFilterEmployee(value === "all" ? "" : value)}>
-                        <SelectTrigger className="h-10 w-full lg:w-[220px] lg:min-w-[220px] lg:flex-none">
-                            <SelectValue placeholder="Все сотрудники" />
+                        <SelectTrigger className="h-12 w-full rounded-xl border-transparent hover:bg-slate-50 focus:ring-0 font-medium text-base shadow-none">
+                            <SelectValue placeholder="Сотрудник" />
                         </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">Все сотрудники</SelectItem>
+                        <SelectContent className="rounded-xl border-slate-200 shadow-lg">
+                            <SelectItem value="all" className="font-medium">Все сотрудники</SelectItem>
                             {reportEmployees.map((emp) => (
-                                <SelectItem key={emp.id} value={emp.id}>
+                                <SelectItem key={emp.id} value={emp.id} className="font-medium">
                                     {emp.full_name}
                                 </SelectItem>
                             ))}
                         </SelectContent>
                     </Select>
+                </div>
 
-                    {(filterStartDate || filterEndDate || (selectedMonth && selectedMonth !== '0')) && (
+                {(filterStartDate || filterEndDate || (selectedMonth && selectedMonth !== '0')) && (
+                    <>
+                        <div className="h-8 w-px bg-slate-200 hidden lg:block" />
                         <Button
                             variant="ghost"
-                            size="sm"
                             onClick={clearFilters}
-                            className="h-10 sm:h-9 w-full sm:w-auto lg:ml-auto lg:shrink-0 text-muted-foreground hover:text-foreground"
+                            className="h-12 rounded-xl px-4 text-slate-400 hover:text-slate-700 hover:bg-slate-50 font-medium w-full lg:w-auto"
                         >
                             Сбросить
                         </Button>
-                    )}
-                </div>
-            </Card>
-
-            {/* Summary Cards */}
-            <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
-                <Card className="overflow-hidden relative border-none bg-purple-500/5 shadow-none">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
-                        <CardTitle className="text-sm font-medium text-purple-600">Всего смен</CardTitle>
-                        <Clock className="h-4 w-4 text-purple-500" />
-                    </CardHeader>
-                    <CardContent className="relative">
-                        <div className="text-3xl font-bold">{shifts.length}</div>
-                        <p className="text-xs text-muted-foreground mt-1">за выбранный период</p>
-                    </CardContent>
-                </Card>
-
-                <Card className="overflow-hidden relative border-none bg-green-600/10 shadow-none border-green-600/20 border col-span-1 sm:col-span-2 lg:col-span-2 xl:col-span-2">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
-                        <CardTitle className="text-sm font-bold text-green-700 uppercase">Итого Выручка</CardTitle>
-                        <TrendingUp className="h-4 w-4 text-green-600" />
-                    </CardHeader>
-                    <CardContent className="relative">
-                        <div className="text-3xl font-black text-green-600 mb-4 whitespace-nowrap">{formatMoney(totalRevenue)}</div>
-                        
-                        <div className="space-y-1">
-                            {/* Standard Fields */}
-                            <div className="flex items-center justify-between text-xs">
-                                <span className="text-muted-foreground flex items-center gap-1">
-                                    <Wallet className="h-3 w-3" />
-                                    Наличные
-                                </span>
-                                <span className="font-medium text-emerald-700 whitespace-nowrap">{formatMoney(totals.totalCash)}</span>
-                            </div>
-                            <div className="flex items-center justify-between text-xs">
-                                <span className="text-muted-foreground flex items-center gap-1">
-                                    <DollarSign className="h-3 w-3" />
-                                    Безналичные
-                                </span>
-                                <span className="font-medium text-blue-700 whitespace-nowrap">{formatMoney(totals.totalCard)}</span>
-                            </div>
-
-                            {/* Dynamic Income Fields */}
-                            {customFieldTotals.filter(f => f.field_type === 'INCOME' && f.show_in_stats).map(field => (
-                                <div key={field.metric_key} className="flex items-center justify-between text-xs">
-                                    <span className="text-muted-foreground flex items-center gap-1">
-                                        <TrendingUp className="h-3 w-3" />
-                                        {field.custom_label}
-                                    </span>
-                                    <span className="font-medium text-cyan-700 whitespace-nowrap">{formatMoney(field.total)}</span>
-                                </div>
-                            ))}
-                        </div>
-                    </CardContent>
-                </Card>
-
-                <Card className="overflow-hidden relative border-none bg-orange-500/5 shadow-none">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
-                        <CardTitle className="text-sm font-medium text-orange-600">Расходы</CardTitle>
-                        <TrendingUp className="h-4 w-4 text-orange-500" />
-                    </CardHeader>
-                    <CardContent className="relative">
-                        <div className="text-3xl font-bold text-orange-500 whitespace-nowrap">{formatMoney(totalExpenses)}</div>
-                    </CardContent>
-                </Card>
-
-                {/* Expense Cards */}
-                {customFieldTotals.filter(f => (f.field_type === 'EXPENSE' || f.field_type === 'EXPENSE_LIST') && f.show_in_stats).map(field => (
-                    <Card key={field.metric_key} className="overflow-hidden relative border-none bg-rose-500/5 shadow-none">
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
-                            <CardTitle className="text-sm font-medium text-red-600">{field.custom_label}</CardTitle>
-                            <TrendingUp className="h-4 w-4 text-red-500" />
-                        </CardHeader>
-                        <CardContent className="relative">
-                            <div className="text-3xl font-bold text-red-600 whitespace-nowrap">{formatMoney(field.total || 0)}</div>
-                        </CardContent>
-                    </Card>
-                ))}
-
-                {/* Average Shift Revenue (Day/Night) */}
-                <Card className="overflow-hidden relative border-none bg-indigo-500/5 shadow-none">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
-                        <CardTitle className="text-sm font-medium text-indigo-600">Ср. выручка (День)</CardTitle>
-                        <Sun className="h-4 w-4 text-indigo-500" />
-                    </CardHeader>
-                    <CardContent className="relative">
-                        <div className="text-3xl font-bold text-indigo-600 whitespace-nowrap">
-                            {formatMoney(
-                                shifts.filter(s => s.shift_type !== 'NIGHT').length > 0 
-                                ? shifts.filter(s => s.shift_type !== 'NIGHT').reduce((acc, s) => acc + calculateShiftTotalIncome(s), 0) / shifts.filter(s => s.shift_type !== 'NIGHT').length
-                                : 0
-                            )}
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-1">
-                            {shifts.filter(s => s.shift_type !== 'NIGHT').length} смен
-                        </p>
-                    </CardContent>
-                </Card>
-
-                <Card className="overflow-hidden relative border-none bg-violet-500/5 shadow-none">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
-                        <CardTitle className="text-sm font-medium text-violet-600">Ср. выручка (Ночь)</CardTitle>
-                        <Moon className="h-4 w-4 text-violet-500" />
-                    </CardHeader>
-                    <CardContent className="relative">
-                        <div className="text-3xl font-bold text-violet-600 whitespace-nowrap">
-                            {formatMoney(
-                                shifts.filter(s => s.shift_type === 'NIGHT').length > 0 
-                                ? shifts.filter(s => s.shift_type === 'NIGHT').reduce((acc, s) => acc + calculateShiftTotalIncome(s), 0) / shifts.filter(s => s.shift_type === 'NIGHT').length
-                                : 0
-                            )}
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-1">
-                            {shifts.filter(s => s.shift_type === 'NIGHT').length} смен
-                        </p>
-                    </CardContent>
-                </Card>
-
-                {/* Revenue Forecast (Month End) */}
-                {selectedMonth && (
-                    <Card className="overflow-hidden relative border-none bg-teal-500/5 shadow-none">
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
-                            <CardTitle className="text-sm font-medium text-teal-600">Прогноз (Месяц)</CardTitle>
-                            <TrendingUp className="h-4 w-4 text-teal-500" />
-                        </CardHeader>
-                        <CardContent className="relative">
-                            <div className="text-3xl font-bold text-teal-600 whitespace-nowrap">
-                                {(() => {
-                                    // Calculate forecast logic
-                                     const offset = parseInt(selectedMonth);
-                                     const isCurrentMonth = offset === 0;
-                                     
-                                     if (!isCurrentMonth) {
-                                         // For past months (or future?), forecast = actual total
-                                         return formatMoney(totalRevenue);
-                                     }
-
-                                     const now = new Date();
-                                     const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-                                     const currentDay = now.getDate();
-                                     
-                                     // Avoid division by zero
-                                     if (currentDay === 0) return formatMoney(0);
-                                     
-                                     // Use completed days for better accuracy (current day is still in progress)
-                                     const daysPassed = Math.max(1, currentDay);
-                                     const dailyAvg = totalRevenue / daysPassed;
-                                     const forecast = dailyAvg * daysInMonth;
-                                     
-                                     return formatMoney(forecast);
-                                })()}
-                            </div>
-                            <p className="text-xs text-muted-foreground mt-1">
-                                на конец месяца
-                            </p>
-                        </CardContent>
-                    </Card>
+                    </>
                 )}
+            </div>
 
-                {/* Other Stats Cards (e.g. Guest Count, Bar Revenue) */}
-            {customFieldTotals.filter(f => (f.field_type === 'OTHER' || !f.field_type) && f.show_in_stats).map(field => (
-                <Card key={field.metric_key} className="overflow-hidden relative border-none bg-slate-500/5 shadow-none">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
-                        <CardTitle className="text-sm font-medium text-slate-600">{field.custom_label}</CardTitle>
-                        <TrendingUp className="h-4 w-4 text-slate-500" />
-                    </CardHeader>
-                    <CardContent className="relative">
-                        <div className="text-3xl font-bold text-slate-600 whitespace-nowrap">{formatMoney(field.total || 0)}</div>
-                    </CardContent>
-                </Card>
-            ))}
-        </div>
-
-        {/* Shifts Table */}
-            <Card className="border-0 bg-transparent shadow-none md:border md:bg-card md:shadow-sm">
-                <CardHeader className="px-0 pt-0 md:px-6 md:pt-6">
-                    <CardTitle>История смен</CardTitle>
-                    <CardDescription>Смены за выбранный период</CardDescription>
-                </CardHeader>
-                <CardContent className="px-0 pb-0 md:px-6 md:pb-6">
-                    <div className="md:hidden space-y-3">
-                        {sortedShifts.length === 0 ? (
-                            <div className="text-center text-muted-foreground py-12">
-                                <div className="flex flex-col items-center gap-2">
-                                    <Clock className="h-8 w-8 opacity-30" />
-                                    <p>Смен пока нет</p>
-                                </div>
-                            </div>
-                        ) : (
-                            sortedShifts.map((shift) => {
-                                const isWeekend = isWeekendDate(shift.check_in)
-
-                                return (
-                                <div
-                                    key={shift.id}
-                                    className="rounded-lg border bg-background p-3"
-                                >
-                                    <div className="flex items-start justify-between gap-3">
-                                        <div className="min-w-0">
-                                            <div className="flex items-center gap-2 flex-wrap">
-                                                <span className={cn(
-                                                    "font-medium whitespace-nowrap",
-                                                    isWeekend && "text-rose-600 dark:text-rose-400"
-                                                )}>{formatDate(shift.check_in)}</span>
-                                                {shift.shift_type === 'NIGHT' ? (
-                                                    <span className="inline-flex items-center gap-1 text-blue-500 text-xs">
-                                                        <Moon className="h-3.5 w-3.5" />
-                                                        Ночь
-                                                    </span>
-                                                ) : (
-                                                    <span className="inline-flex items-center gap-1 text-orange-500 text-xs">
-                                                        <Sun className="h-3.5 w-3.5" />
-                                                        День
-                                                    </span>
-                                                )}
-                                            </div>
-                                            <div className="text-sm text-foreground font-semibold truncate mt-1">
-                                                {shift.employee_name || 'Неизвестно'}
-                                            </div>
-                                            <div className="text-xs text-muted-foreground mt-0.5">
-                                                {formatTime(shift.check_in)} — {shift.check_out ? formatTime(shift.check_out) : '...'}
-                                            </div>
-                                        </div>
-
-                                        <div className="shrink-0 text-right">
-                                            <div className="text-sm font-bold text-green-600 tabular-nums">
-                                                {formatMoney(calculateShiftTotalIncome(shift))}
-                                            </div>
-                                            <div className="mt-2 flex justify-end">
-                                                {getStatusBadge(shift)}
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div className="mt-3 grid grid-cols-2 gap-2">
-                                        <div className="rounded-md bg-muted/20 p-2">
-                                            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Нал</div>
-                                            <div className="text-sm font-medium tabular-nums">{formatMoney(shift.cash_income)}</div>
-                                        </div>
-                                        <div className="rounded-md bg-muted/20 p-2">
-                                            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Безнал</div>
-                                            <div className="text-sm font-medium tabular-nums">{formatMoney(shift.card_income)}</div>
-                                        </div>
-                                        <div className="rounded-md bg-muted/20 p-2">
-                                            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Расходы</div>
-                                            <div className="text-sm font-medium text-orange-600 tabular-nums">{formatMoney(shift.expenses)}</div>
-                                        </div>
-                                        <div className="rounded-md bg-muted/20 p-2">
-                                            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Часы</div>
-                                            <div className="text-sm font-medium tabular-nums">
-                                                {shift.total_hours && !isNaN(Number(shift.total_hours))
-                                                    ? `${Number(shift.total_hours).toFixed(1)}ч`
-                                                    : '-'}
-                                            </div>
-                                        </div>
-                                        {reportFields.map((field: any) => {
-                                            const raw = shift.report_data?.[field.metric_key]
-                                            const parsed = parseFloat(String(raw))
-                                            const value = Array.isArray(raw)
-                                                ? formatMoney(getMetricValue(shift, field.metric_key))
-                                                : raw === null || raw === undefined || raw === ''
-                                                    ? '-'
-                                                    : (!Number.isNaN(parsed) ? formatMoney(parsed) : String(raw))
-
-                                            return (
-                                                <div key={field.metric_key} className="rounded-md border border-border/50 bg-background/60 p-2">
-                                                    <div className="text-[10px] uppercase tracking-wide text-muted-foreground truncate">
-                                                        {field.custom_label}
-                                                    </div>
-                                                    <div className="text-sm font-medium tabular-nums">{value}</div>
-                                                </div>
-                                            )
-                                        })}
-                                    </div>
-
-                                    <div className="mt-3 flex items-center gap-2">
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            className="h-9 flex-1 px-4"
-                                            onClick={(e) => {
-                                                e.stopPropagation()
-                                                router.push(`/clubs/${clubId}/shifts/${shift.id}`)
-                                            }}
-                                        >
-                                            Открыть
-                                        </Button>
-                                    </div>
-                                </div>
-                                )
-                            })
-                        )}
+            {/* Summary Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-12">
+                <div className="bg-white rounded-2xl border border-slate-200 p-6 flex flex-col justify-between h-full min-h-[220px]">
+                    <div className="mb-6">
+                        <p className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-2">Выручка</p>
+                        <p className="text-3xl lg:text-4xl font-bold text-emerald-600 tracking-tight whitespace-nowrap">{formatMoney(totalRevenue)}</p>
                     </div>
+                    <div className="space-y-3 mt-auto">
+                        <div className="flex items-center justify-between text-sm">
+                            <span className="text-slate-500 truncate mr-2">Наличные</span>
+                            <span className="font-medium text-slate-900 whitespace-nowrap">{formatMoney(totals.totalCash)}</span>
+                        </div>
+                        <div className="flex items-center justify-between text-sm">
+                            <span className="text-slate-500 truncate mr-2">Безналичные</span>
+                            <span className="font-medium text-slate-900 whitespace-nowrap">{formatMoney(totals.totalCard)}</span>
+                        </div>
+                        {/* Custom Income Fields added inside Revenue card */}
+                        {customFieldTotals.filter(f => (f.field_type === 'OTHER' || f.field_type === 'INCOME' || !f.field_type) && f.show_in_stats).map(field => (
+                            <div key={field.metric_key} className="flex items-center justify-between text-sm">
+                                <span className="text-slate-500 truncate mr-2" title={field.custom_label}>{field.custom_label}</span>
+                                <span className="font-medium text-emerald-600 whitespace-nowrap">{formatMoney(field.total || 0)}</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
 
-                    <div className="hidden md:block">
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead
-                                    className="cursor-pointer hover:bg-muted/50 select-none"
-                                    onClick={() => handleSort('check_in')}
-                                >
-                                    <div className="flex items-center gap-1">
-                                        Дата
-                                        <ArrowUpDown className="h-3 w-3" />
-                                    </div>
-                                </TableHead>
-                                <TableHead>Тип</TableHead>
-                                <TableHead
-                                    className="cursor-pointer hover:bg-muted/50 select-none"
-                                    onClick={() => handleSort('employee_name')}
-                                >
-                                    <div className="flex items-center gap-1">
-                                        Сотрудник
-                                        <ArrowUpDown className="h-3 w-3" />
-                                    </div>
-                                </TableHead>
-                                <TableHead>Время</TableHead>
-                                <TableHead
-                                    className="cursor-pointer hover:bg-muted/50 select-none"
-                                    onClick={() => handleSort('total_hours')}
-                                >
-                                    <div className="flex items-center gap-1">
-                                        Часы
-                                        <ArrowUpDown className="h-3 w-3" />
-                                    </div>
-                                </TableHead>
-                                <TableHead
-                                    className="text-right cursor-pointer hover:bg-muted/50 select-none font-bold text-green-600"
-                                    onClick={() => handleSort('total_income')}
-                                >
-                                    <div className="flex items-center justify-end gap-1">
-                                        Итого Выручка
-                                        <ArrowUpDown className="h-3 w-3" />
-                                    </div>
-                                </TableHead>
-                                <TableHead
-                                    className="text-right cursor-pointer hover:bg-muted/50 select-none"
-                                    onClick={() => handleSort('cash_income')}
-                                >
-                                    <div className="flex items-center justify-end gap-1">
-                                        Нал
-                                        <ArrowUpDown className="h-3 w-3" />
-                                    </div>
-                                </TableHead>
-                                <TableHead
-                                    className="text-right cursor-pointer hover:bg-muted/50 select-none"
-                                    onClick={() => handleSort('card_income')}
-                                >
-                                    <div className="flex items-center justify-end gap-1">
-                                        Безнал
-                                        <ArrowUpDown className="h-3 w-3" />
-                                    </div>
-                                </TableHead>
-                                <TableHead
-                                    className="text-right cursor-pointer hover:bg-muted/50 select-none"
-                                    onClick={() => handleSort('expenses')}
-                                >
-                                    <div className="flex items-center justify-end gap-1">
-                                        Расходы
-                                        <ArrowUpDown className="h-3 w-3" />
-                                    </div>
-                                </TableHead>
-                                {reportFields.map((field: any) => (
-                                    <TableHead key={field.metric_key} className="text-right min-w-[100px]">{field.custom_label}</TableHead>
-                                ))}
-                                <TableHead>Статус</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {sortedShifts.length === 0 ? (
-                                <TableRow>
-                                    <TableCell colSpan={9 + reportFields.length} className="text-center text-muted-foreground py-12">
-                                        <div className="flex flex-col items-center gap-2">
-                                            <Clock className="h-8 w-8 opacity-30" />
-                                            <p>Смен пока нет</p>
-                                        </div>
-                                    </TableCell>
-                                </TableRow>
-                            ) : sortedShifts.map((shift) => {
+                <div className="bg-white rounded-2xl border border-slate-200 p-6 flex flex-col justify-between h-full min-h-[220px]">
+                    <div className="mb-6">
+                        <p className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-2">Расходы</p>
+                        <p className="text-3xl lg:text-4xl font-bold text-rose-600 tracking-tight whitespace-nowrap">-{formatMoney(totalExpenses)}</p>
+                    </div>
+                    <div className="space-y-3 mt-auto">
+                        <div className="flex items-center justify-between text-sm">
+                            <span className="text-slate-500 truncate mr-2">Из кассы</span>
+                            <span className="font-medium text-slate-900 whitespace-nowrap">{formatMoney(totals.totalExpensesCore)}</span>
+                        </div>
+                        {customFieldTotals.filter(f => (f.field_type === 'EXPENSE' || f.field_type === 'EXPENSE_LIST') && f.show_in_stats).map(field => (
+                            <div key={field.metric_key} className="flex items-center justify-between text-sm">
+                                <span className="text-slate-500 truncate mr-2" title={field.custom_label}>{field.custom_label}</span>
+                                <span className="font-medium text-slate-900 whitespace-nowrap">{formatMoney(field.total || 0)}</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                <div className="bg-white rounded-2xl border border-slate-200 p-6 flex flex-col justify-between h-full min-h-[220px]">
+                    <div className="mb-6">
+                        <p className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-2">Смены</p>
+                        <p className="text-3xl lg:text-4xl font-bold text-slate-900 tracking-tight whitespace-nowrap">{shifts.length}</p>
+                    </div>
+                    <div className="space-y-3 mt-auto">
+                        <div className="flex items-center justify-between text-sm">
+                            <span className="flex items-center gap-1.5 text-slate-500 truncate mr-2"><Sun className="h-4 w-4 text-orange-500 shrink-0"/> Дневные</span>
+                            <span className="font-medium text-slate-900 whitespace-nowrap">{shifts.filter(s => s.shift_type !== 'NIGHT').length}</span>
+                        </div>
+                        <div className="flex items-center justify-between text-sm">
+                            <span className="flex items-center gap-1.5 text-slate-500 truncate mr-2"><Moon className="h-4 w-4 text-blue-500 shrink-0"/> Ночные</span>
+                            <span className="font-medium text-slate-900 whitespace-nowrap">{shifts.filter(s => s.shift_type === 'NIGHT').length}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="bg-white rounded-2xl border border-slate-200 p-6 flex flex-col justify-between h-full min-h-[220px]">
+                    <div className="mb-6">
+                        <p className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-2">Прогноз (Месяц)</p>
+                        <p className="text-3xl lg:text-4xl font-bold text-blue-600 tracking-tight whitespace-nowrap">
+                            {(() => {
+                                const offset = parseInt(selectedMonth || '0');
+                                if (offset !== 0) return formatMoney(totalRevenue);
+                                const now = new Date();
+                                const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+                                const currentDay = now.getDate();
+                                if (currentDay === 0) return formatMoney(0);
+                                const daysPassed = Math.max(1, currentDay);
+                                const dailyAvg = totalRevenue / daysPassed;
+                                const forecast = dailyAvg * daysInMonth;
+                                return formatMoney(forecast);
+                            })()}
+                        </p>
+                    </div>
+                    <div className="mt-auto">
+                        <p className="text-sm text-slate-500 leading-relaxed">На основе текущей динамики выручки</p>
+                    </div>
+                </div>
+            </div>
+
+            {/* Shifts List (Cardless Desktop, Mobile list) */}
+            <div>
+                <h2 className="text-2xl font-bold tracking-tight mb-6">История смен</h2>
+                
+                {sortedShifts.length === 0 ? (
+                    <div className="text-center py-20 bg-white rounded-2xl border border-slate-200 border-dashed">
+                        <Clock className="h-8 w-8 text-slate-300 mx-auto mb-3" />
+                        <p className="text-slate-500 text-lg">Смен за этот период не найдено</p>
+                    </div>
+                ) : (
+                    <>
+                        {/* Mobile View */}
+                        <div className="md:hidden space-y-3">
+                            {sortedShifts.map((shift) => {
                                 const isWeekend = isWeekendDate(shift.check_in)
-
                                 return (
-                                <TableRow 
-                                    key={shift.id} 
-                                    className="hover:bg-muted/50 cursor-pointer"
-                                    onClick={() => {
-                                        router.push(`/clubs/${clubId}/shifts/${shift.id}`);
-                                    }}
-                                >
-                                    <TableCell className={cn(
-                                        "font-medium whitespace-nowrap",
-                                        isWeekend && "text-rose-600 bg-rose-50/60 dark:bg-rose-950/20 dark:text-rose-400"
-                                    )}>
-                                        {formatDate(shift.check_in)}
-                                    </TableCell>
-                                    <TableCell className="whitespace-nowrap">
-                                        {shift.shift_type === 'NIGHT' ? (
-                                            <div className="flex items-center gap-1 text-blue-500">
-                                                <Moon className="h-4 w-4" />
-                                                <span className="text-xs">Ночь</span>
+                                    <div
+                                        key={shift.id}
+                                        className="bg-white rounded-2xl border border-slate-200 p-4"
+                                        onClick={() => router.push(`/clubs/${clubId}/shifts/${shift.id}`)}
+                                    >
+                                        <div className="flex items-start justify-between gap-3 mb-4">
+                                            <div className="min-w-0">
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <span className={cn(
+                                                        "font-bold text-lg whitespace-nowrap",
+                                                        isWeekend ? "text-rose-600" : "text-slate-900"
+                                                    )}>{formatDate(shift.check_in)}</span>
+                                                    {shift.shift_type === 'NIGHT' ? (
+                                                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 text-xs font-medium">
+                                                            <Moon className="h-3 w-3" /> Ночь
+                                                        </span>
+                                                    ) : (
+                                                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-orange-50 text-orange-700 text-xs font-medium">
+                                                            <Sun className="h-3 w-3" /> День
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <div className="text-sm font-medium text-slate-700 truncate">
+                                                    {shift.employee_name || 'Неизвестно'}
+                                                </div>
+                                                <div className="text-xs text-slate-500 mt-0.5">
+                                                    {formatTime(shift.check_in)} — {shift.check_out ? formatTime(shift.check_out) : '...'}
+                                                </div>
                                             </div>
-                                        ) : (
-                                            <div className="flex items-center gap-1 text-orange-500">
-                                                <Sun className="h-4 w-4" />
-                                                <span className="text-xs">День</span>
+
+                                            <div className="shrink-0 text-right">
+                                                <div className="text-lg font-bold text-emerald-600 tabular-nums">
+                                                    {formatMoney(calculateShiftTotalIncome(shift))}
+                                                </div>
+                                                <div className="mt-1 flex justify-end">
+                                                    {getStatusBadge(shift)}
+                                                </div>
                                             </div>
-                                        )}
-                                    </TableCell>
-                                    <TableCell className="whitespace-nowrap">
-                                        {shift.employee_name || 'Неизвестно'}
-                                    </TableCell>
-                                    <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
-                                        {formatTime(shift.check_in)} — {shift.check_out ? formatTime(shift.check_out) : '...'}
-                                    </TableCell>
-                                    <TableCell className="font-mono whitespace-nowrap">
-                                        {shift.total_hours && !isNaN(Number(shift.total_hours))
-                                            ? `${Number(shift.total_hours).toFixed(1)}ч`
-                                            : '-'}
-                                    </TableCell>
-                                    <TableCell className="text-right font-bold text-green-600 whitespace-nowrap bg-green-500/5">{formatMoney(calculateShiftTotalIncome(shift))}</TableCell>
-                                    <TableCell className="text-right font-medium text-green-500 whitespace-nowrap">{formatMoney(getMetricValue(shift, 'cash_income'))}</TableCell>
-                                    <TableCell className="text-right font-medium text-blue-500 whitespace-nowrap">{formatMoney(getMetricValue(shift, 'card_income'))}</TableCell>
-                                    <TableCell className="text-right font-medium text-orange-500 whitespace-nowrap">{formatMoney(getMetricValue(shift, 'expenses'))}</TableCell>
-                                    {reportFields.map((field: any) => (
-                                        <TableCell key={field.metric_key} className="text-right whitespace-nowrap">
-                                            {shift.report_data && shift.report_data[field.metric_key] !== undefined
-                                                ? formatMoney(getMetricValue(shift, field.metric_key))
-                                                : '-'}
-                                        </TableCell>
-                                    ))}
-                                    <TableCell className="whitespace-nowrap">
-                                        {getStatusBadge(shift)}
-                                    </TableCell>
-                                </TableRow>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <div className="rounded-xl bg-slate-50 border border-slate-100 p-3">
+                                                <div className="text-[10px] uppercase font-bold tracking-widest text-slate-400 mb-1">Нал</div>
+                                                <div className="text-sm font-bold text-slate-900 tabular-nums">{formatMoney(shift.cash_income)}</div>
+                                            </div>
+                                            <div className="rounded-xl bg-slate-50 border border-slate-100 p-3">
+                                                <div className="text-[10px] uppercase font-bold tracking-widest text-slate-400 mb-1">Безнал</div>
+                                                <div className="text-sm font-bold text-slate-900 tabular-nums">{formatMoney(shift.card_income)}</div>
+                                            </div>
+                                            <div className="rounded-xl bg-rose-50 border border-rose-100 p-3">
+                                                <div className="text-[10px] uppercase font-bold tracking-widest text-rose-400 mb-1">Расходы</div>
+                                                <div className="text-sm font-bold text-rose-600 tabular-nums">{formatMoney(shift.expenses)}</div>
+                                            </div>
+                                            <div className="rounded-xl bg-slate-50 border border-slate-100 p-3">
+                                                <div className="text-[10px] uppercase font-bold tracking-widest text-slate-400 mb-1">Часы</div>
+                                                <div className="text-sm font-bold text-slate-900 tabular-nums">
+                                                    {shift.total_hours && !isNaN(Number(shift.total_hours))
+                                                        ? `${Number(shift.total_hours).toFixed(1)}ч`
+                                                        : '-'}
+                                                </div>
+                                            </div>
+                                            {reportFields.map((field: any) => {
+                                                const raw = shift.report_data?.[field.metric_key]
+                                                const parsed = parseFloat(String(raw))
+                                                const value = Array.isArray(raw)
+                                                    ? formatMoney(getMetricValue(shift, field.metric_key))
+                                                    : raw === null || raw === undefined || raw === ''
+                                                        ? '-'
+                                                        : (!Number.isNaN(parsed) ? formatMoney(parsed) : String(raw))
+
+                                                return (
+                                                    <div key={field.metric_key} className="rounded-xl bg-slate-50 border border-slate-100 p-3">
+                                                        <div className="text-[10px] uppercase font-bold tracking-widest text-slate-400 mb-1 truncate" title={field.custom_label}>
+                                                            {field.custom_label}
+                                                        </div>
+                                                        <div className="text-sm font-bold text-slate-900 tabular-nums">{value}</div>
+                                                    </div>
+                                                )
+                                            })}
+                                        </div>
+
+                                        <div className="mt-4 pt-4 border-t border-slate-100">
+                                            <Button
+                                                variant="outline"
+                                                className="w-full h-12 rounded-xl border-slate-200 text-slate-700 font-medium hover:bg-slate-50 hover:text-black"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    router.push(`/clubs/${clubId}/shifts/${shift.id}`);
+                                                }}
+                                            >
+                                                Открыть смену
+                                            </Button>
+                                        </div>
+                                    </div>
                                 )
                             })}
-                        </TableBody>
-                    </Table>
-                    </div>
-                </CardContent>
-            </Card>
+                        </div>
 
-            {/* View Report Modal - Redesigned V3 (Clean & Standard) */}
+                        {/* Desktop View */}
+                        <div className="hidden md:block bg-white rounded-2xl border border-slate-200 overflow-hidden">
+                            <div className="overflow-x-auto">
+                            <Table>
+                                <TableHeader className="bg-slate-50/50 border-b border-slate-200">
+                                    <TableRow className="hover:bg-transparent">
+                                        <TableHead className="h-12 cursor-pointer select-none text-slate-500 font-medium" onClick={() => handleSort('check_in')}>
+                                            <div className="flex items-center gap-2">Дата <ArrowUpDown className="h-3 w-3 opacity-50" /></div>
+                                        </TableHead>
+                                        <TableHead className="h-12 text-slate-500 font-medium">Смена</TableHead>
+                                        <TableHead className="h-12 cursor-pointer select-none text-slate-500 font-medium" onClick={() => handleSort('employee_name')}>
+                                            <div className="flex items-center gap-2">Сотрудник <ArrowUpDown className="h-3 w-3 opacity-50" /></div>
+                                        </TableHead>
+                                        <TableHead className="h-12 text-right cursor-pointer select-none text-emerald-600 font-bold" onClick={() => handleSort('total_income')}>
+                                            <div className="flex items-center justify-end gap-2">Выручка <ArrowUpDown className="h-3 w-3 opacity-50" /></div>
+                                        </TableHead>
+                                        <TableHead className="h-12 text-right text-slate-500 font-medium">Наличные</TableHead>
+                                        <TableHead className="h-12 text-right text-slate-500 font-medium">Безнал</TableHead>
+                                        <TableHead className="h-12 text-right text-slate-500 font-medium">Расходы</TableHead>
+                                        {reportFields.map((field: any) => (
+                                            <TableHead key={field.metric_key} className="h-12 text-right text-slate-500 font-medium whitespace-nowrap min-w-[100px] max-w-[150px] truncate" title={field.custom_label}>
+                                                {field.custom_label}
+                                            </TableHead>
+                                        ))}
+                                        <TableHead className="h-12 text-right text-slate-500 font-medium">Статус</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {sortedShifts.map((shift) => {
+                                        const isWeekend = isWeekendDate(shift.check_in)
+                                        return (
+                                            <TableRow 
+                                                key={shift.id} 
+                                                className={cn(
+                                                    "hover:bg-slate-50 cursor-pointer transition-colors border-b border-slate-100 last:border-0",
+                                                    isWeekend && "bg-rose-50/30"
+                                                )}
+                                                onClick={() => router.push(`/clubs/${clubId}/shifts/${shift.id}`)}
+                                            >
+                                                <TableCell className="py-4">
+                                                    <div className={cn(
+                                                        "font-medium",
+                                                        isWeekend ? "text-rose-600" : "text-slate-900"
+                                                    )}>{formatDate(shift.check_in)}</div>
+                                                    <div className={cn(
+                                                        "text-xs mt-0.5",
+                                                        isWeekend ? "text-rose-500" : "text-slate-500"
+                                                    )}>{formatTime(shift.check_in)} — {shift.check_out ? formatTime(shift.check_out) : '...'}</div>
+                                                </TableCell>
+                                                <TableCell className="py-4">
+                                                    {shift.shift_type === 'NIGHT' ? (
+                                                        <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-blue-50 text-blue-700 text-xs font-medium">
+                                                            <Moon className="h-3 w-3" /> Ночь
+                                                        </span>
+                                                    ) : (
+                                                        <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-orange-50 text-orange-700 text-xs font-medium">
+                                                            <Sun className="h-3 w-3" /> День
+                                                        </span>
+                                                    )}
+                                                </TableCell>
+                                                <TableCell className="py-4">
+                                                    <div className="font-medium text-slate-900">{shift.employee_name || 'Неизвестно'}</div>
+                                                    <div className="text-xs text-slate-500 mt-0.5">
+                                                        {shift.total_hours ? `${Number(shift.total_hours).toFixed(1)} ч` : '-'}
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell className="py-4 text-right">
+                                                    <span className="font-bold text-emerald-600 tabular-nums text-base">
+                                                        {formatMoney(calculateShiftTotalIncome(shift))}
+                                                    </span>
+                                                </TableCell>
+                                                <TableCell className="py-4 text-right font-medium text-slate-600 tabular-nums">
+                                                    {formatMoney(getMetricValue(shift, 'cash_income'))}
+                                                </TableCell>
+                                                <TableCell className="py-4 text-right font-medium text-slate-600 tabular-nums">
+                                                    {formatMoney(getMetricValue(shift, 'card_income'))}
+                                                </TableCell>
+                                                <TableCell className="py-4 text-right font-medium text-rose-600 tabular-nums">
+                                                    {formatMoney(getMetricValue(shift, 'expenses'))}
+                                                </TableCell>
+                                                {reportFields.map((field: any) => (
+                                                    <TableCell key={field.metric_key} className="py-4 text-right text-slate-500 tabular-nums">
+                                                        {shift.report_data && shift.report_data[field.metric_key] !== undefined
+                                                            ? formatMoney(getMetricValue(shift, field.metric_key))
+                                                            : '-'}
+                                                    </TableCell>
+                                                ))}
+                                                <TableCell className="py-4 text-right">
+                                                    {getStatusBadge(shift)}
+                                                </TableCell>
+                                            </TableRow>
+                                        )
+                                    })}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    </div>
+                </>
+                )}
+            </div>
+
+            {/* Modals remain structurally similar but get cleaner classes */}
             <Dialog open={!!selectedShift} onOpenChange={() => setSelectedShift(null)}>
                 <DialogContent className="p-0 gap-0 overflow-hidden bg-background rounded-none fixed inset-0 w-screen h-[100dvh] max-w-none flex flex-col !flex min-h-0 left-0 top-0 translate-x-0 translate-y-0 sm:rounded-xl sm:left-[50%] sm:top-[50%] sm:translate-x-[-50%] sm:translate-y-[-50%] sm:w-[95vw] sm:h-[85vh] sm:max-w-5xl">
                     {/* Header Section */}
@@ -2222,8 +2087,6 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                     )}
                 </DialogContent>
             </Dialog>
-
-            {/* Edit Shift Modal - Redesigned */}
             <Dialog open={!!editingShift} onOpenChange={() => setEditingShift(null)}>
                 <DialogContent className="max-w-3xl p-0 gap-0 overflow-hidden">
                     <DialogHeader className="px-6 py-4 border-b bg-muted/30">
@@ -2563,6 +2426,7 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+            </main>
         </div>
     )
 }

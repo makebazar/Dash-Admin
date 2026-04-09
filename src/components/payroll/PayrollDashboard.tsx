@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -379,14 +378,14 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
     const monthNames = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
 
     return (
-        <div className="space-y-5 p-4 md:space-y-6 md:p-8">
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div className="space-y-8 pb-28 sm:pb-12">
+            <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between mb-8">
                 <div className="flex flex-col gap-4">
                     <div className="space-y-1">
-                        <h1 className="text-[2rem] font-semibold tracking-[-0.04em] text-slate-900 md:text-3xl md:font-bold md:tracking-tight">Зарплаты</h1>
-                        <p className="text-[15px] text-muted-foreground md:text-sm">Начисления, выплаты и остатки по сотрудникам</p>
+                        <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-slate-900">Зарплаты</h1>
+                        <p className="text-slate-500 text-lg mt-2">Начисления, выплаты и остатки по сотрудникам</p>
                     </div>
-                    <div className="flex w-full items-center justify-between gap-2 rounded-2xl border bg-muted/40 p-1.5 md:w-auto md:gap-2 md:rounded-lg md:p-1">
+                    <div className="flex w-full items-center justify-between gap-2 rounded-2xl border border-slate-200 bg-white p-2 md:w-auto md:gap-3 shadow-sm">
                         <Button variant="ghost" size="icon" onClick={() => navigateMonth(-1)} className="h-10 w-10 rounded-xl md:h-8 md:w-8 md:rounded-md"><ChevronLeft className="h-4 w-4" /></Button>
                         <div className="min-w-0 flex-1 text-center text-xl font-semibold tracking-[-0.03em] text-slate-900 md:min-w-[160px] md:flex-none md:text-lg md:font-medium md:tracking-normal">
                             {monthNames[selectedMonth - 1]} <span className="text-muted-foreground">{selectedYear}</span>
@@ -405,55 +404,55 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
             </div>
 
             <div className="grid grid-cols-2 gap-3 md:gap-6 lg:grid-cols-4">
-                <Card className="rounded-2xl border-slate-100 shadow-sm">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 pb-1 md:p-6 md:pb-2">
-                        <CardTitle className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground md:text-sm md:tracking-wider">Сотрудники</CardTitle>
+                <div className="bg-white rounded-3xl border border-slate-200 p-6 flex flex-col gap-4">
+                    <div className="flex flex-row items-center justify-between space-y-0">
+                        <h3 className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Сотрудники</h3>
                         <div className="rounded-lg bg-primary/10 p-1.5 md:p-2"><Users className="h-3.5 w-3.5 text-primary md:h-4 md:w-4" /></div>
-                    </CardHeader>
-                    <CardContent className="p-3 md:p-6 pt-0 md:pt-0">
-                        <div className="text-2xl font-semibold tracking-[-0.03em] text-slate-900 md:text-2xl md:font-bold md:tracking-tight">{stats.total_employees}</div>
-                    </CardContent>
-                </Card>
-                <Card className="rounded-2xl border-slate-100 shadow-sm">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 pb-1 md:p-6 md:pb-2">
-                        <CardTitle className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground md:text-sm md:tracking-wider">Начислено</CardTitle>
+                    </div>
+                    <div>
+                        <div className="text-3xl font-black tracking-tight text-slate-900">{stats.total_employees}</div>
+                    </div>
+                </div>
+                <div className="bg-white rounded-3xl border border-slate-200 p-6 flex flex-col gap-4">
+                    <div className="flex flex-row items-center justify-between space-y-0">
+                        <h3 className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Начислено</h3>
                         <div className="rounded-lg bg-primary/10 p-1.5 md:p-2"><DollarSign className="h-3.5 w-3.5 text-primary md:h-4 md:w-4" /></div>
-                    </CardHeader>
-                    <CardContent className="p-3 md:p-6 pt-0 md:pt-0">
-                        <div className="text-xl font-semibold tracking-[-0.03em] text-slate-900 md:text-2xl md:font-bold md:tracking-tight">{formatCurrency(stats.total_accrued)}</div>
-                    </CardContent>
-                </Card>
-                <Card className="rounded-2xl border-slate-100 shadow-sm">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 pb-1 md:p-6 md:pb-2">
-                        <CardTitle className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground md:text-sm md:tracking-wider">Выплачено</CardTitle>
+                    </div>
+                    <div>
+                        <div className="text-3xl font-black tracking-tight text-slate-900">{formatCurrency(stats.total_accrued)}</div>
+                    </div>
+                </div>
+                <div className="bg-white rounded-3xl border border-slate-200 p-6 flex flex-col gap-4">
+                    <div className="flex flex-row items-center justify-between space-y-0">
+                        <h3 className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Выплачено</h3>
                         <div className="rounded-lg bg-primary/10 p-1.5 md:p-2"><CheckCircle className="h-3.5 w-3.5 text-primary md:h-4 md:w-4" /></div>
-                    </CardHeader>
-                    <CardContent className="p-3 md:p-6 pt-0 md:pt-0">
-                        <div className="text-xl font-semibold tracking-[-0.03em] text-slate-900 md:text-2xl md:font-bold md:tracking-tight">{formatCurrency(stats.total_paid)}</div>
-                    </CardContent>
-                </Card>
-                <Card className="rounded-2xl border-slate-100 shadow-sm">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 pb-1 md:p-6 md:pb-2">
-                        <CardTitle className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground md:text-sm md:tracking-wider">К выплате</CardTitle>
+                    </div>
+                    <div>
+                        <div className="text-3xl font-black tracking-tight text-slate-900">{formatCurrency(stats.total_paid)}</div>
+                    </div>
+                </div>
+                <div className="bg-white rounded-3xl border border-slate-200 p-6 flex flex-col gap-4">
+                    <div className="flex flex-row items-center justify-between space-y-0">
+                        <h3 className="text-[10px] font-bold uppercase tracking-widest text-slate-400">К выплате</h3>
                         <div className="rounded-lg bg-primary/10 p-1.5 md:p-2"><Clock className="h-3.5 w-3.5 text-primary md:h-4 md:w-4" /></div>
-                    </CardHeader>
-                    <CardContent className="p-3 md:p-6 pt-0 md:pt-0">
-                        <div className="text-xl font-semibold tracking-[-0.03em] text-slate-900 md:text-2xl md:font-bold md:tracking-tight">{formatCurrency(stats.pending_payment)}</div>
-                    </CardContent>
-                </Card>
+                    </div>
+                    <div>
+                        <div className="text-3xl font-black tracking-tight text-slate-900">{formatCurrency(stats.pending_payment)}</div>
+                    </div>
+                </div>
             </div>
 
 
 
             {data.leaderboard?.top?.length ? (
-                <Card>
-                    <CardHeader className="pb-3">
-                        <CardTitle className="text-base flex items-center gap-2">
+                <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-8">
+                    <div className="mb-6">
+                        <h2 className="text-2xl font-bold tracking-tight text-slate-900 flex items-center gap-3">
                             <Trophy className="h-4 w-4 text-amber-500" />
                             Рейтинг сотрудников
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-2">
+                        </h2>
+                    </div>
+                    <div className="space-y-2">
                         {data.leaderboard.top.slice(0, 5).map((item) => (
                             <div key={item.user_id} className="flex items-center justify-between rounded-xl border px-4 py-3">
                                 <div className="flex items-center gap-3">
@@ -463,8 +462,8 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                 <span className="font-bold">{item.score.toFixed(1)} / 10</span>
                             </div>
                         ))}
-                    </CardContent>
-                </Card>
+                    </div>
+                </div>
             ) : null}
 
             {filteredEmployees.length === 0 ? (
@@ -472,8 +471,8 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
             ) : (
                 <div className="space-y-4">
                     {filteredEmployees.map((employee) => (
-                        <Card key={employee.id} className="overflow-hidden border-slate-200/60 transition-all hover:shadow-md">
-                            <CardContent className="p-4 md:p-6">
+                        <div key={employee.id} className="bg-white rounded-3xl border border-slate-200 overflow-hidden transition-all hover:shadow-md">
+                            <div className="p-6 sm:p-8">
                                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                                     <div className="flex-1">
                                         <div className="mb-4 flex flex-wrap items-start gap-2">
@@ -482,9 +481,9 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                 <p className="text-xs text-muted-foreground">{employee.role || 'Сотрудник'}</p>
                                             </div>
                                             <div className="flex flex-wrap gap-2 items-center">
-                                                {employee.has_active_kpi && <Badge variant="secondary" className="text-[10px] h-5">KPI</Badge>}
+                                                {employee.has_active_kpi && <Badge variant="secondary" className="text-[10px] h-5 font-bold uppercase tracking-wider bg-slate-100 text-slate-600">KPI</Badge>}
                                                 {employee.leaderboard?.rank ? (
-                                                    <Badge variant="outline" className="text-[10px] h-5 gap-1 bg-amber-50 text-amber-700 border-amber-100">
+                                                    <Badge variant="outline" className="text-[10px] h-5 gap-1 bg-amber-50 text-amber-700 border-amber-200 font-bold uppercase tracking-wider">
                                                         <Trophy className="h-2.5 w-2.5" />
                                                         #{employee.leaderboard.rank} · {employee.leaderboard.score.toFixed(1)}
                                                     </Badge>
@@ -575,8 +574,8 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                                     </div>
                                                                 </div>
                                                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4 pt-4 border-t border-dashed border-slate-100">
-                                                                    {(Array.isArray(employee.period_bonuses) ? employee.period_bonuses : []).map((kpi: any) => (
-                                                                        <div key={kpi.id} className="flex justify-between items-center text-xs">
+                                                                    {(Array.isArray(employee.period_bonuses) ? employee.period_bonuses : []).map((kpi: any, idx: number) => (
+                                                                        <div key={kpi.id || idx} className="flex justify-between items-center text-xs">
                                                                             <span className="text-muted-foreground font-medium">{kpi.name}</span>
                                                                             <span className="font-bold text-slate-900">{formatCurrency(kpi.current_value)}</span>
                                                                         </div>
@@ -741,7 +740,7 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                     return (
                                                         <>
 
-                                                            <div className="bg-muted/30 p-4 rounded-xl border mt-4">
+                                                            <div className="bg-slate-50/50 p-6 rounded-2xl border border-slate-200 mt-6">
                                                                 <h5 className="text-xs font-bold uppercase mb-3 text-muted-foreground">Состав начислений</h5>
                                                                 <div className="space-y-2 text-sm">
                                                                         {employee.breakdown?.base_salary && employee.breakdown.base_salary > 0 ? (
@@ -851,8 +850,8 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
 
                                                             <div className="space-y-4 mt-4">
                                                                 <h4 className="text-sm font-bold">Прогресс по порогам KPI</h4>
-                                                                {Array.isArray(employee.period_bonuses) && employee.period_bonuses.map((kpi: any) => (
-                                                                    <div key={kpi.id} className="bg-background border rounded-xl p-4 space-y-4">
+                                                                {Array.isArray(employee.period_bonuses) && employee.period_bonuses.map((kpi: any, kpiIdx: number) => (
+                                                                    <div key={kpi.id || `kpi-prog-${kpiIdx}`} className="bg-background border rounded-xl p-4 space-y-4">
                                                                         <div className="flex justify-between items-center">
                                                                             <div className="flex items-center gap-2"><div><span className="font-bold text-sm">{kpi.name}</span><p className="text-[10px] text-muted-foreground uppercase tracking-wider">Текущая выручка</p></div></div>
                                                                             <div className="text-right"><span className="font-bold text-lg">{formatCurrency(kpi.current_value)}</span><p className="text-[10px] text-muted-foreground">из {formatCurrency(kpi.target_value)}</p></div>
@@ -1132,22 +1131,22 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
 
                                                     return (
                                                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                                                            <div className="bg-muted/30 p-3 rounded-xl border flex flex-col items-center">
+                                                            <div className="bg-slate-50/50 p-4 rounded-2xl border border-slate-200 flex flex-col items-center shadow-sm">
                                                                 <span className="text-[10px] text-muted-foreground uppercase font-bold mb-1">Ср. эффективность</span>
                                                                 <span className="font-bold text-sm flex items-center gap-1.5">
                                                                     <TrendingUp className="h-3.5 w-3.5 text-emerald-500" />
                                                                     {totalHours > 0 ? formatCurrency(totalRevenue / totalHours) + '/ч' : '0 ₽/ч'}
                                                                 </span>
                                                             </div>
-                                                            <div className="bg-muted/30 p-3 rounded-xl border flex flex-col items-center">
+                                                            <div className="bg-slate-50/50 p-4 rounded-2xl border border-slate-200 flex flex-col items-center shadow-sm">
                                                                 <span className="text-[10px] text-muted-foreground uppercase font-bold mb-1">Доля {otherMetricLabel}</span>
                                                                 <span className="font-bold text-sm flex items-center gap-1.5"><Percent className="h-3.5 w-3.5 text-purple-500" /> {upsellShare.toFixed(1)}%</span>
                                                             </div>
-                                                            <div className="bg-muted/30 p-3 rounded-xl border flex flex-col items-center">
+                                                            <div className="bg-slate-50/50 p-4 rounded-2xl border border-slate-200 flex flex-col items-center shadow-sm">
                                                                 <span className="text-[10px] text-muted-foreground uppercase font-bold mb-1">Эфф. {otherMetricLabel}</span>
                                                                 <span className="font-bold text-sm flex items-center gap-1.5"><DollarSign className="h-3.5 w-3.5 text-emerald-500" /> {formatCurrency(upsellEfficiency)}/ч</span>
                                                             </div>
-                                                            <div className="bg-muted/30 p-3 rounded-xl border flex flex-col items-center">
+                                                            <div className="bg-slate-50/50 p-4 rounded-2xl border border-slate-200 flex flex-col items-center shadow-sm">
                                                                 <span className="text-[10px] text-muted-foreground uppercase font-bold mb-1">Бонусы смен</span>
                                                                 <span className="font-bold text-sm flex items-center gap-1.5"><Plus className="h-3.5 w-3.5 text-purple-500" /> {formatCurrency(totalKpiBonus)}</span>
                                                             </div>
@@ -1172,7 +1171,7 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                         (employee.shifts || []).some((s: any) => (s.virtual_balance_earned || 0) > 0);
 
                                                     return (
-                                                        <div className="rounded-xl border border-slate-100 overflow-hidden bg-white shadow-sm">
+                                                        <div className="rounded-2xl border border-slate-200 overflow-hidden bg-white shadow-sm mt-4">
                                                             <div className="overflow-x-auto scrollbar-thin scrollbar-thumb-slate-200">
                                                                 <table className="w-full text-[11px] md:text-xs">
                                                                     <thead className="bg-slate-50 border-b border-slate-100">
@@ -1353,7 +1352,7 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
 
                                         {activeTabs[employee.id] === 'bar' && (
                                             <div className="space-y-4 animate-in slide-in-from-left-2 duration-300">
-                                                <div className="bg-white border border-slate-100 rounded-2xl overflow-hidden shadow-sm">
+                                                <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
                                                     <div className="p-4 bg-slate-50/50 border-b border-slate-100 flex justify-between items-center">
                                                         <h4 className="font-bold text-sm text-slate-900">Покупки из бара</h4>
                                                         <div className="text-right">
@@ -1467,24 +1466,24 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                     <Button variant="ghost" size="sm" onClick={() => toggleCard(employee.id)}>{expandedCards.has(employee.id) ? '↑ Свернуть' : '↓ Детали'}</Button>
                                     {employee.balance > 0 && <Button size="sm" onClick={() => openPaymentModal(employee)}>Выплатить</Button>}
                                 </div>
-                            </CardContent>
-                        </Card>
+                            </div>
+                        </div>
                     ))}
                 </div>
             )}
 
             {paymentModal.open && paymentModal.employee && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-                    <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-                        <h2 className="text-xl font-semibold mb-4">Выплата: {paymentModal.employee.full_name}</h2>
+                    <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl p-8 max-w-md w-full mx-4">
+                        <h2 className="text-2xl font-bold tracking-tight text-slate-900 mb-6">Выплата: {paymentModal.employee.full_name}</h2>
                         <div className="space-y-4">
                             <div>
-                                <label className="block text-sm font-medium mb-1">Сумма</label>
-                                <input type="number" step="0.01" value={paymentForm.amount} onChange={(e) => setPaymentForm({ ...paymentForm, amount: e.target.value })} className="w-full border rounded px-3 py-2" placeholder="0.00" />
+                                <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">Сумма</label>
+                                <input type="number" step="0.01" value={paymentForm.amount} onChange={(e) => setPaymentForm({ ...paymentForm, amount: e.target.value })} className="w-full h-12 bg-slate-50/50 border border-slate-200 rounded-xl px-4 font-medium text-slate-900 focus:bg-white transition-colors" placeholder="0.00" />
                                 <p className="text-xs text-muted-foreground mt-1">Остаток к выплате: {formatCurrency(paymentModal.employee.balance)}</p>
                             </div>
                             <div>
-                                <label className="block text-sm font-medium mb-2">Тип выплаты</label>
+                                <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3">Тип выплаты</label>
                                 <div className="flex flex-wrap gap-2">
                                     <Button
                                         type="button"
@@ -1510,37 +1509,37 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                     </Button>
                                     {paymentModal.employee.has_virtual_balance_feature && (
                                         <Button
-                                        type="button"
-                                        variant={paymentForm.paymentType === 'bonus' ? 'default' : 'outline'}
-                                        className="flex-1"
-                                        onClick={() => {
-                                            const bonusAmount = paymentModal.employee?.virtual_balance || 0;
-                                            setPaymentForm(prev => ({ 
-                                                ...prev, 
-                                                paymentType: 'bonus', 
-                                                amount: bonusAmount.toString(),
-                                                method: 'VIRTUAL'
-                                            }));
-                                        }}
-                                    >
-                                        Бонусы
-                                    </Button>
-                                )}
+                                            type="button"
+                                            variant={paymentForm.paymentType === 'bonus' ? 'default' : 'outline'}
+                                            className="flex-1"
+                                            onClick={() => {
+                                                const bonusAmount = paymentModal.employee?.virtual_balance || 0;
+                                                setPaymentForm(prev => ({ 
+                                                    ...prev, 
+                                                    paymentType: 'bonus', 
+                                                    amount: bonusAmount.toString(),
+                                                    method: 'VIRTUAL'
+                                                }));
+                                            }}
+                                        >
+                                            Бонусы
+                                        </Button>
+                                    )}
+                                </div>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                    {paymentForm.paymentType === 'advance' ? 'Аванс: только базовая часть, KPI не замораживается' :
+                                    paymentForm.paymentType === 'salary' ? 'Зарплата: полная сумма с KPI, смены замораживаются' :
+                                    'Бонусы: выплата с виртуального (бонусного) баланса'}
+                                </p>
                             </div>
-                            <p className="text-xs text-muted-foreground mt-1">
-                                {paymentForm.paymentType === 'advance' ? 'Аванс: только базовая часть, KPI не замораживается' :
-                                 paymentForm.paymentType === 'salary' ? 'Зарплата: полная сумма с KPI, смены замораживаются' :
-                                 'Бонусы: выплата с виртуального (бонусного) баланса'}
-                            </p>
-                        </div>
                         
                         {paymentForm.paymentType !== 'bonus' && (
                             <div>
-                                <label className="block text-sm font-medium mb-1">Способ оплаты</label>
+                                <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">Способ оплаты</label>
                                 <select 
                                     value={paymentForm.method} 
                                     onChange={(e) => setPaymentForm({ ...paymentForm, method: e.target.value })} 
-                                    className="w-full border rounded px-3 py-2"
+                                    className="w-full h-12 bg-slate-50/50 border border-slate-200 rounded-xl px-4 font-medium text-slate-900 focus:bg-white transition-colors"
                                 >
                                     <option value="CASH">Наличные</option>
                                     <option value="CARD">Карта</option>
@@ -1549,8 +1548,8 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                             </div>
                         )}
                             <div>
-                                <label className="block text-sm font-medium mb-1">Комментарий</label>
-                                <textarea value={paymentForm.notes} onChange={(e) => setPaymentForm({ ...paymentForm, notes: e.target.value })} className="w-full border rounded px-3 py-2" rows={3} placeholder="Примечание..." />
+                                <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">Комментарий</label>
+                                <textarea value={paymentForm.notes} onChange={(e) => setPaymentForm({ ...paymentForm, notes: e.target.value })} className="w-full h-12 bg-slate-50/50 border border-slate-200 rounded-xl px-4 font-medium text-slate-900 focus:bg-white transition-colors" rows={3} placeholder="Примечание..." />
                             </div>
                         </div>
                         <div className="flex gap-3 mt-6">
@@ -1563,7 +1562,7 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
 
             {confirmingDeleteId && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]">
-                    <div className="bg-white rounded-lg p-6 max-w-sm w-full mx-4 shadow-xl border animate-in zoom-in duration-200">
+                    <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl p-8 max-w-sm w-full mx-4 animate-in zoom-in duration-200">
                         <div className="flex items-center gap-3 text-destructive mb-4">
                             <div className="p-2 bg-destructive/10 rounded-full">
                                 <Trash2 className="h-5 w-5" />

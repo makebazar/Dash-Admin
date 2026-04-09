@@ -4,13 +4,13 @@ import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
+import { PageShell } from "@/components/layout/PageShell"
 import { Clipboard, Loader2, Plus, RotateCcw, Trash2, ArrowUp, ArrowDown, Link2, ArrowLeft } from "lucide-react"
 import type { RecruitmentFormSection, RecruitmentQuestionType, RecruitmentRepeatableFieldType, RecruitmentTemplateSchemaV1 } from "@/lib/recruitment"
 import { QRCode } from "@/components/qr/QRCode"
@@ -439,14 +439,15 @@ export default function RecruitmentTemplateEditPage() {
     }
 
     return (
-        <div className="mx-auto max-w-[1600px] overflow-x-hidden space-y-5 p-4 pb-28 sm:space-y-6 sm:p-6 sm:pb-6 lg:p-8">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <PageShell maxWidth="5xl">
+            <div className="space-y-8 pb-28 sm:pb-12">
+            <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between mb-8">
                 <div className="min-w-0">
                     <div className="flex min-w-0 items-center gap-2">
-                        <h1 className="min-w-0 truncate text-2xl font-bold tracking-tight sm:text-3xl">{template.name}</h1>
+                        <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-slate-900 truncate">{template.name}</h1>
                         {!isActive && <Badge variant="outline" className="text-[10px] uppercase tracking-wider">Неактивен</Badge>}
                     </div>
-                    <p className="mt-1 text-sm text-muted-foreground sm:text-base">Здесь настраивается анкета кандидата: разделы, вопросы и тесты, которые он проходит</p>
+                    <p className="text-slate-500 text-lg mt-2">Здесь настраивается анкета кандидата: разделы, вопросы и тесты, которые он проходит</p>
                 </div>
                 <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap lg:justify-end">
                     <Button asChild variant="outline" className="hidden sm:inline-flex sm:w-auto">
@@ -455,7 +456,7 @@ export default function RecruitmentTemplateEditPage() {
                             Назад
                         </Link>
                     </Button>
-                    <Button onClick={handleSave} disabled={isSaving} className="hidden w-full bg-primary text-primary-foreground shadow-md hover:bg-primary/90 sm:inline-flex sm:w-auto">
+                    <Button onClick={handleSave} disabled={isSaving} className="hidden w-full bg-slate-900 text-white shadow-sm hover:bg-slate-800 rounded-xl h-11 px-6 font-medium sm:inline-flex sm:w-auto">
                         {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                         Сохранить
                     </Button>
@@ -463,39 +464,39 @@ export default function RecruitmentTemplateEditPage() {
             </div>
 
             <div className="grid min-w-0 gap-4 lg:grid-cols-3">
-                <Card className="min-w-0 border-none bg-white shadow-sm lg:col-span-1">
-                    <CardContent className="p-5 space-y-4">
+                <div className="bg-white rounded-3xl border border-slate-200 p-6 lg:col-span-1 flex flex-col gap-6">
+                    <div className="space-y-6">
                         <div className="space-y-1.5">
-                            <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Название</Label>
-                            <Input value={name} onChange={(e) => setName(e.target.value)} className="bg-muted/30 border-muted-foreground/10" />
+                            <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Название</Label>
+                            <Input value={name} onChange={(e) => setName(e.target.value)} className="h-12 bg-slate-50/50 border-slate-200 rounded-xl font-medium text-slate-900 focus:bg-white" />
                         </div>
                         <div className="space-y-1.5">
-                            <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Описание</Label>
+                            <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Описание</Label>
                             <Textarea
                                 value={description}
                                 onChange={(e) => setDescription(e.target.value)}
-                                className="min-h-[96px] resize-y bg-muted/30 border-muted-foreground/10"
+                                className="min-h-[96px] resize-y bg-slate-50/50 border-slate-200 rounded-xl font-medium text-slate-900 focus:bg-white p-3"
                                 placeholder="Короткое описание анкеты"
                             />
                         </div>
                         <div className="space-y-1.5">
-                            <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Позиция</Label>
-                            <Input value={position} onChange={(e) => setPosition(e.target.value)} className="bg-muted/30 border-muted-foreground/10" />
+                            <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Позиция</Label>
+                            <Input value={position} onChange={(e) => setPosition(e.target.value)} className="h-12 bg-slate-50/50 border-slate-200 rounded-xl font-medium text-slate-900 focus:bg-white" />
                         </div>
-                        <div className="flex items-start justify-between gap-3 rounded-xl border border-muted-foreground/10 p-3">
+                        <div className="flex items-start justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50/50 p-4">
                             <div className="min-w-0">
-                                <p className="text-sm font-medium">Активен</p>
-                                <p className="text-xs text-muted-foreground">Если выключить — ссылка перестанет работать</p>
+                                <p className="text-sm font-bold text-slate-900">Активен</p>
+                                <p className="text-xs text-slate-500 font-medium mt-0.5">Если выключить — ссылка перестанет работать</p>
                             </div>
                             <Switch checked={isActive} onCheckedChange={setIsActive} />
                         </div>
                         <div className="space-y-1.5">
-                            <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Фото кандидата</Label>
+                            <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Фото кандидата</Label>
                             <Select
                                 value={schema.candidate_photo_mode || "off"}
                                 onValueChange={(value) => setSchema(prev => ({ ...prev, candidate_photo_mode: value as "off" | "optional" | "required" }))}
                             >
-                                <SelectTrigger className="min-w-0 bg-muted/30 border-muted-foreground/10">
+                                <SelectTrigger className="h-12 bg-slate-50/50 border-slate-200 rounded-xl font-medium text-slate-900 focus:bg-white">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -504,13 +505,13 @@ export default function RecruitmentTemplateEditPage() {
                                     <SelectItem value="required" className="text-xs">Запрашивать обязательно</SelectItem>
                                 </SelectContent>
                             </Select>
-                            <p className="text-xs text-muted-foreground">Фото будет отображаться отдельным блоком в начале публичной анкеты</p>
+                            <p className="text-xs text-slate-500 font-medium mt-0.5">Фото будет отображаться отдельным блоком в начале публичной анкеты</p>
                         </div>
 
                         <div className="space-y-2">
-                            <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Ссылка</Label>
+                            <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Ссылка</Label>
                             <div className="flex flex-col gap-2 sm:flex-row">
-                                <Input value={publicUrl} readOnly className="min-w-0 bg-muted/30 border-muted-foreground/10" />
+                                <Input value={publicUrl} readOnly className="h-12 bg-slate-50/50 border-slate-200 rounded-xl font-medium text-slate-900 focus:bg-white" />
                                 <Button variant="outline" className="w-full sm:w-auto" onClick={() => publicUrl && handleCopy(publicUrl)} disabled={!publicUrl}>
                                     <Clipboard className="h-4 w-4" />
                                 </Button>
@@ -529,10 +530,10 @@ export default function RecruitmentTemplateEditPage() {
                         </div>
 
                         <div className="space-y-2">
-                            <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Тесты после анкеты</Label>
+                            <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Тесты после анкеты</Label>
                             <div className="flex flex-col gap-2 sm:flex-row">
                                 <Select value={attachTestId} onValueChange={setAttachTestId}>
-                                    <SelectTrigger className="min-w-0 bg-muted/30 border-muted-foreground/10">
+                                    <SelectTrigger className="h-12 bg-slate-50/50 border-slate-200 rounded-xl font-medium text-slate-900 focus:bg-white">
                                         <SelectValue placeholder="Выбрать тест" />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -547,12 +548,12 @@ export default function RecruitmentTemplateEditPage() {
                             </div>
                             <div className="space-y-2">
                                 {attachedTests.length === 0 ? (
-                                    <div className="text-xs text-muted-foreground">Нет тестов</div>
+                                    <div className="text-xs text-slate-500 font-medium mt-0.5">Нет тестов</div>
                                 ) : attachedTests.map((t, i) => (
-                                    <div key={t.id} className="flex flex-col gap-3 rounded-xl border border-muted-foreground/10 p-3 sm:flex-row sm:items-center sm:justify-between">
+                                    <div key={t.id} className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50/50 p-4 sm:flex-row sm:items-center sm:justify-between">
                                         <div className="min-w-0">
-                                            <div className="text-sm font-medium truncate">{t.name}</div>
-                                            <div className="text-xs text-muted-foreground truncate">{t.description || ""}</div>
+                                            <div className="text-sm font-bold text-slate-900 truncate">{t.name}</div>
+                                            <div className="text-xs text-slate-500 font-medium mt-0.5 truncate">{t.description || ""}</div>
                                         </div>
                                         <div className="flex gap-1 self-end sm:self-auto">
                                             <Button variant="outline" size="icon" onClick={() => moveAttached(i, -1)} disabled={i === 0}>
@@ -570,18 +571,18 @@ export default function RecruitmentTemplateEditPage() {
                             </div>
                         </div>
 
-                        <div className="flex items-start justify-between gap-3 rounded-xl border border-muted-foreground/10 p-3">
+                        <div className="flex items-start justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50/50 p-4">
                             <div className="min-w-0">
-                                <p className="text-sm font-medium">RAW JSON</p>
-                                <p className="text-xs text-muted-foreground">Для быстрых правок схемы</p>
+                                <p className="text-sm font-bold text-slate-900">RAW JSON</p>
+                                <p className="text-xs text-slate-500 font-medium mt-0.5">Для быстрых правок схемы</p>
                             </div>
                             <Switch checked={rawMode} onCheckedChange={setRawMode} />
                         </div>
-                    </CardContent>
-                </Card>
+                    </div>
+                </div>
 
-                <Card className="min-w-0 border-none bg-white shadow-sm lg:col-span-2">
-                    <CardContent className="p-5 space-y-4">
+                <div className="bg-white rounded-3xl border border-slate-200 p-6 lg:col-span-2">
+                    <div className="space-y-6">
                         {rawMode ? (
                             <Textarea
                                 value={rawSchemaText}
@@ -594,7 +595,7 @@ export default function RecruitmentTemplateEditPage() {
                                     <span className="font-bold">Системные поля анкеты:</span> ФИО, телефон и email уже собираются автоматически в начале формы.
                                     Не добавляй их повторно в шаблон анкеты, иначе будет дублирование.
                                 </div>
-                                <div className="rounded-xl border border-muted-foreground/10 bg-muted/20 p-3 text-xs text-muted-foreground">
+                                <div className="rounded-xl border border-muted-foreground/10 bg-muted/20 p-3 text-xs text-slate-500 font-medium mt-0.5">
                                     Анкета должна собирать информацию о кандидате. Оценка и баллы должны жить в тестах, а не в анкете.
                                 </div>
                                 <div className="space-y-4">
@@ -603,16 +604,16 @@ export default function RecruitmentTemplateEditPage() {
                                             <div className="flex items-start justify-between gap-3">
                                                 <div className="min-w-0 flex-1 space-y-3">
                                                     <div className="space-y-1.5">
-                                                        <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Название раздела</Label>
+                                                        <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Название раздела</Label>
                                                         <Input
                                                             value={section.title || ""}
                                                             onChange={(e) => updateSection(section.id, { title: e.target.value })}
-                                                            className="bg-muted/30 border-muted-foreground/10"
+                                                            className="h-12 bg-slate-50/50 border-slate-200 rounded-xl font-medium text-slate-900 focus:bg-white"
                                                             placeholder="Напр: Опыт работы"
                                                         />
                                                     </div>
                                                     <div className="space-y-1.5">
-                                                        <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Описание раздела</Label>
+                                                        <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Описание раздела</Label>
                                                         <Textarea
                                                             value={section.description || ""}
                                                             onChange={(e) => updateSection(section.id, { description: e.target.value })}
@@ -620,7 +621,7 @@ export default function RecruitmentTemplateEditPage() {
                                                             placeholder="Краткое описание раздела"
                                                         />
                                                     </div>
-                                                    <div className="rounded-xl border border-muted-foreground/10 bg-muted/20 p-3 text-xs text-muted-foreground">
+                                                    <div className="rounded-xl border border-muted-foreground/10 bg-muted/20 p-3 text-xs text-slate-500 font-medium mt-0.5">
                                                         Раздел содержит обычные вопросы. Если нужен список записей вроде "опыт работы", используй тип вопроса "Список записей" внутри этого раздела.
                                                     </div>
                                                 </div>
@@ -643,7 +644,7 @@ export default function RecruitmentTemplateEditPage() {
                                                         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                                             <div className="min-w-0 flex-1 space-y-2">
                                                                 <div className="space-y-1.5">
-                                                                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Текст вопроса</Label>
+                                                                    <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Текст вопроса</Label>
                                                                     <Textarea
                                                                         value={q.label || ""}
                                                                         onChange={(e) => updateQuestion(section.id, q.id, { label: e.target.value })}
@@ -652,7 +653,7 @@ export default function RecruitmentTemplateEditPage() {
                                                                     />
                                                                 </div>
                                                                 <div className="space-y-1.5">
-                                                                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Описание</Label>
+                                                                    <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Описание</Label>
                                                                     <Textarea
                                                                         value={q.description || ""}
                                                                         onChange={(e) => updateQuestion(section.id, q.id, { description: e.target.value })}
@@ -662,7 +663,7 @@ export default function RecruitmentTemplateEditPage() {
                                                                 </div>
                                                                 <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                                                                     <div className="space-y-1.5 sm:w-[220px]">
-                                                                        <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Тип вопроса</Label>
+                                                                        <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Тип вопроса</Label>
                                                                         <Select value={q.type} onValueChange={(v) => changeQuestionType(section.id, q.id, v as RecruitmentQuestionType)}>
                                                                             <SelectTrigger className="h-10 bg-muted/30 border-muted-foreground/10">
                                                                                 <SelectValue />
@@ -685,44 +686,40 @@ export default function RecruitmentTemplateEditPage() {
                                                                 </div>
 
                                                                 {(q.type === "choice" || q.type === "multi_choice") && (
-                                                                    <div className="space-y-2">
+                                                                    <div className="space-y-4 pt-2">
                                                                         <div className="flex items-center justify-between">
-                                                                            <p className="text-sm font-medium">Варианты</p>
+                                                                            <p className="text-sm font-bold text-slate-900">Варианты ответов</p>
                                                                             <Button
                                                                                 variant="outline"
-                                                                                size="sm"
+                                                                                className="h-9 rounded-lg border-slate-200 text-slate-700 font-medium"
                                                                                 onClick={() => updateQuestion(section.id, q.id, { options: [...(q.options || []), { id: makeId("opt"), label: "Новый вариант", points: 0 }] })}
                                                                             >
                                                                                 <Plus className="mr-2 h-4 w-4" />
-                                                                                Добавить
+                                                                                Добавить вариант
                                                                             </Button>
                                                                         </div>
                                                                         <div className="space-y-2">
                                                                             {(q.options || []).map((opt: any) => (
-                                                                                <div key={opt.id} className="rounded-xl border border-muted-foreground/10 p-3">
-                                                                                    <div className="grid gap-2 sm:grid-cols-[1fr_40px]">
-                                                                                        <Input
-                                                                                            value={opt.label || ""}
-                                                                                            onChange={(e) => {
-                                                                                                const next = (q.options || []).map((o: any) => o.id === opt.id ? { ...o, label: e.target.value } : o)
-                                                                                                updateQuestion(section.id, q.id, { options: next })
-                                                                                            }}
-                                                                                            className="bg-muted/30 border-muted-foreground/10"
-                                                                                            placeholder="Текст варианта"
-                                                                                        />
-                                                                                        <div className="flex justify-end sm:justify-center">
-                                                                                            <Button
-                                                                                                variant="outline"
-                                                                                                size="icon"
-                                                                                                onClick={() => {
-                                                                                                    const next = (q.options || []).filter((o: any) => o.id !== opt.id)
-                                                                                                    updateQuestion(section.id, q.id, { options: next })
-                                                                                                }}
-                                                                                            >
-                                                                                                <Trash2 className="h-4 w-4" />
-                                                                                            </Button>
-                                                                                        </div>
-                                                                                    </div>
+                                                                                <div key={opt.id} className="flex gap-2">
+                                                                                    <Input
+                                                                                        value={opt.label || ""}
+                                                                                        onChange={(e) => {
+                                                                                            const next = (q.options || []).map((o: any) => o.id === opt.id ? { ...o, label: e.target.value } : o)
+                                                                                            updateQuestion(section.id, q.id, { options: next })
+                                                                                        }}
+                                                                                        className="h-11 bg-white border-slate-200 rounded-xl font-medium"
+                                                                                        placeholder="Текст варианта"
+                                                                                    />
+                                                                                    <Button
+                                                                                        variant="outline"
+                                                                                        className="h-11 w-11 p-0 shrink-0 rounded-xl border-slate-200 text-rose-500 hover:text-rose-600 hover:bg-rose-50 hover:border-rose-200"
+                                                                                        onClick={() => {
+                                                                                            const next = (q.options || []).filter((o: any) => o.id !== opt.id)
+                                                                                            updateQuestion(section.id, q.id, { options: next })
+                                                                                        }}
+                                                                                    >
+                                                                                        <Trash2 className="h-4 w-4" />
+                                                                                    </Button>
                                                                                 </div>
                                                                             ))}
                                                                         </div>
@@ -730,22 +727,22 @@ export default function RecruitmentTemplateEditPage() {
                                                                 )}
 
                                                                 {q.type === "repeatable_list" && (
-                                                                    <div className="space-y-3">
-                                                                        <div className="space-y-1.5">
-                                                                            <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Название записи</Label>
+                                                                    <div className="space-y-4 pt-2">
+                                                                        <div className="space-y-2">
+                                                                            <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Название записи</Label>
                                                                             <Input
                                                                                 value={q.item_label || ""}
                                                                                 onChange={(e) => updateQuestion(section.id, q.id, { item_label: e.target.value })}
-                                                                                className="bg-muted/30 border-muted-foreground/10"
-                                                                                placeholder="Напр: место работы"
+                                                                                className="h-12 bg-white border-slate-200 rounded-xl font-medium"
+                                                                                placeholder="Напр: Место работы"
                                                                             />
                                                                         </div>
-                                                                        <div className="flex items-center justify-between">
-                                                                            <p className="text-sm font-medium">Поля внутри записи</p>
+                                                                        <div className="flex items-center justify-between mt-4">
+                                                                            <p className="text-sm font-bold text-slate-900">Поля для каждой записи</p>
                                                                             <Button
                                                                                 variant="outline"
-                                                                                size="sm"
-                                                                                onClick={() => updateQuestion(section.id, q.id, { fields: [...(q.fields || []), { id: makeId("field"), label: "Новое поле", type: "text", required: false }] })}
+                                                                                className="h-9 rounded-lg border-slate-200 text-slate-700 font-medium"
+                                                                                onClick={() => updateQuestion(section.id, q.id, { fields: [...(q.fields || []), { id: makeId("fld"), label: "Новое поле", type: "text" }] })}
                                                                             >
                                                                                 <Plus className="mr-2 h-4 w-4" />
                                                                                 Добавить поле
@@ -753,44 +750,42 @@ export default function RecruitmentTemplateEditPage() {
                                                                         </div>
                                                                         <div className="space-y-2">
                                                                             {(q.fields || []).map((field: any) => (
-                                                                                <div key={field.id} className="rounded-xl border border-muted-foreground/10 p-3 space-y-2">
-                                                                                    <div className="grid gap-2 sm:grid-cols-[1fr_180px_40px]">
-                                                                                        <Input
-                                                                                            value={field.label || ""}
-                                                                                            onChange={(e) => {
-                                                                                                const next = (q.fields || []).map((item: any) => item.id === field.id ? { ...item, label: e.target.value } : item)
-                                                                                                updateQuestion(section.id, q.id, { fields: next })
-                                                                                            }}
-                                                                                            className="bg-muted/30 border-muted-foreground/10"
-                                                                                            placeholder="Название поля"
-                                                                                        />
-                                                                                        <Select
-                                                                                            value={field.type || "text"}
-                                                                                            onValueChange={(v) => {
-                                                                                                const next = (q.fields || []).map((item: any) => item.id === field.id ? { ...item, type: v as RecruitmentRepeatableFieldType } : item)
-                                                                                                updateQuestion(section.id, q.id, { fields: next })
-                                                                                            }}
-                                                                                        >
-                                                                                            <SelectTrigger className="bg-muted/30 border-muted-foreground/10">
-                                                                                                <SelectValue />
-                                                                                            </SelectTrigger>
-                                                                                            <SelectContent>
-                                                                                                <SelectItem value="text" className="text-xs">Текст</SelectItem>
-                                                                                                <SelectItem value="phone" className="text-xs">Телефон</SelectItem>
-                                                                                                <SelectItem value="email" className="text-xs">Email</SelectItem>
-                                                                                            </SelectContent>
-                                                                                        </Select>
-                                                                                        <Button
-                                                                                            variant="outline"
-                                                                                            size="icon"
-                                                                                            onClick={() => {
-                                                                                                const next = (q.fields || []).filter((item: any) => item.id !== field.id)
-                                                                                                updateQuestion(section.id, q.id, { fields: next })
-                                                                                            }}
-                                                                                        >
-                                                                                            <Trash2 className="h-4 w-4" />
-                                                                                        </Button>
-                                                                                    </div>
+                                                                                <div key={field.id} className="flex flex-col sm:flex-row gap-2 bg-slate-50/50 p-2 rounded-xl border border-slate-100">
+                                                                                    <Input
+                                                                                        value={field.label || ""}
+                                                                                        onChange={(e) => {
+                                                                                            const next = (q.fields || []).map((item: any) => item.id === field.id ? { ...item, label: e.target.value } : item)
+                                                                                            updateQuestion(section.id, q.id, { fields: next })
+                                                                                        }}
+                                                                                        className="flex-1 h-11 bg-white border-slate-200 rounded-lg font-medium"
+                                                                                        placeholder="Название поля"
+                                                                                    />
+                                                                                    <Select
+                                                                                        value={field.type || "text"}
+                                                                                        onValueChange={(v) => {
+                                                                                            const next = (q.fields || []).map((item: any) => item.id === field.id ? { ...item, type: v as RecruitmentRepeatableFieldType } : item)
+                                                                                            updateQuestion(section.id, q.id, { fields: next })
+                                                                                        }}
+                                                                                    >
+                                                                                        <SelectTrigger className="w-full sm:w-[160px] h-11 bg-white border-slate-200 rounded-lg font-medium shrink-0">
+                                                                                            <SelectValue />
+                                                                                        </SelectTrigger>
+                                                                                        <SelectContent>
+                                                                                            <SelectItem value="text" className="text-sm">Текст</SelectItem>
+                                                                                            <SelectItem value="phone" className="text-sm">Телефон</SelectItem>
+                                                                                            <SelectItem value="email" className="text-sm">Email</SelectItem>
+                                                                                        </SelectContent>
+                                                                                    </Select>
+                                                                                    <Button
+                                                                                        variant="outline"
+                                                                                        className="h-11 w-11 p-0 shrink-0 rounded-lg border-slate-200 bg-white text-rose-500 hover:text-rose-600 hover:bg-rose-50 hover:border-rose-200"
+                                                                                        onClick={() => {
+                                                                                            const next = (q.fields || []).filter((item: any) => item.id !== field.id)
+                                                                                            updateQuestion(section.id, q.id, { fields: next })
+                                                                                        }}
+                                                                                    >
+                                                                                        <Trash2 className="h-4 w-4" />
+                                                                                    </Button>
                                                                                 </div>
                                                                             ))}
                                                                         </div>
@@ -798,14 +793,14 @@ export default function RecruitmentTemplateEditPage() {
                                                                 )}
                                                             </div>
 
-                                                            <div className="flex flex-row gap-2 self-end sm:flex-col sm:self-auto">
-                                                                <Button variant="outline" size="icon" onClick={() => moveQuestion(section.id, q.id, -1)} disabled={index === 0}>
+                                                            <div className="flex flex-row gap-2 self-end sm:flex-col sm:self-auto shrink-0">
+                                                                <Button variant="outline" size="icon" className="h-10 w-10 rounded-xl border-slate-200 bg-white" onClick={() => moveQuestion(section.id, q.id, -1)} disabled={index === 0}>
                                                                     <ArrowUp className="h-4 w-4" />
                                                                 </Button>
-                                                                <Button variant="outline" size="icon" onClick={() => moveQuestion(section.id, q.id, 1)} disabled={index === (section.questions || []).length - 1}>
+                                                                <Button variant="outline" size="icon" className="h-10 w-10 rounded-xl border-slate-200 bg-white" onClick={() => moveQuestion(section.id, q.id, 1)} disabled={index === (section.questions || []).length - 1}>
                                                                     <ArrowDown className="h-4 w-4" />
                                                                 </Button>
-                                                                <Button variant="outline" size="icon" onClick={() => deleteQuestion(section.id, q.id)}>
+                                                                <Button variant="outline" size="icon" className="h-10 w-10 rounded-xl border-slate-200 bg-white text-rose-500 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200" onClick={() => deleteQuestion(section.id, q.id)}>
                                                                     <Trash2 className="h-4 w-4" />
                                                                 </Button>
                                                             </div>
@@ -813,38 +808,39 @@ export default function RecruitmentTemplateEditPage() {
                                                     </div>
                                                 ))}
 
-                                                <Button variant="outline" className="w-full" onClick={() => addQuestion(section.id, "text")}>
-                                                    <Plus className="mr-2 h-4 w-4" />
-                                                    Создать вопрос в разделе
+                                                <Button variant="outline" className="w-full h-12 rounded-xl border-slate-200 border-dashed text-slate-600 hover:bg-slate-50 font-medium" onClick={() => addQuestion(section.id, "text")}>
+                                                    <Plus className="mr-2 h-5 w-5" />
+                                                    Добавить вопрос в раздел
                                                 </Button>
                                             </div>
                                         </div>
                                     ))}
                                 </div>
-                                <div className="pt-2">
-                                    <Button variant="outline" className="w-full" onClick={addSection}>
-                                        <Plus className="mr-2 h-4 w-4" />
-                                        Создать раздел
+                                <div className="pt-6 border-t border-slate-100">
+                                    <Button className="w-full bg-slate-900 text-white hover:bg-slate-800 h-14 rounded-2xl font-medium shadow-sm" onClick={addSection}>
+                                        <Plus className="mr-2 h-5 w-5" />
+                                        Добавить новый раздел
                                     </Button>
                                 </div>
                             </div>
                         )}
-                    </CardContent>
-                </Card>
+                    </div>
+                </div>
             </div>
-            <div className="fixed inset-x-0 bottom-0 z-40 border-t border-muted-foreground/10 bg-background/95 p-4 backdrop-blur sm:hidden">
-                <div className="mx-auto flex max-w-[1600px] gap-3">
-                    <Button asChild variant="outline" className="flex-1">
+            <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/80 p-4 backdrop-blur-xl sm:hidden pb-[calc(1rem+env(safe-area-inset-bottom))]">
+                <div className="mx-auto flex max-w-[1600px] gap-2">
+                    <Button asChild variant="outline" className="flex-1 h-12 rounded-xl border-slate-200 text-slate-700 bg-white font-medium">
                         <Link href={`/clubs/${clubId}/employees/recruitment/templates`}>
                             <ArrowLeft className="mr-2 h-4 w-4" />
                             Назад
                         </Link>
                     </Button>
-                    <Button onClick={handleSave} disabled={isSaving} className="flex-1 bg-primary text-primary-foreground shadow-lg">
-                        {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <><span>Сохранить</span></>}
+                    <Button onClick={handleSave} disabled={isSaving} className="flex-1 h-12 rounded-xl bg-slate-900 text-white hover:bg-slate-800 font-medium shadow-sm">
+                        {isSaving ? <Loader2 className="h-5 w-5 animate-spin" /> : <><span>Сохранить</span></>}
                     </Button>
                 </div>
             </div>
         </div>
+        </PageShell>
     )
 }

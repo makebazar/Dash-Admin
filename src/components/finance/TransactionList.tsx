@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -454,8 +453,8 @@ export default function TransactionList({
                         <p className="text-xs">Попробуйте изменить параметры фильтрации</p>
                     </div>
                 ) : (
-                    <div className="grid gap-3">
-                        {groupTransactions().map((item) => {
+                    <div className="space-y-4">
+                        {groupTransactions().map((item, index) => {
                             if ('shift_report_id' in item) {
                                 const group = item as TransactionGroup
                                 return (

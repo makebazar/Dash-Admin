@@ -61,42 +61,42 @@ function SortableRow({ emp, days, month, year, localSchedule, isUpdating, toggle
             ref={setNodeRef}
             style={style}
             className={cn(
-                "group transition-colors",
-                isDragging ? "bg-slate-100 dark:bg-slate-800 shadow-lg" : "hover:bg-slate-50/50 dark:hover:bg-slate-800/20"
+                "group transition-colors h-14",
+                isDragging ? "bg-slate-50 shadow-lg" : "hover:bg-slate-50/50"
             )}
         >
             <td className={cn(
-                "sticky left-0 z-20 bg-white dark:bg-slate-950 p-0 border-r border-slate-200 dark:border-slate-800",
+                "sticky left-0 z-20 bg-white p-0 border-r border-slate-200 shadow-[1px_0_0_0_#e2e8f0]",
                 isDragging && "shadow-none"
             )}>
-                <div className="flex h-full min-h-[52px]">
+                <div className="flex h-full min-h-[56px] items-center">
                     {/* Drag Handle */}
                     {!readOnly && (
                         <button
                             {...attributes}
                             {...listeners}
-                            className="flex items-center justify-center w-8 cursor-grab active:cursor-grabbing hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-300 hover:text-slate-500 transition-colors"
+                            className="flex items-center justify-center w-10 h-full cursor-grab active:cursor-grabbing hover:bg-slate-100 text-slate-300 hover:text-slate-500 transition-colors"
                         >
                             <GripVertical className="h-4 w-4" />
                         </button>
                     )}
-                    {readOnly && <div className="w-4" />}
+                    {readOnly && <div className="w-5" />}
 
                     <div className={cn("flex flex-col flex-1 justify-center py-2 pr-4", emp.dismissed_at && "opacity-70 grayscale")}>
                         <div className="flex items-center gap-2">
-                            <span className="font-bold text-sm text-slate-800 dark:text-slate-200 truncate">{emp.full_name}</span>
+                            <span className="font-bold text-sm text-slate-900 truncate">{emp.full_name}</span>
                             {shiftCount > 0 && (
-                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-600">
                                     {shiftCount}
                                 </span>
                             )}
                             {emp.dismissed_at && (
-                                <span className="text-[9px] font-bold text-red-500 bg-red-100 dark:bg-red-950/50 px-1 py-0.5 rounded border border-red-200 dark:border-red-900">
+                                <span className="text-[9px] font-bold text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded-md border border-rose-100">
                                     УВОЛ
                                 </span>
                             )}
                         </div>
-                        <span className="text-[10px] font-medium text-slate-400 uppercase tracking-tight">{emp.role}</span>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{emp.role}</span>
                     </div>
                 </div>
             </td>
@@ -112,23 +112,22 @@ function SortableRow({ emp, days, month, year, localSchedule, isUpdating, toggle
                         key={dateStr}
                         onClick={() => !readOnly && toggleShift(emp.id, dateStr)}
                         className={cn(
-                            "p-0 border-r border-slate-100 dark:border-slate-800 relative group/cell",
-                            !readOnly && "cursor-pointer transition-all hover:ring-2 hover:ring-inset hover:ring-purple-400",
+                            "p-0 border-r border-slate-200 relative group/cell transition-colors",
+                            !readOnly && "cursor-pointer hover:bg-slate-50",
                             readOnly && "cursor-default",
-                            d.isOutside && "opacity-40 bg-slate-50/30 dark:bg-slate-900/30",
-                            isToday && "bg-purple-50/40 dark:bg-purple-900/10"
+                            d.isOutside && "opacity-40",
+                            isToday && "bg-indigo-50/50"
                         )}
                     >
                         <div className={cn(
                             "w-full h-14 flex items-center justify-center transition-all duration-200",
-                            type === 'DAY' && "bg-emerald-500 text-white shadow-sm",
-                            type === 'NIGHT' && "bg-indigo-500 text-white shadow-sm",
-                            !type && "bg-transparent text-slate-200 dark:text-slate-800",
-                            !type && !readOnly && "hover:bg-slate-50 dark:hover:bg-slate-900",
+                            type === 'DAY' && "bg-emerald-500 text-white shadow-sm inset-y-0",
+                            type === 'NIGHT' && "bg-indigo-500 text-white shadow-sm inset-y-0",
+                            !type && "text-slate-200",
                             updating && "opacity-40 scale-90"
                         )}>
-                            {type === 'DAY' && <Sun className="h-5 w-5 animate-in zoom-in-50 duration-200 drop-shadow-sm" />}
-                            {type === 'NIGHT' && <Moon className="h-5 w-5 animate-in zoom-in-50 duration-200 drop-shadow-sm" />}
+                            {type === 'DAY' && <Sun className="h-5 w-5 drop-shadow-sm" />}
+                            {type === 'NIGHT' && <Moon className="h-5 w-5 drop-shadow-sm" />}
                             {!type && !readOnly && <Plus className="h-3 w-3 opacity-0 group-hover/cell:opacity-100 transition-opacity" />}
                         </div>
                         {updating && (
@@ -348,7 +347,7 @@ export function WorkScheduleGrid({ clubId, month, year, initialData, refreshData
 
     // Mobile View Component
     const MobileScheduleList = () => (
-        <div className="md:hidden space-y-3 p-3">
+        <div className="md:hidden space-y-3">
             {days.map(d => {
                 const date = new Date(d.year, d.month - 1, d.day)
                 const isWeekend = date.getDay() === 0 || date.getDay() === 6
@@ -361,32 +360,35 @@ export function WorkScheduleGrid({ clubId, month, year, initialData, refreshData
                 
                 return (
                     <div key={dateStr} className={cn(
-                        "relative overflow-hidden rounded-2xl border p-4 shadow-sm",
-                        isWeekend && "bg-slate-50/70 dark:bg-slate-900/50",
-                        !isWeekend && "bg-white dark:bg-slate-900",
-                        d.isOutside && "opacity-70",
-                        isToday && "border-purple-200 bg-purple-50/50 dark:bg-purple-900/10"
+                        "relative overflow-hidden rounded-2xl border p-5 shadow-sm transition-all",
+                        isWeekend ? "bg-rose-50/30 border-rose-100" : "bg-white border-slate-200",
+                        d.isOutside && "opacity-60",
+                        isToday && "border-indigo-200 bg-indigo-50/30"
                     )}>
                         {isToday && (
-                            <div className="absolute right-3 top-3 opacity-10">
-                                <CalendarIcon className="h-10 w-10 text-purple-500 rotate-12" />
+                            <div className="absolute -right-4 -top-4 opacity-[0.03]">
+                                <CalendarIcon className="h-24 w-24 text-indigo-900 rotate-12" />
                             </div>
                         )}
-                        <div className="relative z-10 flex items-start justify-between gap-3">
+                        <div className="relative z-10 flex items-start justify-between gap-3 mb-5">
                             <div className="min-w-0">
                                 <div className="flex items-center gap-3">
                                     <div className={cn(
-                                "text-2xl font-semibold leading-none tracking-[-0.03em]",
-                                isWeekend ? "text-red-500" : "text-slate-700 dark:text-slate-200",
-                                isToday && "text-purple-600 dark:text-purple-400"
-                            )}>
-                                {d.day}
+                                        "text-3xl font-bold tracking-tight",
+                                        isWeekend ? "text-rose-600" : "text-slate-900",
+                                        isToday && "text-indigo-600"
+                                    )}>
+                                        {d.day}
                                     </div>
                                     <div className="min-w-0">
-                                        <div className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
+                                        <div className={cn(
+                                            "truncate text-sm font-bold capitalize",
+                                            isWeekend ? "text-rose-900" : "text-slate-900",
+                                            isToday && "text-indigo-900"
+                                        )}>
                                             {new Intl.DateTimeFormat('ru-RU', { weekday: 'long' }).format(date)}
                                         </div>
-                                        <div className="text-xs text-muted-foreground">
+                                        <div className="text-xs font-medium text-slate-500 capitalize">
                                             {new Intl.DateTimeFormat('ru-RU', { month: 'long' }).format(date)}
                                             {d.isOutside ? " · другой месяц" : ""}
                                         </div>
@@ -394,52 +396,52 @@ export function WorkScheduleGrid({ clubId, month, year, initialData, refreshData
                                 </div>
                             </div>
                             {isToday ? (
-                                <span className="shrink-0 rounded-full bg-purple-500 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-white">
+                                <span className="shrink-0 rounded-lg bg-indigo-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-indigo-700">
                                     Сегодня
                                 </span>
                             ) : null}
                         </div>
 
                         <div className="grid gap-3 sm:grid-cols-2">
-                            <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-3">
-                                <div className="flex items-center justify-between gap-2">
-                                    <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-700">
-                                    <Sun className="h-3 w-3 text-emerald-500" />
-                                    Дневная
+                            <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-4">
+                                <div className="flex items-center justify-between gap-2 mb-3">
+                                    <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-emerald-700">
+                                        <Sun className="h-4 w-4 text-emerald-500" />
+                                        Дневная
                                     </div>
-                                    <span className="text-xs font-medium text-emerald-700">{dayWorkers.length}</span>
+                                    <span className="text-sm font-bold text-emerald-700">{dayWorkers.length}</span>
                                 </div>
                                 {dayWorkers.length > 0 ? (
-                                    <div className="mt-3 flex flex-wrap gap-2">
+                                    <div className="flex flex-wrap gap-2">
                                         {dayWorkers.map((w: any) => (
-                                            <div key={w.id} className="rounded-md border border-emerald-100 bg-white px-2.5 py-1.5 text-sm font-medium text-slate-700 dark:text-slate-300">
+                                            <div key={w.id} className="rounded-lg border border-emerald-200 bg-white px-3 py-1.5 text-sm font-bold text-slate-900 shadow-sm">
                                                 {w.full_name.split(' ')[0]}
                                             </div>
                                         ))}
                                     </div>
                                 ) : (
-                                    <div className="mt-3 text-xs italic text-slate-400">Нет смен</div>
+                                    <div className="text-sm font-medium text-emerald-700/50">Нет смен</div>
                                 )}
                             </div>
 
-                            <div className="rounded-xl border border-indigo-100 bg-indigo-50/40 p-3">
-                                <div className="flex items-center justify-between gap-2">
-                                    <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-indigo-700">
-                                    <Moon className="h-3 w-3 text-indigo-500" />
-                                    Ночная
+                            <div className="rounded-xl border border-indigo-100 bg-indigo-50/40 p-4">
+                                <div className="flex items-center justify-between gap-2 mb-3">
+                                    <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-indigo-700">
+                                        <Moon className="h-4 w-4 text-indigo-500" />
+                                        Ночная
                                     </div>
-                                    <span className="text-xs font-medium text-indigo-700">{nightWorkers.length}</span>
+                                    <span className="text-sm font-bold text-indigo-700">{nightWorkers.length}</span>
                                 </div>
                                 {nightWorkers.length > 0 ? (
-                                    <div className="mt-3 flex flex-wrap gap-2">
+                                    <div className="flex flex-wrap gap-2">
                                         {nightWorkers.map((w: any) => (
-                                            <div key={w.id} className="rounded-md border border-indigo-100 bg-white px-2.5 py-1.5 text-sm font-medium text-slate-700 dark:text-slate-300">
+                                            <div key={w.id} className="rounded-lg border border-indigo-200 bg-white px-3 py-1.5 text-sm font-bold text-slate-900 shadow-sm">
                                                 {w.full_name.split(' ')[0]}
                                             </div>
                                         ))}
                                     </div>
                                 ) : (
-                                    <div className="mt-3 text-xs italic text-slate-400">Нет смен</div>
+                                    <div className="text-sm font-medium text-indigo-700/50">Нет смен</div>
                                 )}
                             </div>
                         </div>
@@ -453,8 +455,8 @@ export function WorkScheduleGrid({ clubId, month, year, initialData, refreshData
         <div className="hidden md:block">
         <table className="w-full border-collapse min-w-[1200px]">
             <thead>
-                <tr className="bg-slate-50 dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800">
-                    <th className="sticky left-0 z-20 bg-slate-50 dark:bg-slate-950 p-0 text-left text-xs font-black uppercase tracking-widest text-slate-500 w-72 border-r border-slate-200 dark:border-slate-800 pl-4 py-4">
+                <tr className="bg-slate-50 border-b border-slate-200">
+                    <th className="sticky left-0 z-20 bg-slate-50 p-0 text-left text-xs font-bold uppercase tracking-widest text-slate-500 w-72 border-r border-slate-200 pl-4 py-4 shadow-[1px_0_0_0_#e2e8f0]">
                         Сотрудник
                     </th>
                     {days.map(d => {
@@ -463,24 +465,24 @@ export function WorkScheduleGrid({ clubId, month, year, initialData, refreshData
                         const isToday = d.dateStr === todayStr
                         return (
                             <th key={d.dateStr} className={cn(
-                                "p-2 text-center border-r border-slate-100 dark:border-slate-800 min-w-[40px] transition-colors relative",
-                                isWeekend && "bg-slate-100/50 dark:bg-slate-800/30",
+                                "p-2 text-center border-r border-slate-200 min-w-[40px] transition-colors relative",
+                                isWeekend && "bg-rose-50/50",
                                 d.isOutside && "opacity-40",
-                                isToday && "bg-purple-50/50 dark:bg-purple-900/10"
+                                isToday && "bg-indigo-50/50"
                             )}>
                                 {isToday && (
-                                    <div className="absolute top-0 inset-x-0 h-1 bg-purple-500/50 rounded-b-full mx-1" />
+                                    <div className="absolute top-0 inset-x-0 h-1 bg-indigo-500 mx-1 rounded-b-full" />
                                 )}
                                 <div className={cn(
-                                    "text-[10px] font-bold text-slate-400 uppercase leading-none mb-1",
-                                    isToday && "text-purple-600 dark:text-purple-400"
+                                    "text-[10px] font-bold uppercase tracking-widest leading-none mb-1.5",
+                                    isToday ? "text-indigo-600" : "text-slate-400"
                                 )}>
                                     {new Intl.DateTimeFormat('ru-RU', { weekday: 'short' }).format(date)}
                                 </div>
                                 <div className={cn(
-                                    "text-sm font-black text-slate-700 dark:text-slate-300",
-                                    isWeekend && "text-red-500",
-                                    isToday && "text-purple-700 dark:text-purple-300"
+                                    "text-sm font-bold",
+                                    isWeekend ? "text-rose-600" : "text-slate-900",
+                                    isToday && "text-indigo-700"
                                 )}>
                                     {d.day}
                                 </div>
@@ -489,7 +491,7 @@ export function WorkScheduleGrid({ clubId, month, year, initialData, refreshData
                     })}
                 </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+            <tbody className="divide-y divide-slate-100">
                 <SortableContext
                     items={localEmployees.map((e: any) => e.id)}
                     strategy={verticalListSortingStrategy}
@@ -511,27 +513,27 @@ export function WorkScheduleGrid({ clubId, month, year, initialData, refreshData
                 </SortableContext>
 
                 {/* Coverage Row */}
-                <tr className="bg-slate-50/80 dark:bg-slate-950/80 font-bold border-t-2 border-slate-200 dark:border-slate-800">
-                    <td className="sticky left-0 z-20 bg-slate-50 dark:bg-slate-950 p-4 text-xs uppercase tracking-widest text-slate-500 border-r border-slate-200 dark:border-slate-800">
+                <tr className="bg-slate-50 font-bold border-t-2 border-slate-200">
+                    <td className="sticky left-0 z-20 bg-slate-50 p-4 text-xs font-bold uppercase tracking-widest text-slate-500 border-r border-slate-200 shadow-[1px_0_0_0_#e2e8f0]">
                         Покрытие (Д / Н)
                     </td>
                     {days.map(d => {
                         const isToday = d.dateStr === todayStr
                         return (
                             <td key={d.dateStr} className={cn(
-                                "p-2 border-r border-slate-100 dark:border-slate-800 text-center",
+                                "p-2 border-r border-slate-200 text-center",
                                 d.isOutside && "opacity-40",
-                                isToday && "bg-purple-50/50 dark:bg-purple-900/10"
+                                isToday && "bg-indigo-50/50"
                             )}>
-                                <div className="flex flex-col gap-0.5">
+                                <div className="flex flex-col gap-1">
                                     <span className={cn(
-                                        "text-xs",
+                                        "text-xs font-bold",
                                         coverage[d.dateStr].DAY > 0 ? "text-emerald-600" : "text-slate-300"
-                                    )}>{coverage[d.dateStr].DAY}🌞</span>
+                                    )}>{coverage[d.dateStr].DAY} <Sun className="inline h-3 w-3 -mt-0.5" /></span>
                                     <span className={cn(
-                                        "text-xs",
+                                        "text-xs font-bold",
                                         coverage[d.dateStr].NIGHT > 0 ? "text-indigo-600" : "text-slate-300"
-                                    )}>{coverage[d.dateStr].NIGHT}🌙</span>
+                                    )}>{coverage[d.dateStr].NIGHT} <Moon className="inline h-3 w-3 -mt-0.5" /></span>
                                 </div>
                             </td>
                         )
@@ -544,7 +546,7 @@ export function WorkScheduleGrid({ clubId, month, year, initialData, refreshData
 
 
     return (
-        <Card className="overflow-hidden rounded-2xl border-0 bg-white shadow-sm sm:shadow-lg dark:bg-slate-900">
+        <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
             <div 
                 ref={scrollContainerRef}
                 className="overflow-x-auto"
@@ -561,24 +563,24 @@ export function WorkScheduleGrid({ clubId, month, year, initialData, refreshData
                 )}
             </div>
 
-            <div className="flex flex-col gap-3 border-t border-slate-200 bg-slate-50/80 p-4 text-sm dark:border-slate-800 dark:bg-slate-950/50 sm:flex-row sm:flex-wrap sm:gap-8 sm:items-center sm:p-6">
+            <div className="flex flex-col gap-3 border-t border-slate-200 bg-slate-50 p-4 text-sm sm:flex-row sm:flex-wrap sm:gap-8 sm:items-center sm:p-6">
                 <div className="flex items-center gap-2.5">
                     <div className="w-4 h-4 rounded bg-emerald-500" />
-                    <span className="font-semibold text-slate-700 dark:text-slate-300">Дневная смена</span>
-                    <span className="text-slate-400 font-medium tracking-tight">({clubSettings?.day_start_hour || '09'}:00 - {clubSettings?.night_start_hour || '21'}:00)</span>
+                    <span className="font-bold text-slate-700">Дневная смена</span>
+                    <span className="text-slate-400 font-medium">({clubSettings?.day_start_hour || '09'}:00 - {clubSettings?.night_start_hour || '21'}:00)</span>
                 </div>
                 <div className="flex items-center gap-2.5">
                     <div className="w-4 h-4 rounded bg-indigo-500" />
-                    <span className="font-semibold text-slate-700 dark:text-slate-300">Ночная смена</span>
-                    <span className="text-slate-400 font-medium tracking-tight">({clubSettings?.night_start_hour || '21'}:00 - {clubSettings?.day_start_hour || '09'}:00)</span>
+                    <span className="font-bold text-slate-700">Ночная смена</span>
+                    <span className="text-slate-400 font-medium">({clubSettings?.night_start_hour || '21'}:00 - {clubSettings?.day_start_hour || '09'}:00)</span>
                 </div>
                 {!readOnly && (
                     <div className="flex items-center gap-2.5">
-                        <div className="w-4 h-4 rounded border-2 border-slate-200 dark:border-slate-800 border-dashed" />
+                        <div className="w-4 h-4 rounded border-2 border-slate-200 border-dashed" />
                         <span className="font-medium text-slate-400">Выходной (Кликните для выбора)</span>
                     </div>
                 )}
             </div>
-        </Card>
+        </div>
     )
 }

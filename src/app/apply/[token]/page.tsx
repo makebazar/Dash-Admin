@@ -2,7 +2,6 @@
 
 import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react"
 import { useParams } from "next/navigation"
-import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -444,67 +443,67 @@ export default function ApplyPage() {
 
     if (isLoading) {
         return (
-            <div className="min-h-screen flex items-center justify-center bg-[#F9FAFB] dark:bg-background">
-                <Loader2 className="h-10 w-10 animate-spin text-muted-foreground" />
+            <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-background">
+                <Loader2 className="h-10 w-10 animate-spin text-slate-500" />
             </div>
         )
     }
 
     if (!template) {
         return (
-            <div className="min-h-screen flex items-center justify-center bg-[#F9FAFB] dark:bg-background p-6">
-                <Card className="max-w-lg w-full border-none shadow-sm bg-white">
-                    <CardContent className="p-6">
-                        <p className="text-sm text-muted-foreground">Ссылка недействительна или анкета отключена</p>
-                    </CardContent>
-                </Card>
+            <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-background p-6">
+                <div className="max-w-lg w-full bg-white rounded-3xl border border-slate-200 shadow-sm">
+                    <div className="p-6 sm:p-8">
+                        <p className="text-sm text-slate-500">Ссылка недействительна или анкета отключена</p>
+                    </div>
+                </div>
             </div>
         )
     }
 
     return (
-        <div className="min-h-screen bg-[#F9FAFB] dark:bg-background">
+        <div className="min-h-screen bg-slate-50 dark:bg-background">
             <div className="mx-auto max-w-2xl space-y-5 p-4 sm:space-y-6 sm:p-6 lg:p-8">
                 <div>
-                    <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{template.name}</h1>
-                    <p className="mt-1 text-sm text-muted-foreground sm:text-base">{template.description || template.position || ""}</p>
+                    <h1 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">{template.name}</h1>
+                    <p className="mt-2 text-base text-slate-500">{template.description || template.position || ""}</p>
                 </div>
 
                 {isSubmitted ? (
-                    <Card className="border-none shadow-sm bg-white">
-                        <CardContent className="p-8 flex flex-col items-center text-center gap-3">
+                    <div className="bg-white rounded-3xl border border-slate-200 shadow-sm">
+                        <div className="p-10 flex flex-col items-center text-center gap-4">
                             <CheckCircle2 className="h-10 w-10 text-emerald-600" />
                             <p className="text-lg font-bold">Спасибо! Анкета отправлена</p>
-                            <p className="text-sm text-muted-foreground">Если вы подойдёте — с вами свяжутся</p>
-                        </CardContent>
-                    </Card>
+                            <p className="text-sm text-slate-500">Если вы подойдёте — с вами свяжутся</p>
+                        </div>
+                    </div>
                 ) : (
-                    <Card className="border-none shadow-sm bg-white">
-                        <CardContent className="p-6 space-y-5">
+                    <div className="bg-white rounded-3xl border border-slate-200 shadow-sm">
+                        <div className="p-6 sm:p-8 space-y-8">
                             {step === 0 ? (
                                 <>
                                     <div className="grid gap-4 sm:grid-cols-2">
                                         <div className="space-y-1.5">
-                                            <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">ФИО</Label>
-                                            <Input value={candidateName} onChange={(e) => setCandidateName(e.target.value)} className="bg-muted/30 border-muted-foreground/10" placeholder="Иван Иванов" />
+                                            <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">ФИО</Label>
+                                            <Input value={candidateName} onChange={(e) => setCandidateName(e.target.value)} className="h-12 bg-slate-50/50 border-slate-200 rounded-xl font-medium text-slate-900 focus:bg-white" placeholder="Иван Иванов" />
                                         </div>
                                         <div className="space-y-1.5">
-                                            <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Телефон</Label>
-                                            <PhoneInput value={candidatePhone} onChange={setCandidatePhone} placeholder="+7 (___) ___-__-__" className="bg-muted/30 border-muted-foreground/10" />
+                                            <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Телефон</Label>
+                                            <PhoneInput value={candidatePhone} onChange={setCandidatePhone} placeholder="+7 (___) ___-__-__" className="h-12 bg-slate-50/50 border-slate-200 rounded-xl font-medium text-slate-900 focus:bg-white" />
                                         </div>
                                     </div>
                                     <div className="space-y-1.5">
-                                        <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Email (опционально)</Label>
-                                        <Input value={candidateEmail} onChange={(e) => setCandidateEmail(e.target.value)} className="bg-muted/30 border-muted-foreground/10" placeholder="name@example.com" />
+                                        <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Email (опционально)</Label>
+                                        <Input value={candidateEmail} onChange={(e) => setCandidateEmail(e.target.value)} className="h-12 bg-slate-50/50 border-slate-200 rounded-xl font-medium text-slate-900 focus:bg-white" placeholder="name@example.com" />
                                     </div>
                                     {candidatePhotoMode !== "off" ? (
-                                        <div className="space-y-2 rounded-xl border border-muted-foreground/10 p-4">
+                                        <div className="space-y-2 rounded-2xl border border-slate-200 bg-slate-50/50 p-5">
                                             <div className="space-y-1">
                                                 <p className="text-sm font-bold">
                                                     Фото кандидата
                                                     {candidatePhotoMode === "required" ? <span className="text-rose-600"> *</span> : null}
                                                 </p>
-                                                <p className="text-xs text-muted-foreground">
+                                                <p className="text-xs text-slate-500">
                                                     {candidatePhotoMode === "required" ? "Фото обязательно для отправки анкеты" : "Можно прикрепить фото по желанию"}
                                                 </p>
                                             </div>
@@ -522,7 +521,7 @@ export default function ApplyPage() {
                                                 ) : null}
                                             </div>
                                             {candidatePhotoUrl ? (
-                                                <div className="overflow-hidden rounded-xl border border-muted-foreground/10 bg-muted/20">
+                                                <div className="overflow-hidden rounded-2xl border border-slate-100 bg-slate-50">
                                                     <img src={candidatePhotoUrl} alt="Фото кандидата" className="max-h-80 w-full object-contain" />
                                                 </div>
                                             ) : null}
@@ -535,7 +534,7 @@ export default function ApplyPage() {
                                                 <div key={section.id} className="space-y-3">
                                                     <div className="space-y-1">
                                                         <h2 className="text-base font-bold tracking-tight">{section.title}</h2>
-                                                        {section.description ? <p className="text-xs text-muted-foreground">{section.description}</p> : null}
+                                                        {section.description ? <p className="text-xs text-slate-500">{section.description}</p> : null}
                                                     </div>
 
                                                     <div className="space-y-4">
@@ -543,30 +542,30 @@ export default function ApplyPage() {
                                                                 const type = q.type as RecruitmentQuestionType
                                                                 const val = currentAnswers[q.id]
                                                                 return (
-                                                                    <div key={q.id} className="space-y-2 rounded-xl border border-muted-foreground/10 p-4">
+                                                                    <div key={q.id} className="space-y-2 rounded-2xl border border-slate-200 bg-slate-50/50 p-5">
                                                                         <div className="space-y-1">
                                                                             <p className="text-sm font-bold">
                                                                                 {q.label || q.id}
                                                                                 {q.required ? <span className="text-rose-600"> *</span> : null}
                                                                             </p>
-                                                                            {q.description ? <p className="text-xs text-muted-foreground">{q.description}</p> : null}
+                                                                            {q.description ? <p className="text-xs text-slate-500">{q.description}</p> : null}
                                                                         </div>
                                                                         {q.image_url ? (
-                                                                            <div className="overflow-hidden rounded-xl border border-muted-foreground/10 bg-muted/20">
+                                                                            <div className="overflow-hidden rounded-2xl border border-slate-100 bg-slate-50">
                                                                                 <img src={q.image_url} alt={q.label || "Вопрос"} className="max-h-72 w-full object-contain" />
                                                                             </div>
                                                                         ) : null}
-                                                                        {type === "text" && <Textarea value={val || ""} onChange={(e) => setAnswer(q.id, e.target.value)} className="bg-muted/30 border-muted-foreground/10" />}
-                                                                        {type === "phone" && <PhoneInput value={val || ""} onChange={(v) => setAnswer(q.id, v)} placeholder="+7 (___) ___-__-__" className="bg-muted/30 border-muted-foreground/10" />}
-                                                                        {type === "email" && <Input value={val || ""} onChange={(e) => setAnswer(q.id, e.target.value)} className="bg-muted/30 border-muted-foreground/10" placeholder="name@example.com" />}
+                                                                        {type === "text" && <Textarea value={val || ""} onChange={(e) => setAnswer(q.id, e.target.value)} className="h-12 bg-slate-50/50 border-slate-200 rounded-xl font-medium text-slate-900 focus:bg-white" />}
+                                                                        {type === "phone" && <PhoneInput value={val || ""} onChange={(v) => setAnswer(q.id, v)} placeholder="+7 (___) ___-__-__" className="h-12 bg-slate-50/50 border-slate-200 rounded-xl font-medium text-slate-900 focus:bg-white" />}
+                                                                        {type === "email" && <Input value={val || ""} onChange={(e) => setAnswer(q.id, e.target.value)} className="h-12 bg-slate-50/50 border-slate-200 rounded-xl font-medium text-slate-900 focus:bg-white" placeholder="name@example.com" />}
                                                                         {type === "choice" && (
                                                                             <div className="space-y-2">
                                                                                 {(q.options || []).map((o: any) => {
                                                                                     const checked = val === o.id
                                                                                     return (
-                                                                                        <button key={o.id} type="button" onClick={() => setAnswer(q.id, o.id)} className="flex w-full items-center gap-2 rounded-lg border border-muted-foreground/10 p-2 text-left cursor-pointer">
-                                                                                            <span className={`flex h-5 w-5 items-center justify-center rounded-full border transition-colors ${checked ? "border-primary" : "border-muted-foreground/30"}`}>
-                                                                                                <span className={`h-2.5 w-2.5 rounded-full ${checked ? "bg-primary" : "bg-transparent"}`} />
+                                                                                        <button key={o.id} type="button" onClick={() => setAnswer(q.id, o.id)} className="flex w-full items-center gap-2 rounded-lg border border-slate-200 p-2 text-left cursor-pointer">
+                                                                                            <span className={`flex h-5 w-5 items-center justify-center rounded-full border transition-colors ${checked ? "border-slate-900" : "border-slate-300"}`}>
+                                                                                                <span className={`h-2.5 w-2.5 rounded-full ${checked ? "bg-slate-900" : "bg-transparent"}`} />
                                                                                             </span>
                                                                                             <span className="text-sm">{o.label}</span>
                                                                                         </button>
@@ -579,7 +578,7 @@ export default function ApplyPage() {
                                                                                 {(q.options || []).map((o: any) => {
                                                                                     const checked = Array.isArray(val) ? val.includes(o.id) : false
                                                                                     return (
-                                                                                        <label key={o.id} className="flex items-center gap-2 rounded-lg border border-muted-foreground/10 p-2 cursor-pointer">
+                                                                                        <label key={o.id} className="flex items-center gap-2 rounded-lg border border-slate-200 p-2 cursor-pointer">
                                                                                             <Checkbox checked={checked} onCheckedChange={(v) => toggleMulti(q.id, o.id, Boolean(v))} />
                                                                                             <span className="text-sm">{o.label}</span>
                                                                                         </label>
@@ -589,7 +588,7 @@ export default function ApplyPage() {
                                                                         )}
                                                                         {type === "boolean" && (
                                                                             <Select value={val === true ? "true" : val === false ? "false" : ""} onValueChange={(v) => setAnswer(q.id, v === "true")}>
-                                                                                <SelectTrigger className="bg-muted/30 border-muted-foreground/10">
+                                                                                <SelectTrigger className="h-12 bg-slate-50/50 border-slate-200 rounded-xl font-medium text-slate-900 focus:bg-white">
                                                                                     <SelectValue placeholder="Выберите" />
                                                                                 </SelectTrigger>
                                                                                 <SelectContent>
@@ -601,12 +600,12 @@ export default function ApplyPage() {
                                                                         {type === "repeatable_list" && (
                                                                             <div className="space-y-3">
                                                                                 {(Array.isArray(val) ? (val as Record<string, any>[]) : []).map((item, itemIndex) => (
-                                                                                    <div key={`${q.id}-${itemIndex}`} className="space-y-4 rounded-xl border border-muted-foreground/10 p-4">
-                                                                                        <div className="flex items-center justify-between gap-3 border-b border-muted-foreground/10 pb-3">
+                                                                                    <div key={`${q.id}-${itemIndex}`} className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50/50 p-5">
+                                                                                        <div className="flex items-center justify-between gap-3 border-b border-slate-200 pb-3">
                                                                                             <p className="text-sm font-semibold tracking-tight">
                                                                                                 {getRepeatableItemTitle(q, itemIndex)}
                                                                                             </p>
-                                                                                            <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground" onClick={() => removeRepeatableItem(q.id, itemIndex)}>
+                                                                                            <Button variant="ghost" size="sm" className="text-slate-500 hover:text-foreground" onClick={() => removeRepeatableItem(q.id, itemIndex)}>
                                                                                                 Удалить
                                                                                             </Button>
                                                                                         </div>
@@ -614,18 +613,18 @@ export default function ApplyPage() {
                                                                                             const fieldVal = item?.[field.id]
                                                                                             return (
                                                                                                 <div key={field.id} className="space-y-1.5">
-                                                                                                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                                                                                                    <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
                                                                                                         {field.label}
                                                                                                         {field.required ? <span className="text-rose-600"> *</span> : null}
                                                                                                     </Label>
                                                                                                     {field.type === "text" && (
-                                                                                                        <Input value={fieldVal || ""} onChange={(e) => setRepeatableAnswer(q.id, itemIndex, field.id, e.target.value)} className="bg-muted/30 border-muted-foreground/10" />
+                                                                                                        <Input value={fieldVal || ""} onChange={(e) => setRepeatableAnswer(q.id, itemIndex, field.id, e.target.value)} className="h-12 bg-slate-50/50 border-slate-200 rounded-xl font-medium text-slate-900 focus:bg-white" />
                                                                                                     )}
                                                                                                     {field.type === "phone" && (
-                                                                                                        <PhoneInput value={fieldVal || ""} onChange={(v) => setRepeatableAnswer(q.id, itemIndex, field.id, v)} placeholder="+7 (___) ___-__-__" className="bg-muted/30 border-muted-foreground/10" />
+                                                                                                        <PhoneInput value={fieldVal || ""} onChange={(v) => setRepeatableAnswer(q.id, itemIndex, field.id, v)} placeholder="+7 (___) ___-__-__" className="h-12 bg-slate-50/50 border-slate-200 rounded-xl font-medium text-slate-900 focus:bg-white" />
                                                                                                     )}
                                                                                                     {field.type === "email" && (
-                                                                                                        <Input value={fieldVal || ""} onChange={(e) => setRepeatableAnswer(q.id, itemIndex, field.id, e.target.value)} className="bg-muted/30 border-muted-foreground/10" placeholder="name@example.com" />
+                                                                                                        <Input value={fieldVal || ""} onChange={(e) => setRepeatableAnswer(q.id, itemIndex, field.id, e.target.value)} className="h-12 bg-slate-50/50 border-slate-200 rounded-xl font-medium text-slate-900 focus:bg-white" placeholder="name@example.com" />
                                                                                                     )}
                                                                                                 </div>
                                                                                             )
@@ -633,7 +632,7 @@ export default function ApplyPage() {
                                                                                     </div>
                                                                                 ))}
                                                                                 {!Array.isArray(val) || val.length === 0 ? (
-                                                                                    <div className="rounded-xl border border-dashed border-muted-foreground/20 p-4 text-sm text-muted-foreground">
+                                                                                    <div className="rounded-xl border border-dashed border-muted-foreground/20 p-4 text-sm text-slate-500">
                                                                                         Пока нет записей
                                                                                     </div>
                                                                                 ) : null}
@@ -651,7 +650,7 @@ export default function ApplyPage() {
                                         })}
                                     </div>
 
-                                    <Button onClick={handleSubmit} disabled={isSubmitting || (candidatePhotoMode === "required" && !candidatePhotoUrl)} className="w-full bg-primary text-primary-foreground shadow-md hover:bg-primary/90">
+                                    <Button onClick={handleSubmit} disabled={isSubmitting || (candidatePhotoMode === "required" && !candidatePhotoUrl)} className="w-full bg-slate-900 text-white shadow-sm hover:bg-slate-800 rounded-xl h-12 font-medium">
                                         {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
                                         Дальше
                                     </Button>
@@ -680,7 +679,7 @@ export default function ApplyPage() {
                                         <p className="text-sm font-bold">
                                             Тест {step} / {tests.length}: {currentTest?.name}
                                         </p>
-                                        {currentTest?.description ? <p className="text-xs text-muted-foreground">{currentTest.description}</p> : null}
+                                        {currentTest?.description ? <p className="text-xs text-slate-500">{currentTest.description}</p> : null}
                                     </div>
 
                                     <div className="space-y-4">
@@ -688,30 +687,30 @@ export default function ApplyPage() {
                                             const type = q.type as RecruitmentQuestionType
                                             const val = currentAnswers[q.id]
                                             return (
-                                                <div key={q.id} className="space-y-2 rounded-xl border border-muted-foreground/10 p-4">
+                                                <div key={q.id} className="space-y-2 rounded-2xl border border-slate-200 bg-slate-50/50 p-5">
                                                     <div className="space-y-1">
                                                         <p className="text-sm font-bold">
                                                             {q.label || q.id}
                                                             {q.required ? <span className="text-rose-600"> *</span> : null}
                                                         </p>
-                                                        {q.description ? <p className="text-xs text-muted-foreground">{q.description}</p> : null}
+                                                        {q.description ? <p className="text-xs text-slate-500">{q.description}</p> : null}
                                                     </div>
                                                     {q.image_url ? (
-                                                        <div className="overflow-hidden rounded-xl border border-muted-foreground/10 bg-muted/20">
+                                                        <div className="overflow-hidden rounded-2xl border border-slate-100 bg-slate-50">
                                                             <img src={q.image_url} alt={q.label || "Вопрос"} className="max-h-72 w-full object-contain" />
                                                         </div>
                                                     ) : null}
 
                                                     {type === "text" && (
-                                                        <Textarea value={val || ""} onChange={(e) => setAnswer(q.id, e.target.value)} className="bg-muted/30 border-muted-foreground/10" />
+                                                        <Textarea value={val || ""} onChange={(e) => setAnswer(q.id, e.target.value)} className="h-12 bg-slate-50/50 border-slate-200 rounded-xl font-medium text-slate-900 focus:bg-white" />
                                                     )}
 
                                                     {type === "phone" && (
-                                                        <PhoneInput value={val || ""} onChange={(v) => setAnswer(q.id, v)} placeholder="+7 (___) ___-__-__" className="bg-muted/30 border-muted-foreground/10" />
+                                                        <PhoneInput value={val || ""} onChange={(v) => setAnswer(q.id, v)} placeholder="+7 (___) ___-__-__" className="h-12 bg-slate-50/50 border-slate-200 rounded-xl font-medium text-slate-900 focus:bg-white" />
                                                     )}
 
                                                     {type === "email" && (
-                                                        <Input value={val || ""} onChange={(e) => setAnswer(q.id, e.target.value)} className="bg-muted/30 border-muted-foreground/10" placeholder="name@example.com" />
+                                                        <Input value={val || ""} onChange={(e) => setAnswer(q.id, e.target.value)} className="h-12 bg-slate-50/50 border-slate-200 rounded-xl font-medium text-slate-900 focus:bg-white" placeholder="name@example.com" />
                                                     )}
 
                                                     {type === "choice" && (
@@ -723,10 +722,10 @@ export default function ApplyPage() {
                                                                         key={o.id}
                                                                         type="button"
                                                                         onClick={() => setAnswer(q.id, o.id)}
-                                                                        className="flex w-full items-center gap-2 rounded-lg border border-muted-foreground/10 p-2 text-left cursor-pointer"
+                                                                        className="flex w-full items-center gap-2 rounded-lg border border-slate-200 p-2 text-left cursor-pointer"
                                                                     >
-                                                                        <span className={`flex h-5 w-5 items-center justify-center rounded-full border transition-colors ${checked ? "border-primary" : "border-muted-foreground/30"}`}>
-                                                                            <span className={`h-2.5 w-2.5 rounded-full ${checked ? "bg-primary" : "bg-transparent"}`} />
+                                                                        <span className={`flex h-5 w-5 items-center justify-center rounded-full border transition-colors ${checked ? "border-slate-900" : "border-slate-300"}`}>
+                                                                            <span className={`h-2.5 w-2.5 rounded-full ${checked ? "bg-slate-900" : "bg-transparent"}`} />
                                                                         </span>
                                                                         <span className="text-sm">{o.label}</span>
                                                                     </button>
@@ -740,7 +739,7 @@ export default function ApplyPage() {
                                                             {(q.options || []).map((o: any) => {
                                                                 const checked = Array.isArray(val) ? val.includes(o.id) : false
                                                                 return (
-                                                                    <label key={o.id} className="flex items-center gap-2 rounded-lg border border-muted-foreground/10 p-2 cursor-pointer">
+                                                                    <label key={o.id} className="flex items-center gap-2 rounded-lg border border-slate-200 p-2 cursor-pointer">
                                                                         <Checkbox checked={checked} onCheckedChange={(v) => toggleMulti(q.id, o.id, Boolean(v))} />
                                                                         <span className="text-sm">{o.label}</span>
                                                                     </label>
@@ -751,7 +750,7 @@ export default function ApplyPage() {
 
                                                     {type === "scale" && (
                                                         <Select value={val === null || val === undefined ? "" : String(val)} onValueChange={(v) => setAnswer(q.id, Number(v))}>
-                                                            <SelectTrigger className="bg-muted/30 border-muted-foreground/10">
+                                                            <SelectTrigger className="h-12 bg-slate-50/50 border-slate-200 rounded-xl font-medium text-slate-900 focus:bg-white">
                                                                 <SelectValue placeholder="Выберите" />
                                                             </SelectTrigger>
                                                             <SelectContent>
@@ -764,7 +763,7 @@ export default function ApplyPage() {
 
                                                     {type === "boolean" && (
                                                         <Select value={val === true ? "true" : val === false ? "false" : ""} onValueChange={(v) => setAnswer(q.id, v === "true")}>
-                                                            <SelectTrigger className="bg-muted/30 border-muted-foreground/10">
+                                                            <SelectTrigger className="h-12 bg-slate-50/50 border-slate-200 rounded-xl font-medium text-slate-900 focus:bg-white">
                                                                 <SelectValue placeholder="Выберите" />
                                                             </SelectTrigger>
                                                             <SelectContent>
@@ -782,15 +781,15 @@ export default function ApplyPage() {
                                         <Button variant="outline" onClick={handleBack} disabled={isSubmitting} className="w-full sm:w-auto">
                                             Назад
                                         </Button>
-                                        <Button onClick={handleSubmitTest} disabled={isSubmitting} className="w-full bg-primary text-primary-foreground shadow-md hover:bg-primary/90">
+                                        <Button onClick={handleSubmitTest} disabled={isSubmitting} className="w-full bg-slate-900 text-white shadow-sm hover:bg-slate-800 rounded-xl h-12 font-medium">
                                             {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
                                             {step >= tests.length ? "Завершить" : "Следующий тест"}
                                         </Button>
                                     </div>
                                 </>
                             )}
-                        </CardContent>
-                    </Card>
+                        </div>
+                    </div>
                 )}
             </div>
         </div>

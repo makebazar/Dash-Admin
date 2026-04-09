@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { ImageViewer } from "@/components/ui/image-viewer"
+import { PageShell } from "@/components/layout/PageShell"
 import { Loader2, ArrowLeft, Check } from "lucide-react"
 
 const CANDIDATE_PHOTO_ANSWER_KEY = "_candidate_photo_url"
@@ -223,170 +224,179 @@ export default function RecruitmentApplicationDetailsPage() {
 
     if (isLoading) {
         return (
-            <div className="flex items-center justify-center py-24">
-                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            <div className="flex h-screen items-center justify-center bg-slate-50">
+                <div className="flex flex-col items-center gap-4">
+                    <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+                    <p className="text-sm font-medium text-slate-500 animate-pulse">Загрузка анкеты...</p>
+                </div>
             </div>
         )
     }
 
     if (!details) {
         return (
-            <div className="mx-auto max-w-5xl space-y-4 p-4 sm:p-6 lg:p-8">
-                <Button variant="outline" asChild>
-                    <Link href={`/clubs/${clubId}/employees/recruitment/applications`}>Назад к анкетам</Link>
+            <PageShell maxWidth="5xl">
+                <Button variant="outline" asChild className="mb-6 rounded-xl border-slate-200">
+                    <Link href={`/clubs/${clubId}/employees/recruitment/applications`}>
+                        <ArrowLeft className="mr-2 h-4 w-4" />
+                        Назад к анкетам
+                    </Link>
                 </Button>
-                <Card className="border-none shadow-sm bg-white">
-                    <CardContent className="p-8 text-sm text-muted-foreground">Анкета не найдена</CardContent>
-                </Card>
-            </div>
+                <div className="bg-white rounded-3xl border border-slate-200 p-12 text-center text-slate-500 font-medium">
+                    Анкета не найдена
+                </div>
+            </PageShell>
         )
     }
 
     return (
-        <div className="mx-auto max-w-5xl space-y-5 p-4 pb-28 sm:space-y-6 sm:p-6 sm:pb-6 lg:p-8">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                <div className="min-w-0">
-                    <div className="mb-3 hidden sm:block">
-                        <Button variant="outline" onClick={() => router.push(`/clubs/${clubId}/employees/recruitment/applications`)}>
+        <PageShell maxWidth="5xl">
+            <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between mb-12">
+                <div className="space-y-3">
+                    <div className="mb-4 hidden sm:block">
+                        <Button variant="ghost" className="h-9 px-3 -ml-3 text-slate-500 hover:text-slate-900 rounded-lg" onClick={() => router.push(`/clubs/${clubId}/employees/recruitment/applications`)}>
                             <ArrowLeft className="mr-2 h-4 w-4" />
                             К анкетам
                         </Button>
                     </div>
-                    <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Анкета</h1>
-                    <p className="mt-1 text-sm text-muted-foreground sm:text-base">{details.template_name}</p>
+                    <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-slate-900">Анкета</h1>
+                    <p className="text-slate-500 text-lg">{details.template_name}</p>
                 </div>
-                <Button onClick={handleSave} disabled={isSaving} className="hidden w-full bg-primary text-primary-foreground shadow-lg sm:inline-flex sm:w-auto">
-                    {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Check className="mr-2 h-4 w-4" />Сохранить</>}
-                </Button>
+                <div className="hidden sm:flex lg:justify-end">
+                    <Button onClick={handleSave} disabled={isSaving} className="w-full sm:w-auto bg-slate-900 text-white hover:bg-slate-800 rounded-xl h-12 px-8 font-medium shadow-sm">
+                        {isSaving ? <Loader2 className="h-5 w-5 animate-spin" /> : <><Check className="mr-2 h-5 w-5" />Сохранить</>}
+                    </Button>
+                </div>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-3">
-                <Card className="border-none shadow-sm bg-white">
-                    <CardContent className="p-4">
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Кандидат</p>
-                        <div className="mt-2 flex items-center gap-3">
-                            {details.answers?.[CANDIDATE_PHOTO_ANSWER_KEY] ? (
-                                <button
-                                    type="button"
-                                    onClick={() => setIsCandidatePhotoOpen(true)}
-                                    className="block h-14 w-14 overflow-hidden rounded-full border border-muted-foreground/10 bg-muted/20 transition-opacity hover:opacity-90"
-                                >
-                                    <img
-                                        src={details.answers[CANDIDATE_PHOTO_ANSWER_KEY]}
-                                        alt={details.candidate_name || "Кандидат"}
-                                        className="h-full w-full object-cover"
-                                    />
-                                </button>
-                            ) : null}
-                            <div className="min-w-0">
-                                <p className="text-sm font-bold">{details.candidate_name || "—"}</p>
-                                <p className="mt-1 text-xs text-muted-foreground">{details.candidate_phone || details.candidate_email || ""}</p>
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
-                <Card className="border-none shadow-sm bg-white">
-                    <CardContent className="p-4">
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Шаблон</p>
-                        <p className="mt-1 text-sm font-bold">{details.template_name}</p>
-                        <p className="mt-1 text-xs text-muted-foreground">{details.template_position || ""}</p>
-                    </CardContent>
-                </Card>
-                <Card className="border-none shadow-sm bg-white">
-                    <CardContent className="p-4">
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Оценка</p>
-                        <div className="mt-1 flex flex-wrap gap-2">
-                            <Badge className="bg-muted text-foreground">Баллы тестов: {testsAutoScore}</Badge>
-                        </div>
-                        {applicationTestsList.length > 0 ? (
-                            <div className="mt-3 space-y-2">
-                                {applicationTestsList.map((t: any) => {
-                                    const meta = testsById.get(Number(t.test_id))
-                                    const summary = getTestResultSummary(t.result)
-                                    return (
-                                        <div key={t.test_id} className="rounded-lg border border-muted-foreground/10 bg-muted/20 px-2.5 py-2">
-                                            <p className="text-[11px] font-bold leading-tight">{meta?.name || `Тест #${t.test_id}`}</p>
-                                            {summary ? <p className="mt-1 text-[11px] text-muted-foreground leading-tight">{summary}</p> : null}
-                                        </div>
-                                    )
-                                })}
-                            </div>
+            <div className="grid gap-4 sm:grid-cols-3 mb-8">
+                <div className="bg-white rounded-3xl border border-slate-200 p-6">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Кандидат</p>
+                    <div className="mt-4 flex items-center gap-4">
+                        {details.answers?.[CANDIDATE_PHOTO_ANSWER_KEY] ? (
+                            <button
+                                type="button"
+                                onClick={() => setIsCandidatePhotoOpen(true)}
+                                className="shrink-0 h-16 w-16 overflow-hidden rounded-2xl border border-slate-100 bg-slate-50 transition-opacity hover:opacity-90"
+                            >
+                                <img
+                                    src={details.answers[CANDIDATE_PHOTO_ANSWER_KEY]}
+                                    alt={details.candidate_name || "Кандидат"}
+                                    className="h-full w-full object-cover"
+                                />
+                            </button>
                         ) : null}
-                    </CardContent>
-                </Card>
+                        <div className="min-w-0">
+                            <p className="text-lg font-bold text-slate-900 truncate">{details.candidate_name || "—"}</p>
+                            <p className="text-sm text-slate-500 mt-0.5">{details.candidate_phone || details.candidate_email || ""}</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="bg-white rounded-3xl border border-slate-200 p-6">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Шаблон</p>
+                    <p className="mt-4 text-lg font-bold text-slate-900">{details.template_name}</p>
+                    <p className="mt-0.5 text-sm text-slate-500">{details.template_position || "Без позиции"}</p>
+                </div>
+
+                <div className="bg-white rounded-3xl border border-slate-200 p-6">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-4">Оценка</p>
+                    <div className="inline-flex px-3 py-1.5 rounded-lg bg-slate-100 text-slate-900 text-sm font-bold mb-4">
+                        Баллы тестов: {testsAutoScore}
+                    </div>
+                    {applicationTestsList.length > 0 ? (
+                        <div className="space-y-2">
+                            {applicationTestsList.map((t: any) => {
+                                const meta = testsById.get(Number(t.test_id))
+                                const summary = getTestResultSummary(t.result)
+                                return (
+                                    <div key={t.test_id} className="rounded-xl bg-slate-50 px-3 py-2.5 space-y-0.5">
+                                        <p className="text-xs font-bold text-slate-900 leading-tight">{meta?.name || `Тест #${t.test_id}`}</p>
+                                        {summary ? <p className="text-[11px] text-slate-500 leading-tight">{summary}</p> : null}
+                                    </div>
+                                )
+                            })}
+                        </div>
+                    ) : null}
+                </div>
             </div>
 
-            <Card className="border-none shadow-sm bg-white">
-                <CardContent className="p-5 space-y-4">
-                    <div className="space-y-1.5">
-                        <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Статус</Label>
+            <div className="space-y-8">
+                <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-8">
+                    <div className="max-w-sm space-y-2">
+                        <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Статус кандидата</Label>
                         <Select value={status} onValueChange={setStatus}>
-                            <SelectTrigger className="bg-muted/30 border-muted-foreground/10">
+                            <SelectTrigger className="h-12 bg-slate-50/50 border-slate-200 hover:border-slate-300 transition-colors rounded-xl font-medium">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
                                 {STATUS_OPTIONS.map((o) => (
-                                    <SelectItem key={o.value} value={o.value} className="text-xs">{o.label}</SelectItem>
+                                    <SelectItem key={o.value} value={o.value} className="text-sm">{o.label}</SelectItem>
                                 ))}
                             </SelectContent>
                         </Select>
-                        <p className="text-xs text-muted-foreground">Текущий статус: {getStatusLabel(status)}</p>
+                        <p className="text-xs text-slate-500 font-medium pt-1">Текущий статус: {getStatusLabel(status)}</p>
                     </div>
-                </CardContent>
-            </Card>
+                </div>
 
-            <Card className="border-none shadow-sm bg-white">
-                <CardContent className="p-5 space-y-4">
-                    <p className="text-sm font-bold">Анкета</p>
-                    {formSections.map((section: any) => (
-                        <div key={section.id || section.title} className="space-y-2 rounded-xl border border-muted-foreground/10 p-4">
-                            <p className="text-sm font-bold">{section.title || "Раздел"}</p>
-                            {section.description ? <p className="text-xs text-muted-foreground">{section.description}</p> : null}
-                            <div className="space-y-3">
-                                {(section.questions || []).map((q: any) => {
-                                    const ans = details.answers?.[q.id]
-                                    const text = formatAnswerValue(q, ans)
-                                    return (
-                                        <div key={q.id} className="space-y-1">
-                                            <p className="text-xs font-bold">{q.label || q.id}</p>
-                                            {q.type === "repeatable_list" ? (
-                                                <div className="space-y-3">
-                                                    {(Array.isArray(ans) ? ans : []).length > 0 ? (
-                                                        (ans as any[]).map((item: any, itemIndex: number) => (
-                                                            <div key={`${q.id}-${itemIndex}`} className="rounded-xl border border-muted-foreground/10 p-3 space-y-2">
-                                                                <p className="text-xs font-bold">{formatRepeatableTitle(q, itemIndex)}</p>
-                                                                {(q.fields || []).map((field: any) => {
-                                                                    const fieldValue = item?.[field.id]
-                                                                    const fieldText = Array.isArray(fieldValue) ? fieldValue.join(", ") : (fieldValue === null || fieldValue === undefined ? "" : String(fieldValue))
-                                                                    return (
-                                                                        <div key={field.id} className="space-y-0.5">
-                                                                            <p className="text-xs font-bold">{field.label || field.id}</p>
-                                                                            <p className="text-xs text-muted-foreground whitespace-pre-wrap break-words">{fieldText || "—"}</p>
-                                                                        </div>
-                                                                    )
-                                                                })}
-                                                            </div>
-                                                        ))
-                                                    ) : (
-                                                        <p className="text-xs text-muted-foreground">Нет записей</p>
-                                                    )}
-                                                </div>
-                                            ) : (
-                                                <p className="text-xs text-muted-foreground whitespace-pre-wrap break-words">{text || "—"}</p>
-                                            )}
-                                        </div>
-                                    )
-                                })}
+                <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-8 space-y-8">
+                    <h2 className="text-2xl font-bold text-slate-900">Анкета</h2>
+                    
+                    <div className="space-y-8">
+                        {formSections.map((section: any) => (
+                            <div key={section.id || section.title} className="space-y-6">
+                                <div>
+                                    <h3 className="text-lg font-bold text-slate-900">{section.title || "Раздел"}</h3>
+                                    {section.description ? <p className="text-sm text-slate-500 mt-1">{section.description}</p> : null}
+                                </div>
+                                <div className="space-y-6">
+                                    {(section.questions || []).map((q: any) => {
+                                        const ans = details.answers?.[q.id]
+                                        const text = formatAnswerValue(q, ans)
+                                        return (
+                                            <div key={q.id} className="space-y-2">
+                                                <p className="text-sm font-bold text-slate-900">{q.label || q.id}</p>
+                                                {q.type === "repeatable_list" ? (
+                                                    <div className="space-y-3">
+                                                        {(Array.isArray(ans) ? ans : []).length > 0 ? (
+                                                            (ans as any[]).map((item: any, itemIndex: number) => (
+                                                                <div key={`${q.id}-${itemIndex}`} className="rounded-2xl border border-slate-100 bg-slate-50/50 p-5 space-y-4">
+                                                                    <p className="text-xs font-bold uppercase tracking-widest text-slate-400">{formatRepeatableTitle(q, itemIndex)}</p>
+                                                                    <div className="space-y-3">
+                                                                        {(q.fields || []).map((field: any) => {
+                                                                            const fieldValue = item?.[field.id]
+                                                                            const fieldText = Array.isArray(fieldValue) ? fieldValue.join(", ") : (fieldValue === null || fieldValue === undefined ? "" : String(fieldValue))
+                                                                            return (
+                                                                                <div key={field.id} className="space-y-1">
+                                                                                    <p className="text-sm font-medium text-slate-700">{field.label || field.id}</p>
+                                                                                    <p className="text-sm text-slate-900 whitespace-pre-wrap break-words">{fieldText || "—"}</p>
+                                                                                </div>
+                                                                            )
+                                                                        })}
+                                                                    </div>
+                                                                </div>
+                                                            ))
+                                                        ) : (
+                                                            <p className="text-sm text-slate-500 italic">Нет записей</p>
+                                                        )}
+                                                    </div>
+                                                ) : (
+                                                    <p className="text-sm text-slate-600 whitespace-pre-wrap break-words bg-slate-50/50 rounded-xl p-4 border border-slate-100">{text || "—"}</p>
+                                                )}
+                                            </div>
+                                        )
+                                    })}
+                                </div>
+                                <div className="h-px bg-slate-100 last:hidden" />
                             </div>
-                        </div>
-                    ))}
-                </CardContent>
-            </Card>
+                        ))}
+                    </div>
+                </div>
 
             {applicationTestsList.length > 0 ? (
-                <Card className="border-none shadow-sm bg-white">
-                    <CardContent className="p-5 space-y-3">
-                        <p className="text-sm font-bold">Тесты</p>
+                <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-8 space-y-6">
+                    <h2 className="text-2xl font-bold text-slate-900">Тесты</h2>
+                    <div className="space-y-4">
                         {applicationTestsList.map((t: any) => {
                             const meta = testsById.get(Number(t.test_id))
                             const qs = meta?.schema?.questions
@@ -395,36 +405,45 @@ export default function RecruitmentApplicationDetailsPage() {
                             const bandLabel = t.result?.label ? String(t.result.label) : ""
                             const decision = t.result?.decision ? String(t.result.decision) : ""
                             return (
-                                <div key={t.test_id} className="space-y-3 rounded-xl border border-muted-foreground/10 p-4">
-                                    <div className="flex items-center justify-between gap-2">
+                                <div key={t.test_id} className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5">
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                                         <div className="min-w-0">
-                                            <p className="truncate text-sm font-bold">{meta?.name || `Тест #${t.test_id}`}</p>
-                                            <p className="truncate text-xs text-muted-foreground">{meta?.description || ""}</p>
+                                            <p className="text-lg font-bold text-slate-900">{meta?.name || `Тест #${t.test_id}`}</p>
+                                            {meta?.description ? <p className="text-sm text-slate-500 mt-1">{meta.description}</p> : null}
                                         </div>
-                                        {pct !== null ? <Badge className="bg-muted text-foreground">{t.auto_score ?? 0} баллов ({pct}%)</Badge> : null}
+                                        {pct !== null ? (
+                                            <div className="inline-flex items-center justify-center px-3 py-1.5 rounded-lg bg-slate-100 text-slate-900 text-sm font-bold shrink-0">
+                                                {t.auto_score ?? 0} баллов ({pct}%)
+                                            </div>
+                                        ) : null}
                                     </div>
-                                    <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
-                                        <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-800">Результат</p>
-                                        <p className="mt-1 text-sm font-bold text-emerald-950">{bandLabel || "Без диапазона"}</p>
-                                        {decision ? <p className="mt-1 text-xs text-emerald-800">{decision}</p> : null}
+                                    <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+                                        <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-800">Результат</p>
+                                        <p className="mt-2 text-base font-bold text-emerald-950">{bandLabel || "Без диапазона"}</p>
+                                        {decision ? <p className="mt-1 text-sm text-emerald-800">{decision}</p> : null}
                                     </div>
-                                    <details className="rounded-xl border border-muted-foreground/10 bg-muted/10 px-3 py-2">
-                                        <summary className="cursor-pointer list-none text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                                            Вопросы и ответы
+                                    <details className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 group [&_summary::-webkit-details-marker]:hidden">
+                                        <summary className="flex items-center justify-between cursor-pointer list-none text-xs font-bold uppercase tracking-widest text-slate-500">
+                                            <span>Вопросы и ответы</span>
+                                            <span className="transition group-open:rotate-180">
+                                                <svg fill="none" height="24" shapeRendering="geometricPrecision" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" viewBox="0 0 24 24" width="24"><path d="M6 9l6 6 6-6"></path></svg>
+                                            </span>
                                         </summary>
-                                        <div className="mt-3 space-y-3">
+                                        <div className="mt-4 space-y-3">
                                             {qList.map((q: any) => {
                                                 const ans = t.answers?.[q.id]
                                                 const text = formatAnswerValue(q, ans)
                                                 const points = getAnswerPoints(q, ans)
                                                 return (
-                                                    <div key={q.id} className="rounded-lg border border-muted-foreground/10 p-3">
-                                                        <p className="text-xs font-bold">{q.label || q.id}</p>
-                                                        <p className="mt-1 text-xs text-muted-foreground whitespace-pre-wrap break-words">
+                                                    <div key={q.id} className="rounded-xl border border-slate-200 bg-white p-4">
+                                                        <p className="text-sm font-bold text-slate-900">{q.label || q.id}</p>
+                                                        <p className="mt-2 text-sm text-slate-600 whitespace-pre-wrap break-words">
                                                             {text || "—"}
                                                         </p>
                                                         {points !== null ? (
-                                                            <p className="mt-1 text-[11px] font-bold text-foreground">{points} б.</p>
+                                                            <div className="mt-2 inline-flex px-2 py-1 rounded text-xs font-bold bg-slate-100 text-slate-700">
+                                                                {points} б.
+                                                            </div>
                                                         ) : null}
                                                     </div>
                                                 )
@@ -434,9 +453,10 @@ export default function RecruitmentApplicationDetailsPage() {
                                 </div>
                             )
                         })}
-                    </CardContent>
-                </Card>
+                    </div>
+                </div>
             ) : null}
+            </div>
 
             {details.answers?.[CANDIDATE_PHOTO_ANSWER_KEY] ? (
                 <ImageViewer
@@ -447,17 +467,17 @@ export default function RecruitmentApplicationDetailsPage() {
                 />
             ) : null}
 
-            <div className="fixed inset-x-0 bottom-0 z-40 border-t border-muted-foreground/10 bg-background/95 p-4 backdrop-blur sm:hidden">
-                <div className="mx-auto flex max-w-5xl gap-3">
-                    <Button variant="outline" className="flex-1" onClick={() => router.push(`/clubs/${clubId}/employees/recruitment/applications`)}>
+            <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/80 p-4 backdrop-blur-xl sm:hidden pb-[calc(1rem+env(safe-area-inset-bottom))]">
+                <div className="mx-auto flex max-w-5xl gap-2">
+                    <Button variant="outline" className="flex-1 h-12 rounded-xl border-slate-200 text-slate-700 bg-white font-medium" onClick={() => router.push(`/clubs/${clubId}/employees/recruitment/applications`)}>
                         <ArrowLeft className="mr-2 h-4 w-4" />
                         Назад
                     </Button>
-                    <Button onClick={handleSave} disabled={isSaving} className="flex-1 bg-primary text-primary-foreground shadow-lg">
-                        {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Check className="mr-2 h-4 w-4" />Сохранить</>}
+                    <Button onClick={handleSave} disabled={isSaving} className="flex-1 h-12 rounded-xl bg-slate-900 text-white hover:bg-slate-800 font-medium shadow-sm">
+                        {isSaving ? <Loader2 className="h-5 w-5 animate-spin" /> : <><Check className="mr-2 h-5 w-5" />Сохранить</>}
                     </Button>
                 </div>
             </div>
-        </div>
+        </PageShell>
     )
 }

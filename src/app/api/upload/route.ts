@@ -62,7 +62,7 @@ async function prepareUpload(file: File): Promise<PreparedUpload> {
       });
     }
 
-    let compressedBuffer = originalBuffer;
+    let compressedBuffer: Buffer | Uint8Array = originalBuffer;
     let compressedFileName = originalFileName;
     let compressedMimeType = originalMimeType;
 

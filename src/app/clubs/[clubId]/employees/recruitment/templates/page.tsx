@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
+import { PageShell } from "@/components/layout/PageShell"
 import { Clipboard, Plus, ExternalLink, Edit2, Loader2, QrCode, Trash2, ArrowLeft } from "lucide-react"
 import { QRCode } from "@/components/qr/QRCode"
 
@@ -160,183 +161,213 @@ export default function RecruitmentTemplatesPage() {
 
     if (isLoading) {
         return (
-            <div className="flex items-center justify-center py-24">
-                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            <div className="flex h-screen items-center justify-center bg-slate-50">
+                <div className="flex flex-col items-center gap-4">
+                    <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+                    <p className="text-sm font-medium text-slate-500 animate-pulse">Загрузка шаблонов...</p>
+                </div>
             </div>
         )
     }
 
     return (
-        <div className="mx-auto max-w-[1600px] space-y-5 p-4 pb-28 sm:space-y-6 sm:p-6 sm:pb-6 lg:p-8">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                <div className="min-w-0">
-                    <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Настройки подбора</h1>
-                    <p className="mt-1 text-sm text-muted-foreground sm:text-base">Шаблоны анкет + шаблоны тестов</p>
-                </div>
-                <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap lg:justify-end">
-                    <Button asChild variant="outline" className="hidden sm:inline-flex sm:w-auto">
-                        <Link href={`/clubs/${clubId}/employees`}>
-                            <ArrowLeft className="mr-2 h-4 w-4" />
-                            Назад
-                        </Link>
-                    </Button>
+        <PageShell maxWidth="5xl">
+            <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between mb-12">
+                <div className="space-y-3">
+                    <div className="mb-4 hidden sm:block">
+                        <Button variant="ghost" asChild className="h-9 px-3 -ml-3 text-slate-500 hover:text-slate-900 rounded-lg">
+                            <Link href={`/clubs/${clubId}/employees`}>
+                                <ArrowLeft className="mr-2 h-4 w-4" />
+                                К сотрудникам
+                            </Link>
+                        </Button>
+                    </div>
+                    <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-slate-900">Настройки подбора</h1>
+                    <p className="text-slate-500 text-lg">Шаблоны анкет + шаблоны тестов</p>
                 </div>
             </div>
 
-            <div className="flex items-start justify-between gap-4">
-                <div>
-                    <h2 className="text-lg font-bold tracking-tight">Шаблоны анкет</h2>
-                    <p className="text-xs text-muted-foreground mt-1">Анкета → после неё привязанные тесты</p>
-                </div>
-                <Button onClick={() => setIsCreateOpen(true)} className="bg-primary text-primary-foreground shadow-md hover:bg-primary/90">
-                    <Plus className="h-4 w-4 sm:mr-2" />
-                    <span className="hidden sm:inline">Создать анкету</span>
-                </Button>
-            </div>
+            <div className="space-y-12">
+                {/* Шаблоны анкет */}
+                <div className="space-y-6">
+                    <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+                        <div className="space-y-1">
+                            <h2 className="text-2xl font-bold tracking-tight text-slate-900">Шаблоны анкет</h2>
+                            <p className="text-sm text-slate-500">Анкета → после неё привязанные тесты</p>
+                        </div>
+                        <Button onClick={() => setIsCreateOpen(true)} className="bg-slate-900 text-white hover:bg-slate-800 rounded-xl h-11 px-6 font-medium shadow-sm w-full sm:w-auto">
+                            <Plus className="h-5 w-5 mr-2" />
+                            Создать анкету
+                        </Button>
+                    </div>
 
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                {templates.map(t => {
-                    const publicUrl = origin && t.public_token ? `${origin}/apply/${t.public_token}` : ""
-                    return (
-                        <Card key={t.id} className="border-none shadow-sm bg-white">
-                            <CardContent className="p-5 space-y-4">
-                                <div className="flex items-start justify-between gap-3">
-                                    <div className="min-w-0">
-                                        <div className="flex items-center gap-2">
-                                            <h3 className="font-bold truncate">{t.name}</h3>
-                                            {!t.is_active && (
-                                                <Badge variant="outline" className="text-[10px] uppercase tracking-wider">Неактивен</Badge>
-                                            )}
+                    <div className="grid gap-4 sm:grid-cols-2">
+                        {templates.map(t => {
+                            const publicUrl = origin && t.public_token ? `${origin}/apply/${t.public_token}` : ""
+                            return (
+                                <div key={t.id} className="bg-white rounded-3xl border border-slate-200 p-6 flex flex-col h-full">
+                                    <div className="flex items-start justify-between gap-4 mb-4">
+                                        <div className="min-w-0">
+                                            <div className="flex items-center gap-3 mb-2">
+                                                <h3 className="text-lg font-bold text-slate-900 truncate">{t.name}</h3>
+                                                {!t.is_active && (
+                                                    <Badge variant="secondary" className="bg-slate-100 text-slate-600 text-[10px] uppercase tracking-wider font-bold shrink-0">Неактивен</Badge>
+                                                )}
+                                            </div>
+                                            {t.position && <p className="text-sm font-medium text-slate-700 truncate">{t.position}</p>}
+                                            {t.description && <p className="text-sm text-slate-500 mt-1 line-clamp-2">{t.description}</p>}
                                         </div>
-                                        <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{t.position || "—"}</p>
-                                        <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{t.description || ""}</p>
+                                        <div className="shrink-0 flex flex-col items-center justify-center h-12 w-12 rounded-2xl bg-slate-50 border border-slate-100" title="Количество анкет">
+                                            <span className="text-lg font-bold text-slate-900">{t.applications_count}</span>
+                                        </div>
                                     </div>
-                                    <Badge className="bg-muted text-foreground">{t.applications_count}</Badge>
-                                </div>
 
-                                <div className="flex flex-wrap gap-2">
-                                    <Button asChild variant="outline" size="sm">
-                                        <Link href={`/clubs/${clubId}/employees/recruitment/templates/${t.id}`}>
+                                    <div className="mt-auto pt-4 flex flex-wrap gap-2">
+                                        <Button asChild variant="outline" className="flex-1 h-10 rounded-xl border-slate-200 text-slate-700 hover:bg-slate-50 hover:text-black">
+                                            <Link href={`/clubs/${clubId}/employees/recruitment/templates/${t.id}`}>
+                                                <Edit2 className="mr-2 h-4 w-4" />
+                                                Настроить
+                                            </Link>
+                                        </Button>
+                                        <Button
+                                            variant="outline"
+                                            className="h-10 w-10 p-0 rounded-xl border-slate-200 text-rose-500 hover:bg-rose-50 hover:border-rose-200 shrink-0"
+                                            onClick={() => requestDelete("template", t.id, t.name)}
+                                        >
+                                            <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                    </div>
+                                    
+                                    <div className="flex gap-2 mt-2">
+                                        <Button
+                                            variant="outline"
+                                            className="flex-1 h-10 rounded-xl border-slate-200 text-slate-600 hover:bg-slate-50"
+                                            onClick={() => publicUrl && handleCopy(publicUrl)}
+                                            disabled={!publicUrl}
+                                        >
+                                            <Clipboard className="mr-2 h-4 w-4" />
+                                            Копировать
+                                        </Button>
+                                        <Button
+                                            variant="outline"
+                                            className="h-10 w-10 p-0 rounded-xl border-slate-200 text-slate-600 hover:bg-slate-50 shrink-0"
+                                            onClick={() => publicUrl && setQrValue(publicUrl)}
+                                            disabled={!publicUrl}
+                                            title="QR код"
+                                        >
+                                            <QrCode className="h-4 w-4" />
+                                        </Button>
+                                        <Button asChild variant="outline" className="h-10 w-10 p-0 rounded-xl border-slate-200 text-slate-600 hover:bg-slate-50 shrink-0" disabled={!publicUrl}>
+                                            <a href={publicUrl || "#"} target="_blank" rel="noreferrer" title="Открыть публичную ссылку">
+                                                <ExternalLink className="h-4 w-4" />
+                                            </a>
+                                        </Button>
+                                    </div>
+                                </div>
+                            )
+                        })}
+                        {templates.length === 0 && (
+                            <div className="sm:col-span-2 flex flex-col items-center justify-center py-20 bg-white rounded-3xl border border-slate-200 border-dashed">
+                                <div className="h-16 w-16 rounded-full bg-slate-50 flex items-center justify-center mb-4">
+                                    <Clipboard className="h-8 w-8 text-slate-300" />
+                                </div>
+                                <h3 className="text-lg font-bold text-slate-900">Нет шаблонов анкет</h3>
+                                <p className="text-sm text-slate-500 mt-1">Создайте первый шаблон для сбора откликов</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* Шаблоны тестов */}
+                <div className="space-y-6">
+                    <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+                        <div className="space-y-1">
+                            <h2 className="text-2xl font-bold tracking-tight text-slate-900">Шаблоны тестов</h2>
+                            <p className="text-sm text-slate-500">Отдельные тесты, которые можно привязать к анкете</p>
+                        </div>
+                        <Button onClick={() => setIsCreateTestOpen(true)} variant="outline" className="rounded-xl h-11 px-6 font-medium text-slate-700 hover:bg-slate-50 hover:text-black border-slate-200 w-full sm:w-auto">
+                            <Plus className="h-5 w-5 mr-2" />
+                            Создать тест
+                        </Button>
+                    </div>
+
+                    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                        {tests.map(t => (
+                            <div key={t.id} className="bg-white rounded-3xl border border-slate-200 p-6 flex flex-col h-full">
+                                <div className="min-w-0 mb-6">
+                                    <div className="flex items-center gap-3 mb-2">
+                                        <h3 className="text-lg font-bold text-slate-900 truncate">{t.name}</h3>
+                                        {!t.is_active && (
+                                            <Badge variant="secondary" className="bg-slate-100 text-slate-600 text-[10px] uppercase tracking-wider font-bold shrink-0">Неактивен</Badge>
+                                        )}
+                                    </div>
+                                    {t.description && <p className="text-sm text-slate-500 mt-1 line-clamp-2">{t.description}</p>}
+                                </div>
+                                <div className="mt-auto flex gap-2">
+                                    <Button asChild variant="outline" className="flex-1 h-10 rounded-xl border-slate-200 text-slate-700 hover:bg-slate-50 hover:text-black">
+                                        <Link href={`/clubs/${clubId}/employees/recruitment/tests/${t.id}`}>
                                             <Edit2 className="mr-2 h-4 w-4" />
-                                            Редактировать
+                                            Настроить
                                         </Link>
                                     </Button>
                                     <Button
                                         variant="outline"
-                                        size="sm"
-                                        className="text-red-600 hover:text-red-700"
-                                        onClick={() => requestDelete("template", t.id, t.name)}
+                                        className="h-10 w-10 p-0 rounded-xl border-slate-200 text-rose-500 hover:bg-rose-50 hover:border-rose-200 shrink-0"
+                                        onClick={() => requestDelete("test", t.id, t.name)}
                                     >
-                                        <Trash2 className="mr-2 h-4 w-4" />
-                                        Удалить
-                                    </Button>
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => publicUrl && handleCopy(publicUrl)}
-                                        disabled={!publicUrl}
-                                    >
-                                        <Clipboard className="mr-2 h-4 w-4" />
-                                        <span className="hidden md:inline">Скопировать ссылку</span>
-                                    </Button>
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => publicUrl && setQrValue(publicUrl)}
-                                        disabled={!publicUrl}
-                                    >
-                                        <QrCode className="mr-2 h-4 w-4" />
-                                        <span className="hidden md:inline">QR</span>
-                                    </Button>
-                                    <Button asChild variant="outline" size="sm" disabled={!publicUrl}>
-                                        <a href={publicUrl || "#"} target="_blank" rel="noreferrer">
-                                            <ExternalLink className="mr-2 h-4 w-4" />
-                                            <span className="hidden md:inline">Открыть</span>
-                                        </a>
+                                        <Trash2 className="h-4 w-4" />
                                     </Button>
                                 </div>
-                            </CardContent>
-                        </Card>
-                    )
-                })}
-            </div>
-
-            <div className="flex items-start justify-between gap-4 pt-2">
-                <div>
-                    <h2 className="text-lg font-bold tracking-tight">Шаблоны тестов</h2>
-                    <p className="text-xs text-muted-foreground mt-1">Отдельные тесты, которые можно привязать к анкете</p>
+                            </div>
+                        ))}
+                        {tests.length === 0 && (
+                            <div className="sm:col-span-2 xl:col-span-3 flex flex-col items-center justify-center py-16 bg-white rounded-3xl border border-slate-200 border-dashed">
+                                <p className="text-sm text-slate-500 font-medium">Тестов пока нет</p>
+                            </div>
+                        )}
+                    </div>
                 </div>
-                <Button onClick={() => setIsCreateTestOpen(true)} variant="outline">
-                    <Plus className="h-4 w-4 sm:mr-2" />
-                    <span className="hidden sm:inline">Создать тест</span>
-                </Button>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                {tests.map(t => (
-                    <Card key={t.id} className="border-none shadow-sm bg-white">
-                        <CardContent className="p-5 space-y-3">
-                            <div className="flex items-start justify-between gap-3">
-                                <div className="min-w-0">
-                                    <div className="flex items-center gap-2">
-                                        <h3 className="font-bold truncate">{t.name}</h3>
-                                        {!t.is_active && (
-                                            <Badge variant="outline" className="text-[10px] uppercase tracking-wider">Неактивен</Badge>
-                                        )}
-                                    </div>
-                                    <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{t.description || ""}</p>
-                                </div>
-                            </div>
-                            <div className="flex gap-2">
-                                <Button asChild variant="outline" size="sm" className="w-full">
-                                    <Link href={`/clubs/${clubId}/employees/recruitment/tests/${t.id}`}>
-                                        <Edit2 className="mr-2 h-4 w-4" />
-                                        Редактировать
-                                    </Link>
-                                </Button>
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="w-full text-red-600 hover:text-red-700"
-                                    onClick={() => requestDelete("test", t.id, t.name)}
-                                >
-                                    <Trash2 className="mr-2 h-4 w-4" />
-                                    Удалить
-                                </Button>
-                            </div>
-                        </CardContent>
-                    </Card>
-                ))}
             </div>
 
             <Dialog open={Boolean(qrValue)} onOpenChange={(o) => !o && setQrValue("")}>
-                <DialogContent className="sm:max-w-[420px] rounded-2xl border-none shadow-2xl">
-                    <DialogHeader>
-                        <DialogTitle className="text-xl font-bold">QR</DialogTitle>
+                <DialogContent className="sm:max-w-[400px] rounded-3xl border border-slate-200 shadow-2xl bg-white p-8">
+                    <DialogHeader className="mb-6">
+                        <DialogTitle className="text-2xl font-bold text-center text-slate-900">QR-код анкеты</DialogTitle>
                     </DialogHeader>
-                    <div className="flex justify-center">
+                    <div className="flex justify-center bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
                         {qrValue ? <QRCode value={qrValue} downloadable filename="recruitment-form-qr" /> : null}
                     </div>
-                    <div className="text-xs text-muted-foreground break-all">{qrValue}</div>
+                    <div className="mt-6 text-xs text-slate-500 break-all text-center bg-slate-50 p-3 rounded-xl">
+                        {qrValue}
+                    </div>
                 </DialogContent>
             </Dialog>
 
             <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-                <DialogContent className="sm:max-w-[520px] rounded-2xl border-none shadow-2xl">
-                    <DialogHeader className="space-y-2">
-                        <DialogTitle className="text-xl font-bold">Удалить?</DialogTitle>
-                        <DialogDescription className="text-xs font-medium">
-                            {deleteTarget?.kind === "template"
-                                ? "Удаление анкеты удалит связанные ответы/анкеты кандидатов."
-                                : "Удаление теста удалит его из всех анкет и удалит ответы кандидатов по этому тесту."}
-                        </DialogDescription>
+                <DialogContent className="sm:max-w-[400px] rounded-3xl border border-slate-200 shadow-2xl bg-white p-6">
+                    <DialogHeader className="space-y-3">
+                        <div className="h-12 w-12 rounded-2xl bg-rose-50 flex items-center justify-center">
+                            <Trash2 className="h-6 w-6 text-rose-600" />
+                        </div>
+                        <div>
+                            <DialogTitle className="text-xl font-bold text-slate-900">Удалить?</DialogTitle>
+                            <DialogDescription className="text-sm font-medium text-slate-500 mt-1">
+                                {deleteTarget?.kind === "template"
+                                    ? "Удаление анкеты удалит связанные ответы и анкеты кандидатов."
+                                    : "Удаление теста удалит его из всех анкет и сотрет ответы кандидатов."}
+                            </DialogDescription>
+                        </div>
                     </DialogHeader>
-                    <div className="text-sm font-bold">{deleteTarget?.name}</div>
+                    <div className="py-4">
+                        <div className="bg-slate-50 border border-slate-100 p-4 rounded-xl">
+                            <p className="text-sm font-bold text-slate-900">{deleteTarget?.name}</p>
+                        </div>
+                    </div>
                     <DialogFooter className="gap-2 sm:gap-0">
-                        <Button variant="ghost" onClick={() => setDeleteOpen(false)} className="flex-1 text-xs font-bold uppercase tracking-widest">
+                        <Button variant="ghost" onClick={() => setDeleteOpen(false)} className="flex-1 text-xs font-bold uppercase tracking-widest rounded-xl h-11">
                             Отмена
                         </Button>
-                        <Button onClick={confirmDelete} disabled={isDeleting} className="flex-1 bg-red-600 hover:bg-red-700 text-white text-xs font-bold uppercase tracking-widest shadow-lg">
+                        <Button onClick={confirmDelete} disabled={isDeleting} className="flex-1 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold uppercase tracking-widest shadow-lg shadow-rose-200 rounded-xl h-11">
                             {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Удалить"}
                         </Button>
                     </DialogFooter>
@@ -344,39 +375,41 @@ export default function RecruitmentTemplatesPage() {
             </Dialog>
 
             <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-                <DialogContent className="sm:max-w-[520px] rounded-2xl border-none shadow-2xl">
+                <DialogContent className="sm:max-w-[440px] rounded-3xl border border-slate-200 shadow-2xl bg-white p-6">
                     <DialogHeader className="space-y-2">
-                        <DialogTitle className="text-xl font-bold">Создать анкету</DialogTitle>
-                        <DialogDescription className="text-xs font-medium">Новая анкета создается пустой, потом ее можно настроить вручную</DialogDescription>
+                        <DialogTitle className="text-2xl font-bold text-slate-900">Новая анкета</DialogTitle>
+                        <DialogDescription className="text-sm font-medium text-slate-500">
+                            Анкета создается пустой. Вопросы можно будет настроить на следующем шаге.
+                        </DialogDescription>
                     </DialogHeader>
 
-                    <div className="space-y-4 pt-2">
-                        <div className="space-y-1.5">
-                            <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Название</Label>
+                    <div className="space-y-5 py-4">
+                        <div className="space-y-2">
+                            <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Название анкеты</Label>
                             <Input
                                 value={name}
                                 onChange={(e) => setName(e.target.value)}
-                                className="bg-muted/30 border-muted-foreground/10"
-                                placeholder="Напр: Администратор (анкета)"
+                                className="h-12 bg-slate-50/50 border-slate-200 hover:border-slate-300 transition-colors rounded-xl font-medium"
+                                placeholder="Напр: Администратор рецепции"
                             />
                         </div>
 
-                        <div className="space-y-1.5">
-                            <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Позиция</Label>
+                        <div className="space-y-2">
+                            <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Должность (для кандидата)</Label>
                             <Input
                                 value={position}
                                 onChange={(e) => setPosition(e.target.value)}
-                                className="bg-muted/30 border-muted-foreground/10"
+                                className="h-12 bg-slate-50/50 border-slate-200 hover:border-slate-300 transition-colors rounded-xl font-medium"
                                 placeholder="Напр: Администратор"
                             />
                         </div>
                     </div>
 
-                    <DialogFooter className="gap-2 sm:gap-0">
-                        <Button variant="ghost" onClick={() => setIsCreateOpen(false)} className="flex-1 text-xs font-bold uppercase tracking-widest">
+                    <DialogFooter className="gap-2 sm:gap-0 pt-2">
+                        <Button variant="ghost" onClick={() => setIsCreateOpen(false)} className="flex-1 text-xs font-bold uppercase tracking-widest rounded-xl h-12">
                             Отмена
                         </Button>
-                        <Button onClick={handleCreate} disabled={isSubmitting} className="flex-1 bg-primary text-primary-foreground text-xs font-bold uppercase tracking-widest shadow-lg">
+                        <Button onClick={handleCreate} disabled={isSubmitting} className="flex-1 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold uppercase tracking-widest rounded-xl h-12 shadow-sm">
                             {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Создать"}
                         </Button>
                     </DialogFooter>
@@ -384,54 +417,54 @@ export default function RecruitmentTemplatesPage() {
             </Dialog>
 
             <Dialog open={isCreateTestOpen} onOpenChange={setIsCreateTestOpen}>
-                <DialogContent className="sm:max-w-[520px] rounded-2xl border-none shadow-2xl">
+                <DialogContent className="sm:max-w-[440px] rounded-3xl border border-slate-200 shadow-2xl bg-white p-6">
                     <DialogHeader className="space-y-2">
-                        <DialogTitle className="text-xl font-bold">Создать тест</DialogTitle>
-                        <DialogDescription className="text-xs font-medium">Создаётся пустая схема; редактировать вопросы можно будет через JSON/расширение позже</DialogDescription>
+                        <DialogTitle className="text-2xl font-bold text-slate-900">Новый тест</DialogTitle>
+                        <DialogDescription className="text-sm font-medium text-slate-500">
+                            Создаётся пустая схема. Вопросы настраиваются позже.
+                        </DialogDescription>
                     </DialogHeader>
 
-                    <div className="space-y-4 pt-2">
-                        <div className="space-y-1.5">
-                            <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Название</Label>
+                    <div className="space-y-5 py-4">
+                        <div className="space-y-2">
+                            <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Название теста</Label>
                             <Input
                                 value={testName}
                                 onChange={(e) => setTestName(e.target.value)}
-                                className="bg-muted/30 border-muted-foreground/10"
+                                className="h-12 bg-slate-50/50 border-slate-200 hover:border-slate-300 transition-colors rounded-xl font-medium"
                                 placeholder="Напр: IQ мини"
                             />
                         </div>
-                        <div className="space-y-1.5">
-                            <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Описание</Label>
+                        <div className="space-y-2">
+                            <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Описание (опционально)</Label>
                             <Input
                                 value={testDescription}
                                 onChange={(e) => setTestDescription(e.target.value)}
-                                className="bg-muted/30 border-muted-foreground/10"
-                                placeholder="Опционально"
+                                className="h-12 bg-slate-50/50 border-slate-200 hover:border-slate-300 transition-colors rounded-xl font-medium"
+                                placeholder="Краткая суть теста"
                             />
                         </div>
                     </div>
 
-                    <DialogFooter className="gap-2 sm:gap-0">
-                        <Button variant="ghost" onClick={() => setIsCreateTestOpen(false)} className="flex-1 text-xs font-bold uppercase tracking-widest">
+                    <DialogFooter className="gap-2 sm:gap-0 pt-2">
+                        <Button variant="ghost" onClick={() => setIsCreateTestOpen(false)} className="flex-1 text-xs font-bold uppercase tracking-widest rounded-xl h-12">
                             Отмена
                         </Button>
-                        <Button onClick={handleCreateTest} disabled={isSubmitting} className="flex-1 bg-primary text-primary-foreground text-xs font-bold uppercase tracking-widest shadow-lg">
+                        <Button onClick={handleCreateTest} disabled={isSubmitting} className="flex-1 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold uppercase tracking-widest rounded-xl h-12 shadow-sm">
                             {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Создать"}
                         </Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
 
-            <div className="fixed inset-x-0 bottom-0 z-40 border-t border-muted-foreground/10 bg-background/95 p-4 backdrop-blur sm:hidden">
-                <div className="mx-auto max-w-[1600px]">
-                    <Button asChild variant="outline" className="w-full">
-                        <Link href={`/clubs/${clubId}/employees`}>
-                            <ArrowLeft className="mr-2 h-4 w-4" />
-                            Назад
-                        </Link>
-                    </Button>
-                </div>
+            <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/80 p-4 backdrop-blur-xl sm:hidden pb-[calc(1rem+env(safe-area-inset-bottom))]">
+                <Button asChild variant="outline" className="w-full h-12 rounded-xl border-slate-200 text-slate-700 bg-white font-medium">
+                    <Link href={`/clubs/${clubId}/employees`}>
+                        <ArrowLeft className="mr-2 h-4 w-4" />
+                        К сотрудникам
+                    </Link>
+                </Button>
             </div>
-        </div>
+        </PageShell>
     )
 }

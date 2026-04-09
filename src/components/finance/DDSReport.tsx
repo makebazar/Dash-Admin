@@ -1,6 +1,5 @@
 "use client"
 
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table"
 import { DollarSign, Wallet, ArrowUpRight, Info } from "lucide-react"
 import {
@@ -52,14 +51,14 @@ export default function DDSReport({ data, formatCurrency }: DDSReportProps) {
 
     return (
         <div className="space-y-6">
-            <Card className="border-none shadow-sm bg-white overflow-hidden">
-                <CardHeader className="pb-8 border-b border-slate-50">
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+                <div className="p-6 sm:p-8 pb-8 border-b border-slate-100">
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                         <div>
-                            <CardTitle className="text-2xl font-black text-slate-900">Движение денежных средств</CardTitle>
-                            <CardDescription className="text-sm font-medium text-slate-500 mt-1">
+                            <h2 className="text-2xl font-bold tracking-tight text-slate-900">Движение денежных средств</h2>
+                            <p className="text-sm font-medium text-slate-500 mt-2">
                                 Классификация потоков по международным стандартам финансовой отчетности
-                            </CardDescription>
+                            </p>
                         </div>
                         <div className="bg-slate-900 text-white p-6 rounded-3xl shadow-xl shadow-slate-200 min-w-[240px] relative overflow-hidden group">
                             <div className="absolute -right-4 -top-4 w-20 h-20 bg-white/5 rounded-full blur-2xl group-hover:bg-white/10 transition-all" />
@@ -71,8 +70,8 @@ export default function DDSReport({ data, formatCurrency }: DDSReportProps) {
                             </div>
                         </div>
                     </div>
-                </CardHeader>
-                <CardContent className="p-0">
+                </div>
+                <div>
                     <TooltipProvider>
                         <div className="divide-y divide-slate-50">
                             {sections.map((section, idx) => (
@@ -143,12 +142,12 @@ export default function DDSReport({ data, formatCurrency }: DDSReportProps) {
                             </div>
                         </div>
                     </div>
-                </CardContent>
-            </Card>
+                </div>
+            </div>
 
             {/* Quick Guide / FAQ Section for beginners */}
             <div className="grid gap-6 md:grid-cols-2">
-                <Card className="border-none shadow-sm bg-blue-50/50 rounded-3xl p-6 border border-blue-100">
+                <div className="bg-blue-50/50 rounded-3xl p-6 sm:p-8 border border-blue-100 shadow-sm">
                     <h4 className="text-sm font-black text-blue-900 flex items-center gap-2 mb-3 uppercase tracking-tight">
                         <Info className="h-4 w-4" /> Как читать этот отчет?
                     </h4>
@@ -166,16 +165,16 @@ export default function DDSReport({ data, formatCurrency }: DDSReportProps) {
                             </p>
                         </li>
                     </ul>
-                </Card>
+                </div>
 
-                <Card className="border-none shadow-sm bg-emerald-50/50 rounded-3xl p-6 border border-emerald-100">
+                <div className="bg-emerald-50/50 rounded-3xl p-6 sm:p-8 border border-emerald-100 shadow-sm">
                     <h4 className="text-sm font-black text-emerald-900 flex items-center gap-2 mb-3 uppercase tracking-tight">
                         💡 Совет по анализу
                     </h4>
                     <p className="text-xs text-emerald-800 leading-relaxed">
                         Ваша главная цель — чтобы <strong>Операционная деятельность</strong> всегда была в плюсе. Именно из неё вы должны покупать новые ПК (Инвестиции) и забирать прибыль (Финансы). Если операционка в минусе — клуб проедает свои запасы или кредиты.
                     </p>
-                </Card>
+                </div>
             </div>
         </div>
     )

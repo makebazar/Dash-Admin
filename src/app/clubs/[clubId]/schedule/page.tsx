@@ -55,56 +55,60 @@ export default function SchedulePage() {
     ]
 
     return (
-        <div className="space-y-5 p-4 sm:space-y-6 sm:p-6">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-                <div className="min-w-0 space-y-2">
-                    <h1 className="text-[2rem] font-semibold tracking-[-0.04em] text-slate-900 sm:text-3xl sm:tracking-tight">
-                        График работы
-                    </h1>
-                    <p className="max-w-xl text-[15px] leading-6 text-muted-foreground sm:text-base">
-                        Планирование смен сотрудников по дням месяца
-                    </p>
-                </div>
-
-                <div className="flex w-full items-center justify-between gap-2 rounded-2xl border bg-card p-1.5 sm:w-auto sm:gap-3 sm:p-2">
-                    <Button variant="ghost" size="icon" className="h-10 w-10 rounded-xl shrink-0" onClick={() => handleMonthChange(-1)}>
-                        <ChevronLeft className="h-4 w-4" />
-                    </Button>
-                    <div className="flex min-w-0 flex-1 items-center justify-center gap-2 px-2 text-center sm:min-w-[150px] sm:flex-none">
-                        <span className="truncate text-xl font-semibold tracking-[-0.03em] text-slate-900 sm:text-lg sm:tracking-normal">
-                            {monthNames[month - 1]}
-                        </span>
-                        <span className="shrink-0 text-lg font-medium text-muted-foreground sm:text-base">{year}</span>
+        <div className="flex min-h-screen bg-[#FAFAFA] flex-col font-sans text-slate-900 selection:bg-black/10">
+            <main className="mx-auto max-w-6xl w-full flex-1 px-4 sm:px-6 md:px-8 py-8 md:py-12 lg:py-20">
+                <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between mb-12">
+                    <div className="space-y-3">
+                        <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-slate-900">
+                            График работы
+                        </h1>
+                        <p className="text-slate-500 text-lg">
+                            Планирование смен сотрудников по дням месяца
+                        </p>
                     </div>
-                    <Button variant="ghost" size="icon" className="h-10 w-10 rounded-xl shrink-0" onClick={() => handleMonthChange(1)}>
-                        <ChevronRight className="h-4 w-4" />
-                    </Button>
-                </div>
-            </div>
 
-            {isLoading ? (
-                <div className="flex items-center justify-center py-20">
-                    <Loader2 className="h-10 w-10 animate-spin text-purple-600" />
+                    <div className="flex w-full sm:w-auto items-center justify-between gap-3 bg-white border border-slate-200 rounded-2xl p-2 shadow-sm">
+                        <Button variant="ghost" size="icon" className="h-12 w-12 rounded-xl shrink-0 text-slate-500 hover:text-black hover:bg-slate-50 transition-colors" onClick={() => handleMonthChange(-1)}>
+                            <ChevronLeft className="h-5 w-5" />
+                        </Button>
+                        <div className="flex min-w-[160px] items-center justify-center gap-2 px-4 text-center">
+                            <span className="text-lg font-bold tracking-tight text-slate-900 capitalize">
+                                {monthNames[month - 1]}
+                            </span>
+                            <span className="text-lg font-medium text-slate-400">{year}</span>
+                        </div>
+                        <Button variant="ghost" size="icon" className="h-12 w-12 rounded-xl shrink-0 text-slate-500 hover:text-black hover:bg-slate-50 transition-colors" onClick={() => handleMonthChange(1)}>
+                            <ChevronRight className="h-5 w-5" />
+                        </Button>
+                    </div>
                 </div>
-            ) : data?.error ? (
-                <Card className="p-12 text-center border-dashed">
-                    <div className="text-red-500 font-bold mb-2">Произошла ошибка при загрузке</div>
-                    <p className="text-muted-foreground">{data.error}</p>
-                    <Button variant="outline" className="mt-4" onClick={fetchData}>Попробовать снова</Button>
-                </Card>
-            ) : !data || !data.employees ? (
-                <Card className="p-12 text-center border-dashed">
-                    <p className="text-muted-foreground">Данные не найдены или отсутствуют сотрудники</p>
-                </Card>
-            ) : (
-                <WorkScheduleGrid
-                    clubId={clubId}
-                    month={month}
-                    year={year}
-                    initialData={data}
-                    refreshData={fetchData}
-                />
-            )}
+
+                {isLoading ? (
+                    <div className="flex items-center justify-center py-32">
+                        <Loader2 className="h-8 w-8 animate-spin text-slate-300" />
+                    </div>
+                ) : data?.error ? (
+                    <div className="py-20 bg-white rounded-3xl border border-slate-200 border-dashed text-center p-8">
+                        <div className="text-rose-500 font-bold mb-3 text-lg">Произошла ошибка при загрузке</div>
+                        <p className="text-slate-500 mb-6">{data.error}</p>
+                        <Button variant="outline" className="h-12 rounded-xl px-6 border-slate-200 text-slate-700 hover:bg-slate-50 font-medium" onClick={fetchData}>
+                            Попробовать снова
+                        </Button>
+                    </div>
+                ) : !data || !data.employees ? (
+                    <div className="py-32 bg-white rounded-3xl border border-slate-200 border-dashed text-center">
+                        <p className="text-slate-500 text-lg">Данные не найдены или отсутствуют сотрудники</p>
+                    </div>
+                ) : (
+                    <WorkScheduleGrid
+                        clubId={clubId}
+                        month={month}
+                        year={year}
+                        initialData={data}
+                        refreshData={fetchData}
+                    />
+                )}
+            </main>
         </div>
     )
 }

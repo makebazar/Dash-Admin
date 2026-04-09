@@ -5,9 +5,8 @@ import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
-import { Building2, Plus, Loader2, Trash2, AlertTriangle, LogOut, MoreVertical, Briefcase, CheckCircle2, Calendar as CalendarIcon, Zap, ShieldAlert } from "lucide-react"
+import { Building2, Plus, Loader2, Trash2, AlertTriangle, LogOut, MoreVertical, Briefcase, Zap, ShieldAlert, ArrowRight, Check } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import Link from "next/link"
 
@@ -52,13 +51,6 @@ interface SubscriptionPlanOption {
     is_active: boolean
 }
 
-const PLAN_LABELS: Record<string, string> = {
-    new_user: "Новый пользователь",
-    starter: "Стартовый",
-    pro: "Про",
-    enterprise: "Энтерпрайз"
-}
-
 const STATUS_LABELS: Record<string, string> = {
     trialing: "Временный доступ",
     active: "Активна",
@@ -70,20 +62,6 @@ const PERIOD_LABELS: Record<SubscriptionPlanOption["period_unit"], string> = {
     day: "дн",
     month: "мес",
     year: "год"
-}
-
-const THEME_CLASS: Record<SubscriptionPlanOption["card_theme"], string> = {
-    light: "border-slate-200 bg-white text-slate-900 hover:border-slate-300",
-    dark: "border-slate-900 bg-slate-900 text-white hover:bg-slate-800",
-    accent: "border-indigo-500 bg-indigo-600 text-white hover:bg-indigo-500"
-}
-
-const TONE_CLASS: Record<SubscriptionPlanOption["badge_tone"], string> = {
-    default: "bg-slate-100 text-slate-700",
-    info: "bg-blue-100 text-blue-700",
-    success: "bg-emerald-100 text-emerald-700",
-    warning: "bg-amber-100 text-amber-700",
-    danger: "bg-red-100 text-red-700"
 }
 
 export default function DashboardPage() {
@@ -274,254 +252,240 @@ export default function DashboardPage() {
     }
 
     return (
-        <div className="flex min-h-screen bg-[#fafafa] flex-col">
-            {/* Header */}
-            <header className="sticky top-0 z-50 w-full border-b border-black/5 bg-white/80 backdrop-blur-md">
-                <div className="container mx-auto flex h-16 items-center justify-between px-4 sm:px-8">
-                    <div className="flex items-center gap-2">
-                        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-black">
-                            <Building2 className="h-5 w-5 text-white" />
+        <div className="flex min-h-screen bg-[#FAFAFA] flex-col font-sans text-slate-900 selection:bg-black/10">
+            {/* Minimal Header */}
+            <header className="sticky top-0 z-50 w-full bg-[#FAFAFA]/80 backdrop-blur-md">
+                <div className="mx-auto max-w-5xl flex h-20 items-center justify-between px-6 sm:px-8">
+                    <div className="flex items-center gap-2.5">
+                        <div className="flex h-8 w-8 items-center justify-center rounded bg-black">
+                            <Zap className="h-4 w-4 text-white fill-current" />
                         </div>
                         <span className="text-lg font-bold tracking-tight">DashAdmin</span>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-4 text-sm font-medium">
                         {userData?.is_super_admin && (
-                            <Link href="/super-admin/dashboard">
-                                <Button variant="ghost" className="text-red-600 hover:text-red-700 hover:bg-red-50 flex items-center gap-2">
-                                    <ShieldAlert className="h-4 w-4" />
-                                    <span className="hidden sm:inline">Панель управления</span>
-                                </Button>
+                            <Link href="/super-admin/dashboard" className="text-red-600 hover:text-red-700 transition-colors flex items-center gap-2">
+                                <ShieldAlert className="h-4 w-4" />
+                                <span className="hidden sm:inline">Панель управления</span>
                             </Link>
                         )}
                         {hasEmployeeClubs && (
-                            <Link href="/employee/dashboard">
-                                <Button variant="ghost" className="text-purple-600 hover:text-purple-700 hover:bg-purple-50 flex items-center gap-2">
-                                    <Briefcase className="h-4 w-4" />
-                                    <span className="hidden sm:inline">Выйти на смену</span>
-                                </Button>
+                            <Link href="/employee/dashboard" className="text-purple-600 hover:text-purple-700 transition-colors flex items-center gap-2">
+                                <Briefcase className="h-4 w-4" />
+                                <span className="hidden sm:inline">Выйти на смену</span>
                             </Link>
                         )}
-                        <Button 
-                            variant="ghost" 
+                        <button 
                             onClick={handleLogout}
-                            className="text-slate-500 hover:text-red-600 hover:bg-red-50 flex items-center gap-2"
+                            className="text-slate-500 hover:text-black transition-colors flex items-center gap-2 ml-2"
                         >
                             <LogOut className="h-4 w-4" />
                             <span className="hidden sm:inline">Выйти</span>
-                        </Button>
+                        </button>
                     </div>
                 </div>
             </header>
 
-            <main className="container mx-auto flex-1 p-4 sm:p-8">
-                <div className="mb-10 flex flex-col gap-2">
-                    <h1 className="text-3xl font-extrabold tracking-tight text-slate-900">Мои клубы</h1>
-                    <p className="text-slate-500">
-                        Выберите клуб для управления или создайте новый
-                    </p>
+            <main className="mx-auto max-w-5xl w-full flex-1 px-6 sm:px-8 py-12 md:py-20">
+                {/* Section: Clubs */}
+                <div className="mb-16">
+                    <div className="flex items-end justify-between mb-8">
+                        <div>
+                            <h1 className="text-3xl md:text-4xl font-bold tracking-tight mb-2">Рабочие пространства</h1>
+                            <p className="text-lg text-slate-500">Выберите клуб для управления</p>
+                        </div>
+                        <Button
+                            onClick={() => {
+                                if (!isCreateClubDisabled) setIsModalOpen(true)
+                            }}
+                            disabled={isCreateClubDisabled}
+                            className="hidden sm:flex h-12 rounded-full px-6 bg-black text-white hover:bg-slate-800 font-medium text-base transition-all"
+                        >
+                            <Plus className="mr-2 h-5 w-5" />
+                            Добавить клуб
+                        </Button>
+                    </div>
+
+                    {isLoading ? (
+                        <div className="flex h-32 items-center justify-center">
+                            <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                            {/* Mobile Create Button */}
+                            <button
+                                onClick={() => {
+                                    if (!isCreateClubDisabled) setIsModalOpen(true)
+                                }}
+                                disabled={isCreateClubDisabled}
+                                className={`sm:hidden flex h-16 items-center justify-center rounded-xl border border-dashed transition-all ${isCreateClubDisabled ? "border-slate-200 text-slate-400 cursor-not-allowed" : "border-slate-300 text-slate-600 hover:border-black hover:text-black hover:bg-slate-50"}`}
+                            >
+                                <Plus className="mr-2 h-5 w-5" />
+                                <span className="font-medium text-base">Добавить клуб</span>
+                            </button>
+
+                            {clubs.map((club) => (
+                                <div
+                                    key={club.id}
+                                    onClick={() => router.push(`/clubs/${club.id}`)}
+                                    className="group relative flex cursor-pointer flex-col rounded-2xl border border-slate-200 bg-white p-6 transition-all hover:border-black hover:shadow-[0_8px_30px_rgb(0,0,0,0.04)]"
+                                >
+                                    <div className="flex items-start justify-between mb-8">
+                                        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-900 transition-colors group-hover:bg-black group-hover:text-white">
+                                            <Building2 className="h-6 w-6" />
+                                        </div>
+                                        {club.is_owner && (
+                                            <DropdownMenu>
+                                                <DropdownMenuTrigger asChild onClick={(e: React.MouseEvent) => e.stopPropagation()}>
+                                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-black hover:bg-slate-100 rounded-full">
+                                                        <MoreVertical className="h-4 w-4" />
+                                                    </Button>
+                                                </DropdownMenuTrigger>
+                                                <DropdownMenuContent align="end" className="rounded-xl border-slate-200 shadow-lg">
+                                                    <DropdownMenuItem
+                                                        onClick={(e: React.MouseEvent) => confirmDeleteClub(e, club)}
+                                                        className="text-red-600 focus:text-red-600 focus:bg-red-50 rounded-lg cursor-pointer"
+                                                    >
+                                                        <Trash2 className="mr-2 h-4 w-4" />
+                                                        Удалить пространство
+                                                    </DropdownMenuItem>
+                                                </DropdownMenuContent>
+                                            </DropdownMenu>
+                                        )}
+                                    </div>
+
+                                    <div>
+                                        <div className="flex items-center gap-3 mb-1">
+                                            <h3 className="text-xl font-bold tracking-tight text-slate-900">{club.name}</h3>
+                                            {!club.is_owner && (
+                                                <span className="rounded-full bg-blue-50 px-2.5 py-0.5 text-[11px] font-bold tracking-wide text-blue-600">
+                                                    Управляющий
+                                                </span>
+                                            )}
+                                        </div>
+                                        <p className="text-sm text-slate-500 min-h-[20px] line-clamp-1">
+                                            {club.address || "Адрес не указан"}
+                                        </p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </div>
 
-                {isLoading ? (
-                    <div className="flex h-64 items-center justify-center">
-                        <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+                {/* Section: Subscription */}
+                <div>
+                    <div className="mb-8">
+                        <h2 className="text-2xl font-bold tracking-tight mb-2">Тарифный план</h2>
+                        <p className="text-slate-500">Управление подпиской и лимитами</p>
                     </div>
-                ) : (
-                    <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                        {/* Create Club Action Card */}
-                        <button
-                            onClick={() => {
-                                if (isCreateClubDisabled) return
-                                setIsModalOpen(true)
-                            }}
-                            className={`group relative flex h-full min-h-[180px] flex-col items-center justify-center rounded-2xl border-2 border-dashed bg-white p-6 transition-all ${isCreateClubDisabled ? "border-slate-200 opacity-60 cursor-not-allowed" : "border-slate-200 hover:border-black hover:bg-slate-50"}`}
-                        >
-                            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 transition-colors group-hover:bg-black group-hover:text-white">
-                                <Plus className="h-6 w-6" />
+
+                    <div className="flex flex-col lg:flex-row gap-8 lg:gap-12 items-start">
+                        {/* Current Status */}
+                        <div className="w-full lg:w-1/3 rounded-2xl border border-slate-200 bg-white p-8">
+                            <p className="text-sm font-medium text-slate-500 mb-2">Текущий статус</p>
+                            <div className="flex items-center gap-3 mb-8">
+                                <div className={`h-2 w-2 rounded-full ${userData?.subscription_status === 'active' || userData?.subscription_status === 'trialing' ? 'bg-emerald-500' : 'bg-red-500'}`} />
+                                <span className="text-lg font-semibold">{STATUS_LABELS[userData?.subscription_status || 'trialing'] || 'Временный доступ'}</span>
                             </div>
-                            <span className="font-semibold text-slate-900">Добавить клуб</span>
-                            <span className="mt-1 text-xs text-slate-500 text-center">
-                                {isCreateClubDisabled
-                                    ? (!hasActiveSubscription ? "Подписка неактивна" : `Лимит тарифа: ${clubLimit}`)
-                                    : "Создайте новое заведение в системе"}
-                            </span>
-                        </button>
 
-                        {/* Clubs Cards */}
-                        {clubs.map((club) => (
-                            <div
-                                key={club.id}
-                                onClick={() => router.push(`/clubs/${club.id}`)}
-                                className="group relative flex h-full min-h-[180px] cursor-pointer flex-col justify-between rounded-2xl border border-black/5 bg-white p-6 shadow-sm transition-all hover:shadow-md hover:border-black/10"
-                            >
-                                <div className="flex items-start justify-between">
-                                    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-900 transition-colors group-hover:bg-black group-hover:text-white">
-                                        <Building2 className="h-6 w-6" />
-                                    </div>
-                                    {club.is_owner && (
-                                        <DropdownMenu>
-                                            <DropdownMenuTrigger asChild onClick={(e: React.MouseEvent) => e.stopPropagation()}>
-                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-slate-900">
-                                                    <MoreVertical className="h-4 w-4" />
-                                                </Button>
-                                            </DropdownMenuTrigger>
-                                            <DropdownMenuContent align="end">
-                                                <DropdownMenuItem
-                                                    onClick={(e: React.MouseEvent) => confirmDeleteClub(e, club)}
-                                                    className="text-red-600 focus:text-red-600"
-                                                >
-                                                    <Trash2 className="mr-2 h-4 w-4" />
-                                                    Удалить
-                                                </DropdownMenuItem>
-                                            </DropdownMenuContent>
-                                        </DropdownMenu>
-                                    )}
-                                </div>
+                            <p className="text-sm font-medium text-slate-500 mb-2">Оплачено до</p>
+                            <p className="text-lg font-semibold mb-8">
+                                {userData?.subscription_ends_at
+                                    ? new Date(userData.subscription_ends_at).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })
+                                    : 'Не ограничено'}
+                            </p>
 
-                                <div className="mt-4">
-                                    <h3 className="text-lg font-bold text-slate-900 group-hover:text-black">{club.name}</h3>
-                                    {!club.is_owner && (
-                                        <span className="mt-1 inline-block rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-blue-600">
-                                            Управляющий
-                                        </span>
-                                    )}
-                                    {club.address && (
-                                        <p className="mt-1 line-clamp-1 text-sm text-slate-500">
-                                            {club.address}
-                                        </p>
-                                    )}
-                                </div>
-
-                                <div className="mt-6 flex items-center justify-between border-t border-slate-50 pt-4">
-                                    <span className="text-[10px] font-medium uppercase tracking-wider text-slate-400">
-                                        Создан {new Date(club.created_at).toLocaleDateString('ru-RU')}
+                            <div className="pt-8 border-t border-slate-100">
+                                <p className="text-sm font-medium text-slate-500 mb-2">Текущий платеж</p>
+                                <div className="flex items-baseline gap-1">
+                                    <span className="text-4xl font-bold tracking-tight">
+                                        {Number(currentPlanOption?.price_amount || userData?.subscription_limits?.price_monthly || 0).toLocaleString('ru-RU')} ₽
                                     </span>
+                                    <span className="text-slate-500 font-medium">/ мес</span>
                                 </div>
                             </div>
-                        ))}
-                    </div>
-                )}
+                        </div>
 
-                {/* Subscription Section */}
-                <div className="mt-16">
-                    <div className="mb-6 flex flex-col gap-2">
-                        <h2 className="text-2xl font-bold tracking-tight text-slate-900">Ваша подписка</h2>
-                        <p className="text-slate-500">
-                            Тариф и лимиты аккаунта
-                        </p>
-                    </div>
-
-                    <div className="space-y-6">
-                        <Card className="overflow-hidden border-black/5 shadow-sm">
-                            <div className="flex flex-col sm:flex-row h-full">
-                                <div className="flex-1 p-6 sm:p-8">
-                                    <div className="flex items-center gap-3 mb-6">
-                                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-black text-white">
-                                            <Zap className="h-5 w-5 fill-current" />
-                                        </div>
-                                        <div>
-                                            <p className="text-sm font-medium text-slate-500 uppercase tracking-wider">Текущий тариф</p>
-                                            <h3 className="text-2xl font-bold text-slate-900">
-                                                {currentPlanOption?.name || PLAN_LABELS[userData?.subscription_plan || 'new_user'] || 'Новый пользователь'}
-                                            </h3>
-                                        </div>
-                                    </div>
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                                        <div className="flex items-start gap-3">
-                                            <div className="mt-1 flex h-5 w-5 items-center justify-center rounded-full bg-green-100 text-green-600">
-                                                <CheckCircle2 className="h-3 w-3" />
-                                            </div>
-                                            <div>
-                                                <p className="text-sm font-semibold text-slate-900">Статус</p>
-                                                <p className="text-sm text-slate-500">{STATUS_LABELS[userData?.subscription_status || 'trialing'] || 'Временный доступ'}</p>
-                                            </div>
-                                        </div>
-                                        <div className="flex items-start gap-3">
-                                            <div className="mt-1 flex h-5 w-5 items-center justify-center rounded-full bg-blue-100 text-blue-600">
-                                                <CalendarIcon className="h-3 w-3" />
-                                            </div>
-                                            <div>
-                                                <p className="text-sm font-semibold text-slate-900">Оплачено до</p>
-                                                <p className="text-sm text-slate-500">
-                                                    {userData?.subscription_ends_at
-                                                        ? new Date(userData.subscription_ends_at).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })
-                                                        : 'Не ограничено'}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div className="w-full sm:w-[280px] bg-gradient-to-b from-slate-50 to-white p-6 sm:p-8 border-t sm:border-t-0 sm:border-l border-black/5">
-                                    <p className="text-sm text-slate-500 mb-1">Стоимость</p>
-                                    <div className="flex items-baseline gap-1">
-                                        <span className="text-3xl font-bold text-slate-900">
-                                            {Number(currentPlanOption?.price_amount || userData?.subscription_limits?.price_monthly || 0).toLocaleString('ru-RU')} ₽
-                                        </span>
-                                        <span className="text-slate-500">/мес</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </Card>
-
-                        <div>
-                            <p className="text-sm font-semibold text-slate-900 mb-3">Выберите тариф</p>
+                        {/* Plans Selection */}
+                        <div className="w-full lg:w-2/3">
                             {isPlansLoading ? (
-                                <div className="h-24 flex items-center justify-center rounded-2xl border border-slate-200 bg-white">
-                                    <Loader2 className="h-5 w-5 animate-spin text-slate-500" />
+                                <div className="h-48 flex items-center justify-center rounded-2xl border border-slate-200 bg-white">
+                                    <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
                                 </div>
                             ) : planOptions.length === 0 ? (
-                                <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-500">Нет доступных тарифов</div>
+                                <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-slate-500">Нет доступных тарифов</div>
                             ) : (
-                                <div className="grid grid-cols-1 gap-4">
-                                    {planOptions.map(plan => (
-                                        <div
-                                            key={plan.id}
-                                            onClick={() => setSelectedPlan(plan.code)}
-                                            className={`w-full cursor-pointer rounded-2xl border p-5 text-left transition-all ${THEME_CLASS[plan.card_theme || "light"]} ${selectedPlan === plan.code ? "ring-2 ring-offset-2 ring-black" : ""}`}
-                                        >
-                                            <div className="flex items-center justify-between gap-3 mb-4">
-                                                <div className="flex items-center gap-3">
-                                                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-black text-white">
-                                                        <Zap className="h-5 w-5 fill-current" />
-                                                    </div>
-                                                    <div>
-                                                        <p className="text-sm font-medium uppercase tracking-wider opacity-70">Тариф</p>
-                                                        <h4 className="text-2xl font-bold">{plan.name}</h4>
-                                                    </div>
-                                                </div>
-                                                <div className="text-right">
-                                                    <p className="text-2xl font-bold">{Number(plan.price_amount || 0).toLocaleString('ru-RU')} ₽</p>
-                                                    <p className="text-xs opacity-70">/ {plan.period_value} {PERIOD_LABELS[plan.period_unit]}</p>
-                                                </div>
-                                            </div>
-                                            <p className="text-sm opacity-80">{plan.description || plan.tagline || "Описание тарифа"}</p>
-                                            <div className="mt-3 space-y-1">
-                                                {(plan.features || []).slice(0, 4).map((feature, idx) => (
-                                                    <p key={`${plan.code}-${idx}`} className="text-sm opacity-90">• {feature}</p>
-                                                ))}
-                                            </div>
-                                            <div className="mt-4 flex items-center gap-2">
-                                                {plan.badge_text ? (
-                                                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${TONE_CLASS[plan.badge_tone || "default"]}`}>
-                                                        {plan.badge_text}
-                                                    </span>
-                                                ) : null}
-                                                {plan.is_highlighted ? (
-                                                    <span className="rounded-full bg-black/10 px-2 py-0.5 text-[10px] font-semibold">Рекомендуем</span>
-                                                ) : null}
-                                            </div>
-                                            <Button
-                                                className={`mt-4 h-10 ${selectedPlan === plan.code ? "bg-white text-black hover:bg-slate-100" : "bg-black text-white hover:bg-slate-800"}`}
-                                                onClick={(e) => {
-                                                    e.stopPropagation()
-                                                    handleChangeSubscription(plan.code)
-                                                }}
-                                                disabled={isChangingPlan}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {planOptions.map(plan => {
+                                        const isSelected = selectedPlan === plan.code
+                                        return (
+                                            <div
+                                                key={plan.id}
+                                                className={`relative flex flex-col rounded-2xl border p-6 transition-all ${
+                                                    plan.card_theme === 'dark' 
+                                                        ? 'bg-slate-900 border-slate-900 text-white' 
+                                                        : isSelected 
+                                                            ? 'bg-white border-black shadow-[0_8px_30px_rgb(0,0,0,0.08)]' 
+                                                            : 'bg-white border-slate-200 hover:border-slate-300'
+                                                }`}
                                             >
-                                                {isChangingPlan && selectedPlan === plan.code ? <Loader2 className="h-4 w-4 animate-spin" /> : (plan.cta_text || "Применить тариф")}
-                                            </Button>
-                                        </div>
-                                    ))}
+                                                {plan.is_highlighted && (
+                                                    <div className="absolute -top-3 left-6">
+                                                        <span className="rounded-full bg-blue-600 px-3 py-1 text-xs font-bold tracking-wide text-white">
+                                                            Популярный
+                                                        </span>
+                                                    </div>
+                                                )}
+
+                                                <div className="mb-6">
+                                                    <h3 className="text-2xl font-bold tracking-tight mb-1">{plan.name}</h3>
+                                                    <p className={`text-sm ${plan.card_theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>
+                                                        {plan.description || plan.tagline}
+                                                    </p>
+                                                </div>
+
+                                                <div className="mb-8 flex items-baseline gap-1">
+                                                    <span className="text-3xl font-bold tracking-tight">{Number(plan.price_amount || 0).toLocaleString('ru-RU')} ₽</span>
+                                                    <span className={`text-sm font-medium ${plan.card_theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>
+                                                        / {plan.period_value} {PERIOD_LABELS[plan.period_unit]}
+                                                    </span>
+                                                </div>
+
+                                                <div className="flex-1 space-y-3 mb-8">
+                                                    {(plan.features || []).map((feature, idx) => (
+                                                        <div key={`${plan.code}-${idx}`} className="flex items-start gap-3">
+                                                            <Check className={`h-5 w-5 shrink-0 ${plan.card_theme === 'dark' ? 'text-blue-400' : 'text-black'}`} />
+                                                            <span className={`text-sm leading-tight ${plan.card_theme === 'dark' ? 'text-slate-300' : 'text-slate-600'}`}>{feature}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+
+                                                <Button
+                                                    className={`w-full h-12 rounded-xl font-medium text-base transition-all ${
+                                                        plan.card_theme === 'dark'
+                                                            ? 'bg-white text-black hover:bg-slate-200'
+                                                            : isSelected
+                                                                ? 'bg-slate-100 text-slate-400 cursor-default hover:bg-slate-100'
+                                                                : 'bg-black text-white hover:bg-slate-800'
+                                                    }`}
+                                                    onClick={() => {
+                                                        if (!isSelected) handleChangeSubscription(plan.code)
+                                                    }}
+                                                    disabled={isChangingPlan || isSelected}
+                                                >
+                                                    {isChangingPlan && selectedPlan === plan.code ? (
+                                                        <Loader2 className="h-5 w-5 animate-spin" />
+                                                    ) : isSelected ? (
+                                                        "Текущий тариф"
+                                                    ) : (
+                                                        plan.cta_text || "Выбрать тариф"
+                                                    )}
+                                                </Button>
+                                            </div>
+                                        )
+                                    })}
                                 </div>
                             )}
                         </div>
@@ -529,107 +493,92 @@ export default function DashboardPage() {
                 </div>
             </main>
 
-            {/* Create Club Modal */}
+            {/* Modals remain functionally identical but styled cleaner */}
             <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>Создать новый клуб</DialogTitle>
-                        <DialogDescription>
-                            Введите информацию о вашем клубе
+                <DialogContent className="sm:max-w-[425px] rounded-2xl p-8 border-slate-200">
+                    <DialogHeader className="mb-6">
+                        <DialogTitle className="text-2xl font-bold tracking-tight">Новое пространство</DialogTitle>
+                        <DialogDescription className="text-base text-slate-500">
+                            Создайте новый клуб для управления
                         </DialogDescription>
                     </DialogHeader>
 
-                    <form onSubmit={handleCreateClub} className="mt-4 space-y-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="clubName">Название клуба</Label>
+                    <form onSubmit={handleCreateClub} className="space-y-6">
+                        <div className="space-y-3">
+                            <Label htmlFor="clubName" className="text-sm font-medium text-slate-900">Название клуба</Label>
                             <Input
                                 id="clubName"
-                                placeholder="например, CyberZone Москва"
+                                placeholder="Например, CyberZone Центр"
                                 value={clubName}
                                 onChange={(e) => setClubName(e.target.value)}
+                                className="h-12 rounded-xl border-slate-200 bg-slate-50 focus-visible:ring-1 focus-visible:ring-black focus-visible:bg-white text-base transition-all"
                                 required
                             />
                         </div>
 
-                        <div className="space-y-2">
-                            <Label htmlFor="address">Адрес (опционально)</Label>
+                        <div className="space-y-3">
+                            <Label htmlFor="address" className="text-sm font-medium text-slate-900">Адрес <span className="text-slate-400 font-normal">(необязательно)</span></Label>
                             <Input
                                 id="address"
-                                placeholder="например, ул. Пушкина, 10"
+                                placeholder="Улица, дом"
                                 value={address}
                                 onChange={(e) => setAddress(e.target.value)}
+                                className="h-12 rounded-xl border-slate-200 bg-slate-50 focus-visible:ring-1 focus-visible:ring-black focus-visible:bg-white text-base transition-all"
                             />
                         </div>
 
-                        <div className="flex gap-3 pt-4">
+                        <div className="flex gap-3 pt-2">
                             <Button
                                 type="button"
                                 variant="outline"
                                 onClick={() => setIsModalOpen(false)}
-                                className="flex-1"
+                                className="flex-1 h-12 rounded-xl font-medium text-base border-slate-200 hover:bg-slate-50 text-slate-600"
                                 disabled={isCreating}
                             >
                                 Отмена
                             </Button>
                             <Button
                                 type="submit"
-                                className="flex-1"
+                                className="flex-1 h-12 rounded-xl font-medium text-base bg-black text-white hover:bg-slate-800"
                                 disabled={isCreating}
                             >
-                                {isCreating ? (
-                                    <>
-                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                        Создание...
-                                    </>
-                                ) : (
-                                    <>
-                                        <Building2 className="mr-2 h-4 w-4" />
-                                        Создать клуб
-                                    </>
-                                )}
+                                {isCreating ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : 'Создать'}
                             </Button>
                         </div>
                     </form>
                 </DialogContent>
             </Dialog>
 
-            {/* Delete Confirmation Modal */}
             <Dialog open={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle className="flex items-center gap-2 text-red-600">
-                            <AlertTriangle className="h-5 w-5" />
-                            Удаление клуба
-                        </DialogTitle>
-                        <DialogDescription>
-                            Вы уверены, что хотите удалить клуб <strong>{clubToDelete?.name}</strong>?
-                            <br /><br />
-                            Это действие необратимо. Все данные, связанные с этим клубом (сотрудники, смены, товары, отчеты), будут удалены.
+                <DialogContent className="sm:max-w-[425px] rounded-2xl p-8 border-slate-200">
+                    <DialogHeader className="mb-6">
+                        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-red-100 mb-4">
+                            <AlertTriangle className="h-6 w-6 text-red-600" />
+                        </div>
+                        <DialogTitle className="text-2xl font-bold tracking-tight text-center">Удалить клуб?</DialogTitle>
+                        <DialogDescription className="text-base text-slate-500 text-center mt-2">
+                            Вы собираетесь удалить <strong>{clubToDelete?.name}</strong>. Это действие необратимо и удалит все связанные данные (смены, товары, отчеты).
                         </DialogDescription>
                     </DialogHeader>
-                    <DialogFooter className="gap-2 sm:gap-0">
-                        <Button
-                            variant="outline"
-                            onClick={() => setIsDeleteModalOpen(false)}
-                            disabled={isDeleting}
-                        >
-                            Отмена
-                        </Button>
+                    
+                    <div className="flex flex-col gap-3">
                         <Button
                             variant="destructive"
                             onClick={handleDeleteClub}
                             disabled={isDeleting}
+                            className="w-full h-12 rounded-xl font-medium text-base bg-red-600 hover:bg-red-700"
                         >
-                            {isDeleting ? (
-                                <>
-                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                    Удаление...
-                                </>
-                            ) : (
-                                'Удалить навсегда'
-                            )}
+                            {isDeleting ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : 'Да, удалить навсегда'}
                         </Button>
-                    </DialogFooter>
+                        <Button
+                            variant="outline"
+                            onClick={() => setIsDeleteModalOpen(false)}
+                            disabled={isDeleting}
+                            className="w-full h-12 rounded-xl font-medium text-base border-slate-200 hover:bg-slate-50 text-slate-600"
+                        >
+                            Отмена
+                        </Button>
+                    </div>
                 </DialogContent>
             </Dialog>
         </div>

@@ -24,12 +24,12 @@ describe("Migration SQL safety checks", () => {
 })
 
 describe("Instruction editor implementation", () => {
-    it("uses Quill directly instead of react-quill to avoid findDOMNode", () => {
+    it("uses Tiptap through RichTextEditor to avoid findDOMNode from react-quill", () => {
         const source = readFileSync(
             resolve(process.cwd(), "src/app/clubs/[clubId]/equipment/inventory/InstructionsTab.tsx"),
             "utf8"
         )
-        expect(source).toContain('import("quill")')
+        expect(source).toContain('RichTextEditor')
         expect(source).not.toContain("react-quill")
         expect(source).not.toContain("findDOMNode")
     })

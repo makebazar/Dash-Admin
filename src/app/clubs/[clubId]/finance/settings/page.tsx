@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Loader2, Save, ArrowLeft, Plus, Trash2, Scale, Info } from "lucide-react"
 import Link from "next/link"
+import { PageShell } from "@/components/layout/PageShell"
 import { useRouter } from "next/navigation"
 import {
     Dialog,
@@ -460,9 +461,9 @@ export default function FinanceSettingsPage({ params }: { params: Promise<{ club
     }
 
     return (
-        <div className="p-4 md:p-8 space-y-8 bg-slate-50/50 min-h-screen">
+        <PageShell maxWidth="5xl">
             {/* Header Redesign */}
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+            <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between mb-8">
                 <div className="space-y-1">
                     <Link
                         href={`/clubs/${clubId}/finance`}
@@ -471,17 +472,17 @@ export default function FinanceSettingsPage({ params }: { params: Promise<{ club
                         <ArrowLeft className="h-3 w-3" />
                         Назад к финансам
                     </Link>
-                    <h1 className="text-2xl md:text-3xl font-black tracking-tight text-slate-900">Настройки финансов</h1>
-                    <p className="text-slate-500 text-xs md:text-sm font-medium">Управление счетами, категориями и автоматизацией</p>
+                    <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-slate-900 truncate">Настройки финансов</h1>
+                    <p className="text-slate-500 text-lg mt-2">Управление счетами, категориями и автоматизацией</p>
                 </div>
             </div>
 
             <Tabs defaultValue="categories" className="w-full">
-                <TabsList className="w-full md:w-auto bg-white border p-1 rounded-xl mb-8 shadow-sm">
-                    <TabsTrigger value="categories" className="rounded-lg px-6 font-medium data-[state=active]:bg-slate-100 data-[state=active]:text-primary">📂 Категории</TabsTrigger>
-                    <TabsTrigger value="recurring" className="rounded-lg px-6 font-medium data-[state=active]:bg-slate-100 data-[state=active]:text-primary">🔄 Постоянные</TabsTrigger>
-                    <TabsTrigger value="accounts" className="rounded-lg px-6 font-medium data-[state=active]:bg-slate-100 data-[state=active]:text-primary">💳 Счета</TabsTrigger>
-                    <TabsTrigger value="mapping" className="rounded-lg px-6 font-medium data-[state=active]:bg-slate-100 data-[state=active]:text-primary">🔗 Маппинг</TabsTrigger>
+                <TabsList className="w-full md:w-auto bg-slate-100/50 border border-slate-200 p-1.5 rounded-2xl mb-8 shadow-sm flex overflow-x-auto">
+                    <TabsTrigger value="categories" className="rounded-xl px-6 py-2.5 font-medium text-slate-500 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm transition-all">Категории</TabsTrigger>
+                    <TabsTrigger value="recurring" className="rounded-xl px-6 py-2.5 font-medium text-slate-500 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm transition-all">Постоянные</TabsTrigger>
+                    <TabsTrigger value="accounts" className="rounded-xl px-6 py-2.5 font-medium text-slate-500 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm transition-all">Счета</TabsTrigger>
+                    <TabsTrigger value="mapping" className="rounded-xl px-6 py-2.5 font-medium text-slate-500 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm transition-all">Маппинг</TabsTrigger>
                 </TabsList>
 
                 {/* Categories Tab Redesign */}
@@ -517,12 +518,12 @@ export default function FinanceSettingsPage({ params }: { params: Promise<{ club
                     </div>
 
                     {showNewCategoryForm && (
-                        <Card className="border-2 border-primary/20 bg-white rounded-3xl shadow-xl animate-in fade-in zoom-in-95 duration-300">
-                            <CardHeader>
-                                <CardTitle className="text-lg font-black">Создание категории</CardTitle>
-                                <CardDescription className="text-xs font-medium">Новая категория будет доступна при вводе операций</CardDescription>
-                            </CardHeader>
-                            <CardContent className="space-y-6">
+                        <div className="border-2 border-primary/20 bg-white rounded-3xl shadow-xl animate-in fade-in zoom-in-95 duration-300 p-6 sm:p-8">
+                            <div className="mb-6">
+                                <h2 className="text-2xl font-bold tracking-tight text-slate-900">Создание категории</h2>
+                                <p className="text-sm font-medium text-slate-500 mt-2">Новая категория будет доступна при вводе операций</p>
+                            </div>
+                            <div className="space-y-6">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                     <div className="space-y-2">
                                         <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Название</Label>
@@ -623,8 +624,8 @@ export default function FinanceSettingsPage({ params }: { params: Promise<{ club
                                         Отмена
                                     </Button>
                                 </div>
-                            </CardContent>
-                        </Card>
+                            </div>
+                        </div>
                     )}
 
                     <div className="grid md:grid-cols-2 gap-8">
@@ -749,12 +750,12 @@ export default function FinanceSettingsPage({ params }: { params: Promise<{ club
                     </div>
 
                     {showNewRecurringForm && (
-                        <Card className="border-2 border-primary/20 bg-white rounded-3xl shadow-xl animate-in fade-in zoom-in-95 duration-300">
-                            <CardHeader>
-                                <CardTitle className="text-lg font-black">Настройка автоплатежа</CardTitle>
-                                <CardDescription className="text-xs font-medium">Платеж будет автоматически появляться в списке к оплате каждого месяца</CardDescription>
-                            </CardHeader>
-                            <CardContent className="space-y-6">
+                        <div className="border-2 border-primary/20 bg-white rounded-3xl shadow-xl animate-in fade-in zoom-in-95 duration-300 p-6 sm:p-8">
+                            <div className="mb-6">
+                                <h2 className="text-2xl font-bold tracking-tight text-slate-900">Настройка автоплатежа</h2>
+                                <p className="text-sm font-medium text-slate-500 mt-2">Платеж будет автоматически появляться в списке к оплате каждого месяца</p>
+                            </div>
+                            <div className="space-y-6">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                     <div className="space-y-2">
                                         <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Название платежа</Label>
@@ -877,8 +878,8 @@ export default function FinanceSettingsPage({ params }: { params: Promise<{ club
                                         Отмена
                                     </Button>
                                 </div>
-                            </CardContent>
-                        </Card>
+                            </div>
+                        </div>
                     )}
 
                     <div className="grid gap-4 md:grid-cols-2">
@@ -964,12 +965,12 @@ export default function FinanceSettingsPage({ params }: { params: Promise<{ club
                     </div>
 
                     {showNewAccountForm && (
-                        <Card className="border-2 border-primary/20 bg-white rounded-3xl shadow-xl animate-in fade-in zoom-in-95 duration-300">
-                            <CardHeader>
-                                <CardTitle className="text-lg font-black">Создание счета</CardTitle>
-                                <CardDescription className="text-xs font-medium">Счет будет использоваться для ведения баланса и привязки доходов</CardDescription>
-                            </CardHeader>
-                            <CardContent className="space-y-6">
+                        <div className="border-2 border-primary/20 bg-white rounded-3xl shadow-xl animate-in fade-in zoom-in-95 duration-300 p-6 sm:p-8">
+                            <div className="mb-6">
+                                <h2 className="text-2xl font-bold tracking-tight text-slate-900">Создание счета</h2>
+                                <p className="text-sm font-medium text-slate-500 mt-2">Счет будет использоваться для ведения баланса и привязки доходов</p>
+                            </div>
+                            <div className="space-y-6">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                     <div className="space-y-2">
                                         <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Название счета</Label>
@@ -1043,8 +1044,8 @@ export default function FinanceSettingsPage({ params }: { params: Promise<{ club
                                         Отмена
                                     </Button>
                                 </div>
-                            </CardContent>
-                        </Card>
+                            </div>
+                        </div>
                     )}
 
                     <div className="grid gap-4 md:grid-cols-3">
@@ -1124,8 +1125,8 @@ export default function FinanceSettingsPage({ params }: { params: Promise<{ club
                         <p className="text-xs font-medium text-slate-500">Привяжите поля из отчетов смен к конкретным финансовым счетам для автоматического учета</p>
                     </div>
 
-                    <Card className="border-none shadow-sm bg-white rounded-3xl overflow-hidden">
-                        <CardContent className="p-0">
+                    <div className="border-none shadow-sm bg-white rounded-3xl overflow-hidden">
+                        <div className="p-0">
                             {mappingFields.length === 0 ? (
                                 <div className="text-center py-20 text-slate-400">
                                     <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-4 mx-auto text-2xl">🔗</div>
@@ -1206,8 +1207,8 @@ export default function FinanceSettingsPage({ params }: { params: Promise<{ club
                                     </div>
                                 </div>
                             )}
-                        </CardContent>
-                    </Card>
+                        </div>
+                    </div>
                 </TabsContent>
             </Tabs>
 
@@ -1281,6 +1282,6 @@ export default function FinanceSettingsPage({ params }: { params: Promise<{ club
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
-        </div>
+        </PageShell>
     )
 }

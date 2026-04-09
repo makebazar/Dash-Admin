@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
-import { Card, CardContent } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Plus, Loader2, UserPlus, Pencil, Search, Users, UserCheck, UserMinus, MoreHorizontal, FileText } from "lucide-react"
@@ -16,6 +15,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import Link from "next/link"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { formatLocalDate } from "@/lib/utils"
+
+import { PageShell } from "@/components/layout/PageShell"
 
 interface Employee {
     id: string
@@ -305,131 +306,124 @@ export default function EmployeesPage({ params }: { params: Promise<{ clubId: st
 
     if (isLoading) {
         return (
-            <div className="flex h-screen items-center justify-center bg-background">
+            <div className="flex h-screen items-center justify-center bg-slate-50">
                 <div className="flex flex-col items-center gap-4">
-                    <Loader2 className="h-10 w-10 animate-spin text-purple-600" />
-                    <p className="text-sm font-medium text-muted-foreground animate-pulse">Загрузка команды...</p>
+                    <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+                    <p className="text-sm font-medium text-slate-500 animate-pulse">Загрузка команды...</p>
                 </div>
             </div>
         )
     }
 
     return (
-        <div className="min-h-screen bg-[#F9FAFB] dark:bg-background">
-            <div className="mx-auto max-w-[1600px] space-y-5 p-4 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:space-y-6 sm:p-6 sm:pb-[calc(6.5rem+env(safe-area-inset-bottom))] md:pb-8 lg:p-8">
-                <div className="flex flex-col gap-4">
-                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                        <div className="min-w-0">
-                            <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Сотрудники</h1>
-                            <p className="mt-1 text-sm text-muted-foreground sm:text-base">Управление персоналом</p>
+        <PageShell maxWidth="5xl">
+            <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between mb-12">
+                <div className="space-y-3">
+                    <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-slate-900">
+                        Сотрудники
+                    </h1>
+                    <p className="text-slate-500 text-lg">
+                        Управление персоналом
+                    </p>
+                </div>
+                <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap lg:justify-end hidden md:flex">
+                    <Button asChild variant="outline" className="w-full sm:w-auto rounded-xl h-12 border-slate-200 px-6 font-medium text-slate-700 hover:bg-slate-50 hover:text-black">
+                        <Link href={`/clubs/${clubId}/employees/recruitment/applications`}>
+                            <FileText className="mr-2 h-5 w-5" />
+                            Анкеты
+                        </Link>
+                    </Button>
+                    <Button onClick={() => setIsModalOpen(true)} className="w-full bg-slate-900 text-white hover:bg-slate-800 sm:w-auto rounded-xl h-12 px-6 font-medium shadow-sm">
+                        <UserPlus className="mr-2 h-5 w-5" />
+                        Добавить сотрудника
+                    </Button>
+                </div>
+            </div>
+
+            <div className="space-y-8">
+                
+                <div className="grid gap-4 sm:grid-cols-2 mb-12">
+                    <div className="bg-white rounded-3xl border border-slate-200 p-6 flex items-center justify-between">
+                        <div>
+                            <p className="text-sm font-medium text-slate-500">Активные сотрудники</p>
+                            <p className="text-3xl font-semibold text-slate-900 mt-1">{stats.activeEmployees}</p>
                         </div>
-                        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap lg:justify-end">
-                            <Button asChild variant="outline" className="w-full sm:w-auto">
-                                <Link href={`/clubs/${clubId}/employees/recruitment/applications`}>
-                                    <FileText className="mr-2 h-4 w-4" />
-                                    Анкеты
-                                </Link>
-                            </Button>
-                            <Button onClick={() => setIsModalOpen(true)} className="w-full bg-primary text-primary-foreground shadow-md hover:bg-primary/90 sm:w-auto">
-                                <UserPlus className="mr-2 h-4 w-4" />
-                                Добавить сотрудника
-                            </Button>
+                        <div className="h-12 w-12 rounded-2xl bg-slate-50 flex items-center justify-center">
+                            <Users className="h-6 w-6 text-slate-400" />
                         </div>
                     </div>
-                </div>
 
-                <div className="space-y-8">
-                
-                {/* Statistics Cards */}
-                <div className="grid gap-4 md:grid-cols-2">
-                    <Card className="border-none shadow-sm bg-white overflow-hidden group">
-                        <CardContent className="p-6">
-                            <div className="flex items-center justify-between">
-                                <div className="space-y-1">
-                                    <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Активные сотрудники</p>
-                                    <p className="text-3xl font-black">{stats.activeEmployees}</p>
-                                </div>
-                                <div className="h-12 w-12 rounded-2xl bg-purple-50 flex items-center justify-center group-hover:bg-purple-100 transition-colors">
-                                    <Users className="h-6 w-6 text-purple-600" />
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
-
-                    <Card className="border-none shadow-sm bg-white overflow-hidden group">
-                        <CardContent className="p-6">
-                            <div className="flex items-center justify-between">
-                                <div className="space-y-1">
-                                    <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Новые кандидаты</p>
-                                    <p className="text-3xl font-black text-emerald-600">{stats.newCandidates}</p>
-                                </div>
-                                <div className="h-12 w-12 rounded-2xl bg-emerald-50 flex items-center justify-center group-hover:bg-emerald-100 transition-colors">
-                                    <FileText className="h-6 w-6 text-emerald-600" />
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
+                    <div className="bg-white rounded-3xl border border-slate-200 p-6 flex items-center justify-between">
+                        <div>
+                            <p className="text-sm font-medium text-slate-500">Новые кандидаты</p>
+                            <p className="text-3xl font-semibold text-slate-900 mt-1">{stats.newCandidates}</p>
+                        </div>
+                        <div className="h-12 w-12 rounded-2xl bg-emerald-50 flex items-center justify-center">
+                            <FileText className="h-6 w-6 text-emerald-500" />
+                        </div>
+                    </div>
                 </div>
 
                 {/* Filters and List */}
                 <div className="space-y-6">
                     <div className="flex flex-col sm:flex-row gap-4 justify-between items-center">
                         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="w-full sm:w-auto">
-                            <TabsList className="grid w-full grid-cols-2 bg-muted/50 p-1">
-                                <TabsTrigger value="active" className="text-xs font-bold uppercase tracking-tight data-[state=active]:bg-white data-[state=active]:text-purple-600">
+                            <TabsList className="grid w-full grid-cols-2 bg-slate-100/50 p-1 rounded-xl">
+                                <TabsTrigger value="active" className="text-xs font-semibold rounded-lg data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm">
                                     Активные
                                 </TabsTrigger>
-                                <TabsTrigger value="dismissed" className="text-xs font-bold uppercase tracking-tight data-[state=active]:bg-white data-[state=active]:text-orange-600">
+                                <TabsTrigger value="dismissed" className="text-xs font-semibold rounded-lg data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm">
                                     Уволенные
                                 </TabsTrigger>
                             </TabsList>
                         </Tabs>
 
                         <div className="relative w-full sm:w-80">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                             <Input 
                                 placeholder="Поиск по имени или телефону..." 
-                                className="pl-10 bg-white border-muted-foreground/10 focus:border-purple-500/50"
+                                className="pl-10 bg-white border-slate-200 focus:border-slate-400 rounded-xl h-10"
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                             />
                         </div>
                     </div>
 
-                    <Card className="border-none shadow-xl shadow-purple-900/5 overflow-hidden rounded-2xl">
-                        <CardContent className="p-0">
-                            {filteredEmployees.length === 0 ? (
-                                <div className="flex flex-col items-center justify-center py-20 bg-white">
-                                    <div className="h-16 w-16 rounded-full bg-purple-50 flex items-center justify-center mb-4">
-                                        <Search className="h-8 w-8 text-purple-300" />
-                                    </div>
-                                    <h3 className="text-lg font-bold">Никого не нашли</h3>
-                                    <p className="text-sm text-muted-foreground">Попробуйте изменить поисковый запрос или фильтры</p>
-                                    {searchQuery && (
-                                        <Button variant="link" onClick={() => setSearchQuery('')} className="text-purple-600 mt-2">
-                                            Сбросить поиск
-                                        </Button>
-                                    )}
-                                </div>
-                            ) : (
+                    {filteredEmployees.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-20 bg-white rounded-3xl border border-slate-200">
+                            <div className="h-16 w-16 rounded-full bg-slate-50 flex items-center justify-center mb-4">
+                                <Search className="h-8 w-8 text-slate-300" />
+                            </div>
+                            <h3 className="text-lg font-bold">Никого не нашли</h3>
+                            <p className="text-sm text-slate-500">Попробуйте изменить поисковый запрос или фильтры</p>
+                            {searchQuery && (
+                                <Button variant="link" onClick={() => setSearchQuery('')} className="text-slate-900 mt-2">
+                                    Сбросить поиск
+                                </Button>
+                            )}
+                        </div>
+                    ) : (
+                        <>
+                            {/* Desktop Table */}
+                            <div className="bg-white rounded-3xl border border-slate-200 overflow-hidden hidden md:block">
                                 <Table>
-                                    <TableHeader className="bg-muted/30">
-                                        <TableRow className="hover:bg-transparent border-muted-foreground/5">
-                                            <TableHead className="text-xs font-bold uppercase tracking-widest text-muted-foreground py-4">Сотрудник</TableHead>
-                                            <TableHead className="text-xs font-bold uppercase tracking-widest text-muted-foreground py-4">Должность</TableHead>
-                                            <TableHead className="text-xs font-bold uppercase tracking-widest text-muted-foreground py-4">Зарплата</TableHead>
-                                            <TableHead className="text-xs font-bold uppercase tracking-widest text-muted-foreground py-4">Нанят</TableHead>
-                                            <TableHead className="text-xs font-bold uppercase tracking-widest text-muted-foreground py-4 text-right">Действия</TableHead>
+                                    <TableHeader className="bg-slate-50/50">
+                                        <TableRow className="hover:bg-transparent border-slate-100">
+                                            <TableHead className="text-xs font-bold uppercase tracking-widest text-slate-500 py-4">Сотрудник</TableHead>
+                                            <TableHead className="text-xs font-bold uppercase tracking-widest text-slate-500 py-4">Должность</TableHead>
+                                            <TableHead className="text-xs font-bold uppercase tracking-widest text-slate-500 py-4">Зарплата</TableHead>
+                                            <TableHead className="text-xs font-bold uppercase tracking-widest text-slate-500 py-4">Нанят</TableHead>
+                                            <TableHead className="text-xs font-bold uppercase tracking-widest text-slate-500 py-4 text-right">Действия</TableHead>
                                         </TableRow>
                                     </TableHeader>
-                                    <TableBody className="bg-white">
+                                    <TableBody>
                                         {filteredEmployees.map((employee) => (
-                                            <TableRow key={employee.id} className="group hover:bg-purple-50/30 border-muted-foreground/5 transition-colors">
+                                            <TableRow key={employee.id} className="group hover:bg-slate-50/50 border-slate-100 transition-colors">
                                                 <TableCell className="py-4">
                                                     <div className="flex items-center gap-3">
                                                         <div className="space-y-0.5">
-                                                            <div className="font-bold text-sm tracking-tight">{employee.full_name}</div>
-                                                            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                                            <div className="font-bold text-sm tracking-tight text-slate-900">{employee.full_name}</div>
+                                                            <div className="flex items-center gap-1.5 text-xs text-slate-500">
                                                                 {employee.phone_number}
                                                             </div>
                                                         </div>
@@ -446,7 +440,7 @@ export default function EmployeesPage({ params }: { params: Promise<{ clubId: st
                                                             value={employee.salary_scheme_id?.toString() || "none"}
                                                             onValueChange={(v) => handleAssignScheme(employee.id, v === "none" ? null : parseInt(v))}
                                                         >
-                                                            <SelectTrigger className="h-8 text-xs font-medium border-muted-foreground/10 hover:border-purple-200 transition-colors bg-white">
+                                                            <SelectTrigger className="h-8 text-xs font-medium border-slate-200 hover:border-slate-300 transition-colors bg-white">
                                                                 <SelectValue placeholder="Схема не выбрана" />
                                                             </SelectTrigger>
                                                             <SelectContent>
@@ -462,7 +456,7 @@ export default function EmployeesPage({ params }: { params: Promise<{ clubId: st
                                                 </TableCell>
                                                 <TableCell>
                                                     <div className="space-y-0.5">
-                                                        <div className="text-xs font-bold text-foreground">
+                                                        <div className="text-xs font-medium text-slate-900">
                                                             {new Date(employee.hired_at).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' })}
                                                         </div>
                                                         {employee.dismissed_at && (
@@ -475,16 +469,16 @@ export default function EmployeesPage({ params }: { params: Promise<{ clubId: st
                                                 <TableCell className="text-right">
                                                     <DropdownMenu>
                                                         <DropdownMenuTrigger asChild>
-                                                            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full hover:bg-purple-100 hover:text-purple-600">
+                                                            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full hover:bg-slate-100 hover:text-slate-900">
                                                                 <MoreHorizontal className="h-4 w-4" />
                                                             </Button>
                                                         </DropdownMenuTrigger>
-                                                        <DropdownMenuContent align="end" className="w-48 rounded-xl border-muted-foreground/10 shadow-xl shadow-purple-900/5">
+                                                        <DropdownMenuContent align="end" className="w-48 rounded-xl border-slate-200 shadow-xl shadow-slate-900/5">
                                                             <DropdownMenuItem onClick={() => handleEditEmployee(employee)} className="text-xs font-medium cursor-pointer py-2 gap-2">
                                                                 <Pencil className="h-3.5 w-3.5" /> Редактировать
                                                             </DropdownMenuItem>
                                                             {employee.is_active && !employee.dismissed_at ? (
-                                                                <DropdownMenuItem onClick={() => handleDismissEmployee(employee.id)} className="text-xs font-medium cursor-pointer py-2 gap-2 text-red-600 focus:text-red-600 focus:bg-red-50">
+                                                                <DropdownMenuItem onClick={() => handleDismissEmployee(employee.id)} className="text-xs font-medium cursor-pointer py-2 gap-2 text-rose-600 focus:text-rose-600 focus:bg-rose-50">
                                                                     <UserMinus className="h-3.5 w-3.5" /> Уволить
                                                                 </DropdownMenuItem>
                                                             ) : (
@@ -499,23 +493,106 @@ export default function EmployeesPage({ params }: { params: Promise<{ clubId: st
                                         ))}
                                     </TableBody>
                                 </Table>
-                            )}
-                        </CardContent>
-                    </Card>
+                            </div>
+
+                            {/* Mobile Cards */}
+                            <div className="md:hidden space-y-3">
+                                {filteredEmployees.map((employee) => (
+                                    <div key={employee.id} className="bg-white rounded-2xl border border-slate-200 p-4 space-y-4">
+                                        <div className="flex justify-between items-start">
+                                            <div>
+                                                <div className="font-bold text-sm tracking-tight text-slate-900">{employee.full_name}</div>
+                                                <div className="text-xs text-slate-500 mt-0.5">{employee.phone_number}</div>
+                                            </div>
+                                            <DropdownMenu>
+                                                <DropdownMenuTrigger asChild>
+                                                    <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full -mr-2 -mt-2 text-slate-400 hover:text-slate-900 hover:bg-slate-100">
+                                                        <MoreHorizontal className="h-4 w-4" />
+                                                    </Button>
+                                                </DropdownMenuTrigger>
+                                                <DropdownMenuContent align="end" className="w-48 rounded-xl border-slate-200 shadow-xl shadow-slate-900/5">
+                                                    <DropdownMenuItem onClick={() => handleEditEmployee(employee)} className="text-xs font-medium cursor-pointer py-2 gap-2">
+                                                        <Pencil className="h-3.5 w-3.5" /> Редактировать
+                                                    </DropdownMenuItem>
+                                                    {employee.is_active && !employee.dismissed_at ? (
+                                                        <DropdownMenuItem onClick={() => handleDismissEmployee(employee.id)} className="text-xs font-medium cursor-pointer py-2 gap-2 text-rose-600 focus:text-rose-600 focus:bg-rose-50">
+                                                            <UserMinus className="h-3.5 w-3.5" /> Уволить
+                                                        </DropdownMenuItem>
+                                                    ) : (
+                                                        <DropdownMenuItem onClick={() => handleRestoreEmployee(employee)} className="text-xs font-medium cursor-pointer py-2 gap-2 text-emerald-600 focus:text-emerald-600 focus:bg-emerald-50">
+                                                            <UserCheck className="h-3.5 w-3.5" /> Восстановить
+                                                        </DropdownMenuItem>
+                                                    )}
+                                                </DropdownMenuContent>
+                                            </DropdownMenu>
+                                        </div>
+                                        
+                                        <div className="flex flex-wrap gap-2">
+                                            <Badge variant="outline" className="bg-slate-50 text-slate-600 border-slate-200 font-bold text-[10px] uppercase tracking-wider px-2 py-0.5">
+                                                {employee.role}
+                                            </Badge>
+                                            {employee.dismissed_at ? (
+                                                <Badge variant="outline" className="bg-rose-50 text-rose-600 border-rose-200 font-bold text-[10px] uppercase tracking-wider px-2 py-0.5">
+                                                    Уволен: {new Date(employee.dismissed_at).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}
+                                                </Badge>
+                                            ) : (
+                                                <Badge variant="outline" className="bg-emerald-50 text-emerald-600 border-emerald-200 font-bold text-[10px] uppercase tracking-wider px-2 py-0.5">
+                                                    Нанят: {new Date(employee.hired_at).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                                </Badge>
+                                            )}
+                                        </div>
+
+                                        <div className="pt-3 border-t border-slate-100">
+                                            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Зарплатная схема</div>
+                                            <Select
+                                                value={employee.salary_scheme_id?.toString() || "none"}
+                                                onValueChange={(v) => handleAssignScheme(employee.id, v === "none" ? null : parseInt(v))}
+                                            >
+                                                <SelectTrigger className="h-9 text-xs font-medium border-slate-200 hover:border-slate-300 transition-colors bg-slate-50/50">
+                                                    <SelectValue placeholder="Схема не выбрана" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="none" className="text-xs">Без схемы</SelectItem>
+                                                    {salarySchemes.map(scheme => (
+                                                        <SelectItem key={scheme.id} value={scheme.id.toString()} className="text-xs">
+                                                            {scheme.name}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </>
+                    )}
                 </div>
             </div>
+
+            {/* Mobile Sticky Actions */}
+            <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-xl border-t border-slate-200 md:hidden z-50 flex gap-2 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+                <Button asChild variant="outline" className="flex-1 bg-white border-slate-200 text-slate-700 h-12 rounded-xl font-medium">
+                    <Link href={`/clubs/${clubId}/employees/recruitment/applications`}>
+                        <FileText className="mr-2 h-4 w-4" />
+                        Анкеты
+                    </Link>
+                </Button>
+                <Button onClick={() => setIsModalOpen(true)} className="flex-1 bg-slate-900 text-white hover:bg-slate-800 h-12 rounded-xl font-medium">
+                    <UserPlus className="mr-2 h-4 w-4" />
+                    Добавить
+                </Button>
             </div>
 
             {/* Add Employee Modal */}
             <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-                <DialogContent className="sm:max-w-[425px] rounded-2xl border-none shadow-2xl">
+                <DialogContent className="sm:max-w-[425px] rounded-3xl border border-slate-200 shadow-2xl bg-white p-6">
                     <DialogHeader className="space-y-3">
-                        <div className="h-12 w-12 rounded-2xl bg-purple-50 flex items-center justify-center">
-                            <UserPlus className="h-6 w-6 text-purple-600" />
+                        <div className="h-12 w-12 rounded-2xl bg-slate-100 flex items-center justify-center">
+                            <UserPlus className="h-6 w-6 text-slate-700" />
                         </div>
                         <div>
-                            <DialogTitle className="text-xl font-bold">Добавить сотрудника</DialogTitle>
-                            <DialogDescription className="text-xs font-medium">
+                            <DialogTitle className="text-xl font-bold text-slate-900">Добавить сотрудника</DialogTitle>
+                            <DialogDescription className="text-sm font-medium text-slate-500">
                                 Заполните данные для создания нового аккаунта
                             </DialogDescription>
                         </div>
@@ -524,39 +601,39 @@ export default function EmployeesPage({ params }: { params: Promise<{ clubId: st
                     <form onSubmit={handleAddEmployee} className="space-y-5 pt-4">
                         <div className="space-y-4">
                             <div className="space-y-1.5">
-                                <Label htmlFor="fullName" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Полное имя</Label>
+                                <Label htmlFor="fullName" className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Полное имя</Label>
                                 <Input
                                     id="fullName"
                                     placeholder="Напр: Иван Иванов"
                                     value={fullName}
                                     onChange={(e) => setFullName(e.target.value)}
-                                    className="bg-muted/30 border-muted-foreground/10 focus:border-purple-500/50"
+                                    className="bg-slate-50/50 border-slate-200 focus:border-slate-400 h-10 rounded-xl"
                                     required
                                 />
                             </div>
 
                             <div className="space-y-1.5">
-                                <Label htmlFor="phoneNumber" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Номер телефона</Label>
+                                <Label htmlFor="phoneNumber" className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Номер телефона</Label>
                                 <PhoneInput
                                     id="phoneNumber"
                                     placeholder="+7 (999) 000-00-00"
                                     value={phoneNumber}
                                     onChange={setPhoneNumber}
-                                    className="bg-muted/30 border-muted-foreground/10 focus:border-purple-500/50"
+                                    className="bg-slate-50/50 border-slate-200 focus:border-slate-400 h-10 rounded-xl"
                                     required
                                 />
                             </div>
 
                             <div className="space-y-1.5">
-                                <Label htmlFor="role" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Должность</Label>
+                                <Label htmlFor="role" className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Должность</Label>
                                 <Select 
                                     value={selectedRoleId?.toString() || ""} 
                                     onValueChange={(v) => setSelectedRoleId(parseInt(v))}
                                 >
-                                    <SelectTrigger className="bg-muted/30 border-muted-foreground/10 focus:border-purple-500/50 h-10">
+                                    <SelectTrigger className="bg-slate-50/50 border-slate-200 focus:border-slate-400 h-10 rounded-xl">
                                         <SelectValue placeholder="Выберите должность" />
                                     </SelectTrigger>
-                                    <SelectContent>
+                                    <SelectContent className="rounded-xl">
                                         {roles.map((role) => (
                                             <SelectItem key={role.id} value={role.id.toString()}>
                                                 {role.name}
@@ -570,7 +647,7 @@ export default function EmployeesPage({ params }: { params: Promise<{ clubId: st
                         <DialogFooter className="pt-2">
                             <Button
                                 type="submit"
-                                className="w-full bg-purple-600 hover:bg-purple-700 text-white shadow-lg shadow-purple-200"
+                                className="w-full bg-slate-900 hover:bg-slate-800 text-white rounded-xl h-11 font-medium"
                                 disabled={isSubmitting}
                             >
                                 {isSubmitting ? (
@@ -592,14 +669,14 @@ export default function EmployeesPage({ params }: { params: Promise<{ clubId: st
 
             {/* Edit Employee Modal */}
             <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
-                <DialogContent className="sm:max-w-[425px] rounded-2xl border-none shadow-2xl">
+                <DialogContent className="sm:max-w-[425px] rounded-3xl border border-slate-200 shadow-2xl bg-white p-6">
                     <DialogHeader className="space-y-3">
-                        <div className="h-12 w-12 rounded-2xl bg-blue-50 flex items-center justify-center">
-                            <Pencil className="h-6 w-6 text-blue-600" />
+                        <div className="h-12 w-12 rounded-2xl bg-slate-100 flex items-center justify-center">
+                            <Pencil className="h-6 w-6 text-slate-700" />
                         </div>
                         <div>
-                            <DialogTitle className="text-xl font-bold">Редактировать профиль</DialogTitle>
-                            <DialogDescription className="text-xs font-medium">
+                            <DialogTitle className="text-xl font-bold text-slate-900">Редактировать профиль</DialogTitle>
+                            <DialogDescription className="text-sm font-medium text-slate-500">
                                 Обновите контактные данные или роль сотрудника
                             </DialogDescription>
                         </div>
@@ -608,37 +685,37 @@ export default function EmployeesPage({ params }: { params: Promise<{ clubId: st
                     <form onSubmit={handleUpdateEmployee} className="space-y-5 pt-4">
                         <div className="space-y-4">
                             <div className="space-y-1.5">
-                                <Label htmlFor="editFullName" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Полное имя</Label>
+                                <Label htmlFor="editFullName" className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Полное имя</Label>
                                 <Input
                                     id="editFullName"
                                     value={editFullName}
                                     onChange={(e) => setEditFullName(e.target.value)}
-                                    className="bg-muted/30 border-muted-foreground/10 focus:border-purple-500/50"
+                                    className="bg-slate-50/50 border-slate-200 focus:border-slate-400 h-10 rounded-xl"
                                     required
                                 />
                             </div>
 
                             <div className="space-y-1.5">
-                                <Label htmlFor="editPhoneNumber" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Номер телефона</Label>
+                                <Label htmlFor="editPhoneNumber" className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Номер телефона</Label>
                                 <PhoneInput
                                     id="editPhoneNumber"
                                     value={editPhoneNumber}
                                     onChange={setEditPhoneNumber}
-                                    className="bg-muted/30 border-muted-foreground/10 focus:border-purple-500/50"
+                                    className="bg-slate-50/50 border-slate-200 focus:border-slate-400 h-10 rounded-xl"
                                     required
                                 />
                             </div>
 
                             <div className="space-y-1.5">
-                                <Label htmlFor="editRole" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Должность</Label>
+                                <Label htmlFor="editRole" className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Должность</Label>
                                 <Select 
                                     value={editRoleId?.toString() || ""} 
                                     onValueChange={(v) => setEditRoleId(parseInt(v))}
                                 >
-                                    <SelectTrigger className="bg-muted/30 border-muted-foreground/10 focus:border-purple-500/50 h-10">
+                                    <SelectTrigger className="bg-slate-50/50 border-slate-200 focus:border-slate-400 h-10 rounded-xl">
                                         <SelectValue placeholder="Выберите должность" />
                                     </SelectTrigger>
-                                    <SelectContent>
+                                    <SelectContent className="rounded-xl">
                                         {roles.map((role) => (
                                             <SelectItem key={role.id} value={role.id.toString()}>
                                                 {role.name}
@@ -649,35 +726,35 @@ export default function EmployeesPage({ params }: { params: Promise<{ clubId: st
                             </div>
 
                             <div className="space-y-1.5">
-                                <Label htmlFor="editPassword" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Новый пароль</Label>
+                                <Label htmlFor="editPassword" className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Новый пароль</Label>
                                 <Input
-                                        id="editPassword"
-                                        type="password"
-                                        placeholder="Оставьте пустым, чтобы не менять"
-                                        value={editPassword}
-                                        onChange={(e) => setEditPassword(e.target.value)}
-                                        className="bg-muted/30 border-muted-foreground/10 focus:border-purple-500/50"
-                                    />
-                                </div>
-
-                                <div className="flex items-center justify-between p-3 rounded-xl bg-muted/20 border border-muted-foreground/5">
-                                    <div className="space-y-0.5">
-                                        <Label htmlFor="showInSchedule" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">График работы</Label>
-                                        <p className="text-[10px] text-muted-foreground">Отображать сотрудника в сетке расписания</p>
-                                    </div>
-                                    <Switch
-                                        id="showInSchedule"
-                                        checked={editShowInSchedule}
-                                        onCheckedChange={setEditShowInSchedule}
-                                        className="data-[state=checked]:bg-purple-600"
-                                    />
-                                </div>
+                                    id="editPassword"
+                                    type="password"
+                                    placeholder="Оставьте пустым, чтобы не менять"
+                                    value={editPassword}
+                                    onChange={(e) => setEditPassword(e.target.value)}
+                                    className="bg-slate-50/50 border-slate-200 focus:border-slate-400 h-10 rounded-xl"
+                                />
                             </div>
 
-                            <DialogFooter className="pt-2">
+                            <div className="flex items-center justify-between p-4 rounded-2xl bg-slate-50/50 border border-slate-200">
+                                <div className="space-y-0.5">
+                                    <Label htmlFor="showInSchedule" className="text-[10px] font-bold uppercase tracking-wider text-slate-900">График работы</Label>
+                                    <p className="text-[10px] text-slate-500">Отображать сотрудника в сетке расписания</p>
+                                </div>
+                                <Switch
+                                    id="showInSchedule"
+                                    checked={editShowInSchedule}
+                                    onCheckedChange={setEditShowInSchedule}
+                                    className="data-[state=checked]:bg-slate-900"
+                                />
+                            </div>
+                        </div>
+
+                        <DialogFooter className="pt-2">
                             <Button
                                 type="submit"
-                                className="w-full bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-200"
+                                className="w-full bg-slate-900 hover:bg-slate-800 text-white rounded-xl h-11 font-medium"
                                 disabled={isSubmitting}
                             >
                                 {isSubmitting ? (
@@ -696,14 +773,14 @@ export default function EmployeesPage({ params }: { params: Promise<{ clubId: st
 
             {/* Dismiss Employee Modal */}
             <Dialog open={isDismissModalOpen} onOpenChange={setIsDismissModalOpen}>
-                <DialogContent className="sm:max-w-[400px] rounded-2xl border-none shadow-2xl">
+                <DialogContent className="sm:max-w-[400px] rounded-3xl border border-slate-200 shadow-2xl bg-white p-6">
                     <DialogHeader className="space-y-3">
-                        <div className="h-12 w-12 rounded-2xl bg-orange-50 flex items-center justify-center">
-                            <UserMinus className="h-6 w-6 text-orange-600" />
+                        <div className="h-12 w-12 rounded-2xl bg-rose-50 flex items-center justify-center">
+                            <UserMinus className="h-6 w-6 text-rose-600" />
                         </div>
                         <div>
-                            <DialogTitle className="text-xl font-bold">Увольнение сотрудника</DialogTitle>
-                            <DialogDescription className="text-xs font-medium">
+                            <DialogTitle className="text-xl font-bold text-slate-900">Увольнение сотрудника</DialogTitle>
+                            <DialogDescription className="text-sm font-medium text-slate-500">
                                 Выберите последний рабочий день сотрудника
                             </DialogDescription>
                         </div>
@@ -711,17 +788,17 @@ export default function EmployeesPage({ params }: { params: Promise<{ clubId: st
 
                     <div className="py-4 space-y-4">
                         <div className="space-y-1.5">
-                            <Label htmlFor="dismissDate" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Дата увольнения</Label>
+                            <Label htmlFor="dismissDate" className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Дата увольнения</Label>
                             <Input
                                 id="dismissDate"
                                 type="date"
                                 value={dismissalDate}
                                 onChange={(e) => setDismissalDate(e.target.value)}
-                                className="bg-muted/30 border-muted-foreground/10"
+                                className="bg-slate-50/50 border-slate-200 h-10 rounded-xl"
                             />
                         </div>
-                        <div className="bg-orange-50 border border-orange-100 p-4 rounded-xl space-y-2">
-                            <p className="text-[11px] text-orange-700 leading-relaxed font-medium">
+                        <div className="bg-rose-50 border border-rose-100 p-4 rounded-xl space-y-2">
+                            <p className="text-[11px] text-rose-700 leading-relaxed font-medium">
                                 С этой даты сотрудник больше не сможет выходить в смены, но его история работы останется в архиве.
                             </p>
                         </div>
@@ -732,7 +809,7 @@ export default function EmployeesPage({ params }: { params: Promise<{ clubId: st
                             variant="ghost"
                             onClick={() => setIsDismissModalOpen(false)}
                             disabled={isSubmitting}
-                            className="flex-1 text-xs font-bold uppercase tracking-widest"
+                            className="flex-1 text-xs font-bold uppercase tracking-widest rounded-xl h-11"
                         >
                             Отмена
                         </Button>
@@ -740,7 +817,7 @@ export default function EmployeesPage({ params }: { params: Promise<{ clubId: st
                             variant="destructive"
                             onClick={handleConfirmDismiss}
                             disabled={isSubmitting}
-                            className="flex-1 text-xs font-bold uppercase tracking-widest shadow-lg shadow-red-200"
+                            className="flex-1 text-xs font-bold uppercase tracking-widest shadow-lg shadow-rose-200 rounded-xl h-11"
                         >
                             {isSubmitting ? (
                                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -754,14 +831,14 @@ export default function EmployeesPage({ params }: { params: Promise<{ clubId: st
 
             {/* Restore Employee Modal */}
             <Dialog open={isRestoreModalOpen} onOpenChange={setIsRestoreModalOpen}>
-                <DialogContent className="sm:max-w-[400px] rounded-2xl border-none shadow-2xl">
+                <DialogContent className="sm:max-w-[400px] rounded-3xl border border-slate-200 shadow-2xl bg-white p-6">
                     <DialogHeader className="space-y-3">
                         <div className="h-12 w-12 rounded-2xl bg-emerald-50 flex items-center justify-center">
                             <UserCheck className="h-6 w-6 text-emerald-600" />
                         </div>
                         <div>
-                            <DialogTitle className="text-xl font-bold">Восстановление сотрудника</DialogTitle>
-                            <DialogDescription className="text-xs font-medium">
+                            <DialogTitle className="text-xl font-bold text-slate-900">Восстановление сотрудника</DialogTitle>
+                            <DialogDescription className="text-sm font-medium text-slate-500">
                                 Вы собираетесь восстановить <strong>{employeeToRestore?.full_name}</strong>
                             </DialogDescription>
                         </div>
@@ -780,14 +857,14 @@ export default function EmployeesPage({ params }: { params: Promise<{ clubId: st
                             variant="ghost"
                             onClick={() => setIsRestoreModalOpen(false)}
                             disabled={isSubmitting}
-                            className="flex-1 text-xs font-bold uppercase tracking-widest"
+                            className="flex-1 text-xs font-bold uppercase tracking-widest rounded-xl h-11"
                         >
                             Отмена
                         </Button>
                         <Button
                             onClick={handleConfirmRestore}
                             disabled={isSubmitting}
-                            className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold uppercase tracking-widest shadow-lg shadow-emerald-200"
+                            className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold uppercase tracking-widest shadow-lg shadow-emerald-200 rounded-xl h-11"
                         >
                             {isSubmitting ? (
                                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -798,6 +875,6 @@ export default function EmployeesPage({ params }: { params: Promise<{ clubId: st
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
-        </div>
+        </PageShell>
     )
 }

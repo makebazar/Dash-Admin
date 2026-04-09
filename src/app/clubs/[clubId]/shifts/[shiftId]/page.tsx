@@ -22,10 +22,8 @@ import {
     Wallet,
 } from "lucide-react"
 
-import { PageHeader, PageShell } from "@/components/layout/PageShell"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -705,436 +703,444 @@ export default function ShiftDetailsPage() {
     const monthTitle = useMemo(() => shift ? format(new Date(shift.check_in), "d MMMM yyyy", { locale: ru }) : "", [shift])
 
     return (
-        <PageShell>
-            <div className="flex min-h-[calc(100vh-4rem)] flex-col">
-                <PageHeader
-                    title={shift ? `Смена ${shift.employee_name}` : "Смена"}
-                    description={shift ? `${monthTitle} • ${formatTime(shift.check_in)} - ${formatTime(shift.check_out)}` : "Карточка смены"}
-                >
-                    <Button asChild variant="outline" className="hidden h-10 md:inline-flex">
+        <div className="flex min-h-screen bg-[#FAFAFA] flex-col font-sans text-slate-900 selection:bg-black/10">
+            <main className="mx-auto max-w-5xl w-full flex-1 px-4 sm:px-6 md:px-8 py-8 md:py-12 lg:py-20">
+                {/* Header */}
+                <div className="mb-10">
+                    <Button asChild variant="ghost" className="hidden md:inline-flex h-8 px-0 text-slate-500 hover:text-black hover:bg-transparent -ml-2 mb-6 transition-colors">
                         <Link href={backHref}>
                             <ArrowLeft className="mr-2 h-4 w-4" />
                             Назад
                         </Link>
                     </Button>
-                </PageHeader>
+                    <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+                        <div className="space-y-3">
+                            <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-slate-900">
+                                {shift ? `Смена ${shift.employee_name}` : "Смена"}
+                            </h1>
+                            <p className="text-slate-500 text-lg flex items-center gap-2">
+                                {shift ? (
+                                    <>
+                                        {monthTitle} <span className="text-slate-300">•</span> {formatTime(shift.check_in)} - {formatTime(shift.check_out)}
+                                    </>
+                                ) : "Карточка смены"}
+                            </p>
+                        </div>
+                        {shift && !isLoading && (
+                            <div className="flex flex-wrap items-center gap-3">
+                                <Button 
+                                    variant="outline" 
+                                    className="h-12 rounded-xl px-6 border-slate-200 text-slate-700 hover:bg-slate-50 font-medium transition-all hidden md:flex" 
+                                    onClick={() => {
+                                        populateEditState(shift)
+                                        setIsEditMode((prev) => !prev)
+                                    }}
+                                >
+                                    <Edit className="mr-2 h-4 w-4" />
+                                    {isEditMode ? "Отменить" : "Редактировать"}
+                                </Button>
+                                {shift.status === "VERIFIED" ? (
+                                    <Button 
+                                        variant="outline" 
+                                        className="h-12 rounded-xl px-6 border-slate-200 text-slate-700 hover:bg-slate-50 font-medium transition-all hidden md:flex" 
+                                        onClick={() => handleVerify("CLOSED")}
+                                    >
+                                        Снять подтверждение
+                                    </Button>
+                                ) : (
+                                    <Button 
+                                        className="h-12 rounded-xl px-6 bg-emerald-600 text-white hover:bg-emerald-700 font-medium transition-all hidden md:flex" 
+                                        onClick={() => handleVerify("VERIFIED")}
+                                    >
+                                        Подтвердить
+                                    </Button>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                </div>
 
                 {isLoading || !shift ? (
-                    <div className="flex flex-1 items-center justify-center">
-                        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                    <div className="flex flex-1 items-center justify-center py-20">
+                        <Loader2 className="h-8 w-8 animate-spin text-slate-300" />
                     </div>
                 ) : (
-                    <div className="space-y-6 pb-24 md:pb-0">
-                        <Card>
-                            <CardContent className="p-4 md:p-6">
-                                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                                    <div className="min-w-0 flex-1">
-                                        <div className="flex flex-wrap items-center gap-2">
-                                            <h2 className="text-xl font-bold">{shift.employee_name}</h2>
-                                            <Badge variant={shift.shift_type === "NIGHT" ? "secondary" : "outline"}>
-                                                {shift.shift_type === "NIGHT" ? "Ночная смена" : "Дневная смена"}
-                                            </Badge>
-                                            {shift.status === "VERIFIED" ? (
-                                                <Badge className="bg-green-100 text-green-700 hover:bg-green-100 border-0">Подтверждена</Badge>
-                                            ) : (
-                                                <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
-                                                    Ожидает подтверждения
-                                                </Badge>
-                                            )}
-                                            {shift.has_owner_corrections && (
-                                                <Badge className="bg-orange-100 text-orange-700 hover:bg-orange-100 border-0">
-                                                    Есть правки владельца
-                                                </Badge>
-                                            )}
-                                        </div>
-                                        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
-                                            <span>{formatDate(shift.check_in)}</span>
-                                            <span>{formatTime(shift.check_in)} - {formatTime(shift.check_out)}</span>
-                                            <span>{Number(shift.total_hours || 0).toFixed(1)} ч</span>
-                                            <span className="font-medium text-foreground">Итого: {formatMoney(calculateShiftTotalIncome(shift))}</span>
-                                        </div>
-                                    </div>
+                    <div className="space-y-8 pb-24 md:pb-0">
+                        {/* Status Badges */}
+                        <div className="flex flex-wrap items-center gap-3">
+                            {shift.shift_type === "NIGHT" ? (
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 text-sm font-bold">
+                                    <Moon className="h-4 w-4" /> Ночная смена
+                                </span>
+                            ) : (
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-orange-50 text-orange-700 text-sm font-bold">
+                                    <Sun className="h-4 w-4" /> Дневная смена
+                                </span>
+                            )}
+                            
+                            {shift.status === "VERIFIED" ? (
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 text-sm font-bold">
+                                    Подтверждена
+                                </span>
+                            ) : (
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600 text-sm font-bold">
+                                    Ожидает подтверждения
+                                </span>
+                            )}
 
-                                    <div className="flex flex-wrap gap-2">
-                                        <Button variant="outline" className="hidden md:inline-flex" onClick={() => {
-                                            populateEditState(shift)
-                                            setIsEditMode((prev) => !prev)
-                                        }}>
-                                            <Edit className="mr-2 h-4 w-4" />
-                                            {isEditMode ? "Скрыть редактирование" : "Редактировать"}
-                                        </Button>
-                                        {shift.status === "VERIFIED" ? (
-                                            <Button variant="outline" className="hidden md:inline-flex" onClick={() => handleVerify("CLOSED")}>
-                                                Снять подтверждение
-                                            </Button>
-                                        ) : (
-                                            <Button className="hidden bg-green-600 text-white hover:bg-green-700 md:inline-flex" onClick={() => handleVerify("VERIFIED")}>
-                                                Подтвердить
-                                            </Button>
-                                        )}
-                                    </div>
-                                </div>
-                            </CardContent>
-                        </Card>
+                            {shift.has_owner_corrections && (
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-50 text-rose-700 text-sm font-bold">
+                                    Правки владельца
+                                </span>
+                            )}
+                        </div>
 
                         {isEditMode && (
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle>Редактирование смены</CardTitle>
-                                </CardHeader>
-                                <CardContent className="space-y-8">
-                                    <div className="grid grid-cols-1 gap-8 md:grid-cols-2">
-                                        <div className="space-y-6">
-                                            <div className="space-y-4">
-                                                <h3 className="text-sm font-semibold flex items-center gap-2 text-primary">
-                                                    <Clock className="h-4 w-4" />
-                                                    Временные рамки
-                                                </h3>
-                                                <div className="grid grid-cols-2 gap-4">
-                                                    <div className="space-y-2">
-                                                        <Label className="text-xs text-muted-foreground uppercase">Начало</Label>
-                                                        <MaskedDateTimeInput
-                                                            value={editCheckInDisplay}
-                                                            onValueChange={(displayValue, internalValue) => {
-                                                                setEditCheckInDisplay(displayValue)
-                                                                setEditCheckIn(internalValue)
-                                                            }}
-                                                        />
-                                                    </div>
-                                                    <div className="space-y-2">
-                                                        <Label className="text-xs text-muted-foreground uppercase">Конец</Label>
-                                                        <MaskedDateTimeInput
-                                                            value={editCheckOutDisplay}
-                                                            onValueChange={(displayValue, internalValue) => {
-                                                                setEditCheckOutDisplay(displayValue)
-                                                                setEditCheckOut(internalValue)
-                                                            }}
-                                                        />
-                                                    </div>
+                            <div className="bg-white rounded-2xl border border-slate-200 p-6 md:p-8 space-y-8">
+                                <div>
+                                    <h2 className="text-2xl font-bold tracking-tight mb-2">Редактирование смены</h2>
+                                    <p className="text-slate-500">Внесите изменения в показатели и комментарии</p>
+                                </div>
+                                <div className="grid grid-cols-1 gap-8 md:grid-cols-2">
+                                    <div className="space-y-8">
+                                        <div className="space-y-4">
+                                            <h3 className="text-lg font-bold flex items-center gap-2 text-slate-900 tracking-tight">
+                                                <Clock className="h-5 w-5 text-slate-400" />
+                                                Временные рамки
+                                            </h3>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div className="space-y-2">
+                                                    <Label className="text-xs font-bold tracking-widest text-slate-400 uppercase">Начало</Label>
+                                                    <MaskedDateTimeInput
+                                                        value={editCheckInDisplay}
+                                                        onValueChange={(displayValue, internalValue) => {
+                                                            setEditCheckInDisplay(displayValue)
+                                                            setEditCheckIn(internalValue)
+                                                        }}
+                                                        className="h-12 rounded-xl bg-slate-50 border-slate-200 focus-visible:ring-1 focus-visible:ring-black focus-visible:bg-white text-base transition-all"
+                                                    />
                                                 </div>
-                                            </div>
-
-                                            <div className="space-y-4">
-                                                <h3 className="text-sm font-semibold flex items-center gap-2 text-primary">
-                                                    <Sun className="h-4 w-4" />
-                                                    Тип смены
-                                                </h3>
-                                                <div className="flex gap-2 rounded-lg bg-muted/50 p-1">
-                                                    <Button
-                                                        type="button"
-                                                        variant={editShiftType === "DAY" ? "secondary" : "ghost"}
-                                                        onClick={() => setEditShiftType("DAY")}
-                                                        className={cn("flex-1 gap-2", editShiftType === "DAY" && "bg-background shadow-sm")}
-                                                    >
-                                                        <Sun className="h-4 w-4 text-orange-500" />
-                                                        Дневная
-                                                    </Button>
-                                                    <Button
-                                                        type="button"
-                                                        variant={editShiftType === "NIGHT" ? "secondary" : "ghost"}
-                                                        onClick={() => setEditShiftType("NIGHT")}
-                                                        className={cn("flex-1 gap-2", editShiftType === "NIGHT" && "bg-background shadow-sm")}
-                                                    >
-                                                        <Moon className="h-4 w-4 text-blue-500" />
-                                                        Ночная
-                                                    </Button>
-                                                </div>
-                                            </div>
-
-                                            <div className="space-y-4">
-                                                <h3 className="text-sm font-semibold flex items-center gap-2 text-primary">
-                                                    <FileText className="h-4 w-4" />
-                                                    Комментарии
-                                                </h3>
-                                                <div className="space-y-4">
-                                                    <div className="space-y-2">
-                                                        <Label className="text-xs text-muted-foreground uppercase">От сотрудника</Label>
-                                                        <Textarea
-                                                            value={editComment}
-                                                            onChange={(e) => setEditComment(e.target.value)}
-                                                            placeholder="Примечание к смене..."
-                                                            rows={3}
-                                                            className="resize-none"
-                                                        />
-                                                    </div>
-                                                    <div className="space-y-2">
-                                                        <Label className="text-xs text-muted-foreground uppercase">Заметки владельца</Label>
-                                                        <Textarea
-                                                            value={editOwnerNotes}
-                                                            onChange={(e) => setEditOwnerNotes(e.target.value)}
-                                                            placeholder="Причина корректировки (опционально)"
-                                                            rows={3}
-                                                            className="resize-none bg-blue-50/30 border-blue-100"
-                                                        />
-                                                    </div>
+                                                <div className="space-y-2">
+                                                    <Label className="text-xs font-bold tracking-widest text-slate-400 uppercase">Конец</Label>
+                                                    <MaskedDateTimeInput
+                                                        value={editCheckOutDisplay}
+                                                        onValueChange={(displayValue, internalValue) => {
+                                                            setEditCheckOutDisplay(displayValue)
+                                                            setEditCheckOut(internalValue)
+                                                        }}
+                                                        className="h-12 rounded-xl bg-slate-50 border-slate-200 focus-visible:ring-1 focus-visible:ring-black focus-visible:bg-white text-base transition-all"
+                                                    />
                                                 </div>
                                             </div>
                                         </div>
 
-                                        <div className="space-y-6">
+                                        <div className="space-y-4">
+                                            <h3 className="text-lg font-bold flex items-center gap-2 text-slate-900 tracking-tight">
+                                                <Sun className="h-5 w-5 text-slate-400" />
+                                                Тип смены
+                                            </h3>
+                                            <div className="flex gap-2 rounded-xl bg-slate-100 p-1">
+                                                <Button
+                                                    type="button"
+                                                    variant={editShiftType === "DAY" ? "secondary" : "ghost"}
+                                                    onClick={() => setEditShiftType("DAY")}
+                                                    className={cn("flex-1 gap-2 h-10 rounded-lg text-slate-600 font-medium", editShiftType === "DAY" && "bg-white shadow-sm text-black")}
+                                                >
+                                                    <Sun className={cn("h-4 w-4", editShiftType === "DAY" ? "text-orange-500" : "text-slate-400")} />
+                                                    Дневная
+                                                </Button>
+                                                <Button
+                                                    type="button"
+                                                    variant={editShiftType === "NIGHT" ? "secondary" : "ghost"}
+                                                    onClick={() => setEditShiftType("NIGHT")}
+                                                    className={cn("flex-1 gap-2 h-10 rounded-lg text-slate-600 font-medium", editShiftType === "NIGHT" && "bg-white shadow-sm text-black")}
+                                                >
+                                                    <Moon className={cn("h-4 w-4", editShiftType === "NIGHT" ? "text-blue-500" : "text-slate-400")} />
+                                                    Ночная
+                                                </Button>
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-4">
+                                            <h3 className="text-lg font-bold flex items-center gap-2 text-slate-900 tracking-tight">
+                                                <FileText className="h-5 w-5 text-slate-400" />
+                                                Комментарии
+                                            </h3>
                                             <div className="space-y-4">
-                                                <h3 className="text-sm font-semibold flex items-center gap-2 text-primary">
-                                                    <DollarSign className="h-4 w-4" />
-                                                    Финансы
-                                                </h3>
-                                                <div className="grid grid-cols-2 gap-4">
-                                                    <div className="space-y-2">
-                                                        <Label className="text-xs text-muted-foreground uppercase">Наличные</Label>
-                                                        <div className="relative">
-                                                            <Input type="number" value={editCashIncome} onChange={(e) => setEditCashIncome(e.target.value)} className="pl-8 bg-green-500/5 border-green-500/20" />
-                                                            <Wallet className="absolute left-2.5 top-2.5 h-4 w-4 text-green-600 opacity-50" />
-                                                        </div>
-                                                    </div>
-                                                    <div className="space-y-2">
-                                                        <Label className="text-xs text-muted-foreground uppercase">Безнал</Label>
-                                                        <div className="relative">
-                                                            <Input type="number" value={editCardIncome} onChange={(e) => setEditCardIncome(e.target.value)} className="pl-8 bg-blue-500/5 border-blue-500/20" />
-                                                            <DollarSign className="absolute left-2.5 top-2.5 h-4 w-4 text-blue-600 opacity-50" />
-                                                        </div>
+                                                <div className="space-y-2">
+                                                    <Label className="text-xs font-bold tracking-widest text-slate-400 uppercase">От сотрудника</Label>
+                                                    <Textarea
+                                                        value={editComment}
+                                                        onChange={(e) => setEditComment(e.target.value)}
+                                                        placeholder="Примечание к смене..."
+                                                        rows={3}
+                                                        className="resize-none rounded-xl border-slate-200 bg-slate-50 focus-visible:ring-1 focus-visible:ring-black focus-visible:bg-white text-base transition-all"
+                                                    />
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <Label className="text-xs font-bold tracking-widest text-slate-400 uppercase">Заметки владельца</Label>
+                                                    <Textarea
+                                                        value={editOwnerNotes}
+                                                        onChange={(e) => setEditOwnerNotes(e.target.value)}
+                                                        placeholder="Причина корректировки (опционально)"
+                                                        rows={3}
+                                                        className="resize-none rounded-xl bg-blue-50/50 border-blue-200 focus-visible:ring-1 focus-visible:ring-blue-600 focus-visible:bg-blue-50 text-base transition-all"
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-8">
+                                        <div className="space-y-4">
+                                            <h3 className="text-lg font-bold flex items-center gap-2 text-slate-900 tracking-tight">
+                                                <DollarSign className="h-5 w-5 text-slate-400" />
+                                                Финансы
+                                            </h3>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div className="space-y-2">
+                                                    <Label className="text-xs font-bold tracking-widest text-slate-400 uppercase">Наличные</Label>
+                                                    <div className="relative">
+                                                        <Input type="number" value={editCashIncome} onChange={(e) => setEditCashIncome(e.target.value)} className="h-12 pl-10 rounded-xl bg-emerald-50/50 border-emerald-200 focus-visible:ring-1 focus-visible:ring-emerald-600 text-base font-medium" />
+                                                        <Wallet className="absolute left-3.5 top-3.5 h-5 w-5 text-emerald-600 opacity-50" />
                                                     </div>
                                                 </div>
                                                 <div className="space-y-2">
-                                                    <Label className="text-xs text-muted-foreground uppercase">Расходы</Label>
+                                                    <Label className="text-xs font-bold tracking-widest text-slate-400 uppercase">Безнал</Label>
                                                     <div className="relative">
-                                                        <Input type="number" value={editExpenses} onChange={(e) => setEditExpenses(e.target.value)} className="pl-8 bg-red-500/5 border-red-500/20" />
-                                                        <TrendingUp className="absolute left-2.5 top-2.5 h-4 w-4 text-red-600 opacity-50 rotate-180" />
+                                                        <Input type="number" value={editCardIncome} onChange={(e) => setEditCardIncome(e.target.value)} className="h-12 pl-10 rounded-xl bg-blue-50/50 border-blue-200 focus-visible:ring-1 focus-visible:ring-blue-600 text-base font-medium" />
+                                                        <DollarSign className="absolute left-3.5 top-3.5 h-5 w-5 text-blue-600 opacity-50" />
                                                     </div>
                                                 </div>
                                             </div>
+                                            <div className="space-y-2">
+                                                <Label className="text-xs font-bold tracking-widest text-slate-400 uppercase">Расходы</Label>
+                                                <div className="relative">
+                                                    <Input type="number" value={editExpenses} onChange={(e) => setEditExpenses(e.target.value)} className="h-12 pl-10 rounded-xl bg-rose-50/50 border-rose-200 focus-visible:ring-1 focus-visible:ring-rose-600 text-base font-medium" />
+                                                    <TrendingUp className="absolute left-3.5 top-3.5 h-5 w-5 text-rose-600 opacity-50 rotate-180" />
+                                                </div>
+                                            </div>
+                                        </div>
 
-                                            {reportFields.length > 0 && (
-                                                <div className="space-y-4 border-t border-dashed pt-2">
-                                                    <h3 className="text-sm font-semibold flex items-center gap-2 text-primary">
-                                                        <ArrowUpDown className="h-4 w-4" />
-                                                        Дополнительно
-                                                    </h3>
-                                                    <div className="grid grid-cols-2 gap-4">
-                                                        {reportFields.map((field) => (
-                                                            <div key={field.metric_key} className="space-y-2">
-                                                                <Label className="text-xs text-muted-foreground uppercase truncate" title={field.custom_label}>
-                                                                    {field.custom_label}
-                                                                </Label>
-                                                                {field.field_type === "EXPENSE" || field.field_type === "EXPENSE_LIST" ? (
-                                                                    <div className="space-y-2 rounded-lg border bg-muted/20 p-3">
-                                                                        <div className="space-y-2">
-                                                                            {normalizeExpenseEntries(editCustomFields[field.metric_key]).map((item: any, itemIdx: number) => (
-                                                                                <div key={itemIdx} className="flex items-start gap-2">
-                                                                                    <div className="grid flex-1 gap-2 md:grid-cols-[140px_minmax(0,1fr)]">
-                                                                                        <Input
-                                                                                            type="number"
-                                                                                            value={item.amount}
-                                                                                            onChange={(e) => {
-                                                                                                const nextItems = [...normalizeExpenseEntries(editCustomFields[field.metric_key])]
-                                                                                                nextItems[itemIdx] = { ...nextItems[itemIdx], amount: e.target.value }
-                                                                                                setEditCustomFields((prev) => ({ ...prev, [field.metric_key]: nextItems }))
-                                                                                            }}
-                                                                                            placeholder="Сумма"
-                                                                                            className="bg-background"
-                                                                                        />
-                                                                                        <Input
-                                                                                            value={item.comment}
-                                                                                            onChange={(e) => {
-                                                                                                const nextItems = [...normalizeExpenseEntries(editCustomFields[field.metric_key])]
-                                                                                                nextItems[itemIdx] = { ...nextItems[itemIdx], comment: e.target.value }
-                                                                                                setEditCustomFields((prev) => ({ ...prev, [field.metric_key]: nextItems }))
-                                                                                            }}
-                                                                                            placeholder="Описание расхода"
-                                                                                            className="bg-background"
-                                                                                        />
-                                                                                    </div>
-                                                                                    <Button
-                                                                                        type="button"
-                                                                                        variant="ghost"
-                                                                                        size="icon"
-                                                                                        className="h-10 w-10 shrink-0 text-muted-foreground hover:text-red-500"
-                                                                                        onClick={() => {
+                                        {reportFields.length > 0 && (
+                                            <div className="space-y-4 border-t border-slate-200 pt-6">
+                                                <h3 className="text-lg font-bold flex items-center gap-2 text-slate-900 tracking-tight">
+                                                    <ArrowUpDown className="h-5 w-5 text-slate-400" />
+                                                    Дополнительно
+                                                </h3>
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    {reportFields.map((field) => (
+                                                        <div key={field.metric_key} className="space-y-2">
+                                                            <Label className="text-xs font-bold tracking-widest text-slate-400 uppercase truncate" title={field.custom_label}>
+                                                                {field.custom_label}
+                                                            </Label>
+                                                            {field.field_type === "EXPENSE" || field.field_type === "EXPENSE_LIST" ? (
+                                                                <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                                                                    <div className="space-y-3">
+                                                                        {normalizeExpenseEntries(editCustomFields[field.metric_key]).map((item: any, itemIdx: number) => (
+                                                                            <div key={itemIdx} className="flex items-start gap-2">
+                                                                                <div className="grid flex-1 gap-2 md:grid-cols-[140px_minmax(0,1fr)]">
+                                                                                    <Input
+                                                                                        type="number"
+                                                                                        value={item.amount}
+                                                                                        onChange={(e) => {
                                                                                             const nextItems = [...normalizeExpenseEntries(editCustomFields[field.metric_key])]
-                                                                                            nextItems.splice(itemIdx, 1)
+                                                                                            nextItems[itemIdx] = { ...nextItems[itemIdx], amount: e.target.value }
                                                                                             setEditCustomFields((prev) => ({ ...prev, [field.metric_key]: nextItems }))
                                                                                         }}
-                                                                                    >
-                                                                                        <Trash2 className="h-4 w-4" />
-                                                                                    </Button>
+                                                                                        placeholder="Сумма"
+                                                                                        className="bg-white rounded-lg border-slate-200"
+                                                                                    />
+                                                                                    <Input
+                                                                                        value={item.comment}
+                                                                                        onChange={(e) => {
+                                                                                            const nextItems = [...normalizeExpenseEntries(editCustomFields[field.metric_key])]
+                                                                                            nextItems[itemIdx] = { ...nextItems[itemIdx], comment: e.target.value }
+                                                                                            setEditCustomFields((prev) => ({ ...prev, [field.metric_key]: nextItems }))
+                                                                                        }}
+                                                                                        placeholder="Описание"
+                                                                                        className="bg-white rounded-lg border-slate-200"
+                                                                                    />
                                                                                 </div>
-                                                                            ))}
-                                                                        </div>
-                                                                        <div className="flex items-center justify-between">
-                                                                            <span className="text-xs text-muted-foreground">
-                                                                                {normalizeExpenseEntries(editCustomFields[field.metric_key]).length === 0 ? "Расходов пока нет" : `Позиций: ${normalizeExpenseEntries(editCustomFields[field.metric_key]).length}`}
-                                                                            </span>
-                                                                            <Button
-                                                                                type="button"
-                                                                                variant="outline"
-                                                                                size="sm"
-                                                                                onClick={() => {
-                                                                                    const nextItems = [...normalizeExpenseEntries(editCustomFields[field.metric_key]), { amount: "", comment: "" }]
-                                                                                    setEditCustomFields((prev) => ({ ...prev, [field.metric_key]: nextItems }))
-                                                                                }}
-                                                                            >
-                                                                                Добавить расход
-                                                                            </Button>
-                                                                        </div>
+                                                                                <Button
+                                                                                    type="button"
+                                                                                    variant="ghost"
+                                                                                    size="icon"
+                                                                                    className="h-10 w-10 shrink-0 text-slate-400 hover:text-rose-600 hover:bg-rose-50"
+                                                                                    onClick={() => {
+                                                                                        const nextItems = [...normalizeExpenseEntries(editCustomFields[field.metric_key])]
+                                                                                        nextItems.splice(itemIdx, 1)
+                                                                                        setEditCustomFields((prev) => ({ ...prev, [field.metric_key]: nextItems }))
+                                                                                    }}
+                                                                                >
+                                                                                    <Trash2 className="h-4 w-4" />
+                                                                                </Button>
+                                                                            </div>
+                                                                        ))}
                                                                     </div>
-                                                                ) : (
-                                                                    <Input
-                                                                        type="number"
-                                                                        value={editCustomFields[field.metric_key] || ""}
-                                                                        onChange={(e) => setEditCustomFields((prev) => ({ ...prev, [field.metric_key]: e.target.value }))}
-                                                                        placeholder="0"
-                                                                        className="bg-muted/30"
-                                                                    />
-                                                                )}
-                                                            </div>
-                                                        ))}
-                                                    </div>
+                                                                    <div className="flex items-center justify-between">
+                                                                        <span className="text-xs text-slate-500 font-medium">
+                                                                            {normalizeExpenseEntries(editCustomFields[field.metric_key]).length === 0 ? "Расходов пока нет" : `Позиций: ${normalizeExpenseEntries(editCustomFields[field.metric_key]).length}`}
+                                                                        </span>
+                                                                        <Button
+                                                                            type="button"
+                                                                            variant="outline"
+                                                                            size="sm"
+                                                                            className="rounded-lg border-slate-200 text-slate-700 hover:bg-slate-100"
+                                                                            onClick={() => {
+                                                                                const nextItems = [...normalizeExpenseEntries(editCustomFields[field.metric_key]), { amount: "", comment: "" }]
+                                                                                setEditCustomFields((prev) => ({ ...prev, [field.metric_key]: nextItems }))
+                                                                            }}
+                                                                        >
+                                                                            Добавить
+                                                                        </Button>
+                                                                    </div>
+                                                                </div>
+                                                            ) : (
+                                                                <Input
+                                                                    type="number"
+                                                                    value={editCustomFields[field.metric_key] || ""}
+                                                                    onChange={(e) => setEditCustomFields((prev) => ({ ...prev, [field.metric_key]: e.target.value }))}
+                                                                    placeholder="0"
+                                                                    className="h-12 rounded-xl bg-slate-50 border-slate-200 focus-visible:ring-1 focus-visible:ring-black text-base"
+                                                                />
+                                                            )}
+                                                        </div>
+                                                    ))}
                                                 </div>
-                                            )}
-                                        </div>
+                                            </div>
+                                        )}
                                     </div>
+                                </div>
 
-                                    <div className="flex flex-col-reverse gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
-                                        <Button
-                                            variant="ghost"
-                                            onClick={handleDelete}
-                                            disabled={isSaving}
-                                            className="text-red-600 hover:bg-red-50 hover:text-red-700"
-                                        >
-                                            <Trash2 className="mr-2 h-4 w-4" />
-                                            Удалить смену
+                                <div className="flex flex-col-reverse gap-3 border-t border-slate-200 pt-6 sm:flex-row sm:items-center sm:justify-between">
+                                    <Button
+                                        variant="ghost"
+                                        onClick={handleDelete}
+                                        disabled={isSaving}
+                                        className="h-12 rounded-xl text-rose-600 hover:bg-rose-50 hover:text-rose-700 px-4 font-medium"
+                                    >
+                                        <Trash2 className="mr-2 h-4 w-4" />
+                                        Удалить смену
+                                    </Button>
+                                    <div className="flex gap-3">
+                                        <Button variant="outline" onClick={() => setIsEditMode(false)} className="h-12 rounded-xl px-6 border-slate-200 text-slate-700 hover:bg-slate-50 font-medium">
+                                            Отмена
                                         </Button>
-                                        <div className="flex gap-3">
-                                            <Button variant="outline" onClick={() => setIsEditMode(false)}>
-                                                Отмена
-                                            </Button>
-                                            <Button onClick={handleSave} disabled={isSaving} className="px-8">
-                                                {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                                Сохранить изменения
-                                            </Button>
-                                        </div>
+                                        <Button onClick={handleSave} disabled={isSaving} className="h-12 rounded-xl px-8 bg-black text-white hover:bg-slate-800 font-medium">
+                                            {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                            Сохранить изменения
+                                        </Button>
                                     </div>
-                                </CardContent>
-                            </Card>
+                                </div>
+                            </div>
                         )}
 
                         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                            <TabsList className="w-full justify-start overflow-x-auto">
-                                <TabsTrigger value="overview">Обзор</TabsTrigger>
-                                <TabsTrigger value="checklists">Чеклисты</TabsTrigger>
-                                <TabsTrigger value="products">Товары</TabsTrigger>
-                                <TabsTrigger value="inventory">Инвентаризация</TabsTrigger>
-                                <TabsTrigger value="maintenance">Обслуживание</TabsTrigger>
+                            <TabsList className="w-full justify-start overflow-x-auto bg-transparent border-b border-slate-200 rounded-none h-auto p-0 gap-6">
+                                <TabsTrigger value="overview" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none rounded-none border-b-2 border-transparent data-[state=active]:border-black data-[state=active]:text-black text-slate-500 font-medium px-1 py-3 h-auto">Обзор</TabsTrigger>
+                                <TabsTrigger value="checklists" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none rounded-none border-b-2 border-transparent data-[state=active]:border-black data-[state=active]:text-black text-slate-500 font-medium px-1 py-3 h-auto">Чеклисты</TabsTrigger>
+                                <TabsTrigger value="products" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none rounded-none border-b-2 border-transparent data-[state=active]:border-black data-[state=active]:text-black text-slate-500 font-medium px-1 py-3 h-auto">Товары</TabsTrigger>
+                                <TabsTrigger value="inventory" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none rounded-none border-b-2 border-transparent data-[state=active]:border-black data-[state=active]:text-black text-slate-500 font-medium px-1 py-3 h-auto">Инвентаризация</TabsTrigger>
+                                <TabsTrigger value="maintenance" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none rounded-none border-b-2 border-transparent data-[state=active]:border-black data-[state=active]:text-black text-slate-500 font-medium px-1 py-3 h-auto">Обслуживание</TabsTrigger>
                             </TabsList>
 
-                            <TabsContent value="overview" className="space-y-6">
+                            <TabsContent value="overview" className="space-y-8 mt-6">
                                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-                                    <Card>
-                                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                            <CardTitle className="text-sm font-medium text-muted-foreground">Наличные</CardTitle>
-                                            <Wallet className="h-4 w-4 text-muted-foreground" />
-                                        </CardHeader>
-                                        <CardContent><div className="text-2xl font-bold tabular-nums">{formatMoney(getMetricValue(shift, "cash_income"))}</div></CardContent>
-                                    </Card>
-                                    <Card>
-                                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                            <CardTitle className="text-sm font-medium text-muted-foreground">Терминал</CardTitle>
-                                            <DollarSign className="h-4 w-4 text-muted-foreground" />
-                                        </CardHeader>
-                                        <CardContent><div className="text-2xl font-bold tabular-nums">{formatMoney(getMetricValue(shift, "card_income"))}</div></CardContent>
-                                    </Card>
-                                    <Card>
-                                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                            <CardTitle className="text-sm font-medium text-muted-foreground">Расходы</CardTitle>
-                                            <TrendingUp className="h-4 w-4 text-muted-foreground rotate-180" />
-                                        </CardHeader>
-                                        <CardContent><div className="text-2xl font-bold text-red-600 tabular-nums">-{formatMoney(getMetricValue(shift, "expenses"))}</div></CardContent>
-                                    </Card>
-                                    <Card>
-                                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                            <CardTitle className="text-sm font-medium text-muted-foreground">Часы</CardTitle>
-                                            <Clock className="h-4 w-4 text-muted-foreground" />
-                                        </CardHeader>
-                                        <CardContent><div className="text-2xl font-bold tabular-nums">{Number(shift.total_hours || 0).toFixed(1)} ч</div></CardContent>
-                                    </Card>
+                                    <div className="bg-white rounded-2xl border border-slate-200 p-6 flex flex-col justify-between">
+                                        <p className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-2">Наличные</p>
+                                        <p className="text-3xl font-bold tracking-tight whitespace-nowrap text-slate-900">{formatMoney(getMetricValue(shift, "cash_income"))}</p>
+                                    </div>
+                                    <div className="bg-white rounded-2xl border border-slate-200 p-6 flex flex-col justify-between">
+                                        <p className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-2">Терминал</p>
+                                        <p className="text-3xl font-bold tracking-tight whitespace-nowrap text-slate-900">{formatMoney(getMetricValue(shift, "card_income"))}</p>
+                                    </div>
+                                    <div className="bg-rose-50 rounded-2xl border border-rose-100 p-6 flex flex-col justify-between">
+                                        <p className="text-xs font-bold uppercase tracking-widest text-rose-400 mb-2">Расходы</p>
+                                        <p className="text-3xl font-bold text-rose-600 tracking-tight whitespace-nowrap">-{formatMoney(getMetricValue(shift, "expenses"))}</p>
+                                    </div>
+                                    <div className="bg-slate-50 rounded-2xl border border-slate-100 p-6 flex flex-col justify-between">
+                                        <p className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-2">Часы</p>
+                                        <p className="text-3xl font-bold text-slate-900 tracking-tight whitespace-nowrap">{Number(shift.total_hours || 0).toFixed(1)} ч</p>
+                                    </div>
                                 </div>
 
-                                <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-                                    <Card className="lg:col-span-2">
-                                        <CardHeader>
-                                            <CardTitle className="text-base">Детальные показатели</CardTitle>
-                                        </CardHeader>
-                                        <CardContent className="p-0">
+                                <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
+                                    <div className="lg:col-span-2">
+                                        <h3 className="text-xl font-bold tracking-tight mb-4">Детальные показатели</h3>
+                                        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
                                             <Table>
                                                 <TableBody>
                                                     {shift.report_data && Object.entries(shift.report_data).map(([key, value]) => {
                                                         if (key.startsWith("_")) return null
                                                         const label = details?.metric_labels?.[key] || key
                                                         return (
-                                                            <TableRow key={key} className="hover:bg-muted/30">
-                                                                <TableCell className="font-medium text-muted-foreground w-[40%]">{label}</TableCell>
-                                                                <TableCell className="text-right font-mono font-medium">{renderMetricValue(value)}</TableCell>
+                                                            <TableRow key={key} className="hover:bg-slate-50 transition-colors border-b border-slate-100 last:border-0">
+                                                                <TableCell className="font-medium text-slate-500 w-[40%] py-4">{label}</TableCell>
+                                                                <TableCell className="text-right font-bold text-slate-900 tabular-nums py-4">{renderMetricValue(value)}</TableCell>
                                                             </TableRow>
                                                         )
                                                     })}
                                                     {(!shift.report_data || Object.keys(shift.report_data).length === 0) && (
                                                         <TableRow>
-                                                            <TableCell colSpan={2} className="text-center text-muted-foreground h-24">
+                                                            <TableCell colSpan={2} className="text-center text-slate-500 h-24">
                                                                 Нет дополнительных показателей
                                                             </TableCell>
                                                         </TableRow>
                                                     )}
                                                 </TableBody>
                                             </Table>
-                                        </CardContent>
-                                    </Card>
+                                        </div>
+                                    </div>
 
                                     <div className="space-y-6">
-                                        <div className="space-y-2">
-                                            <h3 className="font-semibold text-sm flex items-center gap-2">
-                                                <FileText className="h-4 w-4 text-muted-foreground" />
-                                                Комментарий сотрудника
+                                        <div className="space-y-3">
+                                            <h3 className="font-bold text-lg flex items-center gap-2 tracking-tight">
+                                                <FileText className="h-5 w-5 text-slate-400" />
+                                                Комментарий
                                             </h3>
-                                            <div className="min-h-[100px] rounded-lg border bg-card p-4 text-sm text-muted-foreground">
-                                                {shift.report_comment ? <p className="whitespace-pre-wrap">{shift.report_comment}</p> : <span className="italic opacity-50">Комментарий отсутствует</span>}
+                                            <div className="min-h-[100px] rounded-2xl border border-slate-200 bg-white p-5 text-slate-700 leading-relaxed">
+                                                {shift.report_comment ? <p className="whitespace-pre-wrap">{shift.report_comment}</p> : <span className="italic text-slate-400">Комментарий отсутствует</span>}
                                             </div>
                                         </div>
-                                        <div className="space-y-2">
-                                            <h3 className="font-semibold text-sm flex items-center gap-2">
-                                                <Edit className="h-4 w-4 text-muted-foreground" />
+                                        <div className="space-y-3">
+                                            <h3 className="font-bold text-lg flex items-center gap-2 tracking-tight">
+                                                <Edit className="h-5 w-5 text-slate-400" />
                                                 Заметки владельца
                                             </h3>
-                                            <div className="min-h-[100px] rounded-lg border border-blue-100 bg-blue-50/30 p-4 text-sm text-muted-foreground">
-                                                {shift.owner_notes ? <p className="whitespace-pre-wrap">{shift.owner_notes}</p> : <span className="italic opacity-50">Заметок нет</span>}
+                                            <div className="min-h-[100px] rounded-2xl border border-blue-100 bg-blue-50/50 p-5 text-slate-700 leading-relaxed">
+                                                {shift.owner_notes ? <p className="whitespace-pre-wrap">{shift.owner_notes}</p> : <span className="italic text-slate-400">Заметок нет</span>}
                                             </div>
                                         </div>
                                         {shift.has_owner_corrections && (
-                                            <div className="space-y-2">
-                                                <h3 className="font-semibold text-sm flex items-center gap-2">
-                                                    <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                                            <div className="space-y-3">
+                                                <h3 className="font-bold text-lg flex items-center gap-2 tracking-tight">
+                                                    <ArrowRight className="h-5 w-5 text-slate-400" />
                                                     Правки владельца
                                                 </h3>
                                                 {shift.owner_correction_changes && shift.owner_correction_changes.length > 0 ? (
-                                                    <div className="space-y-2">
+                                                    <div className="space-y-3">
                                                         {shift.owner_correction_changes.map((change, index) => (
-                                                            <div key={`${change.field}-${index}`} className="rounded-lg border border-orange-200 bg-orange-50/40 p-3">
-                                                                <div className="mb-2 text-sm font-medium text-orange-900">{change.label}</div>
-                                                                <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_24px_minmax(0,1fr)] sm:items-start">
-                                                                    <div className="rounded-md border border-orange-100 bg-white/80 p-2">
-                                                                        <div className="mb-1 text-[10px] uppercase tracking-wide text-muted-foreground">Было</div>
-                                                                        <div className="text-sm text-foreground">{renderOwnerCorrectionValue(change, change.before)}</div>
+                                                            <div key={`${change.field}-${index}`} className="rounded-2xl border border-orange-200 bg-orange-50/40 p-4">
+                                                                <div className="mb-3 text-sm font-bold text-orange-900">{change.label}</div>
+                                                                <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_24px_minmax(0,1fr)] sm:items-center">
+                                                                    <div className="rounded-xl border border-orange-100 bg-white/80 p-3">
+                                                                        <div className="mb-1 text-[10px] uppercase font-bold tracking-widest text-slate-400">Было</div>
+                                                                        <div className="text-sm font-medium text-slate-900">{renderOwnerCorrectionValue(change, change.before)}</div>
                                                                     </div>
-                                                                    <div className="flex items-center justify-center text-orange-500">
-                                                                        <ArrowRight className="h-4 w-4" />
+                                                                    <div className="flex items-center justify-center text-orange-400">
+                                                                        <ArrowRight className="h-5 w-5" />
                                                                     </div>
-                                                                    <div className="rounded-md border border-orange-200 bg-white p-2">
-                                                                        <div className="mb-1 text-[10px] uppercase tracking-wide text-muted-foreground">Стало</div>
-                                                                        <div className="text-sm text-foreground">{renderOwnerCorrectionValue(change, change.after)}</div>
+                                                                    <div className="rounded-xl border border-orange-200 bg-white p-3 shadow-sm">
+                                                                        <div className="mb-1 text-[10px] uppercase font-bold tracking-widest text-slate-400">Стало</div>
+                                                                        <div className="text-sm font-medium text-slate-900">{renderOwnerCorrectionValue(change, change.after)}</div>
                                                                     </div>
                                                                 </div>
                                                             </div>
                                                         ))}
                                                     </div>
                                                 ) : (
-                                                    <div className="rounded-lg border border-dashed border-orange-200 bg-orange-50/40 p-4 text-sm text-orange-800">
+                                                    <div className="rounded-2xl border border-dashed border-orange-200 bg-orange-50/40 p-5 text-sm text-orange-800 leading-relaxed">
                                                         Для этой смены сохранился только флаг правок без детализации. Новые корректировки будут показываться списком.
                                                     </div>
                                                 )}
@@ -1144,90 +1150,86 @@ export default function ShiftDetailsPage() {
                                 </div>
                             </TabsContent>
 
-                            <TabsContent value="checklists">
-                                <Card>
-                                    <CardHeader><CardTitle className="text-base">Выполненные чек-листы</CardTitle></CardHeader>
-                                    <CardContent className="p-0">
-                                        {!details?.checklists?.length ? (
-                                            <div className="py-12 text-center text-muted-foreground">Нет данных о чек-листах</div>
-                                        ) : (
-                                            <Table>
-                                                <TableHeader>
-                                                    <TableRow>
-                                                        <TableHead>Название</TableHead>
-                                                        <TableHead>Время</TableHead>
-                                                        <TableHead>Проверил</TableHead>
-                                                        <TableHead className="text-right">Результат</TableHead>
-                                                    </TableRow>
-                                                </TableHeader>
-                                                <TableBody>
-                                                    {details.checklists.map((check, i) => {
-                                                        const percent = check.max_score > 0 ? Math.round((check.total_score / check.max_score) * 100) : 0
-                                                        return (
-                                                            <TableRow key={i}>
-                                                                <TableCell className="font-medium">{check.template_name || "Чек-лист"}</TableCell>
-                                                                <TableCell className="text-muted-foreground">{formatTime(check.created_at)}</TableCell>
-                                                                <TableCell className="text-muted-foreground text-sm">{check.evaluator_name || "—"}</TableCell>
-                                                                <TableCell className="text-right">
-                                                                    <Badge variant={percent >= 80 ? "default" : "destructive"} className={percent >= 80 ? "bg-green-600 hover:bg-green-700" : ""}>
-                                                                        {percent}%
-                                                                    </Badge>
-                                                                </TableCell>
-                                                            </TableRow>
-                                                        )
-                                                    })}
-                                                </TableBody>
-                                            </Table>
-                                        )}
-                                    </CardContent>
-                                </Card>
-                            </TabsContent>
-
-                            <TabsContent value="products">
-                                <Card>
-                                    <CardHeader><CardTitle className="text-base">Проданные товары</CardTitle></CardHeader>
-                                    <CardContent className="p-0">
+                            <TabsContent value="checklists" className="mt-6">
+                                <h3 className="text-xl font-bold tracking-tight mb-4">Выполненные чек-листы</h3>
+                                <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+                                    {!details?.checklists?.length ? (
+                                        <div className="py-16 text-center text-slate-400">Нет данных о чек-листах</div>
+                                    ) : (
                                         <Table>
-                                            <TableHeader>
-                                                <TableRow>
-                                                    <TableHead>Время</TableHead>
-                                                    <TableHead>Товар</TableHead>
-                                                    <TableHead>Кол-во</TableHead>
-                                                    <TableHead className="text-right">Цена</TableHead>
-                                                    <TableHead className="text-right">Сумма</TableHead>
+                                            <TableHeader className="bg-slate-50/50">
+                                                <TableRow className="hover:bg-transparent border-b border-slate-100">
+                                                    <TableHead className="font-medium text-slate-500 h-12">Название</TableHead>
+                                                    <TableHead className="font-medium text-slate-500 h-12">Время</TableHead>
+                                                    <TableHead className="font-medium text-slate-500 h-12">Проверил</TableHead>
+                                                    <TableHead className="text-right font-medium text-slate-500 h-12">Результат</TableHead>
                                                 </TableRow>
                                             </TableHeader>
                                             <TableBody>
-                                                {details?.product_sales?.map((sale: any) => (
-                                                    <TableRow key={sale.id}>
-                                                        <TableCell className="font-mono text-xs text-muted-foreground">{formatTime(sale.created_at)}</TableCell>
-                                                        <TableCell>
-                                                            <div className="font-medium">{sale.product_name}</div>
-                                                            {sale.reason && <div className="text-xs text-muted-foreground">{sale.reason}</div>}
-                                                        </TableCell>
-                                                        <TableCell>{Math.abs(Number(sale.change_amount))} шт.</TableCell>
-                                                        <TableCell className="text-right text-muted-foreground whitespace-nowrap">{sale.price_at_time ? formatMoney(sale.price_at_time) : "-"}</TableCell>
-                                                        <TableCell className="text-right font-medium whitespace-nowrap">{formatMoney(Math.abs(Number(sale.change_amount)) * (Number(sale.price_at_time) || 0))}</TableCell>
-                                                    </TableRow>
-                                                ))}
-                                                {(!details?.product_sales || details.product_sales.length === 0) && (
-                                                    <TableRow>
-                                                        <TableCell colSpan={5} className="py-12 text-center text-muted-foreground">Продаж товаров не найдено</TableCell>
-                                                    </TableRow>
-                                                )}
+                                                {details.checklists.map((check, i) => {
+                                                    const percent = check.max_score > 0 ? Math.round((check.total_score / check.max_score) * 100) : 0
+                                                    return (
+                                                        <TableRow key={i} className="hover:bg-slate-50 transition-colors border-b border-slate-100 last:border-0">
+                                                            <TableCell className="font-medium py-4 text-slate-900">{check.template_name || "Чек-лист"}</TableCell>
+                                                            <TableCell className="text-slate-500 py-4">{formatTime(check.created_at)}</TableCell>
+                                                            <TableCell className="text-slate-500 text-sm py-4">{check.evaluator_name || "—"}</TableCell>
+                                                            <TableCell className="text-right py-4">
+                                                                <span className={cn("inline-flex items-center px-2.5 py-1 rounded-lg text-sm font-bold", percent >= 80 ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700")}>
+                                                                    {percent}%
+                                                                </span>
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    )
+                                                })}
                                             </TableBody>
                                         </Table>
-                                    </CardContent>
-                                </Card>
+                                    )}
+                                </div>
                             </TabsContent>
 
-                            <TabsContent value="inventory">
-                                <div className="space-y-4">
-                                <Card>
-                                    <CardHeader><CardTitle className="text-base">Инвентаризации</CardTitle></CardHeader>
-                                    <CardContent className="bg-muted/5 p-0">
+                            <TabsContent value="products" className="mt-6">
+                                <h3 className="text-xl font-bold tracking-tight mb-4">Проданные товары</h3>
+                                <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+                                    <Table>
+                                        <TableHeader className="bg-slate-50/50">
+                                            <TableRow className="hover:bg-transparent border-b border-slate-100">
+                                                <TableHead className="font-medium text-slate-500 h-12">Время</TableHead>
+                                                <TableHead className="font-medium text-slate-500 h-12">Товар</TableHead>
+                                                <TableHead className="font-medium text-slate-500 h-12">Кол-во</TableHead>
+                                                <TableHead className="text-right font-medium text-slate-500 h-12">Цена</TableHead>
+                                                <TableHead className="text-right font-medium text-slate-500 h-12">Сумма</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {details?.product_sales?.map((sale: any) => (
+                                                <TableRow key={sale.id} className="hover:bg-slate-50 transition-colors border-b border-slate-100 last:border-0">
+                                                    <TableCell className="font-mono text-xs text-slate-400 py-4">{formatTime(sale.created_at)}</TableCell>
+                                                    <TableCell className="py-4">
+                                                        <div className="font-medium text-slate-900">{sale.product_name}</div>
+                                                        {sale.reason && <div className="text-xs text-slate-500 mt-0.5">{sale.reason}</div>}
+                                                    </TableCell>
+                                                    <TableCell className="py-4 text-slate-700">{Math.abs(Number(sale.change_amount))} шт.</TableCell>
+                                                    <TableCell className="text-right text-slate-500 whitespace-nowrap py-4">{sale.price_at_time ? formatMoney(sale.price_at_time) : "-"}</TableCell>
+                                                    <TableCell className="text-right font-bold text-slate-900 whitespace-nowrap py-4">{formatMoney(Math.abs(Number(sale.change_amount)) * (Number(sale.price_at_time) || 0))}</TableCell>
+                                                </TableRow>
+                                            ))}
+                                            {(!details?.product_sales || details.product_sales.length === 0) && (
+                                                <TableRow>
+                                                    <TableCell colSpan={5} className="py-16 text-center text-slate-400">Продаж товаров не найдено</TableCell>
+                                                </TableRow>
+                                            )}
+                                        </TableBody>
+                                    </Table>
+                                </div>
+                            </TabsContent>
+
+                            <TabsContent value="inventory" className="mt-6">
+                                <div className="space-y-8">
+                                <div>
+                                    <h3 className="text-xl font-bold tracking-tight mb-4">Инвентаризации</h3>
+                                    <div className="bg-slate-50/50 rounded-2xl border border-slate-200">
                                         {(!details?.inventory_checks || details.inventory_checks.length === 0) ? (
-                                            <div className="py-12 text-center text-muted-foreground">Инвентаризаций не проводилось</div>
+                                            <div className="py-16 text-center text-slate-400">Инвентаризаций не проводилось</div>
                                         ) : (
                                             <div className="space-y-3 p-4">
                                                 {details.inventory_checks.map((inv: any) => {
@@ -1278,7 +1280,7 @@ export default function ShiftDetailsPage() {
                                                                     {discrepancies.length > 0 ? (
                                                                         <Table>
                                                                             <TableHeader className="bg-slate-50/50">
-                                                                                <TableRow className="h-9 hover:bg-transparent">
+                                                                                <TableRow className="h-9 hover:bg-transparent border-b border-slate-100">
                                                                                     <TableHead className="h-9 text-[10px] font-bold uppercase text-slate-400">Товар</TableHead>
                                                                                     <TableHead className="h-9 text-right text-[10px] font-bold uppercase text-slate-400">Ожидалось</TableHead>
                                                                                     <TableHead className="h-9 text-right text-[10px] font-bold uppercase text-slate-400">Факт</TableHead>
@@ -1292,7 +1294,7 @@ export default function ShiftDetailsPage() {
                                                                                         <TableCell className="py-2 text-right text-sm text-slate-500 tabular-nums">{item.expected_stock}</TableCell>
                                                                                         <TableCell className="py-2 text-right text-sm font-bold text-slate-900 tabular-nums">{item.actual_stock}</TableCell>
                                                                                         <TableCell className="py-2 text-right">
-                                                                                            <Badge variant={Number(item.difference) > 0 ? "default" : "destructive"} className={cn("h-5 px-1.5 font-mono text-[10px]", Number(item.difference) > 0 ? "bg-green-100 text-green-700 hover:bg-green-200 border-0" : "bg-red-100 text-red-700 hover:bg-red-200 border-0")}>
+                                                                                            <Badge variant={Number(item.difference) > 0 ? "default" : "destructive"} className={cn("h-5 px-1.5 font-mono text-[10px]", Number(item.difference) > 0 ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-0" : "bg-rose-50 text-rose-700 hover:bg-rose-100 border-0")}>
                                                                                                 {Number(item.difference) > 0 ? "+" : ""}{item.difference}
                                                                                             </Badge>
                                                                                         </TableCell>
@@ -1310,99 +1312,100 @@ export default function ShiftDetailsPage() {
                                                 })}
                                             </div>
                                         )}
-                                    </CardContent>
-                                </Card>
+                                    </div>
+                                </div>
 
-                                <Card>
-                                    <CardHeader><CardTitle className="text-base">Передача остатков по смене</CardTitle></CardHeader>
-                                    <CardContent className="p-0">
+                                <div>
+                                    <h3 className="text-xl font-bold tracking-tight mb-4">Передача остатков по смене</h3>
+                                    <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
                                         {(!details?.shift_zone_discrepancies || details.shift_zone_discrepancies.length === 0) ? (
-                                            <div className="py-12 text-center text-muted-foreground">
+                                            <div className="py-16 text-center text-slate-400">
                                                 По передаче остатков расхождений не найдено или склады ответственности не настроены.
                                             </div>
                                         ) : (
                                             <Table>
-                                                <TableHeader>
-                                                    <TableRow>
-                                                        <TableHead>Склад</TableHead>
-                                                        <TableHead>Товар</TableHead>
-                                                        <TableHead className="text-right">Старт</TableHead>
-                                                        <TableHead className="text-right">Приход</TableHead>
-                                                        <TableHead className="text-right">Расход</TableHead>
-                                                        <TableHead className="text-right">Ожидалось</TableHead>
-                                                        <TableHead className="text-right">Факт</TableHead>
-                                                        <TableHead className="text-right">Разница</TableHead>
-                                                        <TableHead>Статус</TableHead>
-                                                        <TableHead>Решение</TableHead>
-                                                        <TableHead className="text-right">Действия</TableHead>
+                                                <TableHeader className="bg-slate-50/50">
+                                                    <TableRow className="hover:bg-transparent border-b border-slate-100">
+                                                        <TableHead className="font-medium text-slate-500 h-12">Склад</TableHead>
+                                                        <TableHead className="font-medium text-slate-500 h-12">Товар</TableHead>
+                                                        <TableHead className="text-right font-medium text-slate-500 h-12">Старт</TableHead>
+                                                        <TableHead className="text-right font-medium text-slate-500 h-12">Приход</TableHead>
+                                                        <TableHead className="text-right font-medium text-slate-500 h-12">Расход</TableHead>
+                                                        <TableHead className="text-right font-medium text-slate-500 h-12">Ожидалось</TableHead>
+                                                        <TableHead className="text-right font-medium text-slate-500 h-12">Факт</TableHead>
+                                                        <TableHead className="text-right font-medium text-slate-500 h-12">Разница</TableHead>
+                                                        <TableHead className="font-medium text-slate-500 h-12">Статус</TableHead>
+                                                        <TableHead className="font-medium text-slate-500 h-12">Решение</TableHead>
+                                                        <TableHead className="text-right font-medium text-slate-500 h-12">Действия</TableHead>
                                                     </TableRow>
                                                 </TableHeader>
                                                 <TableBody>
                                                     {details.shift_zone_discrepancies.map((row, index: number) => (
-                                                        <TableRow key={`${row.warehouse_id}-${row.product_id}-${index}`} className="align-top">
-                                                            <TableCell>
-                                                                <div className="font-medium">{row.warehouse_name}</div>
-                                                                <div className="text-xs text-muted-foreground">{row.shift_zone_label}</div>
+                                                        <TableRow key={`${row.warehouse_id}-${row.product_id}-${index}`} className="align-top hover:bg-slate-50 transition-colors border-b border-slate-100 last:border-0">
+                                                            <TableCell className="py-4">
+                                                                <div className="font-medium text-slate-900">{row.warehouse_name}</div>
+                                                                <div className="text-xs text-slate-500 mt-0.5">{row.shift_zone_label}</div>
                                                             </TableCell>
-                                                            <TableCell className="font-medium">{row.product_name}</TableCell>
-                                                            <TableCell className="text-right tabular-nums">{row.opening_counted_quantity ?? "—"}</TableCell>
-                                                            <TableCell className="text-right tabular-nums text-green-600">+{row.inflow_quantity}</TableCell>
-                                                            <TableCell className="text-right tabular-nums text-red-600">-{row.outflow_quantity}</TableCell>
-                                                            <TableCell className="text-right tabular-nums">{row.expected_closing_quantity ?? "—"}</TableCell>
-                                                            <TableCell className="text-right tabular-nums">{row.actual_closing_quantity ?? "—"}</TableCell>
-                                                            <TableCell className={cn("text-right font-semibold tabular-nums", Number(row.difference_quantity || 0) > 0 ? "text-green-600" : "text-red-600")}>
+                                                            <TableCell className="font-medium text-slate-900 py-4">{row.product_name}</TableCell>
+                                                            <TableCell className="text-right text-slate-500 tabular-nums py-4">{row.opening_counted_quantity ?? "—"}</TableCell>
+                                                            <TableCell className="text-right text-emerald-600 tabular-nums py-4">+{row.inflow_quantity}</TableCell>
+                                                            <TableCell className="text-right text-rose-600 tabular-nums py-4">-{row.outflow_quantity}</TableCell>
+                                                            <TableCell className="text-right text-slate-500 tabular-nums py-4">{row.expected_closing_quantity ?? "—"}</TableCell>
+                                                            <TableCell className="text-right font-medium text-slate-900 tabular-nums py-4">{row.actual_closing_quantity ?? "—"}</TableCell>
+                                                            <TableCell className={cn("text-right font-bold tabular-nums py-4", Number(row.difference_quantity || 0) > 0 ? "text-emerald-600" : "text-rose-600")}>
                                                                 {Number(row.difference_quantity || 0) > 0 ? "+" : ""}{row.difference_quantity}
                                                             </TableCell>
-                                                            <TableCell>
-                                                                <div className="space-y-1">
-                                                                    <Badge variant="outline" className={cn(
-                                                                        row.responsibility_type === "SHIFT_RESPONSIBILITY" ? "border-red-200 bg-red-50 text-red-700" :
-                                                                        row.responsibility_type === "INHERITED_FROM_PREVIOUS_SHIFT" ? "border-amber-200 bg-amber-50 text-amber-700" :
-                                                                        "border-slate-200 bg-slate-50 text-slate-700"
+                                                            <TableCell className="py-4">
+                                                                <div className="space-y-1.5">
+                                                                    <span className={cn(
+                                                                        "inline-flex px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-widest",
+                                                                        row.responsibility_type === "SHIFT_RESPONSIBILITY" ? "bg-rose-50 text-rose-700" :
+                                                                        row.responsibility_type === "INHERITED_FROM_PREVIOUS_SHIFT" ? "bg-orange-50 text-orange-700" :
+                                                                        "bg-slate-100 text-slate-700"
                                                                     )}>
                                                                         {row.responsibility_label}
-                                                                    </Badge>
-                                                                    <div className="text-xs text-muted-foreground">{row.explanation}</div>
+                                                                    </span>
+                                                                    <div className="text-xs text-slate-500">{row.explanation}</div>
                                                                 </div>
                                                             </TableCell>
-                                                            <TableCell>
+                                                            <TableCell className="py-4">
                                                                 {row.resolution ? (
-                                                                    <div className="space-y-1">
-                                                                        <Badge
-                                                                            variant="outline"
+                                                                    <div className="space-y-1.5">
+                                                                        <span
                                                                             className={cn(
+                                                                                "inline-flex px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-widest",
                                                                                 row.resolution.resolution_type === "SALARY_DEDUCTION"
-                                                                                    ? "border-rose-200 bg-rose-50 text-rose-700"
-                                                                                    : "border-slate-200 bg-slate-50 text-slate-700"
+                                                                                    ? "bg-rose-50 text-rose-700"
+                                                                                    : "bg-slate-100 text-slate-700"
                                                                             )}
                                                                         >
                                                                             {row.resolution.resolution_type === "SALARY_DEDUCTION"
                                                                                 ? `В счет ЗП · ${formatMoney(row.resolution.resolution_amount)}`
-                                                                                : `Потери клуба · ${formatMoney(row.resolution.resolution_amount)}`}
-                                                                        </Badge>
-                                                                        <div className="text-xs text-muted-foreground">
+                                                                                : `Потери · ${formatMoney(row.resolution.resolution_amount)}`}
+                                                                        </span>
+                                                                        <div className="text-[10px] text-slate-500">
                                                                             {new Date(row.resolution.resolved_at).toLocaleString("ru-RU")}
                                                                             {row.resolution.resolved_by_name ? ` · ${row.resolution.resolved_by_name}` : ""}
                                                                         </div>
                                                                         {row.resolution.notes && (
-                                                                            <div className="text-xs text-muted-foreground whitespace-pre-wrap">
+                                                                            <div className="text-[10px] text-slate-500 whitespace-pre-wrap">
                                                                                 {row.resolution.notes}
                                                                             </div>
                                                                         )}
                                                                     </div>
                                                                 ) : (
-                                                                    <span className="text-xs text-muted-foreground">Не обработано</span>
+                                                                    <span className="text-xs text-slate-400">Не обработано</span>
                                                                 )}
                                                             </TableCell>
-                                                            <TableCell className="text-right">
+                                                            <TableCell className="text-right py-4">
                                                                 {row.resolution ? (
-                                                                    <span className="text-xs text-muted-foreground">Решение сохранено</span>
+                                                                    <span className="text-xs text-slate-400">Решение сохранено</span>
                                                                 ) : (
-                                                                    <div className="flex justify-end gap-2">
+                                                                    <div className="flex flex-col items-end gap-2">
                                                                         <Button
                                                                             variant="outline"
                                                                             size="sm"
-                                                                            className="h-8"
+                                                                            className="h-8 rounded-lg w-24"
                                                                             onClick={() => openZoneResolutionDialog(row, "SALARY_DEDUCTION")}
                                                                         >
                                                                             В счет ЗП
@@ -1410,7 +1413,7 @@ export default function ShiftDetailsPage() {
                                                                         <Button
                                                                             variant="outline"
                                                                             size="sm"
-                                                                            className="h-8"
+                                                                            className="h-8 rounded-lg w-24 text-slate-500 hover:text-slate-900"
                                                                             onClick={() => openZoneResolutionDialog(row, "LOSS")}
                                                                         >
                                                                             В потери
@@ -1423,30 +1426,29 @@ export default function ShiftDetailsPage() {
                                                 </TableBody>
                                             </Table>
                                         )}
-                                    </CardContent>
-                                </Card>
+                                    </div>
+                                </div>
                                 </div>
                             </TabsContent>
 
-                            <TabsContent value="maintenance">
-                                <Card>
-                                    <CardHeader><CardTitle className="text-base">Обслуживание оборудования</CardTitle></CardHeader>
-                                    <CardContent className="p-0">
-                                        <Table>
-                                            <TableHeader>
-                                                <TableRow>
-                                                    <TableHead>Время</TableHead>
-                                                    <TableHead>Оборудование</TableHead>
-                                                    <TableHead>Тип</TableHead>
-                                                    <TableHead>Статус</TableHead>
-                                                </TableRow>
-                                            </TableHeader>
-                                            <TableBody>
-                                                {details?.maintenance_tasks?.map((task: any) => {
-                                                    const taskTypeMap: Record<string, string> = {
-                                                        CLEANING: "Чистка",
-                                                        REPAIR: "Ремонт",
-                                                        INSPECTION: "Осмотр",
+                            <TabsContent value="maintenance" className="mt-6">
+                                <h3 className="text-xl font-bold tracking-tight mb-4">Обслуживание оборудования</h3>
+                                <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+                                    <Table>
+                                        <TableHeader className="bg-slate-50/50">
+                                            <TableRow className="hover:bg-transparent border-b border-slate-100">
+                                                <TableHead className="font-medium text-slate-500 h-12">Время</TableHead>
+                                                <TableHead className="font-medium text-slate-500 h-12">Оборудование</TableHead>
+                                                <TableHead className="font-medium text-slate-500 h-12">Тип</TableHead>
+                                                <TableHead className="font-medium text-slate-500 h-12">Статус</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {details?.maintenance_tasks?.map((task: any) => {
+                                                const taskTypeMap: Record<string, string> = {
+                                                    CLEANING: "Чистка",
+                                                    REPAIR: "Ремонт",
+                                                    INSPECTION: "Осмотр",
                                                         REPLACEMENT: "Замена",
                                                         SOFTWARE: "ПО",
                                                     }
@@ -1457,55 +1459,54 @@ export default function ShiftDetailsPage() {
                                                         SKIPPED: "Пропущено",
                                                     }
                                                     return (
-                                                        <TableRow key={task.id}>
-                                                            <TableCell className="font-mono text-xs text-muted-foreground">{formatTime(task.completed_at)}</TableCell>
-                                                            <TableCell>
-                                                                <div className="font-medium">{task.equipment_name}</div>
-                                                                <div className="text-xs text-muted-foreground">{task.workstation_name}</div>
+                                                        <TableRow key={task.id} className="hover:bg-slate-50 transition-colors border-b border-slate-100 last:border-0">
+                                                            <TableCell className="font-mono text-xs text-slate-400 py-4">{formatTime(task.completed_at)}</TableCell>
+                                                            <TableCell className="py-4">
+                                                                <div className="font-medium text-slate-900">{task.equipment_name}</div>
+                                                                <div className="text-xs text-slate-500 mt-0.5">{task.workstation_name}</div>
                                                             </TableCell>
-                                                            <TableCell>
-                                                                <Badge variant="outline" className="font-normal">{taskTypeMap[task.task_type] || task.task_type}</Badge>
+                                                            <TableCell className="py-4">
+                                                                <span className="inline-flex px-2 py-1 rounded bg-slate-100 text-slate-700 text-xs font-medium">{taskTypeMap[task.task_type] || task.task_type}</span>
                                                             </TableCell>
-                                                            <TableCell>
-                                                                <Badge variant="secondary" className="bg-green-50 text-green-700 hover:bg-green-100 border-green-200">{statusMap[task.status] || task.status}</Badge>
+                                                            <TableCell className="py-4">
+                                                                <span className={cn("inline-flex px-2 py-1 rounded text-xs font-bold", task.status === "COMPLETED" ? "bg-emerald-50 text-emerald-700" : "bg-slate-50 text-slate-700")}>{statusMap[task.status] || task.status}</span>
                                                             </TableCell>
                                                         </TableRow>
                                                     )
                                                 })}
                                                 {(!details?.maintenance_tasks || details.maintenance_tasks.length === 0) && (
                                                     <TableRow>
-                                                        <TableCell colSpan={4} className="py-12 text-center text-muted-foreground">Нет записей об обслуживании</TableCell>
+                                                        <TableCell colSpan={4} className="py-16 text-center text-slate-400">Нет записей об обслуживании</TableCell>
                                                     </TableRow>
                                                 )}
                                             </TableBody>
                                         </Table>
-                                    </CardContent>
-                                </Card>
-                            </TabsContent>
-                        </Tabs>
+                                    </div>
+                                </TabsContent>
+                            </Tabs>
                     </div>
                 )}
 
-                <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur supports-[backdrop-filter]:bg-background/80 md:hidden">
+                <div className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur md:hidden">
                     <div className="mx-auto grid max-w-7xl grid-cols-[44px_minmax(0,1fr)_44px] gap-2">
-                        <Button asChild variant="outline" size="icon" className="h-11 w-11 justify-center">
+                        <Button asChild variant="outline" size="icon" className="h-11 w-11 justify-center rounded-xl border-slate-200 text-slate-700">
                             <Link href={backHref}>
-                                <ArrowLeft className="h-4 w-4" />
+                                <ArrowLeft className="h-5 w-5" />
                             </Link>
                         </Button>
                         {!isLoading && shift && (
                             shift.status === "VERIFIED" ? (
                                 <Button
                                     variant="outline"
-                                    className="h-11 w-full min-w-0 justify-center px-3"
+                                    className="h-11 w-full min-w-0 justify-center px-3 rounded-xl border-slate-200 text-slate-700 font-medium"
                                     onClick={() => handleVerify("CLOSED")}
-                                    aria-label="Отменить подтверждение"
+                                    aria-label="Снять подтверждение"
                                 >
-                                    Отменить
+                                    Снять подтверждение
                                 </Button>
                             ) : (
                                 <Button
-                                    className="h-11 w-full min-w-0 justify-center px-3 bg-green-600 text-white hover:bg-green-700"
+                                    className="h-11 w-full min-w-0 justify-center px-3 bg-emerald-600 text-white hover:bg-emerald-700 rounded-xl font-medium"
                                     onClick={() => handleVerify("VERIFIED")}
                                 >
                                     Подтвердить
@@ -1515,7 +1516,7 @@ export default function ShiftDetailsPage() {
                         {!isLoading && shift && (
                             <Button
                                 size="icon"
-                                className="h-11 w-11 shrink-0 bg-indigo-600 text-white hover:bg-indigo-700"
+                                className={cn("h-11 w-11 shrink-0 rounded-xl text-slate-700 border border-slate-200", isEditMode ? "bg-slate-100" : "bg-white")}
                                 onClick={() => {
                                     populateEditState(shift)
                                     setIsEditMode((prev) => !prev)
@@ -1529,32 +1530,33 @@ export default function ShiftDetailsPage() {
                 </div>
 
                 <Dialog open={isZoneResolutionDialogOpen} onOpenChange={(open) => !open && closeZoneResolutionDialog()}>
-                    <DialogContent className="sm:max-w-[560px]">
+                    <DialogContent className="sm:max-w-[560px] p-6 rounded-3xl border-slate-200 shadow-xl">
                         <DialogHeader>
-                            <DialogTitle>
+                            <DialogTitle className="text-xl font-bold">
                                 {zoneResolutionType === "SALARY_DEDUCTION" ? "Решение: в счет ЗП" : "Решение: списать как потери"}
                             </DialogTitle>
                         </DialogHeader>
                         {zoneResolutionTarget && (
-                            <div className="space-y-4">
-                                <div className="rounded-xl border bg-slate-50/70 p-4">
-                                    <div className="font-medium">{zoneResolutionTarget.warehouse_name} · {zoneResolutionTarget.product_name}</div>
-                                    <div className="mt-1 text-sm text-muted-foreground">
-                                        Расхождение: {Number(zoneResolutionTarget.difference_quantity || 0) > 0 ? "+" : ""}{Number(zoneResolutionTarget.difference_quantity || 0)} шт. · Цена: {formatMoney(zoneResolutionTarget.selling_price)}
+                            <div className="space-y-6 mt-4">
+                                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                                    <div className="font-bold text-slate-900">{zoneResolutionTarget.warehouse_name} · {zoneResolutionTarget.product_name}</div>
+                                    <div className="mt-2 text-sm text-slate-500">
+                                        Расхождение: <span className="font-medium text-slate-700">{Number(zoneResolutionTarget.difference_quantity || 0) > 0 ? "+" : ""}{Number(zoneResolutionTarget.difference_quantity || 0)} шт.</span> · Цена: <span className="font-medium text-slate-700">{formatMoney(zoneResolutionTarget.selling_price)}</span>
                                     </div>
-                                    <div className="mt-1 text-sm font-semibold">
-                                        Полная сумма: {formatMoney(getZoneResolutionMaxAmount(zoneResolutionTarget))}
+                                    <div className="mt-2 text-sm">
+                                        Полная сумма: <span className="font-bold text-slate-900">{formatMoney(getZoneResolutionMaxAmount(zoneResolutionTarget))}</span>
                                     </div>
                                 </div>
 
                                 {zoneResolutionType === "SALARY_DEDUCTION" ? (
-                                    <div className="space-y-4">
-                                        <div className="space-y-2">
-                                            <Label>Сколько удержать</Label>
+                                    <div className="space-y-6">
+                                        <div className="space-y-3">
+                                            <Label className="text-slate-700 font-bold">Сколько удержать</Label>
                                             <div className="flex gap-2">
                                                 <Button
                                                     type="button"
-                                                    variant={zoneResolutionMode === "full" ? "default" : "outline"}
+                                                    variant={zoneResolutionMode === "full" ? "secondary" : "outline"}
+                                                    className={cn("h-11 rounded-xl px-4 flex-1", zoneResolutionMode === "full" ? "bg-slate-900 text-white hover:bg-slate-800" : "border-slate-200 text-slate-600 hover:bg-slate-50")}
                                                     onClick={() => {
                                                         setZoneResolutionMode("full")
                                                         setZoneResolutionAmount(String(getZoneResolutionMaxAmount(zoneResolutionTarget)))
@@ -1564,7 +1566,8 @@ export default function ShiftDetailsPage() {
                                                 </Button>
                                                 <Button
                                                     type="button"
-                                                    variant={zoneResolutionMode === "custom" ? "default" : "outline"}
+                                                    variant={zoneResolutionMode === "custom" ? "secondary" : "outline"}
+                                                    className={cn("h-11 rounded-xl px-4 flex-1", zoneResolutionMode === "custom" ? "bg-slate-900 text-white hover:bg-slate-800" : "border-slate-200 text-slate-600 hover:bg-slate-50")}
                                                     onClick={() => {
                                                         setZoneResolutionMode("custom")
                                                         setZoneResolutionAmount("")
@@ -1576,8 +1579,8 @@ export default function ShiftDetailsPage() {
                                         </div>
 
                                         {zoneResolutionMode === "custom" && (
-                                            <div className="space-y-2">
-                                                <Label>Сумма удержания</Label>
+                                            <div className="space-y-3">
+                                                <Label className="text-slate-700 font-bold">Сумма удержания</Label>
                                                 <Input
                                                     type="number"
                                                     min="0"
@@ -1585,21 +1588,22 @@ export default function ShiftDetailsPage() {
                                                     step="0.01"
                                                     value={zoneResolutionAmount}
                                                     onChange={(e) => setZoneResolutionAmount(e.target.value)}
+                                                    className="h-12 rounded-xl border-slate-200 bg-slate-50 focus-visible:ring-1 focus-visible:ring-black focus-visible:bg-white text-base transition-all"
                                                 />
-                                                <div className="text-xs text-muted-foreground">
+                                                <div className="text-xs text-slate-500 font-medium">
                                                     Максимум: {formatMoney(getZoneResolutionMaxAmount(zoneResolutionTarget))}
                                                 </div>
                                             </div>
                                         )}
                                     </div>
                                 ) : (
-                                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                                    <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900 font-medium">
                                         Сумма будет списана на потери клуба. Сотруднику удержание по этой строке не создается.
                                     </div>
                                 )}
 
-                                <div className="space-y-2">
-                                    <Label>Комментарий</Label>
+                                <div className="space-y-3">
+                                    <Label className="text-slate-700 font-bold">Комментарий</Label>
                                     <Textarea
                                         value={zoneResolutionNote}
                                         onChange={(e) => setZoneResolutionNote(e.target.value)}
@@ -1607,22 +1611,23 @@ export default function ShiftDetailsPage() {
                                             ? "Например: удержать частично, остальное простить"
                                             : "Например: списано как бой/усушка/операционная потеря"}
                                         rows={3}
+                                        className="rounded-xl border-slate-200 bg-slate-50 focus-visible:ring-1 focus-visible:ring-black focus-visible:bg-white text-base transition-all resize-none"
                                     />
                                 </div>
                             </div>
                         )}
-                        <DialogFooter>
-                            <Button variant="outline" onClick={closeZoneResolutionDialog} disabled={isZoneResolutionSaving}>
+                        <DialogFooter className="mt-6 gap-2 sm:gap-0">
+                            <Button variant="outline" onClick={closeZoneResolutionDialog} disabled={isZoneResolutionSaving} className="h-12 rounded-xl border-slate-200 text-slate-700 hover:bg-slate-50">
                                 Отмена
                             </Button>
-                            <Button onClick={handleResolveZoneDiscrepancy} disabled={isZoneResolutionSaving}>
+                            <Button onClick={handleResolveZoneDiscrepancy} disabled={isZoneResolutionSaving} className="h-12 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 font-medium">
                                 {isZoneResolutionSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                                 Сохранить решение
                             </Button>
                         </DialogFooter>
                     </DialogContent>
                 </Dialog>
-            </div>
-        </PageShell>
+            </main>
+        </div>
     )
 }
