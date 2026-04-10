@@ -14,6 +14,7 @@ type ShiftZoneSnapshotWizardProps = {
     clubId: string
     shiftId: string
     snapshotType: ShiftZoneSnapshotType
+    blindCloseMode?: boolean
     onClose: () => void
     onComplete: () => void | Promise<void>
     allowSkip?: boolean
@@ -24,6 +25,7 @@ export function ShiftZoneSnapshotWizard({
     clubId,
     shiftId,
     snapshotType,
+    blindCloseMode = false,
     onClose,
     onComplete,
     allowSkip = false
@@ -90,6 +92,13 @@ export function ShiftZoneSnapshotWizard({
                         console.error("Failed to restore shift snapshot draft", error)
                     }
 
+                    if (snapshotType === "CLOSE" && blindCloseMode) {
+                        nextItems = nextItems.map((item) => ({
+                            ...item,
+                            counted_quantity: item.saved_counted_quantity === null ? null : item.counted_quantity
+                        }))
+                    }
+
                     setItems(nextItems)
                     setWarehouses(availableWarehouses as any)
                     setHandoverSourceCandidates(sourceCandidates as HandoverSourceCandidate[])
@@ -116,7 +125,7 @@ export function ShiftZoneSnapshotWizard({
         return () => {
             disposed = true
         }
-    }, [clubId, draftStorageKey, isOpen, shiftId, snapshotType])
+    }, [blindCloseMode, clubId, draftStorageKey, isOpen, shiftId, snapshotType])
 
     useEffect(() => {
         if (!isOpen || isLoading) return
@@ -238,6 +247,7 @@ export function ShiftZoneSnapshotWizard({
                     barcode: product.barcode,
                     barcodes: product.barcodes,
                     counted_quantity: 1,
+                    saved_counted_quantity: null,
                     system_quantity: 0,
                     selling_price: Number(product.selling_price || 0)
                 }
@@ -310,7 +320,7 @@ export function ShiftZoneSnapshotWizard({
                                 description={description}
                                 items={workspaceItems}
                                 onItemsChange={handleWorkspaceItemsChange}
-                                blindMode={snapshotType === "CLOSE"}
+                                blindMode={snapshotType === "CLOSE" && blindCloseMode}
                                 toolbarActions={
                                     <Button
                                         type="button"

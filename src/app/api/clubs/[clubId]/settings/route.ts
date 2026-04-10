@@ -3,6 +3,7 @@ import { query } from '@/db';
 import { cookies } from 'next/headers';
 import { ensureOwnerSubscriptionActive } from '@/lib/club-subscription-guard';
 import { requireClubFullAccess } from '@/lib/club-api-access';
+import { normalizeInventorySettings } from '@/lib/inventory-settings';
 
 // GET: Get club settings
 export async function GET(
@@ -27,7 +28,10 @@ export async function GET(
         const metricsRes = await query(`SELECT key, label FROM system_metrics WHERE type = 'MONEY' ORDER BY label`);
 
         return NextResponse.json({ 
-            club: result.rows[0],
+            club: {
+                ...result.rows[0],
+                inventory_settings: normalizeInventorySettings(result.rows[0]?.inventory_settings),
+            },
             warehouses: warehousesRes.rows,
             metrics: metricsRes.rows
         });
@@ -84,13 +88,9 @@ export async function PATCH(
             updates.push(`night_start_hour = $${idx++}`);
             values.push(body.night_start_hour);
         }
-        if (body.inventory_required !== undefined) {
-            updates.push(`inventory_required = $${idx++}`);
-            values.push(body.inventory_required);
-        }
         if (body.inventory_settings !== undefined) {
             updates.push(`inventory_settings = $${idx++}`);
-            values.push(body.inventory_settings);
+            values.push(normalizeInventorySettings(body.inventory_settings));
         }
 
         if (updates.length === 0) {
@@ -104,7 +104,13 @@ export async function PATCH(
             values
         );
 
-        return NextResponse.json({ success: true, club: result.rows[0] });
+        return NextResponse.json({
+            success: true,
+            club: {
+                ...result.rows[0],
+                inventory_settings: normalizeInventorySettings(result.rows[0]?.inventory_settings),
+            }
+        });
 
     } catch (error: any) {
         console.error('Update Club Settings Error:', error);

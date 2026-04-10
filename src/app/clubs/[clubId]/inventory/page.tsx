@@ -1,5 +1,5 @@
 import { TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { getProducts, getCategories, getSupplies, getInventories, getWarehouses, getEmployees, getClubTasks, getProcurementLists, getSuppliersForSelect, getClubSettings, getSalesAnalytics, getActiveShiftsForClub, getInventoryPageAccess, getShiftZoneOverview } from "./actions"
+import { getProducts, getCategories, getSupplies, getInventories, getWarehouses, getClubTasks, getProcurementLists, getSuppliersForSelect, getClubSettings, getSalesAnalytics, getActiveShiftsForClub, getInventoryPageAccess, getShiftZoneOverview } from "./actions"
 import { ProductsTab } from "./_components/ProductsTab"
 import { SalesTab } from "./_components/SalesTab"
 import { TasksTab } from "./_components/TasksTab"
@@ -12,6 +12,7 @@ import { AbcAnalysisTab } from "./_components/AbcAnalysisTab"
 import { InventoryTabsWrapper } from "./_components/InventoryTabsWrapper"
 import { ShiftZonesOverviewTab } from "./_components/ShiftZonesOverviewTab"
 import { cookies } from "next/headers"
+import { normalizeInventorySettings } from "@/lib/inventory-settings"
 
 export default async function InventoryPage({ params, searchParams }: { params: Promise<{ clubId: string }>, searchParams: Promise<{ tab?: string }> }) {
     const { clubId } = await params
@@ -26,13 +27,12 @@ export default async function InventoryPage({ params, searchParams }: { params: 
         return <div className="p-8 text-red-500">Доступ к управлению складом закрыт для вашей роли.</div>
     }
 
-    const [products, categories, supplies, inventories, warehouses, employees, tasks, procurementLists, suppliers, clubSettings, sales, shifts, shiftZoneOverview] = await Promise.all([
+    const [products, categories, supplies, inventories, warehouses, tasks, procurementLists, suppliers, clubSettings, sales, shifts, shiftZoneOverview] = await Promise.all([
         getProducts(clubId),
         getCategories(clubId),
         getSupplies(clubId),
         getInventories(clubId),
         getWarehouses(clubId),
-        getEmployees(clubId),
         getClubTasks(clubId),
         getProcurementLists(clubId),
         getSuppliersForSelect(clubId),
@@ -43,7 +43,28 @@ export default async function InventoryPage({ params, searchParams }: { params: 
     ])
 
     const hasAdminPrivileges = access.isFullAccess
-    const activeTab = tab || "stock"
+    const inventorySettings = normalizeInventorySettings(clubSettings.inventory_settings)
+    const isSuppliesEnabled = inventorySettings.supplies_enabled
+    const isStockEnabled = inventorySettings.stock_enabled
+    const isCashboxEnabled = inventorySettings.cashbox_enabled && Boolean(inventorySettings.cashbox_warehouse_id)
+    const isShiftAccountabilityEnabled = inventorySettings.shift_accountability_mode === "WAREHOUSE" && Boolean(inventorySettings.handover_warehouse_id)
+    const settingsSubTabs = ["general", "categories", "warehouses", "pricetags"]
+    const availableTabs = [
+        "stock",
+        ...(isCashboxEnabled ? ["sales"] : []),
+        "tasks",
+        ...(isStockEnabled ? ["transfers"] : []),
+        ...(isSuppliesEnabled ? ["supplies"] : []),
+        ...(isStockEnabled ? ["procurement"] : []),
+        ...(isShiftAccountabilityEnabled ? ["zones"] : []),
+        ...(isStockEnabled ? ["inventory"] : []),
+        ...(isStockEnabled ? ["abc-analysis"] : []),
+        "settings",
+    ]
+    const requestedTab = tab || "stock"
+    const activeTab = availableTabs.includes(requestedTab) || settingsSubTabs.includes(requestedTab)
+        ? requestedTab
+        : "stock"
 
     return (
         <div className="p-4 md:p-8 max-w-[1600px] mx-auto space-y-4 md:space-y-6">
@@ -63,54 +84,68 @@ export default async function InventoryPage({ params, searchParams }: { params: 
                         >
                             Товары
                         </TabsTrigger>
-                        <TabsTrigger 
-                            value="sales" 
-                            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:shadow-none px-0 py-3 bg-transparent font-medium"
-                        >
-                            Продажи
-                        </TabsTrigger>
+                        {isCashboxEnabled && (
+                            <TabsTrigger 
+                                value="sales" 
+                                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:shadow-none px-0 py-3 bg-transparent font-medium"
+                            >
+                                Касса
+                            </TabsTrigger>
+                        )}
                         <TabsTrigger 
                             value="tasks" 
                             className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:shadow-none px-0 py-3 bg-transparent font-medium"
                         >
                             Задачи {tasks.length > 0 && <span className="ml-2 bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full text-xs font-bold">{tasks.length}</span>}
                         </TabsTrigger>
-                        <TabsTrigger 
-                            value="transfers" 
-                            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:shadow-none px-0 py-3 bg-transparent font-medium"
-                        >
-                            Перемещения
-                        </TabsTrigger>
-                        <TabsTrigger 
-                            value="supplies" 
-                            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:shadow-none px-0 py-3 bg-transparent font-medium"
-                        >
-                            Поставки
-                        </TabsTrigger>
-                        <TabsTrigger 
-                            value="procurement" 
-                            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:shadow-none px-0 py-3 bg-transparent font-medium"
-                        >
-                            Закупки
-                        </TabsTrigger>
-                        <TabsTrigger 
-                            value="zones" 
-                            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:shadow-none px-0 py-3 bg-transparent font-medium"
-                        >
-                            Передача
-                        </TabsTrigger>
-                        <TabsTrigger 
-                            value="inventory" 
-                            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:shadow-none px-0 py-3 bg-transparent font-medium"
-                        >
-                            Инвентаризации
-                        </TabsTrigger>
-                        <TabsTrigger 
-                            value="abc-analysis" 
-                            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:shadow-none px-0 py-3 bg-transparent font-medium"
-                        >
-                            Аналитика
-                        </TabsTrigger>
+                        {isStockEnabled && (
+                            <TabsTrigger 
+                                value="transfers" 
+                                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:shadow-none px-0 py-3 bg-transparent font-medium"
+                            >
+                                Перемещения
+                            </TabsTrigger>
+                        )}
+                        {isSuppliesEnabled && (
+                            <TabsTrigger 
+                                value="supplies" 
+                                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:shadow-none px-0 py-3 bg-transparent font-medium"
+                            >
+                                Поставки
+                            </TabsTrigger>
+                        )}
+                        {isStockEnabled && (
+                            <TabsTrigger 
+                                value="procurement" 
+                                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:shadow-none px-0 py-3 bg-transparent font-medium"
+                            >
+                                Закупки
+                            </TabsTrigger>
+                        )}
+                        {isShiftAccountabilityEnabled && (
+                            <TabsTrigger 
+                                value="zones" 
+                                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:shadow-none px-0 py-3 bg-transparent font-medium"
+                            >
+                                Передача
+                            </TabsTrigger>
+                        )}
+                        {isStockEnabled && (
+                            <TabsTrigger 
+                                value="inventory" 
+                                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:shadow-none px-0 py-3 bg-transparent font-medium"
+                            >
+                                Инвентаризации
+                            </TabsTrigger>
+                        )}
+                        {isStockEnabled && (
+                            <TabsTrigger 
+                                value="abc-analysis" 
+                                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:shadow-none px-0 py-3 bg-transparent font-medium"
+                            >
+                                Аналитика
+                            </TabsTrigger>
+                        )}
                         <TabsTrigger 
                             value="settings" 
                             className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:shadow-none px-0 py-3 bg-transparent font-medium"
@@ -130,60 +165,72 @@ export default async function InventoryPage({ params, searchParams }: { params: 
                     />
                 </TabsContent>
 
-                <TabsContent value="sales" className="mt-0">
-                    <SalesTab 
-                        sales={sales} 
-                        shifts={shifts} 
-                        clubId={clubId} 
-                        warehouses={warehouses} 
-                        products={products}
-                        currentUserId={userId}
-                    />
-                </TabsContent>
+                {isCashboxEnabled && (
+                    <TabsContent value="sales" className="mt-0">
+                        <SalesTab 
+                            sales={sales} 
+                            shifts={shifts} 
+                            clubId={clubId} 
+                            warehouses={warehouses} 
+                            products={products}
+                            currentUserId={userId}
+                        />
+                    </TabsContent>
+                )}
                 
                 <TabsContent value="tasks" className="mt-0">
                     <TasksTab tasks={tasks} currentUserId={userId} />
                 </TabsContent>
 
-                <TabsContent value="transfers" className="mt-0">
-                    <TransfersTab warehouses={warehouses} products={products} currentUserId={userId} />
-                </TabsContent>
+                {isStockEnabled && (
+                    <TabsContent value="transfers" className="mt-0">
+                        <TransfersTab warehouses={warehouses} products={products} currentUserId={userId} />
+                    </TabsContent>
+                )}
                 
-                <TabsContent value="supplies" className="mt-0">
-                    <SuppliesTab supplies={supplies} products={products} warehouses={warehouses} suppliers={suppliers} currentUserId={userId} />
-                </TabsContent>
+                {isSuppliesEnabled && (
+                    <TabsContent value="supplies" className="mt-0">
+                        <SuppliesTab supplies={supplies} products={products} warehouses={warehouses} suppliers={suppliers} currentUserId={userId} />
+                    </TabsContent>
+                )}
 
-                <TabsContent value="procurement" className="mt-0">
-                    <ProcurementTab lists={procurementLists} products={products} currentUserId={userId} />
-                </TabsContent>
+                {isStockEnabled && (
+                    <TabsContent value="procurement" className="mt-0">
+                        <ProcurementTab lists={procurementLists} products={products} currentUserId={userId} />
+                    </TabsContent>
+                )}
 
-                <TabsContent value="zones" className="mt-0">
-                    <ShiftZonesOverviewTab clubId={clubId} overview={shiftZoneOverview} />
-                </TabsContent>
+                {isShiftAccountabilityEnabled && (
+                    <TabsContent value="zones" className="mt-0">
+                        <ShiftZonesOverviewTab clubId={clubId} overview={shiftZoneOverview} />
+                    </TabsContent>
+                )}
 
-                <TabsContent value="inventory" className="mt-0">
-                    <InventoryTab 
-                        inventories={inventories} 
-                        categories={categories} 
-                        warehouses={warehouses}
-                        currentUserId={userId} 
-                        isOwner={hasAdminPrivileges}
-                        inventorySettings={clubSettings.inventory_settings}
-                    />
-                </TabsContent>
+                {isStockEnabled && (
+                    <TabsContent value="inventory" className="mt-0">
+                        <InventoryTab 
+                            inventories={inventories} 
+                            categories={categories} 
+                            warehouses={warehouses}
+                            currentUserId={userId} 
+                            isOwner={hasAdminPrivileges}
+                            inventorySettings={clubSettings.inventory_settings}
+                        />
+                    </TabsContent>
+                )}
 
-                <TabsContent value="abc-analysis" className="mt-0">
-                    <AbcAnalysisTab clubId={clubId} products={products} />
-                </TabsContent>
+                {isStockEnabled && (
+                    <TabsContent value="abc-analysis" className="mt-0">
+                        <AbcAnalysisTab clubId={clubId} products={products} />
+                    </TabsContent>
+                )}
 
                 <TabsContent value="settings" className="mt-0">
                     <SettingsTab 
                         products={products}
                         categories={categories} 
                         warehouses={warehouses} 
-                        employees={employees} 
                         currentUserId={userId} 
-                        inventoryRequired={clubSettings.inventory_required}
                         inventorySettings={clubSettings.inventory_settings}
                     />
                 </TabsContent>

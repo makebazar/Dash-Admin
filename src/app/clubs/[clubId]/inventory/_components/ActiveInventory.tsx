@@ -292,7 +292,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
             { key: "all" as const, label: "Все", count: items.length },
             { key: "uncounted" as const, label: "Не посчитано", count: uncountedItems.length },
             { key: "counted" as const, label: "Посчитано", count: countedItems.length },
-            { key: "sold" as const, label: "В POS-чеке", count: items.filter(item => soldProductIds.has(Number(item.product_id))).length },
+            { key: "sold" as const, label: "В чеке кассы", count: items.filter(item => soldProductIds.has(Number(item.product_id))).length },
             { key: "difference" as const, label: "С расхождением", count: discrepancyItems.length },
             { key: "shortage" as const, label: "Недостача", count: shortageItems.length },
             { key: "excess" as const, label: "Излишек", count: excessItems.length }
@@ -837,7 +837,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                                                                 )}
                                                                 {soldProductIds.has(Number(item.product_id)) && (
                                                                     <Badge variant="outline" className="h-5 border-violet-200 bg-violet-50 text-[10px] font-bold text-violet-700">
-                                                                        POS · {posSoldMap.get(Number(item.product_id)) || 0} шт
+                                                                        Касса · {posSoldMap.get(Number(item.product_id)) || 0} шт
                                                                     </Badge>
                                                                 )}
                                                             </div>
@@ -995,7 +995,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                                                         )}
                                                         {soldProductIds.has(Number(item.product_id)) && (
                                                             <span className="text-[9px] font-bold uppercase tracking-wider text-violet-700 bg-violet-50 px-1 rounded border border-violet-200">
-                                                                POS · {posSoldMap.get(Number(item.product_id)) || 0} шт
+                                                                Касса · {posSoldMap.get(Number(item.product_id)) || 0} шт
                                                             </span>
                                                         )}
                                                         <span className="text-[9px] text-muted-foreground/70 font-bold uppercase tracking-wider">{item.selling_price_snapshot} ₽</span>
@@ -1188,7 +1188,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                             {/* Sales Summary Section */}
                             <div className="border rounded-lg overflow-hidden">
                                 <div className="bg-muted/50 p-2 text-xs font-bold border-b flex justify-between">
-                                    <span>{usesPosRevenue ? "ПРОДАЖИ ПО POS" : "ПРОДАНО ЗА СМЕНУ (СИСТЕМА)"}</span>
+                                    <span>{usesPosRevenue ? "ПРОДАЖИ ПО КАССЕ" : "ПРОДАНО ЗА СМЕНУ (СИСТЕМА)"}</span>
                                     <span>СУММА: {totalSalesRevenue} ₽</span>
                                 </div>
                                 <div className="max-h-[200px] overflow-y-auto">

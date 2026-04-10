@@ -4,6 +4,7 @@ import { cookies } from 'next/headers';
 import { isSuperAdmin } from '@/lib/super-admin';
 import { resolveSubscriptionState } from '@/lib/subscriptions';
 import { hasColumn } from '@/lib/db-compat';
+import { normalizeInventorySettings } from '@/lib/inventory-settings';
 
 const LEGAL_ACCEPTANCE_VERSION = '2026-04-01'
 
@@ -74,7 +75,7 @@ export async function GET() {
             name: row.name,
             address: row.address,
             inventory_required: row.inventory_required,
-            inventory_settings: row.inventory_settings,
+            inventory_settings: normalizeInventorySettings(row.inventory_settings),
             timezone: row.timezone || 'Europe/Moscow'
         }));
 
@@ -109,7 +110,7 @@ export async function GET() {
                 name: row.name,
                 address: row.address,
                 inventory_required: row.inventory_required,
-                inventory_settings: row.inventory_settings,
+                inventory_settings: normalizeInventorySettings(row.inventory_settings),
                 timezone: row.timezone || 'Europe/Moscow',
                 role: normalizedRole,
                 role_id: row.global_role_id
@@ -124,7 +125,7 @@ export async function GET() {
                     name: row.name,
                     address: row.address,
                     inventory_required: row.inventory_required,
-                    inventory_settings: row.inventory_settings,
+                    inventory_settings: normalizeInventorySettings(row.inventory_settings),
                     timezone: row.timezone || 'Europe/Moscow',
                     role: 'Владелец',
                     is_owner: true

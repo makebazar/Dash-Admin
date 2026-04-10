@@ -6,6 +6,8 @@ import { logOperation } from "@/lib/logger"
 import { LogAction } from "@/lib/logger"
 import { cookies } from "next/headers"
 import { notifyInventoryClub } from "@/lib/inventory-events"
+import { normalizeInventorySettings } from "@/lib/inventory-settings"
+import type { InventorySettings as NormalizedInventorySettings } from "@/lib/inventory-settings"
 
 // ... existing code ...
 
@@ -80,7 +82,8 @@ export type ShiftZoneSnapshotDraftItem = {
     product_name: string
     barcode?: string | null
     barcodes?: string[] | null
-    counted_quantity: number
+    counted_quantity: number | null
+    saved_counted_quantity: number | null
     system_quantity: number
     selling_price: number
 }
@@ -103,6 +106,18 @@ export type ShiftZoneDiscrepancyRow = {
     responsibility_type: 'SHIFT_RESPONSIBILITY' | 'INHERITED_FROM_PREVIOUS_SHIFT' | 'PROCESS_GAP'
     responsibility_label: string
     explanation: string
+    movement_window_started_at: string | null
+    movement_window_ended_at: string | null
+    movements: Array<{
+        created_at: string
+        type: string
+        change_amount: number
+        reason: string | null
+        related_entity_type: string | null
+        related_entity_id: string | number | null
+        shift_id: string | null
+        user_id: string | null
+    }>
 }
 
 export type ShiftAccountabilitySetupStatus = {
@@ -223,6 +238,37 @@ function normalizeAllowedWarehouseIds(raw: any): number[] {
     )
 }
 
+async function resolveEffectiveEmployeeWarehouseIds(client: any, clubId: string, settings: NormalizedInventorySettings): Promise<number[]> {
+    const explicitIds = normalizeAllowedWarehouseIds(settings.employee_allowed_warehouse_ids)
+    if (explicitIds.length > 0) return explicitIds
+
+    const autoIds = [
+        settings.handover_warehouse_id,
+        settings.cashbox_warehouse_id,
+    ]
+        .map((value) => Number(value))
+        .filter((value) => Number.isInteger(value) && value > 0)
+
+    if (autoIds.length > 0) {
+        return Array.from(new Set(autoIds))
+    }
+
+    if (!settings.stock_enabled) return []
+
+    const defaultWarehouseRes = await client.query(
+        `SELECT id
+         FROM warehouses
+         WHERE club_id = $1
+           AND is_active = true
+         ORDER BY is_default DESC, created_at ASC
+         LIMIT 1`,
+        [clubId]
+    )
+
+    const defaultWarehouseId = Number(defaultWarehouseRes.rows[0]?.id || 0)
+    return defaultWarehouseId > 0 ? [defaultWarehouseId] : []
+}
+
 function normalizeShiftZoneKey(raw: any): 'BAR' | 'FRIDGE' | 'SHOWCASE' | 'BACKROOM' | null {
     if (raw === 'BAR' || raw === 'FRIDGE' || raw === 'SHOWCASE' || raw === 'BACKROOM') return raw
     return null
@@ -291,10 +337,12 @@ async function getInventoryAccessScope(client: any, clubId: string, userId: stri
         canManageInventory = permissionRes.rows[0]?.is_allowed === true
     }
 
+    const normalizedSettings = normalizeInventorySettings(clubRes.rows[0]?.inventory_settings)
+
     return {
         isFullAccess,
         canManageInventory,
-        allowedWarehouseIds: normalizeAllowedWarehouseIds(clubRes.rows[0]?.inventory_settings?.employee_allowed_warehouse_ids),
+        allowedWarehouseIds: await resolveEffectiveEmployeeWarehouseIds(client, clubId, normalizedSettings),
     }
 }
 
@@ -556,6 +604,36 @@ async function getShiftAccountabilityWarehousesInternal(client: any, clubId: str
         return []
     }
 
+    const inventorySettings = await getClubInventorySettingsInternal(client, clubId)
+    if (inventorySettings.shift_accountability_mode !== 'WAREHOUSE') {
+        return []
+    }
+
+    if (inventorySettings.handover_warehouse_id) {
+        const warehouseId = Number(inventorySettings.handover_warehouse_id)
+        if (!scope.canManageInventory && !scope.allowedWarehouseIds.includes(warehouseId)) {
+            return []
+        }
+
+        const configuredRes = await client.query(
+            `
+            SELECT w.*
+            FROM warehouses w
+            WHERE w.club_id = $1
+              AND w.id = $2
+              AND w.is_active = true
+            LIMIT 1
+            `,
+            [clubId, warehouseId]
+        )
+
+        return configuredRes.rows.map((row: any) => ({
+            ...row,
+            shift_accountability_enabled: true,
+            shift_zone_key: 'BAR',
+        })) as Array<Warehouse & { shift_zone_key: 'BAR' | 'FRIDGE' | 'SHOWCASE' | 'BACKROOM' }>
+    }
+
     const params: any[] = [clubId]
     let warehouseFilter = ""
     if (!scope.canManageInventory) {
@@ -636,36 +714,33 @@ export async function getShiftAccountabilitySetupStatus(clubId: string): Promise
             `SELECT inventory_settings FROM clubs WHERE id = $1 LIMIT 1`,
             [clubId]
         )
-        const settings = clubRes.rows[0]?.inventory_settings || {}
+        const settings = normalizeInventorySettings(clubRes.rows[0]?.inventory_settings || {})
         const mode: ShiftAccountabilitySetupStatus["mode"] =
             settings?.shift_accountability_mode === 'WAREHOUSE' ? 'WAREHOUSE' : 'DISABLED'
 
         const warehouses = await getShiftAccountabilityWarehousesInternal(client, clubId, sessionUserId)
         const issues: string[] = []
 
+        if (settings.cashbox_enabled && !settings.cashbox_warehouse_id) {
+            issues.push("Выбери склад кассы в настройках inventory.")
+        }
+        if (settings.report_reconciliation_enabled && !settings.employee_default_metric_key) {
+            issues.push("Выбери метрику выручки по умолчанию для сверки итогов.")
+        }
+
         if (mode === 'WAREHOUSE') {
             if (warehouses.length === 0) {
-                issues.push("Не настроены склады со сменной ответственностью.")
+                issues.push("Выбери склад передачи в настройках inventory.")
             }
-
-            const configuredZoneKeys = new Set(warehouses.map((warehouse) => warehouse.shift_zone_key))
-            const hasBarZone = configuredZoneKeys.has('BAR')
-            const hasLegacyBarPair = configuredZoneKeys.has('FRIDGE') && configuredZoneKeys.has('SHOWCASE')
-            if (!hasBarZone && !hasLegacyBarPair) {
-                issues.push("Настрой барную зону: либо один или несколько складов с типом 'Бар', либо пару 'Холодильник' + 'Витрина'.")
+            if (settings.cashbox_warehouse_id && settings.handover_warehouse_id && Number(settings.cashbox_warehouse_id) !== Number(settings.handover_warehouse_id)) {
+                issues.push("Для корректной передачи склад кассы и склад передачи должны совпадать.")
             }
 
             const enabledIds = new Set(warehouses.map((warehouse) => Number(warehouse.id)))
-            const allowedWarehouseIds = normalizeAllowedWarehouseIds(settings?.employee_allowed_warehouse_ids)
+            const allowedWarehouseIds = await resolveEffectiveEmployeeWarehouseIds(client, clubId, settings)
             const inaccessible = warehouses.filter((warehouse) => !allowedWarehouseIds.includes(Number(warehouse.id)))
-            if (allowedWarehouseIds.length === 0) {
-                issues.push("Для сотрудников не выбраны доступные склады инвентаризации.")
-            } else if (inaccessible.length > 0) {
-                issues.push("Не все accountability-склады включены в доступные сотрудникам склады.")
-            }
-
-            if ((settings?.inventory_timing || 'END_SHIFT') === 'START_SHIFT' && settings?.inventory_required) {
-                issues.push("Обязательная стартовая ревизия включена одновременно с системой сменной ответственности.")
+            if (inaccessible.length > 0) {
+                issues.push("Склад передачи должен входить в доступные сотрудникам склады.")
             }
 
             // Extra safety: configuration should not be empty after access filtering.
@@ -736,6 +811,7 @@ export async function getShiftZoneSnapshotDraft(clubId: string, shiftId: string,
                     p.barcode,
                     p.barcodes,
                     COALESCE(ws.quantity, 0) as system_quantity,
+                    sii.counted_quantity as saved_counted_quantity,
                     COALESCE(sii.counted_quantity, COALESCE(ws.quantity, 0)) as counted_quantity,
                     COALESCE(p.selling_price, 0) as selling_price
                 FROM relevant_products rp
@@ -766,7 +842,8 @@ export async function getShiftZoneSnapshotDraft(clubId: string, shiftId: string,
                     product_name: row.product_name,
                     barcode: row.barcode,
                     barcodes: row.barcodes,
-                    counted_quantity: Number(row.counted_quantity || 0),
+                    counted_quantity: row.counted_quantity === null || row.counted_quantity === undefined ? null : Number(row.counted_quantity || 0),
+                    saved_counted_quantity: row.saved_counted_quantity === null || row.saved_counted_quantity === undefined ? null : Number(row.saved_counted_quantity || 0),
                     system_quantity: Number(row.system_quantity || 0),
                     selling_price: Number(row.selling_price || 0),
                 })
@@ -1080,6 +1157,7 @@ async function getShiftZoneDiscrepancyReportInternal(client: any, clubId: string
         SELECT
             ss.warehouse_id,
             ss.snapshot_type,
+            ss.created_at as snapshot_created_at,
             sii.product_id,
             sii.counted_quantity,
             sii.system_quantity,
@@ -1096,7 +1174,7 @@ async function getShiftZoneDiscrepancyReportInternal(client: any, clubId: string
 
     const movementRows = await client.query(
         `
-            SELECT warehouse_id, product_id, change_amount, type, user_id, shift_id, related_entity_type
+            SELECT warehouse_id, product_id, change_amount, type, reason, created_at, user_id, shift_id, related_entity_type, related_entity_id
         FROM warehouse_stock_movements
         WHERE club_id = $1
           AND warehouse_id = ANY($2)
@@ -1125,7 +1203,10 @@ async function getShiftZoneDiscrepancyReportInternal(client: any, clubId: string
                 closing_system_quantity: null,
                 inflow_quantity: 0,
                 outflow_quantity: 0,
+                open_snapshot_at: null as string | null,
+                close_snapshot_at: null as string | null,
                 has_process_gap: false,
+                movements: [] as ShiftZoneDiscrepancyRow['movements'],
             })
         }
         if (defaults) {
@@ -1142,21 +1223,47 @@ async function getShiftZoneDiscrepancyReportInternal(client: any, clubId: string
         if (row.snapshot_type === 'OPEN') {
             entry.opening_counted_quantity = Number(row.counted_quantity)
             entry.opening_system_quantity = Number(row.system_quantity)
+            entry.open_snapshot_at = row.snapshot_created_at
         } else if (row.snapshot_type === 'CLOSE') {
             entry.closing_counted_quantity = Number(row.counted_quantity)
             entry.closing_system_quantity = Number(row.system_quantity)
+            entry.close_snapshot_at = row.snapshot_created_at
         }
     }
 
     for (const row of movementRows.rows) {
         const entry = ensureEntry(Number(row.warehouse_id), Number(row.product_id))
         const movementType = String(row.type || '')
-            const relatedEntityType = String(row.related_entity_type || '')
+        const relatedEntityType = String(row.related_entity_type || '')
         const amount = Number(row.change_amount || 0)
         const isInventoryMovement = ['INVENTORY_GAIN', 'INVENTORY_LOSS', 'INVENTORY_CORRECTION'].includes(movementType)
         const isManualGap = movementType === 'ADJUSTMENT'
-            const isShiftZoneSnapshotAdjustment = relatedEntityType === 'SHIFT_ZONE_SNAPSHOT'
-            const isOperationalMovement = !isInventoryMovement && !isManualGap && !isShiftZoneSnapshotAdjustment
+        const isShiftZoneSnapshotAdjustment = relatedEntityType === 'SHIFT_ZONE_SNAPSHOT'
+        const isOperationalMovement = !isInventoryMovement && !isManualGap && !isShiftZoneSnapshotAdjustment
+        const movementCreatedAt = row.created_at ? new Date(row.created_at).getTime() : null
+        const movementWindowStartedAt = entry.open_snapshot_at || shift.check_in || null
+        const movementWindowEndedAt = entry.close_snapshot_at || shift.check_out || new Date().toISOString()
+
+        if (movementCreatedAt !== null) {
+            const windowStartedAtMs = movementWindowStartedAt ? new Date(movementWindowStartedAt).getTime() : null
+            const windowEndedAtMs = movementWindowEndedAt ? new Date(movementWindowEndedAt).getTime() : null
+            if ((windowStartedAtMs !== null && movementCreatedAt < windowStartedAtMs) || (windowEndedAtMs !== null && movementCreatedAt > windowEndedAtMs)) {
+                continue
+            }
+        }
+
+        if (isShiftZoneSnapshotAdjustment) continue
+
+        entry.movements.push({
+            created_at: row.created_at,
+            type: movementType,
+            change_amount: amount,
+            reason: row.reason || null,
+            related_entity_type: row.related_entity_type || null,
+            related_entity_id: row.related_entity_id || null,
+            shift_id: row.shift_id || null,
+            user_id: row.user_id || null,
+        })
 
         if (isOperationalMovement) {
             if (amount > 0) entry.inflow_quantity += amount
@@ -1166,12 +1273,10 @@ async function getShiftZoneDiscrepancyReportInternal(client: any, clubId: string
         if (
             isInventoryMovement ||
             isManualGap ||
-                isShiftZoneSnapshotAdjustment ||
             !row.shift_id ||
             String(row.shift_id) !== String(shiftId) ||
             (row.user_id && String(row.user_id) !== String(shift.user_id))
         ) {
-                if (isShiftZoneSnapshotAdjustment) continue
             entry.has_process_gap = true
         }
     }
@@ -1244,7 +1349,10 @@ async function getShiftZoneDiscrepancyReportInternal(client: any, clubId: string
                 difference_quantity: difference,
                 responsibility_type: responsibilityType,
                 responsibility_label: responsibilityLabel,
-                explanation
+                explanation,
+                movement_window_started_at: entry.open_snapshot_at || shift.check_in || null,
+                movement_window_ended_at: entry.close_snapshot_at || shift.check_out || null,
+                movements: entry.movements,
             } satisfies ShiftZoneDiscrepancyRow
         })
         .filter(row => (row.difference_quantity ?? 0) !== 0)
@@ -1714,6 +1822,13 @@ export async function createTransfer(clubId: string, userId: string, data: { sou
     const client = await import("@/db").then(m => m.getClient())
     try {
         await client.query('BEGIN')
+        const inventorySettings = await getClubInventorySettingsInternal(client, clubId)
+        if (!inventorySettings.stock_enabled) {
+            throw new Error("Перемещения доступны только когда включен учет остатков")
+        }
+        if (!inventorySettings.employee_transfer_enabled) {
+            throw new Error("Перемещения отключены в кабинете сотрудника")
+        }
 
         const { source_warehouse_id, target_warehouse_id, items, notes, shift_id } = data
         if (!items || items.length === 0) throw new Error("Нужно выбрать товары для перемещения")
@@ -3482,7 +3597,7 @@ async function resolvePosWarehouseIdForItems(
 
     const warehouseRes = await client.query(warehouseQuery, warehouseParams)
     if (warehouseRes.rowCount === 0) {
-        throw new Error("Для POS не найден доступный активный склад")
+        throw new Error("Для кассы не найден доступный активный склад")
     }
 
     const warehouseIds = warehouseRes.rows.map((row: any) => Number(row.id))
@@ -3534,7 +3649,7 @@ async function resolvePosWarehouseIdForItems(
         return `${productNames.get(item.product_id) || `Товар #${item.product_id}`} — ${perWarehouse}`
     }).join("; ")
 
-    throw new Error(`Недостаточно товара на доступных POS-складах. ${details}`)
+    throw new Error(`Недостаточно товара на выбранном складе кассы. ${details}`)
 }
 
 export async function createShiftReceipt(
@@ -3557,10 +3672,12 @@ export async function createShiftReceipt(
     const client = await import("@/db").then(m => m.getClient())
     try {
         await client.query('BEGIN')
-        const clubSettingsRes = await client.query('SELECT inventory_settings FROM clubs WHERE id = $1', [clubId])
-        const salesCaptureMode = clubSettingsRes.rows[0]?.inventory_settings?.sales_capture_mode
-        if (salesCaptureMode && salesCaptureMode !== 'SHIFT') {
-            throw new Error("Продажи через POS отключены для этого клуба")
+        const inventorySettings = await getClubInventorySettingsInternal(client, clubId)
+        if (!inventorySettings.stock_enabled || !inventorySettings.cashbox_enabled) {
+            throw new Error("Касса DashAdmin отключена для этого клуба")
+        }
+        if (!inventorySettings.cashbox_warehouse_id) {
+            throw new Error("Для кассы не выбран склад продаж")
         }
 
         const normalizedItems = data.items
@@ -3589,7 +3706,8 @@ export async function createShiftReceipt(
             }
         }
 
-        const warehouseId = await resolvePosWarehouseIdForItems(client, clubId, userId, normalizedItems, data.warehouse_id ?? null)
+        const preferredWarehouseId = data.warehouse_id ?? inventorySettings.cashbox_warehouse_id
+        const warehouseId = await resolvePosWarehouseIdForItems(client, clubId, userId, normalizedItems, preferredWarehouseId)
 
         const productIds = Array.from(new Set(normalizedItems.map(i => i.product_id)))
         const pricesRes = await client.query(
@@ -4393,6 +4511,13 @@ export async function createWriteOff(clubId: string, userId: string, data: { ite
     const client = await import("@/db").then(m => m.getClient())
     try {
         await client.query('BEGIN')
+        const inventorySettings = await getClubInventorySettingsInternal(client, clubId)
+        if (!inventorySettings.stock_enabled) {
+            throw new Error("Списания доступны только когда включен учет остатков")
+        }
+        if (!inventorySettings.employee_writeoff_enabled) {
+            throw new Error("Списания отключены в кабинете сотрудника")
+        }
 
         if (!data.items || data.items.length === 0) throw new Error("Не выбраны товары для списания")
         for (const i of data.items) {
@@ -4459,8 +4584,8 @@ export async function createWriteOff(clubId: string, userId: string, data: { ite
                 // Auto-create inventory if salary deduction is being made and no inventory exists
                 // 1. Get default metric key
                 const settingsRes = await client.query('SELECT inventory_settings FROM clubs WHERE id = $1', [clubId])
-                const settings = settingsRes.rows[0]?.inventory_settings || {}
-                const targetMetric = settings.employee_default_metric_key || 'Bar'
+                const settings = normalizeInventorySettings(settingsRes.rows[0]?.inventory_settings)
+                const targetMetric = settings.employee_default_metric_key || 'total_revenue'
 
                 // 2. Create Inventory Header
                 const invRes = await client.query(`
@@ -4943,6 +5068,10 @@ export async function createSupply(clubId: string, userId: string, data: { suppl
     const client = await import("@/db").then(m => m.getClient())
     try {
         await client.query('BEGIN')
+        const inventorySettings = await getClubInventorySettingsInternal(client, clubId)
+        if (!inventorySettings.supplies_enabled) {
+            throw new Error("Поставки отключены для этого клуба")
+        }
 
         if (!data.items || data.items.length === 0) throw new Error("Поставка должна содержать хотя бы один товар")
         for (const i of data.items) {
@@ -4973,14 +5102,19 @@ export async function createSupply(clubId: string, userId: string, data: { suppl
         const status = data.status || 'COMPLETED'
         const totalCost = data.items.reduce((acc, item) => acc + (item.quantity * item.cost_price), 0)
 
+        const usesStock = inventorySettings.stock_enabled
         let warehouseId = data.warehouse_id
-        if (!warehouseId) {
-            const whRes = await client.query('SELECT id FROM warehouses WHERE club_id = $1 ORDER BY is_default DESC LIMIT 1', [clubId])
-            warehouseId = whRes.rows[0]?.id
+        if (usesStock) {
+            if (!warehouseId) {
+                const whRes = await client.query('SELECT id FROM warehouses WHERE club_id = $1 ORDER BY is_default DESC LIMIT 1', [clubId])
+                warehouseId = whRes.rows[0]?.id
+            }
+            if (!warehouseId) throw new Error("В клубе не создано ни одного склада")
+            await assertWarehouseBelongsToClub(client, clubId, warehouseId)
+            await assertUserCanUseWarehouses(client, clubId, userId, [warehouseId])
+        } else if (warehouseId) {
+            await assertWarehouseBelongsToClub(client, clubId, warehouseId)
         }
-        if (!warehouseId) throw new Error("В клубе не создано ни одного склада")
-        await assertWarehouseBelongsToClub(client, clubId, warehouseId)
-        await assertUserCanUseWarehouses(client, clubId, userId, [warehouseId])
 
         const supplyRes = await client.query(`
             INSERT INTO warehouse_supplies (club_id, supplier_name, supplier_id, notes, total_cost, created_by, status, warehouse_id)
@@ -4996,7 +5130,7 @@ export async function createSupply(clubId: string, userId: string, data: { suppl
                 VALUES ($1, $2, $3, $4, $5)
             `, [supplyId, item.product_id, item.quantity, item.cost_price, item.quantity * item.cost_price])
 
-            if (status === 'COMPLETED' && warehouseId) {
+            if (status === 'COMPLETED' && usesStock && warehouseId) {
                 const { previousStock, newStock } = await applyWarehouseStockDelta(client, warehouseId, item.product_id, item.quantity)
                 
                 await client.query(`
@@ -5021,6 +5155,12 @@ export async function createSupply(clubId: string, userId: string, data: { suppl
                     data.shift_id || null,
                     warehouseId
                 )
+            } else if (status === 'COMPLETED') {
+                await client.query(`
+                    UPDATE warehouse_products
+                    SET cost_price = $2
+                    WHERE id = $1 AND club_id = $3
+                `, [item.product_id, item.cost_price, clubId])
             }
         }
 
@@ -5028,7 +5168,7 @@ export async function createSupply(clubId: string, userId: string, data: { suppl
         await logOperation(clubId, userId, 'CREATE_SUPPLY', 'SUPPLY', supplyId, { itemsCount: data.items.length, totalCost, warehouseId, status })
         
         // Update tasks
-        if (status === 'COMPLETED') {
+        if (status === 'COMPLETED' && usesStock) {
             await checkReplenishmentNeeds(clubId)
         }
     } catch (e) {
@@ -5254,28 +5394,29 @@ export async function getMetrics() {
 export async function getClubSettings(clubId: string) {
     await requireClubAccess(clubId)
     const res = await query(`
-        SELECT id, owner_id, inventory_required, inventory_settings 
+        SELECT id, owner_id, inventory_settings 
         FROM clubs 
         WHERE id = $1
     `, [clubId])
-    return res.rows[0] as { 
+    return {
+        ...res.rows[0],
+        inventory_settings: normalizeInventorySettings(res.rows[0]?.inventory_settings)
+    } as { 
         id: number, 
         owner_id: string, 
-        inventory_required: boolean,
-        inventory_settings: { 
-            employee_allowed_warehouse_ids?: number[], 
-            employee_default_metric_key?: string,
-            blind_inventory_enabled?: boolean,
-            sales_capture_mode?: 'INVENTORY' | 'SHIFT',
-            inventory_timing?: 'END_SHIFT' | 'START_SHIFT',
-            shift_accountability_mode?: 'DISABLED' | 'WAREHOUSE',
-            allow_salary_deduction?: boolean,
-            employee_discount_percent?: number,
-            allow_cost_price_sale?: boolean,
+        inventory_settings: NormalizedInventorySettings & {
             price_tag_template?: PriceTagTemplate,
             price_tag_settings?: PriceTagSettings
-        } 
+        }
     }
+}
+
+async function getClubInventorySettingsInternal(client: any, clubId: string): Promise<NormalizedInventorySettings> {
+    const res = await client.query(
+        `SELECT inventory_settings FROM clubs WHERE id = $1 LIMIT 1`,
+        [clubId]
+    )
+    return normalizeInventorySettings(res.rows[0]?.inventory_settings)
 }
 
 export async function getInventoryPageAccess(clubId: string) {
@@ -5332,28 +5473,14 @@ export type PriceTagSettings = {
 
 export async function updateInventorySettings(clubId: string, userId: string, settings: any) {
     await assertUserCanAccessClub(clubId, userId)
+    const normalizedSettings = normalizeInventorySettings(settings)
     await query(`
         UPDATE clubs 
         SET inventory_settings = $1 
         WHERE id = $2
-    `, [settings, clubId])
+    `, [normalizedSettings, clubId])
     
-    await logOperation(clubId, userId, 'UPDATE_SETTINGS', 'CLUB', Number(clubId), settings)
-    revalidatePath(`/clubs/${clubId}/inventory`)
-}
-
-export async function updateInventoryRequired(clubId: string, userId: string, inventoryRequired: boolean) {
-    await assertUserCanAccessClub(clubId, userId)
-    await query(
-        `
-        UPDATE clubs
-        SET inventory_required = $1
-        WHERE id = $2
-    `,
-        [inventoryRequired, clubId]
-    )
-
-    await logOperation(clubId, userId, 'UPDATE_SETTINGS', 'CLUB', Number(clubId), { inventory_required: inventoryRequired })
+    await logOperation(clubId, userId, 'UPDATE_SETTINGS', 'CLUB', Number(clubId), normalizedSettings)
     revalidatePath(`/clubs/${clubId}/inventory`)
 }
 
@@ -5917,7 +6044,7 @@ export async function closeInventory(
     clubId: string,
     reportedRevenue: number,
     unaccountedSales: { product_id: number, quantity: number, selling_price: number, cost_price: number }[] = [],
-    options?: { salesRecognition?: 'INVENTORY' | 'NONE' }
+    _options?: { salesRecognition?: 'INVENTORY' | 'NONE' }
 ) {
     const actorUserId = await requireClubAccess(clubId)
     const client = await import("@/db").then(m => m.getClient())
@@ -5960,21 +6087,12 @@ export async function closeInventory(
             WHERE ii.inventory_id = $1
         `, [inventoryId, warehouseId, inventoryStartTime, clubId])
 
-        // Default sales recognition depends on club settings.
-        // If the club is in POS/SHIFT mode, inventory deficits should NOT be recognized as SALES by default.
-        let defaultSalesRecognition: 'INVENTORY' | 'NONE' = 'INVENTORY'
-        try {
-            const settingsRes = await client.query('SELECT inventory_settings FROM clubs WHERE id = $1', [clubId])
-            const salesMode = settingsRes.rows[0]?.inventory_settings?.sales_capture_mode
-            if (salesMode === 'SHIFT') defaultSalesRecognition = 'NONE'
-        } catch {
-            // Best effort: fall back to legacy behavior.
-        }
-        const salesRecognition = options?.salesRecognition ?? defaultSalesRecognition
+        // Legacy recognition of deficits as "sales via inventory" is removed.
+        const salesRecognition = 'NONE' as const
 
         // 2. Reconcile counted rows against current stock and store audit deltas.
         const isRevision = !shiftId
-        const recognizeAsSales = !isRevision && salesRecognition === 'INVENTORY'
+        const recognizeAsSales = false
         const reasonPrefix = isRevision
             ? `Ревизия #${inventoryId}`
             : recognizeAsSales
@@ -6195,7 +6313,7 @@ export async function closeInventory(
             totalCalculatedRevenue,
             diff,
             actorUserId,
-            !isRevision ? (salesRecognition === 'NONE' ? 'SHIFT' : 'INVENTORY') : null
+            !isRevision ? 'SHIFT' : null
         ])
 
         await client.query('COMMIT')

@@ -43,8 +43,11 @@ interface ShiftClosingWizardProps {
         employee_default_metric_key?: string
         employee_allowed_warehouse_ids?: number[]
         blind_inventory_enabled?: boolean
-        sales_capture_mode?: 'INVENTORY' | 'SHIFT'
-        inventory_timing?: 'END_SHIFT' | 'START_SHIFT'
+        report_reconciliation_enabled?: boolean
+        cashbox_warehouse_id?: number | null
+        handover_warehouse_id?: number | null
+        sales_capture_mode?: 'SHIFT'
+        inventory_timing?: 'END_SHIFT'
     }
     mode?: 'END_SHIFT' | 'START_SHIFT'
 }
@@ -73,7 +76,7 @@ function buildShiftSalesPreview(
     const agg = new Map<number, { name: string, qty: number, price: number }>()
 
     for (const receipt of receipts) {
-        if (receipt.voided_at) continue
+        if (receipt.voided_at || receipt.counts_in_revenue === false) continue
         for (const item of receipt.items || []) {
             const netQty = Math.max(0, Number(item.quantity) - Number(item.returned_qty || 0))
             if (netQty <= 0) continue
@@ -221,10 +224,10 @@ export function ShiftClosingWizard({
         showMessage({ title, description })
     }, [showMessage])
 
-    const salesMode = inventorySettings?.sales_capture_mode ?? 'INVENTORY'
+    const salesMode = inventorySettings?.sales_capture_mode ?? 'SHIFT'
     const isShiftSalesMode = salesMode === 'SHIFT'
     const isStartShiftMode = mode === 'START_SHIFT'
-    const usesSalesReconciliation = !isStartShiftMode && isShiftSalesMode
+    const usesSalesReconciliation = !isStartShiftMode && isShiftSalesMode && Boolean(inventorySettings?.report_reconciliation_enabled)
     const usesInventoryCounting = isStartShiftMode || (!isStartShiftMode && !skipInventory)
     const usesRevisionMode = !isStartShiftMode && !isShiftSalesMode
     const usesShiftInventoryReconciliation = usesSalesReconciliation && usesInventoryCounting
@@ -346,19 +349,11 @@ export function ShiftClosingWizard({
     const hasInventoryMismatch = usesShiftInventoryReconciliation && inventorySummary?.isPerfect === false
     const isBlindClosingInventory = !isStartShiftMode && usesInventoryCounting
 
-    const revenueKey = useMemo(() => {
-        return inventorySettings?.employee_default_metric_key ||
-            reportTemplate?.schema?.find((f: any) =>
-                f.metric_key.toLowerCase().includes('bar') ||
-                f.metric_key.toLowerCase().includes('revenue') ||
-                f.custom_label.toLowerCase().includes('бар') ||
-                f.custom_label.toLowerCase().includes('выручка')
-            )?.metric_key ||
-            'total_revenue'
-    }, [inventorySettings?.employee_default_metric_key, reportTemplate?.schema])
+    const revenueKey = inventorySettings?.employee_default_metric_key || null
 
     const reportedRevenueValue = useMemo(() => {
-        const raw = reportData[revenueKey] ?? reportData['bar_revenue'] ?? reportData['total_revenue'] ?? 0
+        if (!revenueKey) return 0
+        const raw = reportData[revenueKey] ?? 0
         const parsed = typeof raw === 'number' ? raw : parseFloat(String(raw))
         return Number.isFinite(parsed) ? parsed : 0
     }, [reportData, revenueKey])
@@ -391,6 +386,11 @@ export function ShiftClosingWizard({
         if (isStartShiftMode) return "Далее: Подтверждение"
         return "Далее"
     }, [isStartShiftMode])
+
+    const reconcileNextLabel = useMemo(() => {
+        if (skipInventory) return "Завершить смену"
+        return "Далее: Ревизия"
+    }, [skipInventory])
 
     const finalizeSummary = useMemo(() => {
         if (!calculationResult) return null
@@ -703,6 +703,11 @@ export function ShiftClosingWizard({
             }
         }
 
+        if (!isStartShiftMode && usesSalesReconciliation && !revenueKey) {
+            notifyError("В настройках склада не выбрана метрика выручки по умолчанию. Без нее нельзя включить сверку итогов.", "Настройте метрику")
+            return
+        }
+
         if (skipInventory && !usesSalesReconciliation) {
             onFinalComplete()
             return
@@ -811,18 +816,16 @@ export function ShiftClosingWizard({
 
         startTransition(async () => {
             try {
-                // 1. Determine target metric key
-                const targetMetric = inventorySettings?.employee_default_metric_key || 
-                    reportTemplate?.schema?.find((f: any) => 
-                        f.metric_key.toLowerCase().includes('bar') || 
-                        f.metric_key.toLowerCase().includes('revenue') ||
-                        f.custom_label.toLowerCase().includes('бар') ||
-                        f.custom_label.toLowerCase().includes('выручка')
-                    )?.metric_key || 'total_revenue'
+                const targetMetric = inventorySettings?.employee_default_metric_key
+                if (!targetMetric) {
+                    notifyError("В настройках склада не выбрана метрика выручки по умолчанию.", "Настройте метрику")
+                    return
+                }
 
-                // 2. Determine which warehouse to use. 
-                // If multiple are allowed, we'll pick the first one for now (simplest for shift closing)
-                const allowedWarehouseId = inventorySettings?.employee_allowed_warehouse_ids?.[0] || null
+                const allowedWarehouseId =
+                    inventorySettings?.handover_warehouse_id ||
+                    inventorySettings?.cashbox_warehouse_id ||
+                    null
 
                 console.log('Starting inventory:', { targetMetric, allowedWarehouseId })
                 
@@ -2129,7 +2132,7 @@ export function ShiftClosingWizard({
                             <ArrowLeft className="h-6 w-6" />
                         </Button>
                         <Button onClick={handleReconcileNext} disabled={isPending} className="flex-1 h-14 text-lg font-bold bg-blue-600 hover:bg-blue-700 rounded-2xl shadow-lg shadow-blue-900/20">
-                            Далее: Ревизия
+                            {reconcileNextLabel}
                             <ArrowRight className="ml-2 h-5 w-5" />
                         </Button>
                     </div>

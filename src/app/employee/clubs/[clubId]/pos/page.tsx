@@ -5,14 +5,15 @@ import { useParams } from "next/navigation"
 import { Loader2 } from "lucide-react"
 import { SSEProvider } from "@/hooks/usePOSWebSocket"
 import { EmployeeSalesWizard } from "../_components/EmployeeSalesWizard"
+import { normalizeInventorySettings } from "@/lib/inventory-settings"
 
 export default function EmployeePosPage() {
     const { clubId } = useParams<{ clubId: string }>()
     const [userId, setUserId] = useState<string>("")
     const [activeShiftId, setActiveShiftId] = useState<string | undefined>(undefined)
     const [isLoading, setIsLoading] = useState(true)
-    const [isPosEnabled, setIsPosEnabled] = useState(true)
     const [isBlockedByAcceptance, setIsBlockedByAcceptance] = useState(false)
+    const [isCashboxEnabled, setIsCashboxEnabled] = useState(true)
 
     useEffect(() => {
         const load = async () => {
@@ -25,35 +26,15 @@ export default function EmployeePosPage() {
                  const currentClub = Array.isArray(me?.employee_clubs)
                     ? me.employee_clubs.find((club: any) => String(club.id) === String(clubId))
                     : null
-                if (currentClub?.inventory_settings?.sales_capture_mode && currentClub.inventory_settings.sales_capture_mode !== "SHIFT") {
-                    setIsPosEnabled(false)
-                    return
-                }
+                const inventorySettings = normalizeInventorySettings(currentClub?.inventory_settings)
+                setIsCashboxEnabled(Boolean(inventorySettings.stock_enabled && inventorySettings.cashbox_enabled && inventorySettings.cashbox_warehouse_id))
 
                 const shiftRes = await fetch(`/api/employee/clubs/${clubId}/active-shift`, { cache: "no-store" })
                 const shiftData = await shiftRes.json()
                 if (shiftRes.ok && shiftData?.shift?.id) {
                     const shiftId = String(shiftData.shift.id)
                     setActiveShiftId(shiftId)
-
-                    const requiresStartAcceptance = Boolean(
-                        currentClub?.inventory_required &&
-                        (currentClub?.inventory_settings?.inventory_timing || "END_SHIFT") === "START_SHIFT"
-                    )
-
-                    if (requiresStartAcceptance) {
-                        const inventoryRes = await fetch(
-                            `/api/employee/clubs/${clubId}/shifts/${shiftId}/open-inventory`,
-                            { cache: "no-store" }
-                        )
-                        const inventoryData = await inventoryRes.json().catch(() => ({}))
-                        if (!inventoryRes.ok) {
-                            throw new Error(inventoryData.error || "Не удалось проверить приемку остатков")
-                        }
-                        setIsBlockedByAcceptance(Boolean(inventoryData.inventory))
-                    } else {
-                        setIsBlockedByAcceptance(false)
-                    }
+                    setIsBlockedByAcceptance(false)
                 } else {
                     setActiveShiftId(undefined)
                     setIsBlockedByAcceptance(false)
@@ -77,17 +58,6 @@ export default function EmployeePosPage() {
         )
     }
 
-    if (!isPosEnabled) {
-        return (
-            <div className="min-h-[100dvh] bg-background text-foreground flex items-center justify-center p-6 text-center">
-                <div className="max-w-md space-y-3 rounded-xl border border-border bg-card p-6 shadow-sm">
-                    <div className="text-lg font-bold text-foreground">Касса отключена</div>
-                    <div className="text-sm text-muted-foreground">Продажи через POS недоступны для этого клуба.</div>
-                </div>
-            </div>
-        )
-    }
-
     if (isBlockedByAcceptance) {
         return (
             <div className="min-h-[100dvh] bg-background text-foreground flex items-center justify-center p-6 text-center">
@@ -95,6 +65,19 @@ export default function EmployeePosPage() {
                     <div className="text-lg font-bold text-amber-500">Бар временно заблокирован</div>
                     <div className="text-sm text-muted-foreground">
                         Сначала завершите приемку остатков на старте смены. После подтверждения инвентаризации касса откроется автоматически.
+                    </div>
+                </div>
+            </div>
+        )
+    }
+
+    if (!isCashboxEnabled) {
+        return (
+            <div className="min-h-[100dvh] bg-background text-foreground flex items-center justify-center p-6 text-center">
+                <div className="max-w-md space-y-3 rounded-xl border border-border bg-card p-6 shadow-sm">
+                    <div className="text-lg font-bold text-foreground">Касса отключена</div>
+                    <div className="text-sm text-muted-foreground">
+                        Этот клуб не использует кассу DashAdmin. Если продажи пробиваются во внешней системе, здесь касса недоступна.
                     </div>
                 </div>
             </div>

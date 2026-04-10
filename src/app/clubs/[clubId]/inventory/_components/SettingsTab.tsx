@@ -3,31 +3,37 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { CategoriesTab } from "./CategoriesTab"
 import { WarehousesTab } from "./WarehousesTab"
-import { Category, Warehouse, updateInventoryRequired, updateInventorySettings, PriceTagSettings, Product, getMetrics, getShiftAccountabilitySetupStatus, ShiftAccountabilitySetupStatus } from "../actions"
+import { Category, Warehouse, updateInventorySettings, PriceTagSettings, Product, getMetrics } from "../actions"
 import { useRouter, useSearchParams, useParams } from "next/navigation"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { useTransition, useState, useEffect } from "react"
-import { RefreshCw, ShieldCheck, Wallet, Percent, Tag, Package, Warehouse as WarehouseIcon, AlertTriangle, CheckCircle2 } from "lucide-react"
+import { RefreshCw, Wallet, Percent, Tag, Package } from "lucide-react"
 import { PriceTagTemplateTab } from "./PriceTagTemplateTab"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Badge } from "@/components/ui/badge"
-import { cn } from "@/lib/utils"
+import { normalizeInventorySettings } from "@/lib/inventory-settings"
 
 interface SettingsTabProps {
     products: Product[]
     categories: Category[]
     warehouses: Warehouse[]
-    employees: { id: string, full_name: string, role: string }[]
     currentUserId: string
-    inventoryRequired: boolean
     inventorySettings: {
         employee_allowed_warehouse_ids?: number[],
         employee_default_metric_key?: string,
         blind_inventory_enabled?: boolean,
-        sales_capture_mode?: 'INVENTORY' | 'SHIFT',
-        inventory_timing?: 'END_SHIFT' | 'START_SHIFT',
+        supplies_enabled?: boolean,
+        stock_enabled?: boolean,
+        cashbox_enabled?: boolean,
+        employee_stock_operations_enabled?: boolean,
+        employee_writeoff_enabled?: boolean,
+        employee_transfer_enabled?: boolean,
+        report_reconciliation_enabled?: boolean,
+        cashbox_warehouse_id?: number | null,
+        handover_warehouse_id?: number | null,
+        sales_capture_mode?: 'SHIFT',
+        inventory_timing?: 'END_SHIFT',
         shift_accountability_mode?: 'DISABLED' | 'WAREHOUSE',
         allow_salary_deduction?: boolean,
         employee_discount_percent?: number,
@@ -36,26 +42,22 @@ interface SettingsTabProps {
     }
 }
 
-export function SettingsTab({ products, categories, warehouses, employees, currentUserId, inventoryRequired, inventorySettings }: SettingsTabProps) {
+export function SettingsTab({ products, categories, warehouses, currentUserId, inventorySettings }: SettingsTabProps) {
     const router = useRouter()
     const searchParams = useSearchParams()
     const params = useParams()
     const clubId = params.clubId as string
     const [isPending, startTransition] = useTransition()
     const [metrics, setMetrics] = useState<{ key: string, label: string }[]>([])
-    const [inventoryRequiredValue, setInventoryRequiredValue] = useState(inventoryRequired)
-    const [accountabilityStatus, setAccountabilityStatus] = useState<ShiftAccountabilitySetupStatus | null>(null)
+    const normalizedSettings = normalizeInventorySettings(inventorySettings)
+    const defaultWarehouseId = warehouses.find((warehouse) => warehouse.is_default)?.id ?? warehouses[0]?.id ?? null
     
     // Local state for discount input to avoid too many DB updates while typing
     const [discountValue, setDiscountValue] = useState(inventorySettings?.employee_discount_percent?.toString() || "0")
 
     useEffect(() => {
-        setDiscountValue(inventorySettings?.employee_discount_percent?.toString() || "0")
-    }, [inventorySettings?.employee_discount_percent])
-
-    useEffect(() => {
-        setInventoryRequiredValue(inventoryRequired)
-    }, [inventoryRequired])
+        setDiscountValue(normalizedSettings?.employee_discount_percent?.toString() || "0")
+    }, [normalizedSettings?.employee_discount_percent])
 
     useEffect(() => {
         getMetrics()
@@ -64,10 +66,16 @@ export function SettingsTab({ products, categories, warehouses, employees, curre
     }, [])
 
     useEffect(() => {
-        getShiftAccountabilitySetupStatus(clubId)
-            .then(setAccountabilityStatus)
-            .catch(console.error)
-    }, [clubId, inventorySettings])
+        if (isPending) return
+        if (!normalizedSettings.stock_enabled || !normalizedSettings.report_reconciliation_enabled) return
+        if (normalizedSettings.employee_default_metric_key) return
+        if (metrics.length === 0) return
+
+        saveSettings({
+            ...normalizedSettings,
+            employee_default_metric_key: metrics[0].key,
+        })
+    }, [isPending, metrics, normalizedSettings])
 
     // Default to categories if on 'settings' or something else
     const currentSubTab = searchParams.get("tab")
@@ -75,19 +83,21 @@ export function SettingsTab({ products, categories, warehouses, employees, curre
         ? currentSubTab! 
         : 'general'
 
-    const handleUpdateSetting = (key: string, value: any) => {
-        const newSettings = {
-            ...inventorySettings,
-            [key]: value
-        }
-        
+    const saveSettings = (nextSettings: typeof normalizedSettings) => {
         startTransition(async () => {
             try {
-                await updateInventorySettings(clubId, currentUserId, newSettings)
+                await updateInventorySettings(clubId, currentUserId, nextSettings)
                 router.refresh()
             } catch (err) {
                 console.error(err)
             }
+        })
+    }
+
+    const handleUpdateSetting = (key: string, value: any) => {
+        saveSettings({
+            ...normalizedSettings,
+            [key]: value
         })
     }
 
@@ -97,29 +107,79 @@ export function SettingsTab({ products, categories, warehouses, employees, curre
         handleUpdateSetting('employee_discount_percent', val)
     }
 
-    const handleUpdateInventoryRequired = (nextValue: boolean) => {
-        setInventoryRequiredValue(nextValue)
-        startTransition(async () => {
-            try {
-                await updateInventoryRequired(clubId, currentUserId, nextValue)
-                router.refresh()
-            } catch (err) {
-                console.error(err)
-                setInventoryRequiredValue(inventoryRequired)
+    const handleFeatureToggle = (key: 'supplies_enabled' | 'stock_enabled' | 'cashbox_enabled' | 'report_reconciliation_enabled' | 'shift_accountability_mode', checked: boolean) => {
+        const nextSettings = {
+            ...normalizedSettings,
+            [key]: key === 'shift_accountability_mode' ? (checked ? 'WAREHOUSE' : 'DISABLED') : checked,
+        }
+
+        if (key === 'stock_enabled' && !checked) {
+            nextSettings.stock_enabled = false
+            nextSettings.cashbox_enabled = false
+            nextSettings.employee_stock_operations_enabled = false
+            nextSettings.employee_writeoff_enabled = false
+            nextSettings.employee_transfer_enabled = false
+            nextSettings.report_reconciliation_enabled = false
+            nextSettings.cashbox_warehouse_id = null
+            nextSettings.shift_accountability_mode = 'DISABLED'
+            nextSettings.handover_warehouse_id = null
+        }
+
+        if (key === 'cashbox_enabled') {
+            nextSettings.cashbox_enabled = checked
+            if (checked) {
+                nextSettings.stock_enabled = true
+                nextSettings.cashbox_warehouse_id = nextSettings.cashbox_warehouse_id ?? defaultWarehouseId
+            } else {
+                nextSettings.report_reconciliation_enabled = false
+                nextSettings.cashbox_warehouse_id = null
+                nextSettings.shift_accountability_mode = 'DISABLED'
+                nextSettings.handover_warehouse_id = null
             }
-        })
+        }
+
+        if (key === 'report_reconciliation_enabled') {
+            nextSettings.report_reconciliation_enabled = checked
+            if (checked) {
+                nextSettings.stock_enabled = true
+                nextSettings.cashbox_enabled = true
+                nextSettings.cashbox_warehouse_id = nextSettings.cashbox_warehouse_id ?? defaultWarehouseId
+                nextSettings.employee_default_metric_key = nextSettings.employee_default_metric_key ?? metrics[0]?.key
+            }
+        }
+
+        if (key === 'shift_accountability_mode') {
+            nextSettings.shift_accountability_mode = checked ? 'WAREHOUSE' : 'DISABLED'
+            if (checked) {
+                nextSettings.stock_enabled = true
+                nextSettings.cashbox_enabled = true
+                nextSettings.cashbox_warehouse_id = nextSettings.cashbox_warehouse_id ?? defaultWarehouseId
+                nextSettings.handover_warehouse_id = nextSettings.handover_warehouse_id ?? nextSettings.cashbox_warehouse_id ?? defaultWarehouseId
+            } else {
+                nextSettings.handover_warehouse_id = null
+            }
+        }
+        saveSettings(nextSettings)
     }
 
-    const handleWarehouseToggle = (warehouseId: number) => {
-        const current = inventorySettings?.employee_allowed_warehouse_ids || []
-        const next = current.includes(warehouseId)
-            ? current.filter(id => id !== warehouseId)
-            : [...current, warehouseId]
-        handleUpdateSetting('employee_allowed_warehouse_ids', next)
+    const handleWarehouseBindingChange = (key: 'cashbox_warehouse_id' | 'handover_warehouse_id', value: string) => {
+        const parsedWarehouseId = value === "none" ? null : Number(value)
+        const nextSettings = {
+            ...normalizedSettings,
+            [key]: parsedWarehouseId,
+        }
+
+        if (key === 'cashbox_warehouse_id' && normalizedSettings.shift_accountability_mode === 'WAREHOUSE') {
+            nextSettings.handover_warehouse_id = parsedWarehouseId
+        }
+
+        saveSettings(nextSettings)
     }
 
-    const isShiftAccountabilityEnabled = (inventorySettings?.shift_accountability_mode || "DISABLED") === "WAREHOUSE"
-
+    const isShiftAccountabilityEnabled = normalizedSettings.shift_accountability_mode === "WAREHOUSE"
+    const isStockEnabled = normalizedSettings.stock_enabled
+    const isCashboxEnabled = normalizedSettings.cashbox_enabled
+    const isSuppliesEnabled = normalizedSettings.supplies_enabled
     return (
         <div className="space-y-4 md:space-y-6">
             <Tabs 
@@ -165,332 +225,290 @@ export function SettingsTab({ products, categories, warehouses, employees, curre
                         <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
                             <div className="p-4 border-b border-border/50 bg-muted/50">
                                 <h4 className="font-bold text-foreground flex items-center gap-2">
-                                    <ShieldCheck className="h-4 w-4 text-blue-600" />
-                                    Политики продаж
-                                </h4>
-                                <p className="text-[11px] text-muted-foreground mt-0.5">Настройка прав сотрудников при продаже товаров</p>
-                            </div>
-                            
-                            <div className="divide-y divide-slate-100">
-                                <div className="p-6 flex items-center justify-between hover:bg-muted/30 transition-colors">
-                                    <div className="space-y-1">
-                                        <Label className="text-sm font-bold text-foreground flex items-center gap-2">
-                                            <Wallet className="h-3.5 w-3.5 text-muted-foreground/70" />
-                                            Продажа в счет зарплаты
-                                        </Label>
-                                        <p className="text-xs text-muted-foreground leading-relaxed max-w-[400px]">
-                                            Разрешить сотрудникам покупать товары с автоматическим вычетом суммы из их будущей выплаты
-                                        </p>
-                                    </div>
-                                    <Switch 
-                                        checked={inventorySettings?.allow_salary_deduction ?? false}
-                                        onCheckedChange={(checked) => handleUpdateSetting('allow_salary_deduction', checked)}
-                                        disabled={isPending}
-                                        className="data-[state=checked]:bg-blue-600"
-                                    />
-                                </div>
-                                
-                                <div className="p-6 flex items-center justify-between hover:bg-muted/30 transition-colors">
-                                    <div className="space-y-1">
-                                        <Label className="text-sm font-bold text-foreground flex items-center gap-2">
-                                            <Percent className="h-3.5 w-3.5 text-muted-foreground/70" />
-                                            Скидка для сотрудников
-                                        </Label>
-                                        <p className="text-xs text-muted-foreground leading-relaxed max-w-[400px]">
-                                            Фиксированный процент скидки, который будет применен к цене товара при покупке в счет зарплаты
-                                        </p>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        <div className="relative">
-                                            <Input 
-                                                type="number"
-                                                className="w-24 text-right pr-8 font-black text-foreground h-10 rounded-lg border-border focus:ring-blue-500/10 focus:border-blue-500/50"
-                                                value={discountValue}
-                                                onChange={(e) => setDiscountValue(e.target.value)}
-                                                onBlur={handleDiscountBlur}
-                                                disabled={isPending}
-                                                min="0"
-                                                max="100"
-                                            />
-                                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/70 font-bold text-xs">%</span>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="p-6 flex items-center justify-between hover:bg-muted/30 transition-colors">
-                                    <div className="space-y-1">
-                                        <Label className="text-sm font-bold text-foreground flex items-center gap-2">
-                                            <Tag className="h-3.5 w-3.5 text-muted-foreground/70" />
-                                            Продажа по себестоимости
-                                        </Label>
-                                        <p className="text-xs text-muted-foreground leading-relaxed max-w-[400px]">
-                                            Добавить кнопку в интерфейс сотрудника для быстрой продажи товара по его закупочной цене
-                                        </p>
-                                    </div>
-                                    <Switch 
-                                        checked={inventorySettings?.allow_cost_price_sale ?? false}
-                                        onCheckedChange={(checked) => handleUpdateSetting('allow_cost_price_sale', checked)}
-                                        disabled={isPending}
-                                        className="data-[state=checked]:bg-blue-600"
-                                    />
-                                </div>
-                            </div>
-
-                            {isPending && (
-                                <div className="p-3 bg-blue-50/50 border-t border-blue-100 flex items-center justify-center gap-2 text-[10px] text-blue-600 font-bold uppercase tracking-widest">
-                                    <RefreshCw className="h-3 w-3 animate-spin" />
-                                    Сохранение настроек...
-                                </div>
-                            )}
-                        </div>
-
-                        <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
-                            <div className="p-4 border-b border-border/50 bg-muted/50">
-                                <h4 className="font-bold text-foreground flex items-center gap-2">
                                     <Package className="h-4 w-4 text-blue-600" />
-                                    Инвентаризация
+                                    Режим работы
                                 </h4>
-                                <p className="text-[11px] text-muted-foreground mt-0.5">Настройки проведения инвентаризаций при закрытии смены</p>
+                                <p className="text-[11px] text-muted-foreground mt-0.5">Товары и цены остаются базой, а поставки, остатки, касса и передача зон включаются только там, где клубу это реально нужно.</p>
                             </div>
 
                             <div className="divide-y divide-slate-100">
                                 <div className="p-6 hover:bg-muted/30 transition-colors">
                                     <div className="space-y-4">
-                                        <div className="space-y-1">
-                                            <Label className="text-sm font-bold text-foreground">
-                                                Система сменной ответственности
-                                            </Label>
-                                            <p className="text-xs text-muted-foreground leading-relaxed max-w-[520px]">
-                                                Явно включает новую модель приемки и сдачи холодильника/витрины вместо старой shift-инвентаризации.
-                                            </p>
+                                        <div className="flex items-center justify-between gap-4 rounded-xl border border-border p-4">
+                                            <div className="space-y-1">
+                                                <div className="font-semibold text-foreground">Использовать поставки</div>
+                                                <div className="text-xs text-muted-foreground">
+                                                    Нужно для закупок, поставщиков и себестоимости.
+                                                </div>
+                                            </div>
+                                            <Switch
+                                                checked={isSuppliesEnabled}
+                                                onCheckedChange={(checked) => handleFeatureToggle('supplies_enabled', checked)}
+                                                disabled={isPending}
+                                                className="data-[state=checked]:bg-blue-600"
+                                            />
                                         </div>
 
                                         <div className="flex items-center justify-between gap-4 rounded-xl border border-border p-4">
                                             <div className="space-y-1">
-                                                <div className="font-semibold text-foreground">Активировать систему</div>
+                                                <div className="font-semibold text-foreground">Вести остатки по складам</div>
                                                 <div className="text-xs text-muted-foreground">
-                                                    Когда включено, сотрудники проходят приемку/сдачу зон, а старая shift-инвентаризация отключается.
+                                                    Включает склады, движения, списания, перемещения, ревизии и аналитику по остаткам.
+                                                </div>
+                                            </div>
+                                            <Switch
+                                                checked={isStockEnabled}
+                                                onCheckedChange={(checked) => handleFeatureToggle('stock_enabled', checked)}
+                                                disabled={isPending}
+                                                className="data-[state=checked]:bg-blue-600"
+                                            />
+                                        </div>
+
+                                        {isStockEnabled && (
+                                            <div className="flex items-center justify-between gap-4 rounded-xl border border-border p-4">
+                                                <div className="space-y-1">
+                                                    <div className="font-semibold text-foreground">Разрешать списание сотруднику</div>
+                                                    <div className="text-xs text-muted-foreground">
+                                                        Показывает сотруднику кнопку списания в его кабинете.
+                                                    </div>
+                                                </div>
+                                                <Switch
+                                                    checked={normalizedSettings.employee_writeoff_enabled}
+                                                    onCheckedChange={(checked) => handleUpdateSetting('employee_writeoff_enabled', checked)}
+                                                    disabled={isPending}
+                                                    className="data-[state=checked]:bg-blue-600"
+                                                />
+                                            </div>
+                                        )}
+
+                                        {isStockEnabled && (
+                                            <div className="flex items-center justify-between gap-4 rounded-xl border border-border p-4">
+                                                <div className="space-y-1">
+                                                    <div className="font-semibold text-foreground">Разрешать перемещение сотруднику</div>
+                                                    <div className="text-xs text-muted-foreground">
+                                                        Показывает сотруднику кнопку перемещения в его кабинете.
+                                                    </div>
+                                                </div>
+                                                <Switch
+                                                    checked={normalizedSettings.employee_transfer_enabled}
+                                                    onCheckedChange={(checked) => handleUpdateSetting('employee_transfer_enabled', checked)}
+                                                    disabled={isPending}
+                                                    className="data-[state=checked]:bg-blue-600"
+                                                />
+                                            </div>
+                                        )}
+
+                                        <div className="flex items-center justify-between gap-4 rounded-xl border border-border p-4">
+                                            <div className="space-y-1">
+                                                <div className="font-semibold text-foreground">Использовать кассу DashAdmin</div>
+                                                <div className="text-xs text-muted-foreground">
+                                                    Касса нужна только если клуб пробивает продажи внутри DashAdmin. При выключенном учете остатков касса автоматически недоступна.
+                                                </div>
+                                            </div>
+                                            <Switch
+                                                checked={isCashboxEnabled}
+                                                onCheckedChange={(checked) => handleFeatureToggle('cashbox_enabled', checked)}
+                                                disabled={isPending}
+                                                className="data-[state=checked]:bg-blue-600"
+                                            />
+                                        </div>
+
+                                        {isCashboxEnabled && (
+                                            <div className="rounded-xl border border-border p-4 space-y-2">
+                                                <Label className="text-sm font-semibold text-foreground">Склад кассы</Label>
+                                                <Select
+                                                    value={normalizedSettings.cashbox_warehouse_id ? String(normalizedSettings.cashbox_warehouse_id) : "none"}
+                                                    onValueChange={(value) => handleWarehouseBindingChange('cashbox_warehouse_id', value)}
+                                                    disabled={isPending}
+                                                >
+                                                    <SelectTrigger>
+                                                        <SelectValue placeholder="Выберите склад для кассы" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="none">Не выбран</SelectItem>
+                                                        {warehouses.filter((warehouse) => warehouse.is_active).map((warehouse) => (
+                                                            <SelectItem key={warehouse.id} value={String(warehouse.id)}>
+                                                                {warehouse.name}
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                                <p className="text-xs text-muted-foreground">
+                                                    Все продажи из кассы будут списываться только с этого склада.
+                                                </p>
+                                            </div>
+                                        )}
+
+                                        {isCashboxEnabled && (
+                                            <div className="flex items-center justify-between gap-4 rounded-xl border border-border p-4">
+                                                <div className="space-y-1">
+                                                    <Label className="text-sm font-bold text-foreground flex items-center gap-2">
+                                                        <Wallet className="h-3.5 w-3.5 text-muted-foreground/70" />
+                                                        Разрешать продажу в счет ЗП сотруднику
+                                                    </Label>
+                                                    <p className="text-xs text-muted-foreground leading-relaxed max-w-[520px]">
+                                                        Сотрудник сможет покупать товары через кассу с вычетом суммы из будущей выплаты.
+                                                    </p>
+                                                </div>
+                                                <Switch 
+                                                    checked={normalizedSettings?.allow_salary_deduction ?? false}
+                                                    onCheckedChange={(checked) => saveSettings({
+                                                        ...normalizedSettings,
+                                                        allow_salary_deduction: checked,
+                                                        allow_cost_price_sale: checked ? (normalizedSettings?.allow_cost_price_sale ?? false) : false,
+                                                    })}
+                                                    disabled={isPending}
+                                                    className="data-[state=checked]:bg-blue-600"
+                                                />
+                                            </div>
+                                        )}
+
+                                        {isCashboxEnabled && normalizedSettings?.allow_salary_deduction && (
+                                            <div className="rounded-xl border border-border p-4 space-y-2">
+                                                <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
+                                                    <Percent className="h-3.5 w-3.5 text-muted-foreground/70" />
+                                                    Скидка для сотрудников
+                                                </Label>
+                                                <p className="text-xs text-muted-foreground leading-relaxed max-w-[520px]">
+                                                    Фиксированный процент скидки, который будет применен в кассе при покупке в счет зарплаты.
+                                                </p>
+                                                <div className="relative max-w-24">
+                                                    <Input 
+                                                        type="number"
+                                                        className="w-24 text-right pr-8 font-black text-foreground h-10 rounded-lg border-border focus:ring-blue-500/10 focus:border-blue-500/50"
+                                                        value={discountValue}
+                                                        onChange={(e) => setDiscountValue(e.target.value)}
+                                                        onBlur={handleDiscountBlur}
+                                                        disabled={isPending}
+                                                        min="0"
+                                                        max="100"
+                                                    />
+                                                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/70 font-bold text-xs">%</span>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {isCashboxEnabled && normalizedSettings?.allow_salary_deduction && (
+                                            <div className="flex items-center justify-between gap-4 rounded-xl border border-border p-4">
+                                                <div className="space-y-1">
+                                                    <Label className="text-sm font-bold text-foreground flex items-center gap-2">
+                                                        <Tag className="h-3.5 w-3.5 text-muted-foreground/70" />
+                                                        Продажа в счет ЗП по себестоимости
+                                                    </Label>
+                                                    <p className="text-xs text-muted-foreground leading-relaxed max-w-[520px]">
+                                                        Разрешить продажу в счет зарплаты по закупочной цене вместо обычной цены товара.
+                                                    </p>
+                                                </div>
+                                                <Switch 
+                                                    checked={normalizedSettings?.allow_cost_price_sale ?? false}
+                                                    onCheckedChange={(checked) => handleUpdateSetting('allow_cost_price_sale', checked)}
+                                                    disabled={isPending}
+                                                    className="data-[state=checked]:bg-blue-600"
+                                                />
+                                            </div>
+                                        )}
+
+                                        <div className="flex items-center justify-between gap-4 rounded-xl border border-border p-4">
+                                            <div className="space-y-1">
+                                                <div className="font-semibold text-foreground">Сверка отчетов</div>
+                                                <div className="text-xs text-muted-foreground">
+                                                    Сравнивает итог из отчета смены с расчетом продаж по кассе. Используй только если клуб пробивает продажи в DashAdmin.
+                                                </div>
+                                            </div>
+                                            <Switch
+                                                checked={normalizedSettings.report_reconciliation_enabled}
+                                                onCheckedChange={(checked) => handleFeatureToggle('report_reconciliation_enabled', checked)}
+                                                disabled={isPending || !isCashboxEnabled}
+                                                className="data-[state=checked]:bg-blue-600"
+                                            />
+                                        </div>
+
+                                        {normalizedSettings.report_reconciliation_enabled && (
+                                            <div className="rounded-xl border border-border p-4 space-y-2">
+                                                <Label className="text-sm font-semibold text-foreground">Метрика для сверки</Label>
+                                                <Select
+                                                    value={normalizedSettings?.employee_default_metric_key || ""}
+                                                    onValueChange={(val) => handleUpdateSetting('employee_default_metric_key', val)}
+                                                    disabled={isPending}
+                                                >
+                                                    <SelectTrigger>
+                                                    <SelectValue placeholder="Выберите метрику для сверки" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        {metrics.map(m => (
+                                                            <SelectItem key={m.key} value={m.key}>{m.label}</SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                                <p className="text-xs text-muted-foreground">
+                                                    Эта метрика используется для сверки итогов при закрытии смены.
+                                                </p>
+                                            </div>
+                                        )}
+
+                                        <div className="flex items-center justify-between gap-4 rounded-xl border border-border p-4">
+                                            <div className="space-y-1">
+                                                <div className="font-semibold text-foreground">Использовать передачу зон</div>
+                                                <div className="text-xs text-muted-foreground">
+                                                    Приемка и сдача барной зоны. Работает только вместе с учетом остатков и кассой DashAdmin, иначе продажи не попадут в расчет передачи.
                                                 </div>
                                             </div>
                                             <Switch
                                                 checked={isShiftAccountabilityEnabled}
-                                                onCheckedChange={(checked) => handleUpdateSetting('shift_accountability_mode', checked ? 'WAREHOUSE' : 'DISABLED')}
+                                                onCheckedChange={(checked) => handleFeatureToggle('shift_accountability_mode', checked)}
                                                 disabled={isPending}
                                                 className="data-[state=checked]:bg-blue-600"
                                             />
                                         </div>
 
-                                        <div className={cn(
-                                            "rounded-xl border p-4 space-y-3",
-                                            !isShiftAccountabilityEnabled
-                                                ? "border-border bg-muted"
-                                                : accountabilityStatus?.ready
-                                                    ? "border-green-200 bg-green-50"
-                                                    : "border-amber-200 bg-amber-50"
-                                        )}>
-                                            <div className="flex items-center justify-between gap-3">
-                                                <div className="flex items-center gap-2">
-                                                    {!isShiftAccountabilityEnabled ? (
-                                                        <Package className="h-4 w-4 text-muted-foreground" />
-                                                    ) : accountabilityStatus?.ready ? (
-                                                        <CheckCircle2 className="h-4 w-4 text-green-600" />
-                                                    ) : (
-                                                        <AlertTriangle className="h-4 w-4 text-amber-600" />
-                                                    )}
-                                                    <span className="font-semibold text-foreground">
-                                                        {!isShiftAccountabilityEnabled
-                                                            ? "Система отключена"
-                                                            : accountabilityStatus?.ready
-                                                                ? "Система готова к включению"
-                                                                : "Система включена, но конфигурация не завершена"}
-                                                    </span>
-                                                </div>
-                                                <Badge variant="outline">
-                                                    {accountabilityStatus?.warehouses_count ?? 0} зон/складов
-                                                </Badge>
-                                            </div>
-
-                                            {accountabilityStatus?.configured_warehouses?.length ? (
-                                                <div className="flex flex-wrap gap-2">
-                                                    {accountabilityStatus.configured_warehouses.map((warehouse) => (
-                                                        <Badge key={warehouse.id} variant="secondary" className="bg-card text-foreground border border-border">
-                                                            {warehouse.name} · {warehouse.shift_zone_label}
-                                                        </Badge>
-                                                    ))}
-                                                </div>
-                                            ) : null}
-
-                                            {isShiftAccountabilityEnabled && accountabilityStatus?.issues?.length ? (
-                                                <div className="space-y-2">
-                                                    {accountabilityStatus.issues.map((issue) => (
-                                                        <div key={issue} className="text-xs text-amber-900">
-                                                            • {issue}
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            ) : (
+                                        {isShiftAccountabilityEnabled && (
+                                            <div className="rounded-xl border border-border p-4 space-y-2">
+                                                <Label className="text-sm font-semibold text-foreground">Склад передачи</Label>
+                                                <Select
+                                                    value={normalizedSettings.handover_warehouse_id ? String(normalizedSettings.handover_warehouse_id) : "none"}
+                                                    onValueChange={(value) => handleWarehouseBindingChange('handover_warehouse_id', value)}
+                                                    disabled={isPending}
+                                                >
+                                                    <SelectTrigger>
+                                                        <SelectValue placeholder="Выберите склад для передачи" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="none">Не выбран</SelectItem>
+                                                        {warehouses.filter((warehouse) => warehouse.is_active).map((warehouse) => (
+                                                            <SelectItem key={warehouse.id} value={String(warehouse.id)}>
+                                                                {warehouse.name}
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
                                                 <p className="text-xs text-muted-foreground">
-                                                    {!isShiftAccountabilityEnabled
-                                                        ? "Новая система не влияет на смены, пока не включена."
-                                                        : "Сотрудники будут работать через приемку/сдачу барной зоны. Можно подключить один или несколько складов к бару."}
-                                                </p>
-                                            )}
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="p-6 hover:bg-muted/30 transition-colors">
-                                    <div className="space-y-3">
-                                        <div className="space-y-1">
-                                            <Label className="text-sm font-bold text-foreground">
-                                                Режим учета продаж по складу
-                                            </Label>
-                                            <p className="text-xs text-muted-foreground leading-relaxed max-w-[520px]">
-                                                Либо продажи фиксируются по результатам инвентаризации, либо сотрудник пробивает товар в течение смены.
-                                            </p>
-                                        </div>
-                                        <Select
-                                            value={inventorySettings?.sales_capture_mode || "INVENTORY"}
-                                            onValueChange={(val: any) => handleUpdateSetting('sales_capture_mode', val)}
-                                            disabled={isPending || isShiftAccountabilityEnabled}
-                                        >
-                                            <SelectTrigger>
-                                                <SelectValue placeholder="Выберите режим" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="INVENTORY">Фиксировать продажи через инвентаризацию</SelectItem>
-                                                <SelectItem value="SHIFT">Пробитие товара в течение смены</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                </div>
-
-                                <div className="p-6 flex items-center justify-between hover:bg-muted/30 transition-colors">
-                                    <div className="space-y-1">
-                                        <Label className="text-sm font-bold text-foreground">
-                                            Обязательная инвентаризация
-                                        </Label>
-                                        <p className="text-xs text-muted-foreground leading-relaxed max-w-[520px]">
-                                            Если включено, администратор не сможет закрыть смену без проведения инвентаризации
-                                        </p>
-                                    </div>
-                                    <Switch
-                                        checked={inventoryRequiredValue}
-                                        onCheckedChange={handleUpdateInventoryRequired}
-                                        disabled={isPending || isShiftAccountabilityEnabled}
-                                        className="data-[state=checked]:bg-blue-600"
-                                    />
-                                </div>
-
-                                <div className="p-6 hover:bg-muted/30 transition-colors">
-                                    <div className="space-y-3">
-                                        <div className="space-y-1">
-                                            <Label className="text-sm font-bold text-foreground">
-                                                Когда проводить обязательную инвентаризацию
-                                            </Label>
-                                            <p className="text-xs text-muted-foreground leading-relaxed max-w-[520px]">
-                                                Выбери, в какой момент сотрудник должен пройти обязательную инвентаризацию: перед завершением смены или сразу после её начала.
-                                            </p>
-                                        </div>
-                                        <Select
-                                            value={inventorySettings?.inventory_timing || "END_SHIFT"}
-                                            onValueChange={(val: 'END_SHIFT' | 'START_SHIFT') => handleUpdateSetting('inventory_timing', val)}
-                                            disabled={isPending || !inventoryRequiredValue || isShiftAccountabilityEnabled}
-                                        >
-                                            <SelectTrigger>
-                                                <SelectValue placeholder="Выберите момент инвентаризации" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="END_SHIFT">В конце смены</SelectItem>
-                                                <SelectItem value="START_SHIFT">В начале смены</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                        {!inventoryRequiredValue ? (
-                                            <p className="text-[11px] text-amber-600">
-                                                Сначала включи обязательную инвентаризацию, чтобы выбрать момент её проведения.
-                                            </p>
-                                        ) : isShiftAccountabilityEnabled ? (
-                                            <p className="text-[11px] text-amber-600">
-                                                Пока включена система сменной ответственности, эта настройка не используется.
-                                            </p>
-                                        ) : null}
-                                    </div>
-                                </div>
-
-                                <div className="p-6 hover:bg-muted/30 transition-colors">
-                                    <div className="space-y-4">
-                                        <div className="space-y-1">
-                                            <Label className="text-sm font-bold text-foreground">
-                                                Правила для сотрудников
-                                            </Label>
-                                            <p className="text-xs text-muted-foreground leading-relaxed max-w-[520px]">
-                                                Ограничения для сотрудников при старте инвентаризации
-                                            </p>
-                                        </div>
-
-                                        <div className="space-y-2">
-                                            <Label className="text-xs font-bold text-muted-foreground">Доступные склады для инвентаризации</Label>
-                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                                {warehouses.map(w => (
-                                                    <div key={w.id} className="flex items-center justify-between gap-3 border border-border p-3 rounded-lg bg-card">
-                                                        <div className="flex items-center gap-2 min-w-0">
-                                                            <WarehouseIcon className="h-4 w-4 text-muted-foreground/70 shrink-0" />
-                                                            <span className="text-sm font-bold text-foreground truncate">{w.name}</span>
-                                                        </div>
-                                                        <Switch
-                                                            checked={(inventorySettings?.employee_allowed_warehouse_ids || []).includes(w.id)}
-                                                            onCheckedChange={() => handleWarehouseToggle(w.id)}
-                                                            disabled={isPending}
-                                                            className="data-[state=checked]:bg-blue-600"
-                                                        />
-                                                    </div>
-                                                ))}
-                                                {warehouses.length === 0 && (
-                                                    <div className="text-xs text-muted-foreground italic">Склады не созданы</div>
-                                                )}
-                                            </div>
-                                        </div>
-
-                                        <div className="space-y-2">
-                                            <Label className="text-xs font-bold text-muted-foreground">Метрика выручки по умолчанию</Label>
-                                            <Select
-                                                value={inventorySettings?.employee_default_metric_key || "none"}
-                                                onValueChange={(val) => handleUpdateSetting('employee_default_metric_key', val === "none" ? undefined : val)}
-                                                disabled={isPending}
-                                            >
-                                                <SelectTrigger>
-                                                    <SelectValue placeholder="Выберите метрику" />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem value="none">Не выбрано</SelectItem>
-                                                    {metrics.map(m => (
-                                                        <SelectItem key={m.key} value={m.key}>{m.label}</SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                            <p className="text-xs text-muted-foreground leading-relaxed max-w-[520px]">
-                                                Эта метрика будет автоматически выбрана для сотрудников при старте инвентаризации
-                                            </p>
-                                        </div>
-
-                                        <div className="flex items-center justify-between gap-4">
-                                            <div className="space-y-1">
-                                                <Label className="text-sm font-bold text-foreground">
-                                                    Слепая инвентаризация
-                                                </Label>
-                                                <p className="text-xs text-muted-foreground leading-relaxed max-w-[520px]">
-                                                    Если включено, сотрудники не будут видеть ожидаемые остатки при пересчете
+                                                    Этот же склад участвует в приемке и сдаче смены. Для безопасной работы держи его таким же, как склад кассы.
                                                 </p>
                                             </div>
-                                            <Switch
-                                                checked={inventorySettings?.blind_inventory_enabled ?? true}
-                                                onCheckedChange={(checked) => handleUpdateSetting('blind_inventory_enabled', checked)}
-                                                disabled={isPending}
-                                                className="data-[state=checked]:bg-blue-600"
-                                            />
-                                        </div>
+                                        )}
+
+                                        {isShiftAccountabilityEnabled && (
+                                            <div className="flex items-center justify-between gap-4 rounded-xl border border-border p-4">
+                                                <div className="space-y-1">
+                                                    <Label className="text-sm font-bold text-foreground">
+                                                        Слепая инвентаризация
+                                                    </Label>
+                                                    <p className="text-xs text-muted-foreground leading-relaxed max-w-[520px]">
+                                                        На сдаче зоны сотрудник не увидит ожидаемые остатки и не получит автозаполненные количества.
+                                                    </p>
+                                                </div>
+                                                <Switch
+                                                    checked={normalizedSettings?.blind_inventory_enabled ?? true}
+                                                    onCheckedChange={(checked) => handleUpdateSetting('blind_inventory_enabled', checked)}
+                                                    disabled={isPending}
+                                                    className="data-[state=checked]:bg-blue-600"
+                                                />
+                                            </div>
+                                        )}
+
                                     </div>
                                 </div>
+
                             </div>
 
                             {isPending && (
@@ -508,7 +526,12 @@ export function SettingsTab({ products, categories, warehouses, employees, curre
                 </TabsContent>
                 
                 <TabsContent value="warehouses" className="mt-6">
-                    <WarehousesTab warehouses={warehouses} employees={employees} currentUserId={currentUserId} />
+                    <WarehousesTab
+                        warehouses={warehouses}
+                        currentUserId={currentUserId}
+                        cashboxWarehouseId={normalizedSettings.cashbox_warehouse_id}
+                        handoverWarehouseId={normalizedSettings.handover_warehouse_id}
+                    />
                 </TabsContent>
                 
                 <TabsContent value="pricetags" className="mt-6">

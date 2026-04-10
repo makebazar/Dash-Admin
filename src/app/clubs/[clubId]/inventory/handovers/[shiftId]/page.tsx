@@ -63,6 +63,18 @@ interface ShiftZoneDiscrepancy {
     responsibility_type: string
     responsibility_label: string
     explanation: string
+    movement_window_started_at: string | null
+    movement_window_ended_at: string | null
+    movements: Array<{
+        created_at: string
+        type: string
+        change_amount: number
+        reason: string | null
+        related_entity_type: string | null
+        related_entity_id: string | number | null
+        shift_id: string | null
+        user_id: string | null
+    }>
     resolution?: ShiftZoneResolution | null
 }
 
@@ -119,6 +131,16 @@ function isShortage(row: ShiftZoneDiscrepancy) {
 
 function isSurplus(row: ShiftZoneDiscrepancy) {
     return getDiscrepancyValue(row) > 0
+}
+
+function getMovementMeta(type: string) {
+    if (type === "SALE") return { label: "Продажа", className: "border-red-200 bg-red-50 text-red-700" }
+    if (type === "RETURN") return { label: "Возврат", className: "border-emerald-200 bg-emerald-50 text-emerald-700" }
+    if (type === "TRANSFER") return { label: "Перемещение", className: "border-sky-200 bg-sky-50 text-sky-700" }
+    if (type === "ADJUSTMENT") return { label: "Корректировка", className: "border-amber-200 bg-amber-50 text-amber-700" }
+    if (type === "INVENTORY_GAIN") return { label: "Инв. излишек", className: "border-emerald-200 bg-emerald-50 text-emerald-700" }
+    if (type === "INVENTORY_LOSS") return { label: "Инв. недостача", className: "border-rose-200 bg-rose-50 text-rose-700" }
+    return { label: type, className: "border-border bg-muted text-foreground" }
 }
 
 export default function InventoryHandoverDetailsPage() {
@@ -303,6 +325,48 @@ export default function InventoryHandoverDetailsPage() {
                 </div>
                 {row.resolution.notes && (
                     <div className="text-xs text-muted-foreground whitespace-pre-wrap">{row.resolution.notes}</div>
+                )}
+            </div>
+        )
+    }, [])
+
+    const renderMovementFeed = useCallback((row: ShiftZoneDiscrepancy) => {
+        const movements = row.movements || []
+        return (
+            <div className="mt-3 flex flex-col gap-2">
+                <div className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                    Окно расчета: {formatDateTime(row.movement_window_started_at)} {"->"} {formatDateTime(row.movement_window_ended_at)}
+                </div>
+                {movements.length === 0 ? (
+                    <div className="rounded-xl border border-dashed px-3 py-2 text-xs text-muted-foreground">
+                        Движений в этом окне не было.
+                    </div>
+                ) : (
+                    <div className="flex flex-col gap-2">
+                        {movements.map((movement, index) => {
+                            const meta = getMovementMeta(movement.type)
+                            const amount = Number(movement.change_amount || 0)
+                            return (
+                                <div key={`${movement.created_at}-${movement.type}-${index}`} className="rounded-xl border bg-muted/40 px-3 py-2">
+                                    <div className="flex items-center justify-between gap-3">
+                                        <Badge variant="outline" className={meta.className}>
+                                            {meta.label}
+                                        </Badge>
+                                        <span className={cn(
+                                            "text-xs font-semibold tabular-nums",
+                                            amount > 0 ? "text-emerald-700" : amount < 0 ? "text-red-700" : "text-muted-foreground"
+                                        )}>
+                                            {amount > 0 ? "+" : ""}{amount}
+                                        </span>
+                                    </div>
+                                    <div className="mt-2 text-xs text-muted-foreground">
+                                        {formatDateTime(movement.created_at)}
+                                        {movement.reason ? ` · ${movement.reason}` : ""}
+                                    </div>
+                                </div>
+                            )
+                        })}
+                    </div>
                 )}
             </div>
         )
@@ -547,6 +611,7 @@ export default function InventoryHandoverDetailsPage() {
                                                             <TableCell>
                                                                 <div className="font-medium">{row.product_name}</div>
                                                                 <div className="text-xs text-muted-foreground">Цена: {formatMoney(row.selling_price)}</div>
+                                                                {renderMovementFeed(row)}
                                                             </TableCell>
                                                             <TableCell className="text-right tabular-nums">{row.closing_system_quantity ?? row.expected_closing_quantity ?? "—"}</TableCell>
                                                             <TableCell className="text-right tabular-nums">{row.actual_closing_quantity ?? "—"}</TableCell>
@@ -606,6 +671,7 @@ export default function InventoryHandoverDetailsPage() {
                                                             <TableCell>
                                                                 <div className="font-medium">{row.product_name}</div>
                                                                 <div className="text-xs text-muted-foreground">Цена: {formatMoney(row.selling_price)}</div>
+                                                                {renderMovementFeed(row)}
                                                             </TableCell>
                                                             <TableCell className="text-right tabular-nums">{row.opening_counted_quantity ?? "—"}</TableCell>
                                                             <TableCell className="text-right tabular-nums text-green-600">+{row.inflow_quantity}</TableCell>

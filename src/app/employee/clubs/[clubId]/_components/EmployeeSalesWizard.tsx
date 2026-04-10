@@ -233,7 +233,7 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
                     } else if (product) {
                         showMessage({
                             title: "⚠️ Нет остатка",
-                            description: `${product.name} отсутствует на доступном складе POS`
+                            description: `${product.name} отсутствует на доступном складе кассы`
                         })
                     } else {
                         showMessage({
@@ -358,7 +358,7 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
             }
             const product = await getProductByBarcode(clubId, v).catch(() => null)
             if (product) {
-                showMessage({ title: "Нет остатка", description: `${product.name} отсутствует на доступном складе POS` })
+                showMessage({ title: "Нет остатка", description: `${product.name} отсутствует на доступном складе кассы` })
             } else {
                 showMessage({ title: "Не найдено", description: "Штрихкод не найден в каталоге" })
             }
@@ -438,7 +438,7 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
                 await refresh()
                 inputRef.current?.focus()
             } catch (e: any) {
-                showMessage({ title: "Ошибка", description: e?.message || "Ошибка обновления POS" })
+                showMessage({ title: "Ошибка", description: e?.message || "Ошибка обновления кассы" })
             }
         })
     }
@@ -833,23 +833,40 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
                                                     setSalaryTargetUserId("")
                                                 }
                                             }}>
-                                                <SelectTrigger className="h-14 bg-zinc-950 border-zinc-800/50 rounded-xl text-base font-medium">
+                                                <SelectTrigger className="h-14 rounded-2xl border border-zinc-800 bg-zinc-950 px-4 text-base font-medium text-zinc-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] data-[placeholder]:text-zinc-500">
                                                     <SelectValue />
                                                 </SelectTrigger>
-                                                <SelectContent className="rounded-xl border-zinc-800 bg-zinc-950">
-                                                    <SelectItem value="cash" className="py-3">
-                                                        <div className="flex items-center gap-3"><Banknote className="h-4 w-4 text-muted-foreground" /> Наличные</div>
+                                                <SelectContent className="rounded-2xl border-zinc-800 bg-zinc-950/98 p-2 text-zinc-100 shadow-2xl shadow-black/60 backdrop-blur-xl">
+                                                    <SelectItem value="cash" className="rounded-xl border border-transparent px-3 py-3 text-[15px] font-medium text-zinc-100 focus:border-zinc-700 focus:bg-zinc-900 focus:text-white data-[state=checked]:border-zinc-700 data-[state=checked]:bg-zinc-900 data-[state=checked]:text-white">
+                                                        <div className="flex items-center gap-3">
+                                                            <Banknote className="h-4 w-4 text-zinc-400" />
+                                                            <span>Наличные</span>
+                                                        </div>
                                                     </SelectItem>
-                                                    <SelectItem value="card" className="py-3">
-                                                        <div className="flex items-center gap-3"><CreditCard className="h-4 w-4 text-muted-foreground" /> Карта</div>
+                                                    <SelectItem value="card" className="rounded-xl border border-transparent px-3 py-3 text-[15px] font-medium text-zinc-100 focus:border-zinc-700 focus:bg-zinc-900 focus:text-white data-[state=checked]:border-zinc-700 data-[state=checked]:bg-zinc-900 data-[state=checked]:text-white">
+                                                        <div className="flex items-center gap-3">
+                                                            <CreditCard className="h-4 w-4 text-zinc-400" />
+                                                            <span>Карта</span>
+                                                        </div>
                                                     </SelectItem>
-                                                    <SelectItem value="mixed" className="py-3">
-                                                        <div className="flex items-center gap-3"><Wallet className="h-4 w-4 text-muted-foreground" /> Смешанная</div>
+                                                    <SelectItem value="mixed" className="rounded-xl border border-transparent px-3 py-3 text-[15px] font-medium text-zinc-100 focus:border-zinc-700 focus:bg-zinc-900 focus:text-white data-[state=checked]:border-zinc-700 data-[state=checked]:bg-zinc-900 data-[state=checked]:text-white">
+                                                        <div className="flex items-center gap-3">
+                                                            <Wallet className="h-4 w-4 text-zinc-400" />
+                                                            <span>Смешанная</span>
+                                                        </div>
                                                     </SelectItem>
-                                                    <SelectItem value="salary" className="py-3">
-                                                        <div className="flex items-center gap-3"><Wallet className="h-4 w-4 text-muted-foreground" /> В счет ЗП</div>
+                                                    <SelectItem value="salary" className="rounded-xl border border-transparent px-3 py-3 text-[15px] font-medium text-zinc-100 focus:border-zinc-700 focus:bg-zinc-900 focus:text-white data-[state=checked]:border-zinc-700 data-[state=checked]:bg-zinc-900 data-[state=checked]:text-white">
+                                                        <div className="flex items-center gap-3">
+                                                            <Wallet className="h-4 w-4 text-zinc-400" />
+                                                            <span>В счет ЗП</span>
+                                                        </div>
                                                     </SelectItem>
-                                                    <SelectItem value="other" className="py-3">Другое</SelectItem>
+                                                    <SelectItem value="other" className="rounded-xl border border-transparent px-3 py-3 text-[15px] font-medium text-zinc-100 focus:border-zinc-700 focus:bg-zinc-900 focus:text-white data-[state=checked]:border-zinc-700 data-[state=checked]:bg-zinc-900 data-[state=checked]:text-white">
+                                                        <div className="flex items-center gap-3">
+                                                            <Wallet className="h-4 w-4 text-zinc-400" />
+                                                            <span>Другое</span>
+                                                        </div>
+                                                    </SelectItem>
                                                 </SelectContent>
                                             </Select>
                                         </div>
@@ -859,15 +876,21 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
                                                 <div className="space-y-3">
                                                     <Label className="text-xs font-medium text-muted-foreground">Сотрудник</Label>
                                                     <Select value={salaryTargetUserId} onValueChange={setSalaryTargetUserId}>
-                                                        <SelectTrigger className="h-14 bg-zinc-950 border-zinc-800/50 rounded-xl text-base">
+                                                        <SelectTrigger className="h-14 rounded-2xl border border-zinc-800 bg-zinc-950 px-4 text-base text-zinc-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] data-[placeholder]:text-zinc-500">
                                                             <SelectValue placeholder="Выберите сотрудника..." />
                                                         </SelectTrigger>
-                                                        <SelectContent className="rounded-xl border-zinc-800 bg-zinc-950">
+                                                        <SelectContent className="rounded-2xl border-zinc-800 bg-zinc-950/98 p-2 text-zinc-100 shadow-2xl shadow-black/60 backdrop-blur-xl">
                                                             {salarySaleCandidates.map((candidate) => (
-                                                                <SelectItem key={candidate.id} value={candidate.id} className="py-2">
-                                                                    <div className="flex flex-col">
-                                                                        <span className="font-medium">{candidate.full_name}</span>
-                                                                        <span className="text-xs text-muted-foreground">{candidate.role} · доступно {candidate.available_amount.toLocaleString()} ₽</span>
+                                                                <SelectItem
+                                                                    key={candidate.id}
+                                                                    value={candidate.id}
+                                                                    className="rounded-xl border border-transparent px-3 py-3 text-left text-zinc-100 focus:border-zinc-700 focus:bg-zinc-900 focus:text-white data-[state=checked]:border-zinc-700 data-[state=checked]:bg-zinc-900 data-[state=checked]:text-white"
+                                                                >
+                                                                    <div className="flex min-w-0 flex-col gap-1 pr-4">
+                                                                        <span className="truncate text-[15px] font-semibold leading-none">{candidate.full_name}</span>
+                                                                        <span className="text-xs text-zinc-400">
+                                                                            {candidate.role} · доступно {candidate.available_amount.toLocaleString()} ₽
+                                                                        </span>
                                                                     </div>
                                                                 </SelectItem>
                                                             ))}

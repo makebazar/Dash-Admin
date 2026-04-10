@@ -16,6 +16,7 @@ import {
     generateProcurementList,
     getAbcAnalysisData,
     getProductByBarcode,
+    getShiftZoneDiscrepancyReport,
 } from "@/app/clubs/[clubId]/inventory/actions"
 import { query, getClient } from "@/db"
 
@@ -169,6 +170,117 @@ describe("Warehouse System Logic", () => {
         expect(client.query).toHaveBeenCalledWith("ROLLBACK")
     })
 
+    it("does not treat in-shift transfers as handover discrepancy", async () => {
+        const client = createMockClient((sql) => {
+            if (sql.includes("FROM shifts s")) {
+                return {
+                    rowCount: 1,
+                    rows: [{
+                        id: "shift-1",
+                        user_id: userId,
+                        club_id: Number(clubId),
+                        check_in: "2026-04-10T10:00:00.000Z",
+                        check_out: "2026-04-10T18:00:00.000Z",
+                        status: "CLOSED",
+                    }]
+                }
+            }
+
+            if (sql.includes("FROM warehouses w") && sql.includes("shift_accountability_enabled = true")) {
+                return {
+                    rowCount: 2,
+                    rows: [
+                        { id: 1, name: "Бар", shift_zone_key: "BAR", shift_accountability_enabled: true, is_active: true },
+                        { id: 2, name: "Холодильник", shift_zone_key: "FRIDGE", shift_accountability_enabled: true, is_active: true },
+                    ]
+                }
+            }
+
+            if (sql.includes("FROM shift_zone_snapshots ss") && sql.includes("JOIN shift_zone_snapshot_items sii")) {
+                return {
+                    rowCount: 4,
+                    rows: [
+                        { warehouse_id: 1, snapshot_type: "OPEN", snapshot_created_at: "2026-04-10T10:01:00.000Z", product_id: 101, counted_quantity: 10, system_quantity: 10, product_name: "Кола", selling_price: 100 },
+                        { warehouse_id: 1, snapshot_type: "CLOSE", snapshot_created_at: "2026-04-10T17:59:00.000Z", product_id: 101, counted_quantity: 6, system_quantity: 6, product_name: "Кола", selling_price: 100 },
+                        { warehouse_id: 2, snapshot_type: "OPEN", snapshot_created_at: "2026-04-10T10:01:00.000Z", product_id: 101, counted_quantity: 0, system_quantity: 0, product_name: "Кола", selling_price: 100 },
+                        { warehouse_id: 2, snapshot_type: "CLOSE", snapshot_created_at: "2026-04-10T17:59:00.000Z", product_id: 101, counted_quantity: 4, system_quantity: 4, product_name: "Кола", selling_price: 100 },
+                    ]
+                }
+            }
+
+            if (sql.includes("FROM warehouse_stock_movements") && sql.includes("created_at >= $3")) {
+                return {
+                    rowCount: 2,
+                    rows: [
+                        { warehouse_id: 1, product_id: 101, change_amount: -4, type: "TRANSFER", reason: "Перемещение", created_at: "2026-04-10T12:00:00.000Z", user_id: userId, shift_id: "shift-1", related_entity_type: "TRANSFER", related_entity_id: "t-1" },
+                        { warehouse_id: 2, product_id: 101, change_amount: 4, type: "TRANSFER", reason: "Перемещение", created_at: "2026-04-10T12:00:00.000Z", user_id: userId, shift_id: "shift-1", related_entity_type: "TRANSFER", related_entity_id: "t-1" },
+                    ]
+                }
+            }
+
+            return { rows: [], rowCount: 0 }
+        })
+        vi.mocked(getClient).mockResolvedValue(client as any)
+
+        const result = await getShiftZoneDiscrepancyReport(clubId, "shift-1")
+
+        expect(result).toEqual([])
+    })
+
+    it("does not double count transfers that happened before open snapshot", async () => {
+        const client = createMockClient((sql) => {
+            if (sql.includes("FROM shifts s")) {
+                return {
+                    rowCount: 1,
+                    rows: [{
+                        id: "shift-2",
+                        user_id: userId,
+                        club_id: Number(clubId),
+                        check_in: "2026-04-10T10:00:00.000Z",
+                        check_out: "2026-04-10T18:00:00.000Z",
+                        status: "CLOSED",
+                    }]
+                }
+            }
+
+            if (sql.includes("FROM warehouses w") && sql.includes("shift_accountability_enabled = true")) {
+                return {
+                    rowCount: 1,
+                    rows: [
+                        { id: 3, name: "Холодильник", shift_zone_key: "FRIDGE", shift_accountability_enabled: true, is_active: true },
+                    ]
+                }
+            }
+
+            if (sql.includes("FROM shift_zone_snapshots ss") && sql.includes("JOIN shift_zone_snapshot_items sii")) {
+                return {
+                    rowCount: 2,
+                    rows: [
+                        { warehouse_id: 3, snapshot_type: "OPEN", snapshot_created_at: "2026-04-10T10:20:00.000Z", product_id: 101, counted_quantity: 8, system_quantity: 8, product_name: "Кола", selling_price: 100 },
+                        { warehouse_id: 3, snapshot_type: "CLOSE", snapshot_created_at: "2026-04-10T18:00:00.000Z", product_id: 101, counted_quantity: 7, system_quantity: 7, product_name: "Кола", selling_price: 100 },
+                    ]
+                }
+            }
+
+            if (sql.includes("FROM warehouse_stock_movements") && sql.includes("created_at >= $3")) {
+                return {
+                    rowCount: 2,
+                    rows: [
+                        { warehouse_id: 3, product_id: 101, change_amount: 8, type: "TRANSFER", reason: "Перемещение со склада #1", created_at: "2026-04-10T10:15:00.000Z", user_id: userId, shift_id: "shift-2", related_entity_type: "TRANSFER", related_entity_id: "t-2" },
+                        { warehouse_id: 3, product_id: 101, change_amount: -1, type: "SALE", reason: "POS чек #1", created_at: "2026-04-10T11:00:00.000Z", user_id: userId, shift_id: "shift-2", related_entity_type: "SHIFT_RECEIPT", related_entity_id: "r-1" },
+                    ]
+                }
+            }
+
+            return { rows: [], rowCount: 0 }
+        })
+        vi.mocked(getClient).mockResolvedValue(client as any)
+
+        const result = await getShiftZoneDiscrepancyReport(clubId, "shift-2")
+
+        expect(result).toEqual([])
+    })
+
     it("creates completed supply and updates stock", async () => {
         const client = createMockClient((sql, params) => {
             if (sql.includes("SELECT COUNT(*)::int as cnt FROM warehouse_products")) {
@@ -241,6 +353,35 @@ describe("Warehouse System Logic", () => {
 
         const stockUpserts = vi.mocked(client.query).mock.calls.filter(([sql]) => typeof sql === "string" && sql.includes("INSERT INTO warehouse_stock"))
         expect(stockUpserts.length).toBe(0)
+    })
+
+    it("creates completed supply as purchase journal when stock tracking is disabled", async () => {
+        const client = createMockClient((sql, params) => {
+            if (sql.startsWith("SELECT inventory_settings FROM clubs")) {
+                return { rowCount: 1, rows: [{ inventory_settings: { supplies_enabled: true, stock_enabled: false } }] }
+            }
+            if (sql.includes("SELECT COUNT(*)::int as cnt FROM warehouse_products")) {
+                const ids = (params?.[1] || []) as any[]
+                return { rows: [{ cnt: ids.length }], rowCount: 1 }
+            }
+            if (sql.startsWith("SELECT id FROM warehouse_suppliers")) return { rowCount: 1, rows: [{ id: 90 }] }
+            if (sql.includes("INSERT INTO warehouse_supplies")) return { rows: [{ id: 125 }] }
+            return { rows: [], rowCount: 1 }
+        })
+        vi.mocked(getClient).mockResolvedValue(client as any)
+
+        await createSupply(clubId, userId, {
+            supplier_name: "Supplier B",
+            notes: "journal only",
+            status: "COMPLETED",
+            items: [{ product_id: 12, quantity: 4, cost_price: 70 }],
+        })
+
+        const stockUpserts = vi.mocked(client.query).mock.calls.filter(([sql]) => typeof sql === "string" && sql.includes("INSERT INTO warehouse_stock"))
+        const movementInserts = vi.mocked(client.query).mock.calls.filter(([sql]) => typeof sql === "string" && sql.includes("INSERT INTO warehouse_stock_movements"))
+        expect(stockUpserts.length).toBe(0)
+        expect(movementInserts.length).toBe(0)
+        expect(client.query).toHaveBeenCalledWith(expect.stringContaining("UPDATE warehouse_products"), [12, 70, clubId])
     })
 
     it("deletes completed supply and reverts stock if no later inventory", async () => {
@@ -456,10 +597,58 @@ describe("Warehouse System Logic", () => {
         await expect(updateInventoryItem(501, 3, clubId)).rejects.toThrow("Редактировать можно только открытую инвентаризацию")
     })
 
-    it("blocks POS receipts when club is not in SHIFT sales mode", async () => {
+    it("ignores legacy inventory sales mode and still allows POS receipts", async () => {
+        const client = createMockClient((sql, params) => {
+            if (sql.startsWith("SELECT inventory_settings FROM clubs")) {
+                return { rowCount: 1, rows: [{ inventory_settings: { sales_capture_mode: "INVENTORY", stock_enabled: true, cashbox_enabled: true, cashbox_warehouse_id: 1 } }] }
+            }
+            if (sql.includes("FROM shifts WHERE id = $1")) {
+                return { rowCount: 1, rows: [{ ok: 1 }] }
+            }
+            if (sql.includes("FROM warehouses") && sql.includes("is_active = true")) {
+                return {
+                    rowCount: 1,
+                    rows: [{ id: 1, name: "Бар", is_default: true }],
+                }
+            }
+            if (sql.includes("FROM warehouse_stock") && sql.includes("warehouse_id = ANY($1)")) {
+                return {
+                    rowCount: 1,
+                    rows: [{ warehouse_id: 1, product_id: 10, quantity: 5 }],
+                }
+            }
+            if (sql.includes("FROM warehouse_products") && sql.includes("id = ANY($2)") && sql.includes("cost_price")) {
+                return { rowCount: 1, rows: [{ id: 10, cost_price: 40, selling_price: 100 }] }
+            }
+            if (sql.includes("SELECT quantity FROM warehouse_stock WHERE warehouse_id = $1 AND product_id = $2 FOR UPDATE")) {
+                if (params?.[0] === 1 && params?.[1] === 10) return { rowCount: 1, rows: [{ quantity: 5 }] }
+                return { rowCount: 1, rows: [{ quantity: 0 }] }
+            }
+            if (sql.includes("INSERT INTO shift_receipts")) return { rowCount: 1, rows: [{ id: 999 }] }
+            if (sql.includes("INSERT INTO shift_receipt_items")) return { rowCount: 1, rows: [{ id: 501 }] }
+            if (sql.includes("INSERT INTO warehouse_stock_movements")) return { rowCount: 1, rows: [{ id: 700 }] }
+            if (sql.includes("INSERT INTO warehouse_stock")) return { rowCount: 1, rows: [] }
+            if (sql === "COMMIT" || sql === "BEGIN") return { rowCount: 0, rows: [] }
+            return { rows: [], rowCount: 1 }
+        })
+        vi.mocked(getClient).mockResolvedValue(client as any)
+
+        await createShiftReceipt(clubId, userId, {
+            shift_id: "shift-1",
+            payment_type: "cash",
+            items: [{ product_id: 10, quantity: 1 }],
+        })
+
+        expect(client.query).toHaveBeenCalledWith(
+            expect.stringContaining("INSERT INTO shift_receipts"),
+            expect.arrayContaining([clubId, "shift-1", userId, 1])
+        )
+    })
+
+    it("blocks cashbox receipts when cashbox mode is disabled", async () => {
         const client = createMockClient((sql) => {
             if (sql.startsWith("SELECT inventory_settings FROM clubs")) {
-                return { rowCount: 1, rows: [{ inventory_settings: { sales_capture_mode: "INVENTORY" } }] }
+                return { rowCount: 1, rows: [{ inventory_settings: { stock_enabled: true, cashbox_enabled: false } }] }
             }
             return { rows: [], rowCount: 0 }
         })
@@ -469,22 +658,28 @@ describe("Warehouse System Logic", () => {
             createShiftReceipt(clubId, userId, {
                 shift_id: "shift-1",
                 payment_type: "cash",
-                items: [{ product_id: 1, quantity: 1 }],
+                items: [{ product_id: 10, quantity: 1 }],
             })
-        ).rejects.toThrow("Продажи через POS отключены для этого клуба")
+        ).rejects.toThrow("Касса DashAdmin отключена для этого клуба")
 
         expect(client.query).toHaveBeenCalledWith("ROLLBACK")
     })
 
-    it("uses an alternative accessible warehouse for POS when default warehouse is empty", async () => {
+    it("uses configured cashbox warehouse for receipts", async () => {
         const client = createMockClient((sql, params) => {
             if (sql.startsWith("SELECT inventory_settings FROM clubs")) {
-                return { rowCount: 1, rows: [{ inventory_settings: { sales_capture_mode: "SHIFT" } }] }
+                return { rowCount: 1, rows: [{ inventory_settings: { stock_enabled: true, cashbox_enabled: true, cashbox_warehouse_id: 2 } }] }
             }
             if (sql.includes("FROM shifts WHERE id = $1")) {
                 return { rowCount: 1, rows: [{ ok: 1 }] }
             }
             if (sql.includes("FROM warehouses") && sql.includes("is_active = true")) {
+                if (params?.[1] === 2 || params?.[2] === 2) {
+                    return {
+                        rowCount: 1,
+                        rows: [{ id: 2, name: "Резерв", is_default: false }],
+                    }
+                }
                 return {
                     rowCount: 2,
                     rows: [
@@ -497,7 +692,7 @@ describe("Warehouse System Logic", () => {
                 return {
                     rowCount: 2,
                     rows: [
-                        { warehouse_id: 1, product_id: 10, quantity: 0 },
+                        { warehouse_id: 1, product_id: 10, quantity: 100 },
                         { warehouse_id: 2, product_id: 10, quantity: 5 },
                     ],
                 }
@@ -507,7 +702,7 @@ describe("Warehouse System Logic", () => {
             }
             if (sql.includes("SELECT quantity FROM warehouse_stock WHERE warehouse_id = $1 AND product_id = $2 FOR UPDATE")) {
                 if (params?.[0] === 2 && params?.[1] === 10) return { rowCount: 1, rows: [{ quantity: 5 }] }
-                return { rowCount: 1, rows: [{ quantity: 0 }] }
+                return { rowCount: 1, rows: [{ quantity: 100 }] }
             }
             if (sql.includes("INSERT INTO shift_receipts")) return { rowCount: 1, rows: [{ id: 999 }] }
             if (sql.includes("INSERT INTO shift_receipt_items")) return { rowCount: 1, rows: [{ id: 501 }] }
@@ -528,6 +723,26 @@ describe("Warehouse System Logic", () => {
             expect.stringContaining("INSERT INTO shift_receipts"),
             expect.arrayContaining([clubId, "shift-1", userId, 2])
         )
+    })
+
+    it("blocks cashbox receipts when cashbox warehouse is not configured", async () => {
+        const client = createMockClient((sql) => {
+            if (sql.startsWith("SELECT inventory_settings FROM clubs")) {
+                return { rowCount: 1, rows: [{ inventory_settings: { stock_enabled: true, cashbox_enabled: true, cashbox_warehouse_id: null } }] }
+            }
+            return { rows: [], rowCount: 0 }
+        })
+        vi.mocked(getClient).mockResolvedValue(client as any)
+
+        await expect(
+            createShiftReceipt(clubId, userId, {
+                shift_id: "shift-warehouse-missing",
+                payment_type: "cash",
+                items: [{ product_id: 10, quantity: 1 }],
+            })
+        ).rejects.toThrow("Для кассы не выбран склад продаж")
+
+        expect(client.query).toHaveBeenCalledWith("ROLLBACK")
     })
 
     it("closes inventory with movement compensation without auto supply", async () => {
@@ -578,7 +793,7 @@ describe("Warehouse System Logic", () => {
 
         expect(mainClient.query).toHaveBeenCalledWith(
             expect.stringContaining("UPDATE warehouse_inventories"),
-            [77, 1000, 540, 460, userId, "INVENTORY"]
+            [77, 1000, 0, 1000, userId, "SHIFT"]
         )
         expect(mainClient.query).toHaveBeenCalledWith(
             expect.stringContaining("INSERT INTO warehouse_stock_movements"),
@@ -590,7 +805,7 @@ describe("Warehouse System Logic", () => {
         expect(mainClient.release).toHaveBeenCalled()
     })
 
-    it("defaults to NONE sales recognition when club is in SHIFT mode", async () => {
+    it("defaults to POS revenue reconciliation on shift inventory close", async () => {
         const mainClient = createMockClient((sql) => {
             if (sql.startsWith("SELECT warehouse_id, shift_id, created_by, started_at, status FROM warehouse_inventories")) {
                 return { rows: [{ warehouse_id: 1, shift_id: "shift-9", created_by: userId, started_at: "2026-01-01T10:00:00Z", status: "OPEN" }] }
@@ -687,7 +902,7 @@ describe("Warehouse System Logic", () => {
 
         expect(mainClient.query).toHaveBeenCalledWith(
             expect.stringContaining("UPDATE warehouse_inventories"),
-            [88, 400, 300, 100, userId, "INVENTORY"]
+            [88, 400, 0, 400, userId, "SHIFT"]
         )
         const supplyItemCalls = vi.mocked(mainClient.query).mock.calls.filter(([sql]) => typeof sql === "string" && sql.includes("INSERT INTO warehouse_supply_items"))
         expect(supplyItemCalls.length).toBe(0)

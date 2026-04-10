@@ -1,25 +1,24 @@
 "use client"
 
 import { useState, useTransition } from "react"
-import { Plus, Pencil, Trash2, Warehouse as WarehouseIcon, MapPin, User, Info } from "lucide-react"
+import { Plus, Pencil, Trash2, Warehouse as WarehouseIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
-import { Switch } from "@/components/ui/switch"
 import { createWarehouse, updateWarehouse, deleteWarehouse, Warehouse } from "../actions"
 import { useParams } from "next/navigation"
 import { useUiDialogs } from "./useUiDialogs"
 
 interface WarehousesTabProps {
     warehouses: Warehouse[]
-    employees: { id: string, full_name: string, role: string }[]
     currentUserId: string
+    cashboxWarehouseId?: number | null
+    handoverWarehouseId?: number | null
 }
 
-export function WarehousesTab({ warehouses, employees, currentUserId }: WarehousesTabProps) {
+export function WarehousesTab({ warehouses, currentUserId, cashboxWarehouseId, handoverWarehouseId }: WarehousesTabProps) {
     const params = useParams()
     const clubId = params.clubId as string
     
@@ -41,8 +40,6 @@ export function WarehousesTab({ warehouses, employees, currentUserId }: Warehous
                         name,
                         address: editingWarehouse.address || undefined,
                         type: editingWarehouse.type || 'GENERAL',
-                        shift_zone_key: editingWarehouse.shift_zone_key || null,
-                        shift_accountability_enabled: Boolean(editingWarehouse.shift_accountability_enabled),
                         contact_info: editingWarehouse.contact_info || undefined,
                         characteristics: editingWarehouse.characteristics || undefined,
                         is_active: editingWarehouse.is_active ?? true
@@ -53,8 +50,6 @@ export function WarehousesTab({ warehouses, employees, currentUserId }: Warehous
                         name,
                         address: editingWarehouse.address || undefined,
                         type: editingWarehouse.type || 'GENERAL',
-                        shift_zone_key: editingWarehouse.shift_zone_key || null,
-                        shift_accountability_enabled: Boolean(editingWarehouse.shift_accountability_enabled),
                         contact_info: editingWarehouse.contact_info || undefined,
                         characteristics: editingWarehouse.characteristics || undefined
                     }
@@ -89,7 +84,7 @@ export function WarehousesTab({ warehouses, employees, currentUserId }: Warehous
     }
 
     const openCreate = () => {
-        setEditingWarehouse({ name: '', is_active: true, shift_accountability_enabled: false, shift_zone_key: null })
+        setEditingWarehouse({ name: '', is_active: true })
         setIsDialogOpen(true)
     }
 
@@ -136,20 +131,20 @@ export function WarehousesTab({ warehouses, employees, currentUserId }: Warehous
                             </div>
                         </div>
                         
-                        <div className="space-y-3 text-sm text-muted-foreground">
-                            <div className="flex items-center gap-2">
-                                <Info className="h-4 w-4 text-muted-foreground/70" />
-                                <span>Тип: {wh.type === 'GENERAL' ? 'Общий' : wh.type}</span>
-                            </div>
-                            {wh.shift_accountability_enabled && wh.shift_zone_key && (
-                                <div className="flex items-center gap-2">
-                                    <Badge variant="outline" className="text-[10px]">
-                                        {wh.shift_zone_key === 'BAR' ? 'Бар' : wh.shift_zone_key === 'FRIDGE' ? 'Холодильник' : wh.shift_zone_key === 'SHOWCASE' ? 'Витрина' : 'Подсобка'}
+                        {(Number(cashboxWarehouseId) === Number(wh.id) || Number(handoverWarehouseId) === Number(wh.id)) && (
+                            <div className="flex flex-wrap gap-2">
+                                {Number(cashboxWarehouseId) === Number(wh.id) && (
+                                    <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">
+                                        Для кассы
                                     </Badge>
-                                    <span className="text-xs text-muted-foreground">Участвует в сменной ответственности</span>
-                                </div>
-                            )}
-                        </div>
+                                )}
+                                {Number(handoverWarehouseId) === Number(wh.id) && (
+                                    <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700">
+                                        Для сверок
+                                    </Badge>
+                                )}
+                            </div>
+                        )}
                     </div>
                 ))}
                 
@@ -175,43 +170,6 @@ export function WarehousesTab({ warehouses, employees, currentUserId }: Warehous
                                 required
                                 placeholder="Например: Бар"
                             />
-                        </div>
-
-                        <div className="space-y-3 rounded-xl border p-4">
-                            <div className="flex items-center justify-between gap-3">
-                                <div>
-                                    <Label className="text-sm font-medium">Сменная ответственность</Label>
-                                    <p className="text-xs text-muted-foreground">
-                                        Использовать этот склад как зону при приемке и сдаче смены.
-                                    </p>
-                                </div>
-                                <Switch
-                                    checked={Boolean(editingWarehouse?.shift_accountability_enabled)}
-                                    onCheckedChange={(checked) => setEditingWarehouse(prev => ({ ...prev!, shift_accountability_enabled: checked }))}
-                                />
-                            </div>
-
-                            <div className="space-y-2">
-                                <Label>Тип зоны</Label>
-                                <Select
-                                    value={editingWarehouse?.shift_zone_key || "NONE"}
-                                    onValueChange={(value) => setEditingWarehouse(prev => ({
-                                        ...prev!,
-                                        shift_zone_key: value === "NONE" ? null : value as Warehouse["shift_zone_key"]
-                                    }))}
-                                >
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Выберите тип зоны" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="NONE">Не выбрано</SelectItem>
-                                        <SelectItem value="BAR">Бар</SelectItem>
-                                        <SelectItem value="FRIDGE">Холодильник</SelectItem>
-                                        <SelectItem value="SHOWCASE">Витрина</SelectItem>
-                                        <SelectItem value="BACKROOM">Подсобка</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
                         </div>
 
                         <DialogFooter>
