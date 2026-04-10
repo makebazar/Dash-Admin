@@ -518,6 +518,8 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
     }
 
     useEffect(() => {
+        document.title = "Касса - DashAdmin"
+        
         const onKeyDown = (e: KeyboardEvent) => {
             const el = document.activeElement as HTMLElement | null
             const isInInput = el?.tagName === 'INPUT' || el?.tagName === 'TEXTAREA' || (el?.getAttribute('role') === 'textbox')
@@ -621,52 +623,44 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
 
     return (
         <>
-            <div className="min-h-screen bg-slate-950 text-primary-foreground flex flex-col">
-                <div className="p-4 border-b border-slate-800 flex items-start justify-between gap-3 sticky top-0 bg-slate-950 z-50">
-                    <div className="space-y-0.5">
-                        <div className="flex items-center gap-2 text-xl font-black">
-                            <ShoppingCart className="h-4 w-4 text-emerald-400" />
-                            Касса (Смена)
-                        </div>
-                        <div className="text-muted-foreground/70 text-sm leading-tight">
-                            Собирайте чек, выбирайте оплату, пробивайте. Остатки спишутся при завершении смены.
-                        </div>
-                    </div>
-                    <Button
-                        variant="outline"
-                        className="h-12 border-slate-800 bg-primary/50 hover:bg-primary/90 rounded-xl shrink-0 text-base"
-                        onClick={handleExit}
-                    >
-                        <ArrowLeft className="h-4 w-4 mr-2" />
-                        Назад
-                    </Button>
-                </div>
-
-                <div className="flex-1 overflow-y-auto p-6 w-full max-w-7xl mx-auto space-y-6">
+            <div className="h-[100dvh] bg-zinc-950 text-foreground flex flex-col font-sans selection:bg-primary/20 overflow-hidden">
+                <main className="flex-1 flex flex-col min-h-0 w-full max-w-6xl mx-auto p-6 lg:p-8">
                     {!activeShiftId ? (
-                        <div className="text-base text-muted-foreground/70">Нет активной смены</div>
+                        <div className="flex flex-col items-center justify-center h-full text-center animate-in fade-in duration-500">
+                            <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-4">
+                                <History className="h-6 w-6 text-muted-foreground" />
+                            </div>
+                            <h2 className="text-xl font-medium tracking-tight mb-2">Нет активной смены</h2>
+                            <p className="text-muted-foreground max-w-sm mx-auto">Откройте смену, чтобы начать принимать оплаты и списывать товары.</p>
+                        </div>
                     ) : (
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                                <div className="space-y-4">
-                                    <div className="bg-primary/30 border border-slate-800 rounded-xl p-4 space-y-3">
-                                        <div className="flex items-center justify-between">
-                                            <div className="text-xs text-muted-foreground/70 uppercase tracking-wider flex items-center gap-2">
-                                                <Search className="h-3 w-3" />
-                                                Поиск / Сканер
-                                                <span className={cn(
-                                                    "ml-2 px-1.5 py-0.5 rounded text-[9px] font-bold",
-                                                    isConnected ? "bg-green-900/50 text-green-400 border border-green-800" : "bg-amber-900/50 text-amber-400 border border-amber-800"
-                                                )}>
-                                                    {isConnected ? '● LIVE' : '● RECONNECTING'}
+                        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-full animate-in fade-in slide-in-from-bottom-4 duration-700 fill-mode-both min-h-0">
+                            
+                            {/* Left Column: Search, Cart & Payment */}
+                            <div className="lg:col-span-8 flex flex-col gap-5 min-h-0">
+                                {/* Search Section */}
+                                <section className="shrink-0 space-y-3">
+                                    <div className="flex items-center justify-between">
+                                        <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-widest">Поиск товаров</h2>
+                                        <div className="flex items-center gap-3 text-xs">
+                                            <span className={cn(
+                                                "flex items-center gap-1.5 font-medium transition-colors",
+                                                isConnected ? "text-emerald-500" : "text-amber-500"
+                                            )}>
+                                                <span className={cn("h-1.5 w-1.5 rounded-full", isConnected ? "bg-emerald-500" : "bg-amber-500 animate-pulse")} />
+                                                {isConnected ? 'Подключено' : 'Переподключение'}
+                                            </span>
+                                            {isScanning && (
+                                                <span className="flex items-center gap-1.5 text-blue-500 font-medium animate-pulse">
+                                                    <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
+                                                    Сканер
                                                 </span>
-                                                {isScanning && (
-                                                    <span className="ml-2 px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-900/50 text-blue-400 border border-blue-800 animate-pulse">
-                                                        📷 СКАНИРОВАНИЕ
-                                                    </span>
-                                                )}
-                                            </div>
-                                            <Badge className="bg-slate-800 text-slate-300 border-slate-700 text-xs px-2 py-1">Enter</Badge>
+                                            )}
                                         </div>
+                                    </div>
+                                    
+                                    <div className="relative group">
+                                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground transition-colors group-focus-within:text-primary" />
                                         <Input
                                             ref={inputRef}
                                             value={inputValue}
@@ -687,19 +681,23 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
                                                     }
                                                 }
                                             }}
-                                            placeholder="Сканируйте штрихкод или начните вводить название"
-                                            className="bg-slate-950 border-slate-800 h-14 rounded-xl font-mono text-lg"
+                                            placeholder="Штрихкод или название..."
+                                            className="h-14 pl-12 pr-16 rounded-2xl bg-zinc-900/50 border-zinc-800/50 focus-visible:border-primary focus-visible:ring-1 focus-visible:ring-primary/20 text-lg transition-all"
                                             disabled={isPending}
                                         />
+                                        <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-1 text-xs text-muted-foreground font-medium bg-zinc-900 px-2 py-1 rounded-md border border-zinc-800/50">
+                                            <span>↵</span> Enter
+                                        </div>
+
                                         {suggestions.length > 0 && inputValue.trim() !== "" && (
-                                            <div className="border border-slate-800 rounded-xl overflow-hidden bg-slate-950">
+                                        <div className="absolute z-10 w-full mt-2 rounded-2xl bg-zinc-900 border border-zinc-800 shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200 max-h-[300px] overflow-y-auto custom-scrollbar">
                                                 {suggestions.map((p, idx) => (
                                                     <button
                                                         key={p.id}
                                                         type="button"
                                                         className={cn(
-                                                            "w-full text-left px-3 py-2 text-[11px] hover:bg-primary flex items-center justify-between",
-                                                            idx === selectedSuggestionIdx ? "bg-primary" : ""
+                                                            "w-full text-left px-5 py-4 text-base flex items-center justify-between transition-colors",
+                                                            idx === selectedSuggestionIdx ? "bg-zinc-800/80" : "hover:bg-zinc-800/50"
                                                         )}
                                                         onMouseEnter={() => setSelectedSuggestionIdx(idx)}
                                                         onClick={() => {
@@ -708,402 +706,445 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
                                                             inputRef.current?.focus()
                                                         }}
                                                     >
-                                                        <span className="truncate pr-3">{p.name}</span>
-                                                        <span className="text-muted-foreground shrink-0">{Number(p.selling_price || 0)} ₽</span>
+                                                        <span className="font-medium truncate pr-4">{p.name}</span>
+                                                        <span className="text-muted-foreground shrink-0 font-mono text-lg">{Number(p.selling_price || 0).toLocaleString()} ₽</span>
                                                     </button>
                                                 ))}
                                             </div>
                                         )}
-                                        <div className="flex items-center justify-between text-xs text-muted-foreground px-0.5">
-                                            <div className="flex items-center gap-2">
-                                                <Keyboard className="h-3 w-3" />
-                                                F2: оплата · Ctrl+Enter: пробить · Del: удалить · +/-: кол-во
-                                            </div>
-                                        </div>
                                     </div>
+                                </section>
 
-                                    <div className="bg-primary/30 border border-slate-800 rounded-xl overflow-hidden">
-                                        <div className="p-4 border-b border-slate-800 flex items-center justify-between">
-                                            <div className="text-base font-black text-primary-foreground/90 flex items-center gap-2">
-                                                <ShoppingCart className="h-5 w-5 text-emerald-400" />
-                                                Текущий чек
-                                            </div>
-                                            <Badge className="bg-emerald-500/20 text-emerald-200 border-emerald-500/30 text-base px-3 py-1">
-                                                {cartTotal.toLocaleString()} ₽
-                                            </Badge>
-                                        </div>
-                                        <div className="p-2">
-                                            {cart.length === 0 ? (
-                                                    <div className="p-6 text-base text-muted-foreground/70">Пусто</div>
-                                            ) : (
-                                                <Table>
-                                                    <TableBody>
-                                                        {cart.map(i => (
-                                                            <TableRow
-                                                                key={i.product_id}
-                                                                className={cn(
-                                                                    "border-slate-800 hover:bg-primary/50 cursor-pointer",
-                                                                    i.product_id === selectedCartProductId ? "bg-primary/70" : ""
-                                                                )}
-                                                                onClick={() => setSelectedCartProductId(i.product_id)}
-                                                            >
-                                                                <TableCell className="py-3">
-                                                                    <div className="flex items-center justify-between gap-3">
-                                                                        <div className="min-w-0">
-                                                                            <div className="text-base font-bold truncate">{i.name}</div>
-                                                                            <div className="text-xs text-muted-foreground truncate">{i.quantity} × {i.price} ₽</div>
-                                                                        </div>
-                                                                        <div className="flex items-center gap-2">
-                                                                            <Input
-                                                                                type="number"
-                                                                                min="1"
-                                                                                value={String(i.quantity)}
-                                                                                onChange={e => updateCartQty(i.product_id, parseInt(e.target.value || "1"))}
-                                                                                className={cn("w-24 h-11 bg-slate-950 border-slate-800 text-right font-black text-base")}
-                                                                                disabled={isPending}
-                                                                            />
-                                                                            <Button
-                                                                                variant="ghost"
-                                                                                size="icon"
-                                                                                className="h-9 w-9 text-red-300 hover:text-primary-foreground hover:bg-red-500/20"
-                                                                                onClick={() => removeCartItem(i.product_id)}
-                                                                                disabled={isPending}
-                                                                            >
-                                                                                <Trash2 className="h-4 w-4" />
-                                                                            </Button>
-                                                                        </div>
-                                                                    </div>
-                                                                </TableCell>
-                                                            </TableRow>
-                                                        ))}
-                                                    </TableBody>
-                                                </Table>
-                                            )}
-                                        </div>
+                                {/* Cart Section */}
+                                <section className="flex-1 flex flex-col min-h-0 gap-3">
+                                    <div className="flex items-center justify-between shrink-0">
+                                        <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-widest">Текущий чек</h2>
                                         {cart.length > 0 && (
-                                            <div className="px-4 py-2 border-t border-slate-800 flex items-center justify-between text-[10px] text-muted-foreground">
-                                                <span>Выбрано: {selectedCartIndex === -1 ? "—" : `${selectedCartIndex + 1}/${cart.length}`}</span>
-                                                <Button
-                                                    variant="ghost"
-                                                                className="h-10 text-xs text-slate-300 hover:bg-primary/90"
-                                                    onClick={() => {
-                                                        startTransition(async () => {
-                                                            const ok = await confirmAction({
-                                                                title: "Очистить чек",
-                                                                description: "Очистить текущий чек?",
-                                                                confirmText: "Очистить",
-                                                                cancelText: "Отмена"
-                                                            })
-                                                            if (!ok) return
-                                                            setCart([])
-                                                            setSelectedCartProductId(null)
-                                                            setCashAmount("")
-                                                            setCardAmount("")
-                                                            setCashReceived("")
-                                                            setReceiptNotes("")
-                                                            inputRef.current?.focus()
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-8 text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                                                onClick={() => {
+                                                    startTransition(async () => {
+                                                        const ok = await confirmAction({
+                                                            title: "Очистить чек",
+                                                            description: "Вы уверены, что хотите очистить текущий чек?",
+                                                            confirmText: "Очистить",
+                                                            cancelText: "Отмена"
                                                         })
-                                                    }}
-                                                    disabled={isPending}
-                                                >
-                                                    Очистить
-                                                </Button>
+                                                        if (!ok) return
+                                                        setCart([])
+                                                        setSelectedCartProductId(null)
+                                                        setCashAmount("")
+                                                        setCardAmount("")
+                                                        setCashReceived("")
+                                                        setReceiptNotes("")
+                                                        inputRef.current?.focus()
+                                                    })
+                                                }}
+                                            >
+                                                Очистить всё
+                                            </Button>
+                                        )}
+                                    </div>
+                                    
+                                    <div className="flex-1 rounded-2xl border border-zinc-800/50 bg-zinc-900/30 overflow-hidden flex flex-col max-h-[30vh]">
+                                        {cart.length === 0 ? (
+                                            <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
+                                                <div className="h-12 w-12 rounded-full border border-dashed border-zinc-700 flex items-center justify-center mb-3">
+                                                    <ShoppingCart className="h-5 w-5 text-muted-foreground/30" />
+                                                </div>
+                                                <p className="text-sm text-muted-foreground">Чек пуст. Отсканируйте товар.</p>
+                                            </div>
+                                        ) : (
+                                            <div className="flex-1 overflow-y-auto p-2 custom-scrollbar">
+                                                <div className="space-y-1">
+                                                    {cart.map(i => (
+                                                        <div
+                                                            key={i.product_id}
+                                                            className={cn(
+                                                                "group flex items-center justify-between p-2.5 rounded-xl transition-colors cursor-pointer",
+                                                                i.product_id === selectedCartProductId ? "bg-zinc-800/80" : "hover:bg-zinc-800/40"
+                                                            )}
+                                                            onClick={() => setSelectedCartProductId(i.product_id)}
+                                                        >
+                                                            <div className="min-w-0 flex-1 pr-3">
+                                                                <div className="text-sm font-medium truncate">{i.name}</div>
+                                                                <div className="text-xs text-muted-foreground mt-0.5 font-mono">
+                                                                    {i.quantity} × {i.price.toLocaleString()} ₽
+                                                                </div>
+                                                            </div>
+                                                            <div className="flex items-center gap-2.5 shrink-0">
+                                                                <div className="flex items-center bg-zinc-950 rounded-md border border-zinc-800/50 overflow-hidden">
+                                                                    <button 
+                                                                        className="px-2.5 py-1 text-muted-foreground hover:bg-zinc-800 transition-colors text-sm"
+                                                                        onClick={(e) => { e.stopPropagation(); updateCartQty(i.product_id, Math.max(1, i.quantity - 1)) }}
+                                                                    >−</button>
+                                                                    <div className="w-8 text-center font-medium font-mono text-xs">{i.quantity}</div>
+                                                                    <button 
+                                                                        className="px-2.5 py-1 text-muted-foreground hover:bg-zinc-800 transition-colors text-sm"
+                                                                        onClick={(e) => { e.stopPropagation(); updateCartQty(i.product_id, i.quantity + 1) }}
+                                                                    >+</button>
+                                                                </div>
+                                                                <div className="w-16 text-right text-sm font-semibold font-mono">
+                                                                    {(i.quantity * i.price).toLocaleString()} ₽
+                                                                </div>
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="icon"
+                                                                    className="h-7 w-7 opacity-0 group-hover:opacity-100 text-destructive hover:text-destructive hover:bg-destructive/10 transition-all"
+                                                                    onClick={(e) => { e.stopPropagation(); removeCartItem(i.product_id) }}
+                                                                    disabled={isPending}
+                                                                >
+                                                                    <Trash2 className="h-3.5 w-3.5" />
+                                                                </Button>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                        {cart.length > 0 && (
+                                            <div className="p-4 border-t border-zinc-800/50 bg-zinc-900/50 flex items-center justify-between">
+                                                <span className="text-muted-foreground font-medium">Итого к оплате</span>
+                                                <span className="text-3xl font-bold tracking-tight font-mono">{cartTotal.toLocaleString()} ₽</span>
                                             </div>
                                         )}
                                     </div>
+                                </section>
 
-                                    <div ref={paymentRef} className="bg-primary/30 border border-slate-800 rounded-xl p-4 space-y-3">
-                                        <div className="text-xs text-muted-foreground/70 uppercase tracking-wider">Оплата</div>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                            <div className="space-y-2">
-                                                <Label className="text-sm text-slate-300">Тип оплаты</Label>
-                                                <Select value={paymentType} onValueChange={(v: any) => {
-                                                    setPaymentType(v)
-                                                    if (v !== 'mixed') {
-                                                        setCashAmount("")
-                                                        setCardAmount("")
-                                                    }
-                                                    if (v !== 'cash') {
-                                                        setCashReceived("")
-                                                    }
-                                                    if (v !== 'salary') {
-                                                        setSalaryTargetUserId("")
-                                                    }
-                                                }}>
-                                                    <SelectTrigger className="bg-slate-950 border-slate-800 h-12 rounded-xl text-base">
-                                                        <SelectValue />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="cash">
-                                                            <div className="flex items-center gap-2"><Banknote className="h-4 w-4" /> Наличные</div>
-                                                        </SelectItem>
-                                                        <SelectItem value="card">
-                                                            <div className="flex items-center gap-2"><CreditCard className="h-4 w-4" /> Карта</div>
-                                                        </SelectItem>
-                                                        <SelectItem value="mixed">
-                                                            <div className="flex items-center gap-2"><CreditCard className="h-4 w-4" /> Смешанная</div>
-                                                        </SelectItem>
-                                                        <SelectItem value="salary">
-                                                            <div className="flex items-center gap-2"><Wallet className="h-4 w-4" /> В счет ЗП</div>
-                                                        </SelectItem>
-                                                        <SelectItem value="other">Другое</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
-                                            <div className="space-y-2">
-                                                <Label className="text-sm text-slate-300">Комментарий (опц.)</Label>
-                                                <Input
-                                                    value={receiptNotes}
-                                                    onChange={e => setReceiptNotes(e.target.value)}
-                                                    className="bg-slate-950 border-slate-800 h-12 rounded-xl text-base"
-                                                    disabled={isPending}
-                                                />
-                                            </div>
+                                {/* Payment Section */}
+                                <section ref={paymentRef} className="flex flex-col gap-5">
+                                    <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-widest">Оплата</h2>
+                                    
+                                    <div className="p-6 rounded-3xl border border-zinc-800/50 bg-zinc-900/30 space-y-6">
+                                        <div className="space-y-3">
+                                            <Label className="text-xs font-medium text-muted-foreground">Способ оплаты</Label>
+                                            <Select value={paymentType} onValueChange={(v: any) => {
+                                                setPaymentType(v)
+                                                if (v !== 'mixed') {
+                                                    setCashAmount("")
+                                                    setCardAmount("")
+                                                }
+                                                if (v !== 'cash') {
+                                                    setCashReceived("")
+                                                }
+                                                if (v !== 'salary') {
+                                                    setSalaryTargetUserId("")
+                                                }
+                                            }}>
+                                                <SelectTrigger className="h-14 bg-zinc-950 border-zinc-800/50 rounded-xl text-base font-medium">
+                                                    <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent className="rounded-xl border-zinc-800 bg-zinc-950">
+                                                    <SelectItem value="cash" className="py-3">
+                                                        <div className="flex items-center gap-3"><Banknote className="h-4 w-4 text-muted-foreground" /> Наличные</div>
+                                                    </SelectItem>
+                                                    <SelectItem value="card" className="py-3">
+                                                        <div className="flex items-center gap-3"><CreditCard className="h-4 w-4 text-muted-foreground" /> Карта</div>
+                                                    </SelectItem>
+                                                    <SelectItem value="mixed" className="py-3">
+                                                        <div className="flex items-center gap-3"><Wallet className="h-4 w-4 text-muted-foreground" /> Смешанная</div>
+                                                    </SelectItem>
+                                                    <SelectItem value="salary" className="py-3">
+                                                        <div className="flex items-center gap-3"><Wallet className="h-4 w-4 text-muted-foreground" /> В счет ЗП</div>
+                                                    </SelectItem>
+                                                    <SelectItem value="other" className="py-3">Другое</SelectItem>
+                                                </SelectContent>
+                                            </Select>
                                         </div>
+
                                         {paymentType === 'salary' && (
-                                            <div className="space-y-3">
-                                                <div className="space-y-2">
-                                                    <Label className="text-sm text-slate-300">На кого записать покупку</Label>
+                                            <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                                                <div className="space-y-3">
+                                                    <Label className="text-xs font-medium text-muted-foreground">Сотрудник</Label>
                                                     <Select value={salaryTargetUserId} onValueChange={setSalaryTargetUserId}>
-                                                        <SelectTrigger className="bg-slate-950 border-slate-800 h-12 rounded-xl text-base">
-                                                            <SelectValue placeholder="Выберите сотрудника со сменами в этом месяце" />
+                                                        <SelectTrigger className="h-14 bg-zinc-950 border-zinc-800/50 rounded-xl text-base">
+                                                            <SelectValue placeholder="Выберите сотрудника..." />
                                                         </SelectTrigger>
-                                                        <SelectContent>
+                                                        <SelectContent className="rounded-xl border-zinc-800 bg-zinc-950">
                                                             {salarySaleCandidates.map((candidate) => (
-                                                                <SelectItem key={candidate.id} value={candidate.id}>
-                                                                    {candidate.full_name} · {candidate.role} · доступно {candidate.available_amount.toLocaleString('ru-RU')} ₽
+                                                                <SelectItem key={candidate.id} value={candidate.id} className="py-2">
+                                                                    <div className="flex flex-col">
+                                                                        <span className="font-medium">{candidate.full_name}</span>
+                                                                        <span className="text-xs text-muted-foreground">{candidate.role} · доступно {candidate.available_amount.toLocaleString()} ₽</span>
+                                                                    </div>
                                                                 </SelectItem>
                                                             ))}
                                                         </SelectContent>
                                                     </Select>
                                                 </div>
-                                                <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-xs text-amber-100">
-                                                    Этот чек спишет товар как продажу, но не попадет в обычную выручку. Сумма запишется в покупки бара выбранного сотрудника за текущий месяц.
-                                                </div>
                                             </div>
                                         )}
+
                                         {paymentType === 'cash' && (
-                                            <div className="grid grid-cols-2 gap-3">
-                                                <div className="space-y-2">
-                                                    <Label className="text-sm text-slate-300">Получено</Label>
+                                            <div className="grid grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                                                <div className="space-y-3">
+                                                    <Label className="text-xs font-medium text-muted-foreground">Получено (₽)</Label>
                                                     <Input
                                                         value={cashReceived}
                                                         onChange={e => setCashReceived(e.target.value)}
                                                         type="number"
-                                                        className="bg-slate-950 border-slate-800 h-12 rounded-xl text-base"
+                                                        placeholder="0"
+                                                        className="h-14 bg-zinc-950 border-zinc-800/50 rounded-xl text-lg font-mono font-medium"
                                                         disabled={isPending}
                                                     />
                                                 </div>
-                                                <div className="space-y-2">
-                                                    <Label className="text-sm text-slate-300">Сдача</Label>
-                                                    <div className="h-12 rounded-xl border border-slate-800 bg-slate-950 flex items-center justify-between px-3">
-                                                        <span className="text-sm text-muted-foreground">к выдаче</span>
-                                                        <span className="text-lg font-black text-emerald-300">{changeDue.toLocaleString()} ₽</span>
+                                                <div className="space-y-3">
+                                                    <Label className="text-xs font-medium text-muted-foreground">Сдача</Label>
+                                                    <div className="h-14 rounded-xl border border-transparent bg-zinc-900 flex items-center justify-end px-4">
+                                                        <span className={cn(
+                                                            "text-xl font-bold font-mono tracking-tight",
+                                                            changeDue > 0 ? "text-emerald-500" : "text-muted-foreground"
+                                                        )}>
+                                                            {changeDue > 0 ? `+${changeDue.toLocaleString()}` : "0"} ₽
+                                                        </span>
                                                     </div>
                                                 </div>
                                             </div>
                                         )}
+
                                         {paymentType === 'mixed' && (
-                                            <div className="grid grid-cols-2 gap-3">
-                                                <div className="space-y-2">
-                                                    <Label className="text-xs text-muted-foreground/70">Нал</Label>
+                                            <div className="grid grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                                                <div className="space-y-3">
+                                                    <Label className="text-xs font-medium text-muted-foreground">Наличные (₽)</Label>
                                                     <Input
                                                         value={cashAmount}
                                                         onChange={e => setCashAmount(e.target.value)}
                                                         type="number"
-                                                        className="bg-slate-950 border-slate-800 h-11 rounded-xl"
+                                                        placeholder="0"
+                                                        className="h-14 bg-zinc-950 border-zinc-800/50 rounded-xl text-base font-mono"
                                                         disabled={isPending}
                                                     />
                                                 </div>
-                                                <div className="space-y-2">
-                                                    <Label className="text-xs text-muted-foreground/70">Карта</Label>
+                                                <div className="space-y-3">
+                                                    <Label className="text-xs font-medium text-muted-foreground">Карта (₽)</Label>
                                                     <Input
                                                         value={cardAmount}
                                                         onChange={e => setCardAmount(e.target.value)}
                                                         type="number"
-                                                        className="bg-slate-950 border-slate-800 h-11 rounded-xl"
+                                                        placeholder="0"
+                                                        className="h-14 bg-zinc-950 border-zinc-800/50 rounded-xl text-base font-mono"
                                                         disabled={isPending}
                                                     />
                                                 </div>
                                             </div>
                                         )}
+
+                                        <div className="space-y-3">
+                                            <Label className="text-xs font-medium text-muted-foreground">Комментарий (опционально)</Label>
+                                            <Input
+                                                value={receiptNotes}
+                                                onChange={e => setReceiptNotes(e.target.value)}
+                                                placeholder="Добавьте заметку к чеку..."
+                                                className="h-12 bg-zinc-950 border-zinc-800/50 rounded-xl text-sm"
+                                                disabled={isPending}
+                                            />
+                                        </div>
+
                                         <Button
                                             onClick={finalizeReceipt}
                                             disabled={isPending || cart.length === 0}
-                                            className="w-full h-14 bg-emerald-600 hover:bg-emerald-700 rounded-xl font-black text-lg"
+                                            className="w-full h-16 rounded-2xl font-bold text-lg shadow-sm transition-all hover:scale-[1.02] active:scale-[0.98]"
+                                            size="lg"
                                         >
-                                            {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                            Пробить чек ({cartTotal.toLocaleString()} ₽)
+                                            {isPending ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : `Пробить чек (${cartTotal.toLocaleString()} ₽)`}
                                         </Button>
                                     </div>
-                                </div>
+                                </section>
 
-                                <div className="space-y-4">
-                                    <div className="bg-primary/30 border border-slate-800 rounded-xl p-4">
-                                        <div className="flex items-center justify-between">
-                                            <div className="text-base font-black text-primary-foreground/90 flex items-center gap-2">
-                                                <History className="h-5 w-5 text-blue-400" />
-                                                История за смену
-                                            </div>
-                                            <Badge className="bg-blue-500/20 text-blue-200 border-blue-500/30 text-base px-3 py-1">
+                            </div>
+
+                            {/* Right Column: History */}
+                            <div className="lg:col-span-4 flex flex-col gap-8">
+
+                                {/* History Section */}
+                                <section className="flex flex-col gap-4 sticky top-24">
+                                    <div className="flex items-center justify-between">
+                                        <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-widest">История смены</h2>
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-sm font-semibold font-mono bg-muted/50 px-2.5 py-1 rounded-md">
                                                 {receiptTotalForShift.toLocaleString()} ₽
-                                            </Badge>
-                                        </div>
-                                    </div>
-
-                                    <div className="bg-primary/30 border border-slate-800 rounded-xl overflow-hidden">
-                                        <div className="p-4 border-b border-slate-800 flex items-center justify-between">
-                                            <div className="text-[11px] font-bold text-primary-foreground/80">Чеки</div>
+                                            </span>
                                             <Button
                                                 variant="ghost"
-                                                className="h-8 text-[10px] text-slate-300 hover:bg-primary/90"
+                                                size="sm"
+                                                className="h-8 w-8 p-0 rounded-full text-muted-foreground hover:text-foreground"
                                                 onClick={() => refresh()}
                                                 disabled={isPending}
+                                                title="Обновить историю"
                                             >
-                                                Обновить
+                                                <History className="h-4 w-4" />
                                             </Button>
                                         </div>
-                                        <div className="p-2 max-h-[70vh] overflow-y-auto">
+                                    </div>
+                                    
+                                    <div className="flex flex-col rounded-3xl border border-zinc-800/50 bg-zinc-900/30 overflow-hidden">
+                                        <div className="max-h-[calc(100vh-140px)] overflow-y-auto p-4 space-y-3 custom-scrollbar">
                                             {receipts.length === 0 ? (
-                                                <div className="p-4 text-[11px] text-muted-foreground/70">Пока нет чеков</div>
+                                                <div className="p-8 text-center text-sm text-muted-foreground">
+                                                    Пока нет чеков
+                                                </div>
                                             ) : (
-                                                <div className="space-y-2">
-                                                    {receipts.filter(r => !r.voided_at).map(r => (
-                                                        <div key={r.id} className="border border-slate-800 rounded-xl overflow-hidden bg-slate-950/30">
-                                                            <div className="p-3 flex items-center justify-between gap-3">
-                                                                <div className="min-w-0">
-                                                                    <div className="text-[11px] font-bold truncate">Чек #{r.id}</div>
-                                                                    <div className="text-[9px] text-muted-foreground truncate">
-                                                                        {new Date(r.created_at).toLocaleTimeString()} · {r.payment_type === 'salary' ? 'В СЧЕТ ЗП' : r.payment_type.toUpperCase()} · {r.total_amount} ₽
-                                                                        {(r.total_refund_amount || 0) > 0 && (
-                                                                             <span className="text-amber-400 ml-1">
-                                                                                 (возврат: {(r.total_refund_amount || 0)} ₽, итог: {r.total_amount - (r.total_refund_amount || 0)} ₽)
-                                                                             </span>
-                                                                         )}
-                                                                    </div>
+                                                receipts.filter(r => !r.voided_at).map(r => (
+                                                    <div key={r.id} className="p-4 rounded-2xl border border-zinc-800/50 bg-zinc-950 flex flex-col gap-3 transition-colors hover:border-zinc-700">
+                                                        <div className="flex items-start justify-between gap-4">
+                                                            <div className="min-w-0">
+                                                                <div className="flex items-center gap-2 mb-1">
+                                                                        <span className="text-sm font-semibold">Чек #{r.id}</span>
+                                                                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-zinc-800 text-muted-foreground uppercase">
+                                                                        {r.payment_type === 'salary' ? 'В СЧЕТ ЗП' : 
+                                                                         r.payment_type === 'cash' ? 'НАЛИЧНЫЕ' :
+                                                                         r.payment_type === 'card' ? 'КАРТА' :
+                                                                         r.payment_type === 'mixed' ? 'СМЕШАННАЯ' :
+                                                                         r.payment_type}
+                                                                    </span>
                                                                 </div>
-                                                                <div className="flex items-center gap-2">
-                                                                    {r.committed_at ? (
-                                                                        <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-500/30">Проведен</Badge>
-                                                                    ) : (
-                                                                        <Button
-                                                                            variant="ghost"
-                                                                            size="icon"
-                                                                            className="h-9 w-9 text-red-300 hover:text-primary-foreground hover:bg-red-500/20"
-                                                                            onClick={() => cancelReceipt(r.id)}
-                                                                            disabled={isPending}
-                                                                            title="Отменить"
-                                                                        >
-                                                                            <X className="h-4 w-4" />
-                                                                        </Button>
+                                                                <div className="text-xs text-muted-foreground font-mono flex items-center gap-1.5 flex-wrap">
+                                                                    <span>{new Date(r.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                                                                    <span>·</span>
+                                                                    <span className="text-foreground font-medium text-sm">{r.total_amount.toLocaleString()} ₽</span>
+                                                                    {(r.total_refund_amount || 0) > 0 && (
+                                                                        <span className="text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded text-[10px]">
+                                                                            возврат: {(r.total_refund_amount || 0).toLocaleString()} ₽
+                                                                        </span>
                                                                     )}
                                                                 </div>
                                                             </div>
-                                                            {r.items?.length > 0 && (
-                                                                <div className="px-3 pb-3 space-y-1">
-                                                                    {r.items.map(it => {
-                                                                        const isFullyReturned = (it.available_qty || 0) <= 0
-                                                                        const returnedQty = it.returned_qty || 0
-                                                                        
-                                                                        return (
-                                                                            <div key={it.id} className="flex justify-between items-center text-[10px] text-muted-foreground/70">
-                                                                                <span className="truncate pr-2">{it.product_name}</span>
-                                                                                <div className="flex items-center gap-2 shrink-0">
-                                                                                    <span className={isFullyReturned ? "line-through text-muted-foreground" : ""}>
-                                                                                        {it.quantity} × {it.selling_price_snapshot} ₽
-                                                                                    </span>
-                                                                                    {returnedQty > 0 && (
-                                                                                        <span className="text-[9px] text-muted-foreground">
-                                                                                            (возвращено: {returnedQty})
-                                                                                        </span>
-                                                                                    )}
-                                                                                    {!isFullyReturned ? (
-                                                                                        <button
-                                                                                            type="button"
-                                                                                            onClick={() => openReturnDialog(r, it.id)}
-                                                                                            className="text-[9px] text-amber-400 hover:text-amber-300 hover:bg-amber-500/20 px-1.5 py-0.5 rounded transition-colors"
-                                                                                            title="Вернуть товар"
-                                                                                            disabled={isPending}
-                                                                                        >
-                                                                                            Возврат
-                                                                                        </button>
-                                                                                    ) : (
-                                                                                        <span className="text-[9px] text-green-500 font-bold">
-                                                                                            ✓
-                                                                                        </span>
-                                                                                    )}
-                                                                                </div>
-                                                                            </div>
-                                                                        )
-                                                                    })}
-                                                                </div>
-                                                            )}
+                                                            <div className="flex items-center shrink-0">
+                                                                {r.committed_at ? (
+                                                                    <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+                                                                        ПРОВЕДЕН
+                                                                    </span>
+                                                                ) : (
+                                                                    <Button
+                                                                        variant="ghost"
+                                                                        size="icon"
+                                                                        className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-full"
+                                                                        onClick={() => cancelReceipt(r.id)}
+                                                                        disabled={isPending}
+                                                                        title="Отменить чек"
+                                                                    >
+                                                                        <X className="h-4 w-4" />
+                                                                    </Button>
+                                                                )}
+                                                            </div>
                                                         </div>
-                                                    ))}
-                                                </div>
+                                                        
+                                                        {r.items?.length > 0 && (
+                                                            <div className="pt-3 border-t border-zinc-800/50 space-y-2">
+                                                                {r.items.map((it: any) => {
+                                                                    const isFullyReturned = (it.available_qty || 0) <= 0
+                                                                    const returnedQty = it.returned_qty || 0
+                                                                    
+                                                                    return (
+                                                                        <div key={it.id} className="flex justify-between items-center text-xs text-muted-foreground group/item">
+                                                                            <span className="truncate pr-3">{it.product_name}</span>
+                                                                            <div className="flex items-center gap-2 shrink-0 font-mono">
+                                                                                <span className={cn(isFullyReturned && "line-through opacity-50")}>
+                                                                                    {it.quantity} × {Number(it.selling_price_snapshot).toLocaleString()}
+                                                                                </span>
+                                                                                {returnedQty > 0 && (
+                                                                                    <span className="text-[10px] text-amber-500 bg-amber-500/10 px-1 rounded">
+                                                                                        -{returnedQty}
+                                                                                    </span>
+                                                                                )}
+                                                                                {!isFullyReturned && !r.voided_at ? (
+                                                                                    <Button
+                                                                                        variant="ghost"
+                                                                                        size="sm"
+                                                                                        onClick={() => {
+                                                                                            setSelectedReceipt(r)
+                                                                                            setReturnItemId(it.id)
+                                                                                            setReturnQuantity("1")
+                                                                                            setReturnReason("")
+                                                                                            setIsReturnDialogOpen(true)
+                                                                                        }}
+                                                                                        className="h-6 px-2 text-[10px] font-sans font-medium text-amber-500 opacity-0 group-hover/item:opacity-100 hover:text-amber-600 hover:bg-amber-500/10 ml-1 transition-all"
+                                                                                        disabled={isPending}
+                                                                                    >
+                                                                                        Вернуть
+                                                                                    </Button>
+                                                                                ) : isFullyReturned ? (
+                                                                                    <span className="text-emerald-500 ml-1">✓</span>
+                                                                                ) : null}
+                                                                            </div>
+                                                                        </div>
+                                                                    )
+                                                                })}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                ))
                                             )}
                                         </div>
                                     </div>
-                                </div>
+                                </section>
+                            </div>
                         </div>
                     )}
-                </div>
+                </main>
             </div>
 
             {/* Return Dialog */}
             <Dialog open={isReturnDialogOpen} onOpenChange={setIsReturnDialogOpen}>
-                <DialogContent className="bg-slate-950 border-slate-800 text-primary-foreground max-w-md">
-                    <DialogHeader>
-                        <DialogTitle>Возврат товара</DialogTitle>
-                        <DialogDescription className="text-muted-foreground/70">
-                            {selectedReceipt?.items?.find(i => i.id === returnItemId)?.product_name}
+                <DialogContent className="bg-card border-border sm:max-w-md rounded-3xl p-6">
+                    <DialogHeader className="mb-4">
+                        <DialogTitle className="text-xl font-semibold">Возврат товара</DialogTitle>
+                        <DialogDescription className="text-base">
+                            {selectedReceipt?.items?.find((i: any) => i.id === returnItemId)?.product_name}
                         </DialogDescription>
                     </DialogHeader>
-                    <div className="py-4 space-y-4">
-                        <div className="p-3 bg-primary rounded-xl border border-slate-800">
-                            <div className="text-xs text-muted-foreground/70 mb-1">Доступно для возврата:</div>
-                            <div className="text-lg font-bold text-primary-foreground">
-                                {selectedReceipt?.items?.find(i => i.id === returnItemId)?.available_qty || 0} из {selectedReceipt?.items?.find(i => i.id === returnItemId)?.quantity} шт.
-                            </div>
+                    
+                    <div className="space-y-6">
+                        <div className="flex items-center justify-between p-4 bg-muted/50 rounded-2xl">
+                            <span className="text-sm font-medium text-muted-foreground">Доступно для возврата</span>
+                            <span className="text-lg font-bold font-mono">
+                                {selectedReceipt?.items?.find((i: any) => i.id === returnItemId)?.available_qty || 0} <span className="text-muted-foreground text-sm font-sans font-normal">шт.</span>
+                            </span>
                         </div>
-                        <div className="space-y-2">
-                            <Label className="text-sm text-slate-300">Количество</Label>
+                        
+                        <div className="space-y-3">
+                            <Label className="text-sm font-medium">Количество к возврату</Label>
                             <Input
                                 type="number"
                                 min="1"
-                                max={selectedReceipt?.items?.find(i => i.id === returnItemId)?.available_qty}
+                                max={selectedReceipt?.items?.find((i: any) => i.id === returnItemId)?.available_qty}
                                 value={returnQuantity}
                                 onChange={e => setReturnQuantity(e.target.value)}
-                                className="bg-primary border-slate-800 h-12 rounded-xl text-base"
+                                className="h-14 bg-background rounded-xl text-lg font-mono"
                             />
                         </div>
-                        <div className="space-y-2">
-                            <Label className="text-sm text-slate-300">Причина возврата</Label>
+                        
+                        <div className="space-y-3">
+                            <Label className="text-sm font-medium">Причина возврата (опционально)</Label>
                             <Input
                                 value={returnReason}
                                 onChange={e => setReturnReason(e.target.value)}
-                                placeholder="Например: товар не подошел"
-                                className="bg-primary border-slate-800 h-12 rounded-xl text-base"
+                                placeholder="Например: ошибка при пробитии"
+                                className="h-14 bg-background rounded-xl text-base"
                             />
                         </div>
-                        <div className="p-3 bg-primary rounded-xl border border-slate-800">
-                            <div className="text-xs text-muted-foreground/70 mb-1">Сумма возврата:</div>
-                            <div className="text-2xl font-black text-emerald-400">
-                                {(Number(returnQuantity) * (selectedReceipt?.items?.find(i => i.id === returnItemId)?.selling_price_snapshot || 0)).toLocaleString('ru-RU')} ₽
-                            </div>
+                        
+                        <div className="flex items-center justify-between pt-2">
+                            <span className="text-sm font-medium text-muted-foreground">Сумма к возврату</span>
+                            <span className="text-2xl font-bold font-mono text-emerald-500">
+                                {(Number(returnQuantity) * (selectedReceipt?.items?.find((i: any) => i.id === returnItemId)?.selling_price_snapshot || 0)).toLocaleString()} ₽
+                            </span>
                         </div>
                     </div>
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setIsReturnDialogOpen(false)} className="border-slate-800">
+                    
+                    <DialogFooter className="mt-8 gap-3 sm:gap-0">
+                        <Button variant="ghost" onClick={() => setIsReturnDialogOpen(false)} className="h-12 rounded-xl">
                             Отмена
                         </Button>
                         <Button 
                             onClick={handleReturnReceipt} 
-                            disabled={!returnQuantity || Number(returnQuantity) <= 0 || isPending || Number(returnQuantity) > (selectedReceipt?.items?.find(i => i.id === returnItemId)?.available_qty || 0)}
-                            className="bg-amber-600 hover:bg-amber-700"
+                            disabled={!returnQuantity || Number(returnQuantity) <= 0 || isPending || Number(returnQuantity) > (selectedReceipt?.items?.find((i: any) => i.id === returnItemId)?.available_qty || 0)}
+                            className="h-12 rounded-xl bg-destructive hover:bg-destructive/90 text-destructive-foreground px-8"
                         >
                             {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                            Оформить возврат
+                            Подтвердить возврат
                         </Button>
                     </DialogFooter>
                 </DialogContent>

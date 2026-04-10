@@ -68,10 +68,10 @@ export default function EmployeePosPage() {
 
     if (isLoading || !clubId || !userId) {
         return (
-            <div className="min-h-screen bg-slate-950 text-primary-foreground flex items-center justify-center">
-                <div className="flex items-center gap-2 text-muted-foreground/70">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Загрузка...
+            <div className="min-h-[100dvh] bg-background text-foreground flex items-center justify-center">
+                <div className="flex flex-col items-center gap-3 text-muted-foreground">
+                    <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                    <p className="text-sm font-medium">Загрузка кассы...</p>
                 </div>
             </div>
         )
@@ -79,18 +79,21 @@ export default function EmployeePosPage() {
 
     if (!isPosEnabled) {
         return (
-            <div className="min-h-screen bg-slate-950 text-primary-foreground flex items-center justify-center p-6 text-center">
-                <div className="text-slate-300">Продажи через POS недоступны для этого клуба.</div>
+            <div className="min-h-[100dvh] bg-background text-foreground flex items-center justify-center p-6 text-center">
+                <div className="max-w-md space-y-3 rounded-xl border border-border bg-card p-6 shadow-sm">
+                    <div className="text-lg font-bold text-foreground">Касса отключена</div>
+                    <div className="text-sm text-muted-foreground">Продажи через POS недоступны для этого клуба.</div>
+                </div>
             </div>
         )
     }
 
     if (isBlockedByAcceptance) {
         return (
-            <div className="min-h-screen bg-slate-950 text-primary-foreground flex items-center justify-center p-6 text-center">
-                <div className="max-w-md space-y-3">
-                    <div className="text-lg font-bold text-amber-300">Бар временно заблокирован</div>
-                    <div className="text-slate-300">
+            <div className="min-h-[100dvh] bg-background text-foreground flex items-center justify-center p-6 text-center">
+                <div className="max-w-md space-y-3 rounded-xl border border-amber-500/20 bg-amber-500/5 p-6 shadow-sm">
+                    <div className="text-lg font-bold text-amber-500">Бар временно заблокирован</div>
+                    <div className="text-sm text-muted-foreground">
                         Сначала завершите приемку остатков на старте смены. После подтверждения инвентаризации касса откроется автоматически.
                     </div>
                 </div>
