@@ -62,11 +62,11 @@ function SortableRow({ emp, days, month, year, localSchedule, isUpdating, toggle
             style={style}
             className={cn(
                 "group transition-colors h-14",
-                isDragging ? "bg-slate-50 shadow-lg" : "hover:bg-slate-50/50"
+                isDragging ? "bg-accent/50 shadow-lg" : "hover:bg-accent/30"
             )}
         >
             <td className={cn(
-                "sticky left-0 z-20 bg-white p-0 border-r border-slate-200 shadow-[1px_0_0_0_#e2e8f0]",
+                "sticky left-0 z-20 bg-card p-0 border-r border-border shadow-[1px_0_0_0_hsl(var(--border))]",
                 isDragging && "shadow-none"
             )}>
                 <div className="flex h-full min-h-[56px] items-center">
@@ -75,7 +75,7 @@ function SortableRow({ emp, days, month, year, localSchedule, isUpdating, toggle
                         <button
                             {...attributes}
                             {...listeners}
-                            className="flex items-center justify-center w-10 h-full cursor-grab active:cursor-grabbing hover:bg-slate-100 text-slate-300 hover:text-slate-500 transition-colors"
+                            className="flex items-center justify-center w-10 h-full cursor-grab active:cursor-grabbing hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
                         >
                             <GripVertical className="h-4 w-4" />
                         </button>
@@ -84,19 +84,19 @@ function SortableRow({ emp, days, month, year, localSchedule, isUpdating, toggle
 
                     <div className={cn("flex flex-col flex-1 justify-center py-2 pr-4", emp.dismissed_at && "opacity-70 grayscale")}>
                         <div className="flex items-center gap-2">
-                            <span className="font-bold text-sm text-slate-900 truncate">{emp.full_name}</span>
+                            <span className="font-bold text-sm text-foreground truncate">{emp.full_name}</span>
                             {shiftCount > 0 && (
-                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-600">
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-accent text-muted-foreground">
                                     {shiftCount}
                                 </span>
                             )}
                             {emp.dismissed_at && (
-                                <span className="text-[9px] font-bold text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded-md border border-rose-100">
+                                <span className="text-[9px] font-bold text-rose-500 bg-rose-500/10 px-1.5 py-0.5 rounded-md border border-rose-500/20">
                                     УВОЛ
                                 </span>
                             )}
                         </div>
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{emp.role}</span>
+                        <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">{emp.role}</span>
                     </div>
                 </div>
             </td>
@@ -112,27 +112,27 @@ function SortableRow({ emp, days, month, year, localSchedule, isUpdating, toggle
                         key={dateStr}
                         onClick={() => !readOnly && toggleShift(emp.id, dateStr)}
                         className={cn(
-                            "p-0 border-r border-slate-200 relative group/cell transition-colors",
-                            !readOnly && "cursor-pointer hover:bg-slate-50",
+                            "p-0 border-r border-border relative group/cell transition-colors",
+                            !readOnly && "cursor-pointer hover:bg-accent/50",
                             readOnly && "cursor-default",
                             d.isOutside && "opacity-40",
-                            isToday && "bg-indigo-50/50"
+                            isToday && "bg-primary/5"
                         )}
                     >
                         <div className={cn(
                             "w-full h-14 flex items-center justify-center transition-all duration-200",
-                            type === 'DAY' && "bg-emerald-500 text-white shadow-sm inset-y-0",
-                            type === 'NIGHT' && "bg-indigo-500 text-white shadow-sm inset-y-0",
-                            !type && "text-slate-200",
+                            type === 'DAY' && "bg-amber-500/10 text-amber-500 shadow-sm inset-y-0",
+                            type === 'NIGHT' && "bg-indigo-500/10 text-indigo-400 shadow-sm inset-y-0",
+                            !type && "text-muted-foreground/20",
                             updating && "opacity-40 scale-90"
                         )}>
-                            {type === 'DAY' && <Sun className="h-5 w-5 drop-shadow-sm" />}
-                            {type === 'NIGHT' && <Moon className="h-5 w-5 drop-shadow-sm" />}
+                            {type === 'DAY' && <Sun className="h-5 w-5" />}
+                            {type === 'NIGHT' && <Moon className="h-5 w-5" />}
                             {!type && !readOnly && <Plus className="h-3 w-3 opacity-0 group-hover/cell:opacity-100 transition-opacity" />}
                         </div>
                         {updating && (
                             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                <Loader2 className="h-4 w-4 animate-spin text-white/50" />
+                                <Loader2 className="h-4 w-4 animate-spin text-foreground/50" />
                             </div>
                         )}
                     </td>
@@ -360,35 +360,35 @@ export function WorkScheduleGrid({ clubId, month, year, initialData, refreshData
                 
                 return (
                     <div key={dateStr} className={cn(
-                        "relative overflow-hidden rounded-2xl border p-5 shadow-sm transition-all",
-                        isWeekend ? "bg-rose-50/30 border-rose-100" : "bg-white border-slate-200",
+                        "relative overflow-hidden rounded-xl border p-4 shadow-sm transition-all bg-card",
+                        isWeekend ? "bg-rose-500/5 border-rose-500/20" : "border-border",
                         d.isOutside && "opacity-60",
-                        isToday && "border-indigo-200 bg-indigo-50/30"
+                        isToday && "border-primary/50 bg-primary/5"
                     )}>
                         {isToday && (
                             <div className="absolute -right-4 -top-4 opacity-[0.03]">
-                                <CalendarIcon className="h-24 w-24 text-indigo-900 rotate-12" />
+                                <CalendarIcon className="h-24 w-24 text-primary rotate-12" />
                             </div>
                         )}
-                        <div className="relative z-10 flex items-start justify-between gap-3 mb-5">
+                        <div className="relative z-10 flex items-start justify-between gap-3 mb-4">
                             <div className="min-w-0">
                                 <div className="flex items-center gap-3">
                                     <div className={cn(
                                         "text-3xl font-bold tracking-tight",
-                                        isWeekend ? "text-rose-600" : "text-slate-900",
-                                        isToday && "text-indigo-600"
+                                        isWeekend ? "text-rose-500" : "text-foreground",
+                                        isToday && "text-primary"
                                     )}>
                                         {d.day}
                                     </div>
                                     <div className="min-w-0">
                                         <div className={cn(
                                             "truncate text-sm font-bold capitalize",
-                                            isWeekend ? "text-rose-900" : "text-slate-900",
-                                            isToday && "text-indigo-900"
+                                            isWeekend ? "text-rose-500/80" : "text-foreground",
+                                            isToday && "text-primary/80"
                                         )}>
                                             {new Intl.DateTimeFormat('ru-RU', { weekday: 'long' }).format(date)}
                                         </div>
-                                        <div className="text-xs font-medium text-slate-500 capitalize">
+                                        <div className="text-xs font-medium text-muted-foreground capitalize">
                                             {new Intl.DateTimeFormat('ru-RU', { month: 'long' }).format(date)}
                                             {d.isOutside ? " · другой месяц" : ""}
                                         </div>
@@ -396,53 +396,59 @@ export function WorkScheduleGrid({ clubId, month, year, initialData, refreshData
                                 </div>
                             </div>
                             {isToday ? (
-                                <span className="shrink-0 rounded-lg bg-indigo-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-indigo-700">
+                                <span className="shrink-0 rounded-md bg-primary/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-primary">
                                     Сегодня
                                 </span>
                             ) : null}
                         </div>
 
-                        <div className="grid gap-3 sm:grid-cols-2">
-                            <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-4">
-                                <div className="flex items-center justify-between gap-2 mb-3">
-                                    <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-emerald-700">
-                                        <Sun className="h-4 w-4 text-emerald-500" />
-                                        Дневная
-                                    </div>
-                                    <span className="text-sm font-bold text-emerald-700">{dayWorkers.length}</span>
+                        <div className="relative z-10 space-y-2">
+                            {/* Day Shift */}
+                            <div className="rounded-lg bg-amber-500/10 p-3 border border-amber-500/20">
+                                <div className="flex items-center gap-2 mb-2">
+                                    <Sun className="h-3.5 w-3.5 text-amber-500" />
+                                    <span className="text-[11px] font-bold uppercase tracking-widest text-amber-500">
+                                        Дневная смена
+                                    </span>
                                 </div>
-                                {dayWorkers.length > 0 ? (
-                                    <div className="flex flex-wrap gap-2">
-                                        {dayWorkers.map((w: any) => (
-                                            <div key={w.id} className="rounded-lg border border-emerald-200 bg-white px-3 py-1.5 text-sm font-bold text-slate-900 shadow-sm">
-                                                {w.full_name.split(' ')[0]}
+                                <div className="flex flex-wrap gap-1.5">
+                                    {dayWorkers.length > 0 ? (
+                                        dayWorkers.map((w: any) => (
+                                            <div key={w.id} className="inline-flex items-center rounded bg-amber-500/10 px-2 py-1 border border-amber-500/20">
+                                                <div className="h-1.5 w-1.5 rounded-full bg-amber-500 mr-1.5"></div>
+                                                <span className="text-xs font-medium text-amber-600 dark:text-amber-400">
+                                                    {w.full_name?.split(' ')[0] || 'Без имени'}
+                                                </span>
                                             </div>
-                                        ))}
-                                    </div>
-                                ) : (
-                                    <div className="text-sm font-medium text-emerald-700/50">Нет смен</div>
-                                )}
+                                        ))
+                                    ) : (
+                                        <span className="text-xs font-medium text-amber-500/50 italic">Нет смен</span>
+                                    )}
+                                </div>
                             </div>
 
-                            <div className="rounded-xl border border-indigo-100 bg-indigo-50/40 p-4">
-                                <div className="flex items-center justify-between gap-2 mb-3">
-                                    <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-indigo-700">
-                                        <Moon className="h-4 w-4 text-indigo-500" />
-                                        Ночная
-                                    </div>
-                                    <span className="text-sm font-bold text-indigo-700">{nightWorkers.length}</span>
+                            {/* Night Shift */}
+                            <div className="rounded-lg bg-indigo-500/10 p-3 border border-indigo-500/20">
+                                <div className="flex items-center gap-2 mb-2">
+                                    <Moon className="h-3.5 w-3.5 text-indigo-400" />
+                                    <span className="text-[11px] font-bold uppercase tracking-widest text-indigo-400">
+                                        Ночная смена
+                                    </span>
                                 </div>
-                                {nightWorkers.length > 0 ? (
-                                    <div className="flex flex-wrap gap-2">
-                                        {nightWorkers.map((w: any) => (
-                                            <div key={w.id} className="rounded-lg border border-indigo-200 bg-white px-3 py-1.5 text-sm font-bold text-slate-900 shadow-sm">
-                                                {w.full_name.split(' ')[0]}
+                                <div className="flex flex-wrap gap-1.5">
+                                    {nightWorkers.length > 0 ? (
+                                        nightWorkers.map((w: any) => (
+                                            <div key={w.id} className="inline-flex items-center rounded bg-indigo-500/10 px-2 py-1 border border-indigo-500/20">
+                                                <div className="h-1.5 w-1.5 rounded-full bg-indigo-400 mr-1.5"></div>
+                                                <span className="text-xs font-medium text-indigo-400">
+                                                    {w.full_name?.split(' ')[0] || 'Без имени'}
+                                                </span>
                                             </div>
-                                        ))}
-                                    </div>
-                                ) : (
-                                    <div className="text-sm font-medium text-indigo-700/50">Нет смен</div>
-                                )}
+                                        ))
+                                    ) : (
+                                        <span className="text-xs font-medium text-indigo-400/50 italic">Нет смен</span>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -455,8 +461,8 @@ export function WorkScheduleGrid({ clubId, month, year, initialData, refreshData
         <div className="hidden md:block">
         <table className="w-full border-collapse min-w-[1200px]">
             <thead>
-                <tr className="bg-slate-50 border-b border-slate-200">
-                    <th className="sticky left-0 z-20 bg-slate-50 p-0 text-left text-xs font-bold uppercase tracking-widest text-slate-500 w-72 border-r border-slate-200 pl-4 py-4 shadow-[1px_0_0_0_#e2e8f0]">
+                <tr className="bg-accent/30 border-b border-border">
+                    <th className="sticky left-0 z-20 bg-card p-0 text-left text-xs font-bold uppercase tracking-widest text-muted-foreground w-72 border-r border-border pl-4 py-4 shadow-[1px_0_0_0_hsl(var(--border))]">
                         Сотрудник
                     </th>
                     {days.map(d => {
@@ -465,24 +471,24 @@ export function WorkScheduleGrid({ clubId, month, year, initialData, refreshData
                         const isToday = d.dateStr === todayStr
                         return (
                             <th key={d.dateStr} className={cn(
-                                "p-2 text-center border-r border-slate-200 min-w-[40px] transition-colors relative",
-                                isWeekend && "bg-rose-50/50",
+                                "p-2 text-center border-r border-border min-w-[40px] transition-colors relative",
+                                isWeekend && "bg-rose-500/5",
                                 d.isOutside && "opacity-40",
-                                isToday && "bg-indigo-50/50"
+                                isToday && "bg-primary/10"
                             )}>
                                 {isToday && (
-                                    <div className="absolute top-0 inset-x-0 h-1 bg-indigo-500 mx-1 rounded-b-full" />
+                                    <div className="absolute top-0 inset-x-0 h-1 bg-primary mx-1 rounded-b-full" />
                                 )}
                                 <div className={cn(
                                     "text-[10px] font-bold uppercase tracking-widest leading-none mb-1.5",
-                                    isToday ? "text-indigo-600" : "text-slate-400"
+                                    isToday ? "text-primary" : "text-muted-foreground"
                                 )}>
                                     {new Intl.DateTimeFormat('ru-RU', { weekday: 'short' }).format(date)}
                                 </div>
                                 <div className={cn(
                                     "text-sm font-bold",
-                                    isWeekend ? "text-rose-600" : "text-slate-900",
-                                    isToday && "text-indigo-700"
+                                    isWeekend ? "text-rose-500" : "text-foreground",
+                                    isToday && "text-primary"
                                 )}>
                                     {d.day}
                                 </div>
@@ -491,7 +497,7 @@ export function WorkScheduleGrid({ clubId, month, year, initialData, refreshData
                     })}
                 </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-border">
                 <SortableContext
                     items={localEmployees.map((e: any) => e.id)}
                     strategy={verticalListSortingStrategy}
@@ -513,26 +519,26 @@ export function WorkScheduleGrid({ clubId, month, year, initialData, refreshData
                 </SortableContext>
 
                 {/* Coverage Row */}
-                <tr className="bg-slate-50 font-bold border-t-2 border-slate-200">
-                    <td className="sticky left-0 z-20 bg-slate-50 p-4 text-xs font-bold uppercase tracking-widest text-slate-500 border-r border-slate-200 shadow-[1px_0_0_0_#e2e8f0]">
+                <tr className="bg-accent/30 font-bold border-t-2 border-border">
+                    <td className="sticky left-0 z-20 bg-card p-4 text-xs font-bold uppercase tracking-widest text-muted-foreground border-r border-border shadow-[1px_0_0_0_hsl(var(--border))]">
                         Покрытие (Д / Н)
                     </td>
                     {days.map(d => {
                         const isToday = d.dateStr === todayStr
                         return (
                             <td key={d.dateStr} className={cn(
-                                "p-2 border-r border-slate-200 text-center",
+                                "p-2 border-r border-border text-center",
                                 d.isOutside && "opacity-40",
-                                isToday && "bg-indigo-50/50"
+                                isToday && "bg-primary/10"
                             )}>
                                 <div className="flex flex-col gap-1">
                                     <span className={cn(
                                         "text-xs font-bold",
-                                        coverage[d.dateStr].DAY > 0 ? "text-emerald-600" : "text-slate-300"
+                                        coverage[d.dateStr].DAY > 0 ? "text-emerald-500" : "text-muted-foreground/30"
                                     )}>{coverage[d.dateStr].DAY} <Sun className="inline h-3 w-3 -mt-0.5" /></span>
                                     <span className={cn(
                                         "text-xs font-bold",
-                                        coverage[d.dateStr].NIGHT > 0 ? "text-indigo-600" : "text-slate-300"
+                                        coverage[d.dateStr].NIGHT > 0 ? "text-indigo-400" : "text-muted-foreground/30"
                                     )}>{coverage[d.dateStr].NIGHT} <Moon className="inline h-3 w-3 -mt-0.5" /></span>
                                 </div>
                             </td>
@@ -546,7 +552,7 @@ export function WorkScheduleGrid({ clubId, month, year, initialData, refreshData
 
 
     return (
-        <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+        <div className="overflow-hidden bg-card">
             <div 
                 ref={scrollContainerRef}
                 className="overflow-x-auto"
@@ -563,21 +569,21 @@ export function WorkScheduleGrid({ clubId, month, year, initialData, refreshData
                 )}
             </div>
 
-            <div className="flex flex-col gap-3 border-t border-slate-200 bg-slate-50 p-4 text-sm sm:flex-row sm:flex-wrap sm:gap-8 sm:items-center sm:p-6">
+            <div className="flex flex-col gap-3 border-t border-border bg-accent/30 p-4 text-sm sm:flex-row sm:flex-wrap sm:gap-8 sm:items-center sm:p-6">
                 <div className="flex items-center gap-2.5">
-                    <div className="w-4 h-4 rounded bg-emerald-500" />
-                    <span className="font-bold text-slate-700">Дневная смена</span>
-                    <span className="text-slate-400 font-medium">({clubSettings?.day_start_hour || '09'}:00 - {clubSettings?.night_start_hour || '21'}:00)</span>
+                    <div className="w-4 h-4 rounded bg-amber-500/20 border border-amber-500/50" />
+                    <span className="font-bold text-foreground">Дневная смена</span>
+                    <span className="text-muted-foreground font-medium">({clubSettings?.day_start_hour || '09'}:00 - {clubSettings?.night_start_hour || '21'}:00)</span>
                 </div>
                 <div className="flex items-center gap-2.5">
-                    <div className="w-4 h-4 rounded bg-indigo-500" />
-                    <span className="font-bold text-slate-700">Ночная смена</span>
-                    <span className="text-slate-400 font-medium">({clubSettings?.night_start_hour || '21'}:00 - {clubSettings?.day_start_hour || '09'}:00)</span>
+                    <div className="w-4 h-4 rounded bg-indigo-500/20 border border-indigo-500/50" />
+                    <span className="font-bold text-foreground">Ночная смена</span>
+                    <span className="text-muted-foreground font-medium">({clubSettings?.night_start_hour || '21'}:00 - {clubSettings?.day_start_hour || '09'}:00)</span>
                 </div>
                 {!readOnly && (
                     <div className="flex items-center gap-2.5">
-                        <div className="w-4 h-4 rounded border-2 border-slate-200 border-dashed" />
-                        <span className="font-medium text-slate-400">Выходной (Кликните для выбора)</span>
+                        <div className="w-4 h-4 rounded border-2 border-border border-dashed" />
+                        <span className="font-medium text-muted-foreground">Выходной (Кликните для выбора)</span>
                     </div>
                 )}
             </div>

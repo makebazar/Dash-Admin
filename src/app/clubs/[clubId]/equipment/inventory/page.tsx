@@ -22,7 +22,6 @@ import {
     ChevronDown,
     ChevronRight
 } from "lucide-react"
-import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -54,6 +53,7 @@ import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { Textarea } from "@/components/ui/textarea"
 import { cn, formatLocalDate } from "@/lib/utils"
+import { PageShell } from "@/components/layout/PageShell"
 import { renderEquipmentIcon } from "@/lib/equipment-icons"
 import { EQUIPMENT_STATUS_LABELS, type EquipmentStatus } from "@/lib/equipment-status"
 
@@ -774,16 +774,17 @@ export default function EquipmentInventory() {
     // --- Stats calculation removed (now from server) ---
 
     return (
-        <div className="mx-auto max-w-[1600px] space-y-5 p-4 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:space-y-6 sm:p-6 sm:pb-[calc(6.5rem+env(safe-area-inset-bottom))] md:pb-8 lg:p-8">
+        <PageShell maxWidth="5xl">
+            <div className="space-y-8 pb-28 sm:pb-12">
             {/* Header & Breadcrumbs */}
             <div className="flex flex-col gap-4">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between mb-8">
                     <div className="min-w-0">
-                        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Инвентаризация</h1>
-                        <p className="mt-1 text-sm text-muted-foreground sm:text-base">База данных оборудования и периферии</p>
+                        <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-slate-900 truncate">Инвентаризация</h1>
+                        <p className="text-slate-500 text-lg mt-2">База данных оборудования и периферии</p>
                     </div>
                     <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap lg:justify-end">
-                        <Button asChild variant="outline" className="hidden w-full md:inline-flex md:w-auto">
+                        <Button asChild variant="outline" className="hidden w-full md:inline-flex md:w-auto rounded-xl h-11 px-6 font-medium">
                             <Link href={`/clubs/${clubId}/equipment`}>
                                 <ChevronLeft className="mr-2 h-4 w-4" />
                                 Назад
@@ -796,10 +797,10 @@ export default function EquipmentInventory() {
                             className="hidden"
                             onChange={handleImportFile}
                         />
-                        <Button variant="outline" onClick={() => setIsImportExportDialogOpen(true)} className="w-full sm:w-auto">
+                        <Button variant="outline" onClick={() => setIsImportExportDialogOpen(true)} className="w-full sm:w-auto rounded-xl h-11 px-6 font-medium">
                             <Download className="mr-2 h-4 w-4" /> Импорт / Экспорт
                         </Button>
-                        <Button onClick={handleCreate} className="w-full bg-primary text-primary-foreground shadow-md hover:bg-primary/90 sm:w-auto">
+                        <Button onClick={handleCreate} className="w-full bg-slate-900 text-white shadow-sm hover:bg-slate-800 sm:w-auto rounded-xl h-11 px-6 font-medium">
                             <Plus className="mr-2 h-4 w-4" />
                             Добавить оборудование
                         </Button>
@@ -811,8 +812,8 @@ export default function EquipmentInventory() {
 
             {/* Dashboard Stats (New) */}
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <Card className="shadow-sm border-none bg-white">
-                    <CardContent className="flex items-center justify-between p-4 sm:p-6">
+                <div className="bg-white rounded-3xl border border-slate-200 shadow-sm">
+                    <div className="flex items-center justify-between p-6 sm:p-8">
                         <div>
                             <p className="text-sm font-medium text-muted-foreground">Всего единиц</p>
                             <h3 className="text-2xl font-bold mt-1">{inventoryStats.total}</h3>
@@ -820,10 +821,10 @@ export default function EquipmentInventory() {
                         <div className="p-3 bg-blue-50 text-blue-600 rounded-xl">
                             <Box className="h-6 w-6" />
                         </div>
-                    </CardContent>
-                </Card>
-                <Card className="shadow-sm border-none bg-white">
-                    <CardContent className="flex items-center justify-between p-4 sm:p-6">
+                    </div>
+                </div>
+                <div className="bg-white rounded-3xl border border-slate-200 shadow-sm">
+                    <div className="flex items-center justify-between p-6 sm:p-8">
                         <div>
                             <p className="text-sm font-medium text-muted-foreground">На складе</p>
                             <h3 className="text-2xl font-bold mt-1 text-amber-600">{inventoryStats.storage}</h3>
@@ -831,10 +832,10 @@ export default function EquipmentInventory() {
                         <div className="p-3 bg-amber-50 text-amber-600 rounded-xl">
                             <Archive className="h-6 w-6" />
                         </div>
-                    </CardContent>
-                </Card>
-                <Card className="shadow-sm border-none bg-white">
-                    <CardContent className="flex items-center justify-between p-4 sm:p-6">
+                    </div>
+                </div>
+                <div className="bg-white rounded-3xl border border-slate-200 shadow-sm">
+                    <div className="flex items-center justify-between p-6 sm:p-8">
                         <div>
                             <p className="text-sm font-medium text-muted-foreground">Просрочена чистка</p>
                             <h3 className="text-2xl font-bold mt-1 text-rose-600">{inventoryStats.overdue_tasks}</h3>
@@ -842,10 +843,10 @@ export default function EquipmentInventory() {
                         <div className="p-3 bg-rose-50 text-rose-600 rounded-xl">
                             <Clock3 className="h-6 w-6" />
                         </div>
-                    </CardContent>
-                </Card>
-                <Card className="shadow-sm border-none bg-white">
-                    <CardContent className="flex items-center justify-between p-4 sm:p-6">
+                    </div>
+                </div>
+                <div className="bg-white rounded-3xl border border-slate-200 shadow-sm">
+                    <div className="flex items-center justify-between p-6 sm:p-8">
                         <div>
                             <p className="text-sm font-medium text-muted-foreground">С проблемами</p>
                             <h3 className="text-2xl font-bold mt-1 text-orange-600">{inventoryStats.active_issues}</h3>
@@ -853,25 +854,25 @@ export default function EquipmentInventory() {
                         <div className="p-3 bg-orange-50 text-orange-600 rounded-xl">
                             <AlertCircle className="h-6 w-6" />
                         </div>
-                    </CardContent>
-                </Card>
+                    </div>
+                </div>
             </div>
 
             {/* Advanced Filters Bar */}
-            <div className="flex flex-col gap-4 bg-white p-4 rounded-xl shadow-sm border">
+            <div className="flex flex-col gap-4 bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
                 <div className="flex flex-col gap-4">
                     <div className="relative w-full">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                         <Input
                             placeholder="Поиск по названию, серийному номеру..."
-                            className="pl-9 bg-slate-50 border-slate-200"
+                            className="h-12 pl-10 bg-slate-50/50 border-slate-200 rounded-xl font-medium text-slate-900 focus:bg-white"
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
                         />
                     </div>
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-[repeat(4,minmax(0,160px))_auto] xl:items-center">
                         <Select value={typeFilter} onValueChange={handleFilterChange(setTypeFilter)}>
-                            <SelectTrigger className="w-full bg-slate-50 border-slate-200">
+                            <SelectTrigger className="w-full h-11 bg-slate-50/50 border-slate-200 rounded-xl font-medium text-slate-900">
                                 <SelectValue placeholder="Тип оборудования" />
                             </SelectTrigger>
                             <SelectContent>
@@ -883,7 +884,7 @@ export default function EquipmentInventory() {
                         </Select>
 
                         <Select value={zoneFilter} onValueChange={handleFilterChange(setZoneFilter)}>
-                            <SelectTrigger className="w-full bg-slate-50 border-slate-200">
+                            <SelectTrigger className="w-full h-11 bg-slate-50/50 border-slate-200 rounded-xl font-medium text-slate-900">
                                 <SelectValue placeholder="Зона" />
                             </SelectTrigger>
                             <SelectContent>
@@ -895,7 +896,7 @@ export default function EquipmentInventory() {
                         </Select>
 
                         <Select value={workstationFilter} onValueChange={handleFilterChange(setWorkstationFilter)}>
-                            <SelectTrigger className="w-full bg-slate-50 border-slate-200">
+                            <SelectTrigger className="w-full h-11 bg-slate-50/50 border-slate-200 rounded-xl font-medium text-slate-900">
                                 <SelectValue placeholder="Место" />
                             </SelectTrigger>
                             <SelectContent>
@@ -908,7 +909,7 @@ export default function EquipmentInventory() {
                         </Select>
 
                         <Select value={statusFilter} onValueChange={handleFilterChange(setStatusFilter)}>
-                            <SelectTrigger className="w-full bg-slate-50 border-slate-200">
+                            <SelectTrigger className="w-full h-11 bg-slate-50/50 border-slate-200 rounded-xl font-medium text-slate-900">
                                 <SelectValue placeholder="Статус" />
                             </SelectTrigger>
                             <SelectContent>
@@ -920,7 +921,7 @@ export default function EquipmentInventory() {
                             </SelectContent>
                         </Select>
 
-                        <Button variant="ghost" className="w-full justify-center xl:w-auto" onClick={() => {
+                        <Button variant="ghost" className="w-full justify-center xl:w-auto h-11 rounded-xl font-medium text-slate-500 hover:text-slate-900 hover:bg-slate-100" onClick={() => {
                             setSearch("")
                             setTypeFilter("all")
                             setZoneFilter("all")
@@ -955,8 +956,8 @@ export default function EquipmentInventory() {
             </div>
 
             {/* Data Table */}
-            <Card className="border-none shadow-sm overflow-hidden">
-                <div className="space-y-3 p-3 md:hidden">
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+                <div className="space-y-4 p-4 sm:p-6 md:hidden">
                     {isLoading ? (
                         <div className="flex h-40 flex-col items-center justify-center text-center">
                             <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -972,7 +973,7 @@ export default function EquipmentInventory() {
                             const overdueCount = group.items.filter(i => isCleaningOverdue(i)).length
 
                             return (
-                                <div key={groupId} className="overflow-hidden rounded-xl border bg-white">
+                                <div key={groupId} className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
                                     <div className="flex items-start gap-3 p-4" onClick={() => toggleGroup(groupId)}>
                                         <div className="pt-1" onClick={(e) => e.stopPropagation()}>
                                             <input
@@ -1005,12 +1006,12 @@ export default function EquipmentInventory() {
                                     </div>
 
                                     {isExpanded && (
-                                        <div className="space-y-3 border-t bg-slate-50/70 p-3">
+                                        <div className="space-y-4 border-t border-slate-100 bg-slate-50/50 p-4 sm:p-6">
                                             {group.items.map((item) => (
                                                 <div
                                                     key={item.id}
                                                     className={cn(
-                                                        "rounded-xl border bg-white p-3 shadow-sm",
+                                                        "rounded-2xl border bg-white p-4 shadow-sm hover:shadow-md transition-shadow cursor-pointer",
                                                         selectedIds.has(item.id) && "border-indigo-200 bg-indigo-50/40",
                                                         !selectedIds.has(item.id) && (item.open_issues_count || 0) > 0 && "border-orange-200"
                                                     )}
@@ -1100,7 +1101,7 @@ export default function EquipmentInventory() {
                 <div className="hidden overflow-x-auto md:block">
                     <Table>
                         {!isGrouped && (
-                            <TableHeader className="bg-slate-50">
+                            <TableHeader className="bg-slate-50/50">
                                 <TableRow>
                                     <TableHead className="w-[40px]">
                                         <input 
@@ -1188,14 +1189,13 @@ export default function EquipmentInventory() {
 
                                             {/* Group Items */}
                                             {isExpanded && (
-                                                <TableRow className="bg-white border-b border-slate-200">
-                                                    <TableCell className="w-[40px]" />
-                                                    <TableCell className="text-[10px] font-black uppercase tracking-widest text-slate-500 py-2">Оборудование</TableCell>
-                                                    <TableCell className="text-[10px] font-black uppercase tracking-widest text-slate-500 py-2">Идентификация</TableCell>
-                                                    <TableCell className="text-[10px] font-black uppercase tracking-widest text-slate-500 py-2">Расположение</TableCell>
-                                                    <TableCell className="text-[10px] font-black uppercase tracking-widest text-slate-500 py-2">Состояние</TableCell>
-                                                    <TableCell className="text-[10px] font-black uppercase tracking-widest text-slate-500 py-2">Гарантия</TableCell>
-                                                </TableRow>
+                                                <div className="bg-white border-b border-slate-200 hidden md:grid grid-cols-6 gap-4 px-6 py-2">
+                                                    <div className="col-span-2 text-[10px] font-black uppercase tracking-widest text-slate-500">Оборудование</div>
+                                                    <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Идентификация</div>
+                                                    <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Расположение</div>
+                                                    <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Состояние</div>
+                                                    <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Гарантия</div>
+                                                </div>
                                             )}
                                             {isExpanded && group.items.map((item) => (
                                                 <TableRow 
@@ -1374,7 +1374,7 @@ export default function EquipmentInventory() {
                                             variant={page === pageNum ? "default" : "outline"}
                                             size="sm"
                                             onClick={() => setPage(pageNum)}
-                                            className="h-8 w-8 p-0 bg-white data-[variant=default]:bg-primary"
+                                            className={cn("h-8 w-8 p-0 bg-white", page === pageNum ? "bg-slate-900 text-white" : "")}
                                         >
                                             {pageNum}
                                         </Button>
@@ -1406,7 +1406,7 @@ export default function EquipmentInventory() {
                         </div>
                     </div>
                 )}
-            </Card>
+            </div>
 
             </div>
 
@@ -1614,7 +1614,7 @@ export default function EquipmentInventory() {
                                                 is_active: val !== "WRITTEN_OFF",
                                             }))}
                                         >
-                                            <SelectTrigger className="bg-slate-50">
+                                            <SelectTrigger className="h-12 bg-slate-50/50 border-slate-200 rounded-xl font-medium text-slate-900 focus:bg-white">
                                                 <SelectValue placeholder="Выберите статус" />
                                             </SelectTrigger>
                                             <SelectContent>
@@ -1774,6 +1774,7 @@ export default function EquipmentInventory() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
-        </div>
+            </div>
+        </PageShell>
     )
 }

@@ -100,7 +100,7 @@ export function WarehousesTab({ warehouses, employees, currentUserId }: Warehous
 
     return (
         <div className="space-y-4">
-            <div className="flex justify-between items-center bg-white p-4 rounded-lg border shadow-sm">
+            <div className="flex justify-between items-center bg-card p-4 rounded-lg border shadow-sm">
                 <h3 className="font-medium flex items-center gap-2">
                     <WarehouseIcon className="h-4 w-4" />
                     Складские помещения
@@ -113,7 +113,7 @@ export function WarehousesTab({ warehouses, employees, currentUserId }: Warehous
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {warehouses.map(wh => (
-                    <div key={wh.id} className="bg-white border rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow group">
+                    <div key={wh.id} className="bg-card border rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow group">
                         <div className="flex justify-between items-center mb-4">
                             <div className="flex items-center gap-3">
                                 <div className="h-10 w-10 bg-blue-50 text-blue-600 rounded-lg flex items-center justify-center">
@@ -125,20 +125,20 @@ export function WarehousesTab({ warehouses, employees, currentUserId }: Warehous
                                 </div>
                             </div>
                             <div className="flex gap-1">
-                                <Button aria-label={`Редактировать склад ${wh.name}`} variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-slate-700 hover:bg-slate-50" onClick={() => openEdit(wh)}>
+                                <Button aria-label={`Редактировать склад ${wh.name}`} variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground/70 hover:text-foreground hover:bg-muted" onClick={() => openEdit(wh)}>
                                     <Pencil className="h-4 w-4" />
                                 </Button>
                                 {!wh.is_default && (
-                                    <Button aria-label={`Удалить склад ${wh.name}`} variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50" onClick={() => handleDelete(wh.id)}>
+                                    <Button aria-label={`Удалить склад ${wh.name}`} variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground/70 hover:text-red-600 hover:bg-red-50" onClick={() => handleDelete(wh.id)}>
                                         <Trash2 className="h-4 w-4" />
                                     </Button>
                                 )}
                             </div>
                         </div>
                         
-                        <div className="space-y-3 text-sm text-slate-600">
+                        <div className="space-y-3 text-sm text-muted-foreground">
                             <div className="flex items-center gap-2">
-                                <Info className="h-4 w-4 text-slate-400" />
+                                <Info className="h-4 w-4 text-muted-foreground/70" />
                                 <span>Тип: {wh.type === 'GENERAL' ? 'Общий' : wh.type}</span>
                             </div>
                             {wh.shift_accountability_enabled && wh.shift_zone_key && (
@@ -146,7 +146,7 @@ export function WarehousesTab({ warehouses, employees, currentUserId }: Warehous
                                     <Badge variant="outline" className="text-[10px]">
                                         {wh.shift_zone_key === 'BAR' ? 'Бар' : wh.shift_zone_key === 'FRIDGE' ? 'Холодильник' : wh.shift_zone_key === 'SHOWCASE' ? 'Витрина' : 'Подсобка'}
                                     </Badge>
-                                    <span className="text-xs text-slate-500">Участвует в сменной ответственности</span>
+                                    <span className="text-xs text-muted-foreground">Участвует в сменной ответственности</span>
                                 </div>
                             )}
                         </div>
@@ -154,7 +154,7 @@ export function WarehousesTab({ warehouses, employees, currentUserId }: Warehous
                 ))}
                 
                 {warehouses.length === 0 && (
-                    <div className="col-span-full py-12 text-center text-muted-foreground bg-slate-50 rounded-xl border border-dashed">
+                    <div className="col-span-full py-12 text-center text-muted-foreground bg-muted rounded-xl border border-dashed">
                         <WarehouseIcon className="h-12 w-12 mx-auto mb-3 opacity-20" />
                         <p>Складов пока нет. Создайте первый склад.</p>
                     </div>

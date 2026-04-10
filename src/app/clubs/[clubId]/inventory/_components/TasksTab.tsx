@@ -33,7 +33,7 @@ export function TasksTab({ tasks, currentUserId }: TasksTabProps) {
 
     if (tasks.length === 0) {
         return (
-            <div className="flex flex-col items-center justify-center h-64 border rounded-lg bg-white text-muted-foreground">
+            <div className="flex flex-col items-center justify-center h-64 border rounded-lg bg-card text-muted-foreground">
                 <CheckCircle2 className="h-12 w-12 mb-4 text-green-500/50" />
                 <p className="text-lg font-medium">Все задачи выполнены!</p>
                 <p className="text-sm">На данный момент нет активных задач по складу.</p>
@@ -45,7 +45,7 @@ export function TasksTab({ tasks, currentUserId }: TasksTabProps) {
         <div className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {tasks.map(task => (
-                    <div key={task.id} className="bg-white border rounded-lg p-4 shadow-sm flex flex-col justify-between">
+                    <div key={task.id} className="bg-card border rounded-lg p-4 shadow-sm flex flex-col justify-between">
                         <div>
                             <div className="flex justify-between items-start mb-2">
                                 <Badge variant={task.priority === 'HIGH' ? 'destructive' : 'secondary'}>
@@ -61,15 +61,15 @@ export function TasksTab({ tasks, currentUserId }: TasksTabProps) {
                             <p className="text-sm text-muted-foreground mb-4">{task.description}</p>
                             
                             {task.product_name && (
-                                <div className="bg-slate-50 p-2 rounded text-sm mb-4 flex items-center">
-                                    <Package className="h-4 w-4 mr-2 text-slate-500" />
+                                <div className="bg-muted p-2 rounded text-sm mb-4 flex items-center">
+                                    <Package className="h-4 w-4 mr-2 text-muted-foreground" />
                                     <span>Товар: <strong>{task.product_name}</strong></span>
                                 </div>
                             )}
                         </div>
 
                         <Button 
-                            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white" 
+                            className="w-full bg-emerald-600 hover:bg-emerald-700 text-primary-foreground" 
                             onClick={() => handleComplete(task.id)}
                             disabled={isPending}
                         >

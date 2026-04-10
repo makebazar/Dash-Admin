@@ -259,8 +259,8 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
         return kpiData.kpi.map((kpi: any) => (
             <div key={kpi.id} className="space-y-4">
                 <div className="flex items-center gap-3 px-1">
-                    <div className="h-6 w-1 bg-purple-600 rounded-full" />
-                    <h2 className="text-xl font-black text-slate-800 dark:text-white uppercase tracking-tight">Выручка: {kpi.name}</h2>
+                    
+                    <h2 className="text-lg font-semibold tracking-tight text-foreground">Выручка: {kpi.name}</h2>
                 </div>
                 <KpiOverview
                     kpi={kpi}
@@ -274,15 +274,15 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                 />
             </div>
         ))
-    }, [kpiData?.kpi?.length, kpiData?.remaining_shifts, kpiData?.shifts_count, activeShift?.id])
+    }, [kpiData?.kpi, kpiData?.remaining_shifts, kpiData?.shifts_count, kpiData?.completed_shifts, kpiData?.planned_shifts, kpiData?.days_remaining, activeShift?.id])
 
     const checklistComponents = useMemo(() => {
         if (!kpiData?.checklist) return null
         return kpiData.checklist.map((checklist: any) => (
             <div key={checklist.id} className="space-y-4">
                 <div className="flex items-center gap-3 px-1">
-                    <div className="h-6 w-1 bg-fuchsia-600 rounded-full" />
-                    <h2 className="text-xl font-black text-slate-800 dark:text-white uppercase tracking-tight">Чек-лист</h2>
+                    
+                    <h2 className="text-lg font-semibold tracking-tight text-foreground">Чек-лист</h2>
                 </div>
                 <ChecklistKpiCard kpi={checklist} formatCurrency={formatCurrency} />
             </div>
@@ -354,8 +354,8 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
         return (
             <div className="space-y-4">
                 <div className="flex items-center gap-3 px-1">
-                    <div className="h-6 w-1 bg-indigo-600 rounded-full" />
-                    <h2 className="text-xl font-black text-slate-800 dark:text-white uppercase tracking-tight">Обслуживание</h2>
+                    
+                    <h2 className="text-lg font-semibold tracking-tight text-foreground">Обслуживание</h2>
                 </div>
                 <MaintenanceKpiCard kpi={kpiData.maintenance} formatCurrency={formatCurrency} />
             </div>
@@ -878,10 +878,10 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
 
     if (isLoading) {
         return (
-            <div className="flex h-screen items-center justify-center bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
+            <div className="flex h-screen items-center justify-center bg-background">
                 <div className="text-center">
-                    <Loader2 className="h-12 w-12 animate-spin text-purple-400 mx-auto" />
-                    <p className="mt-4 text-purple-200">Загрузка...</p>
+                    <Loader2 className="h-12 w-12 animate-spin text-muted-foreground mx-auto" />
+                    <p className="mt-4 text-sm text-muted-foreground">Загрузка...</p>
                 </div>
             </div>
         )
@@ -892,7 +892,7 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
             <div className="flex h-screen items-center justify-center">
                 <div className="text-center">
                     <h3 className="text-xl font-semibold">Клуб не найден</h3>
-                    <Link href="/employee/dashboard" className="mt-4 inline-block text-purple-500">
+                    <Link href="/employee/dashboard" className="mt-4 inline-block text-sm text-muted-foreground hover:text-foreground transition-colors">
                         ← Вернуться к списку клубов
                     </Link>
                 </div>
@@ -902,564 +902,377 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
 
     if (!currentUserId) {
         return (
-            <div className="flex h-screen items-center justify-center bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
+            <div className="flex h-screen items-center justify-center bg-background">
                 <div className="text-center">
-                    <Loader2 className="h-12 w-12 animate-spin text-purple-400 mx-auto" />
-                    <p className="mt-4 text-purple-200">Загрузка...</p>
+                    <Loader2 className="h-12 w-12 animate-spin text-muted-foreground mx-auto" />
+                    <p className="mt-4 text-sm text-muted-foreground">Загрузка...</p>
                 </div>
             </div>
         )
     }
 
     return (
-        <div className="w-full max-w-7xl mx-auto px-4 py-6 md:px-6 md:py-8 space-y-6 relative z-0">
+        <div className="w-full max-w-5xl mx-auto px-4 py-8 md:px-8 md:py-12 space-y-12 relative z-0">
             {/* Rework Alert Notification */}
-                {reworkTasksCount > 0 && (
-                    <Link href={`/employee/clubs/${clubId}/tasks?verification_status=REJECTED`} className="block group">
-                        <div className="relative overflow-hidden rounded-2xl bg-rose-500 p-4 text-white shadow-lg">
-                            <div className="absolute top-0 right-0 -mt-4 -mr-4 h-24 w-24 rounded-full bg-white/10" />
-                            <div className="flex flex-col gap-4 relative z-10">
-                                <div className="flex items-start gap-3">
-                                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/20">
-                                        <AlertCircle className="h-6 w-6 text-white" />
-                                    </div>
-                                    <div className="min-w-0 flex-1">
-                                        <h3 className="text-lg font-bold leading-tight">Доработка!</h3>
-                                        <p className="text-sm text-white/90 mt-1 leading-snug">
-                                            Админ вернул <span className="font-black underline decoration-2">{reworkTasksCount} задач(и)</span>. Исправьте их, чтобы не терять бонусы.
-                                        </p>
-                                    </div>
-                                </div>
-                                <div className="flex items-center justify-center gap-2 font-bold bg-white/20 px-6 py-3 rounded-xl text-base">
-                                    Исправить сейчас
-                                    <ChevronRight className="h-5 w-5" />
-                                </div>
+            {reworkTasksCount > 0 && (
+                <Link href={`/employee/clubs/${clubId}/tasks?verification_status=REJECTED`} className="block group">
+                    <div className="flex items-center justify-between rounded-xl bg-rose-500/10 border border-rose-500/20 p-4 transition-colors hover:bg-rose-500/20">
+                        <div className="flex items-start gap-3">
+                            <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-rose-500/20 text-rose-500">
+                                <AlertCircle className="h-4 w-4" />
+                            </div>
+                            <div className="space-y-1 pr-4">
+                                <p className="font-bold text-sm text-rose-500">Доработка ({reworkTasksCount})</p>
+                                <p className="text-xs text-rose-400/80 leading-relaxed max-w-2xl">
+                                    Ваша работа не прошла проверку. Руководитель или система контроля вернули задачи на исправление. Пожалуйста, исправьте недочеты, чтобы не потерять бонус за эффективность.
+                                </p>
                             </div>
                         </div>
-                    </Link>
-                )}
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-rose-500/10 text-rose-500 opacity-50 group-hover:opacity-100 transition-opacity shrink-0">
+                            <ChevronRight className="h-4 w-4" />
+                        </div>
+                    </div>
+                </Link>
+            )}
 
-                {/* Main Grid */}
-                <div className="grid gap-4 lg:gap-6 lg:grid-cols-3">
+            <div className="grid gap-12 lg:grid-cols-[1fr_320px]">
+                {/* Main Content */}
+                <div className="space-y-10">
+                    
+                    {/* Shift Control */}
+                    <section className="space-y-6">
+                        <div className="flex items-center justify-between">
+                            <h2 className="text-lg font-semibold tracking-tight text-foreground">Смена</h2>
+                            {activeShift && (
+                                <div className="flex items-center gap-2">
+                                    <span className="relative flex h-2 w-2">
+                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                                    </span>
+                                    <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">Активна</span>
+                                </div>
+                            )}
+                        </div>
 
-                    {/* Shift Control - Main Card */}
-                    <div className="lg:col-span-2 space-y-4">
-                        <Card className="overflow-hidden border-0 shadow-lg bg-gradient-to-br from-slate-900 via-purple-900 to-indigo-900 text-white relative">
-                            <div className="absolute inset-0 bg-[url('/grid.svg')] opacity-10 pointer-events-none" />
-                            <div className="relative z-10">
-                                <CardHeader className="pb-2">
-                                    <div className="flex items-center justify-between">
-                                        <CardTitle className="flex items-center gap-2 text-white/90">
-                                            <Clock className="h-5 w-5 text-purple-400" />
-                                            Управление сменой
-                                        </CardTitle>
-                                        {activeShift && (
-                                            <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/30">
-                                                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                                                <span className="text-sm font-medium text-emerald-400">Активна</span>
-                                            </div>
-                                        )}
+                        {activeShift ? (
+                            <div className="space-y-8 rounded-xl border bg-card p-6">
+                                <div className="flex flex-col items-center justify-center py-4">
+                                    <div className="flex items-baseline gap-1 font-mono tracking-tighter">
+                                        <span className="text-6xl md:text-7xl font-bold text-foreground">{liveDisplay.split(':')[0]}</span>
+                                        <span className="text-3xl md:text-5xl text-muted-foreground/30">:</span>
+                                        <span className="text-6xl md:text-7xl font-bold text-foreground">{liveDisplay.split(':')[1]}</span>
+                                        <span className="text-3xl md:text-5xl text-muted-foreground/30">:</span>
+                                        <span className="text-3xl md:text-5xl font-medium text-muted-foreground">{liveDisplay.split(':')[2]}</span>
                                     </div>
-                                </CardHeader>
-                                <CardContent className="pt-4">
-                                    {activeShift ? (
-                                        <div className="space-y-4">
-                                            {/* Live Timer */}
-                                            <div className="flex flex-col items-center justify-center py-6">
-                                                <div className="flex items-baseline gap-1 font-mono">
-                                                    <span className="text-4xl md:text-6xl font-bold text-white">{liveDisplay.split(':')[0]}</span>
-                                                    <span className="text-2xl md:text-4xl text-white/50">:</span>
-                                                    <span className="text-4xl md:text-6xl font-bold text-white">{liveDisplay.split(':')[1]}</span>
-                                                    <span className="text-2xl md:text-4xl text-white/50">:</span>
-                                                    <span className="text-2xl md:text-4xl font-medium text-purple-400">{liveDisplay.split(':')[2]}</span>
-                                                </div>
-                                                <p className="mt-2 text-white/60">
-                                                    Начало в {new Date(activeShift.check_in).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
-                                                </p>
+                                    <div className="mt-4 flex items-center gap-2 text-sm text-muted-foreground">
+                                        <span>Начало в {new Date(activeShift.check_in).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</span>
+                                        <span className="w-1 h-1 rounded-full bg-border" />
+                                        <span className="font-medium text-emerald-600 dark:text-emerald-400">+{formatCurrency(currentEarnings)}</span>
+                                    </div>
+                                </div>
 
-                                                {/* Live Earnings */}
-                                                <div className="mt-4 px-4 py-2 rounded-xl bg-white/10 border border-white/10">
-                                                    <div className="flex items-center gap-2">
-                                                        <Zap className="h-4 w-4 text-yellow-400" />
-                                                        <span className="text-xs text-white/70">Заработано за смену:</span>
-                                                        <span className="text-lg font-bold text-emerald-400">
-                                                            +{formatCurrency(currentEarnings)}
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            <Button
-                                                variant="destructive"
-                                                className="w-full h-12 text-base shadow-lg bg-red-600 hover:bg-red-700"
-                                                onClick={handleEndShiftClick}
-                                            >
-                                                {isActionLoading && !isReportModalOpen ? (
-                                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                                ) : (
-                                                    <LogOut className="mr-2 h-4 w-4" />
-                                                )}
-                                                Завершить смену
-                                            </Button>
-
-                                            <Button
-                                                variant="outline"
-                                                className="w-full h-auto py-3 text-sm border-white/20 bg-white/5 text-white"
-                                                onClick={() => setIsRequestWizardOpen(true)}
-                                            >
-                                                <div className="relative">
-                                                    <MessageSquare className="mr-2 h-4 w-4 shrink-0" />
-                                                    {unreadRequestsCount > 0 && (
-                                                        <span className="absolute -top-1 -right-1 flex h-3 w-3">
-                                                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75"></span>
-                                                            <span className="relative inline-flex rounded-full h-3 w-3 bg-purple-500 border border-white/20"></span>
-                                                        </span>
-                                                    )}
-                                                </div>
-                                                <span className="text-center">Связаться с руководством</span>
-                                            </Button>
-
-                                            <div className={cn(
-                                                "pt-2 border-t border-white/10 mt-2 grid gap-2",
-                                                club?.inventory_settings?.sales_capture_mode === 'SHIFT' ? "grid-cols-4" : "grid-cols-3"
-                                            )}>
-                                                {isBarBlockedByStartAcceptance && (
-                                                    <div className={cn(
-                                                        "col-span-full rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-3 text-[11px] text-amber-100"
-                                                    )}>
-                                                        Сначала завершите приемку остатков. Пока приемка не закрыта, продажи и действия по бару заблокированы.
-                                                    </div>
-                                                )}
-                                                {(hasPendingStartAcceptance || hasOpenZoneSnapshotDraft || hasPendingZoneStartAcceptance) && activeShift?.id && (
-                                                    <Button
-                                                        variant="outline"
-                                                        className="col-span-full h-11 rounded-xl border-amber-400/40 bg-amber-500/10 text-amber-100 hover:bg-amber-500/20 hover:text-white"
-                                                        onClick={() => {
-                                                            setStartedShiftId(activeShift.id)
-                                                            setIsOpenZoneSnapshotModalOpen(true)
-                                                        }}
-                                                    >
-                                                        {hasPendingZoneStartAcceptance && !hasOpenZoneSnapshotDraft ? "Начать приемку остатков" : "Вернуться к приемке"}
-                                                    </Button>
-                                                )}
-                                                <Button
-                                                    variant="ghost"
-                                                    className="w-full h-12 text-[10px] text-purple-300 rounded-xl"
-                                                    onClick={() => setIsSupplyWizardOpen(true)}
-                                                    disabled={isBarBlockedByStartAcceptance}
-                                                >
-                                                    <Zap className="mr-1.5 h-3.5 w-3.5" />
-                                                    Поставка
-                                                </Button>
-                                                {club?.inventory_settings?.sales_capture_mode === 'SHIFT' && (
-                                                    <Button
-                                                        variant="ghost"
-                                                        className="w-full h-12 text-[10px] text-emerald-300 rounded-xl"
-                                                        onClick={() => window.open(`/employee/clubs/${clubId}/pos`, '_blank', 'noopener,noreferrer')}
-                                                        disabled={isBarBlockedByStartAcceptance}
-                                                    >
-                                                        <ShoppingCart className="mr-1.5 h-3.5 w-3.5" />
-                                                        Продажи
-                                                    </Button>
-                                                )}
-                                                <Button
-                                                    variant="ghost"
-                                                    className="w-full h-12 text-[10px] text-red-300 rounded-xl"
-                                                    onClick={() => setIsWriteOffWizardOpen(true)}
-                                                    disabled={isBarBlockedByStartAcceptance}
-                                                >
-                                                    <Ban className="mr-1.5 h-3.5 w-3.5" />
-                                                    Списание
-                                                </Button>
-                                                <Button
-                                                    variant="ghost"
-                                                    className="w-full h-12 text-[10px] text-emerald-300 rounded-xl"
-                                                    onClick={() => setIsTransferWizardOpen(true)}
-                                                    disabled={isBarBlockedByStartAcceptance}
-                                                >
-                                                    <ArrowRightLeft className="mr-1.5 h-3.5 w-3.5" />
-                                                    Перемещение
-                                                </Button>
-                                            </div>
-                                        </div>
-                                    ) : (
-                                        <div className="py-6 space-y-4">
-                                            <div className="flex flex-col items-center justify-center">
-                                                <div className="h-24 w-24 rounded-full bg-white/5 border border-white/10 flex items-center justify-center mb-4">
-                                                    <CoffeeIcon className="h-10 w-10 text-white/40" />
-                                                </div>
-                                                <h3 className="text-lg font-medium text-white/80">Вы сейчас не на работе</h3>
-                                                <p className="text-sm text-white/50 mt-1">Начните смену для учёта времени</p>
-                                            </div>
-
-                                            <Button
-                                                className="w-full h-12 text-base bg-gradient-to-r from-emerald-500 to-green-600 shadow-lg"
-                                                onClick={handleStartShift}
-                                            >
-                                                {isActionLoading ? (
-                                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                                ) : (
-                                                    <LogIn className="mr-2 h-4 w-4" />
-                                                )}
-                                                Начать смену
-                                            </Button>
-
-                                            <div className="pt-2 border-t border-white/10 mt-2">
-                                                <Button
-                                                    variant="ghost"
-                                                    className="w-full h-12 text-[10px] text-white/60 rounded-xl"
-                                                    onClick={() => setIsRequestWizardOpen(true)}
-                                                >
-                                                <div className="relative">
-                                                    <MessageSquare className="mr-1.5 h-3.5 w-3.5" />
-                                                    {unreadRequestsCount > 0 && (
-                                                        <span className="absolute -top-1 -right-1 flex h-2 w-2">
-                                                            <span className="relative inline-flex rounded-full h-2 w-2 bg-purple-500"></span>
-                                                        </span>
-                                                    )}
-                                                </div>
-                                                Связаться с руководством
-                                                </Button>
-                                            </div>
+                                <div className="grid gap-3">
+                                    {isBarBlockedByStartAcceptance && (
+                                        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-600 dark:text-amber-400">
+                                            Завершите приемку остатков. Продажи и действия по бару заблокированы.
                                         </div>
                                     )}
-                                </CardContent>
-                            </div>
-                        </Card>
+                                    {(hasPendingStartAcceptance || hasOpenZoneSnapshotDraft || hasPendingZoneStartAcceptance) && activeShift?.id && (
+                                        <Button
+                                            variant="outline"
+                                            className="w-full h-11 text-amber-600 border-amber-200 bg-amber-50 hover:bg-amber-100 hover:text-amber-700 dark:border-amber-900 dark:bg-amber-950/30 dark:hover:bg-amber-900/50 dark:text-amber-400"
+                                            onClick={() => {
+                                                setStartedShiftId(activeShift.id)
+                                                setIsOpenZoneSnapshotModalOpen(true)
+                                            }}
+                                        >
+                                            {hasPendingZoneStartAcceptance && !hasOpenZoneSnapshotDraft ? "Начать приемку остатков" : "Вернуться к приемке"}
+                                        </Button>
+                                    )}
+                                    <Button
+                                        variant="default"
+                                        className="w-full h-12 text-sm font-semibold shadow-none"
+                                        onClick={handleEndShiftClick}
+                                    >
+                                        {isActionLoading && !isReportModalOpen ? (
+                                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                        ) : null}
+                                        Завершить смену
+                                    </Button>
+                                </div>
 
-                        {/* Warehouse/Restock Tasks Card */}
-                        {clubTasks.length > 0 && (
-                            <div className="space-y-4">
-                                <div className="flex items-center gap-3 px-1">
-                                    <div className="h-6 w-1 bg-blue-600 rounded-full" />
-                                    <h2 className="text-xl font-black text-slate-800 dark:text-white uppercase tracking-tight">Пополнение склада</h2>
+                                {/* Utilities */}
+                                <div className="pt-2">
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                                        <Button
+                                            variant="outline"
+                                            className="h-10 text-xs shadow-none border-border bg-card hover:bg-accent hover:text-accent-foreground"
+                                            onClick={() => setIsSupplyWizardOpen(true)}
+                                            disabled={isBarBlockedByStartAcceptance}
+                                        >
+                                            Поставка
+                                        </Button>
+                                        {club?.inventory_settings?.sales_capture_mode === 'SHIFT' && (
+                                            <Button
+                                                variant="outline"
+                                                className="h-10 text-xs shadow-none border-border bg-card hover:bg-accent hover:text-accent-foreground"
+                                                onClick={() => window.open(`/employee/clubs/${clubId}/pos`, '_blank', 'noopener,noreferrer')}
+                                                disabled={isBarBlockedByStartAcceptance}
+                                            >
+                                                Продажи
+                                            </Button>
+                                        )}
+                                        <Button
+                                            variant="outline"
+                                            className="h-10 text-xs shadow-none border-border bg-card hover:bg-accent hover:text-accent-foreground"
+                                            onClick={() => setIsWriteOffWizardOpen(true)}
+                                            disabled={isBarBlockedByStartAcceptance}
+                                        >
+                                            Списание
+                                        </Button>
+                                        <Button
+                                            variant="outline"
+                                            className="h-10 text-xs shadow-none border-border bg-card hover:bg-accent hover:text-accent-foreground"
+                                            onClick={() => setIsTransferWizardOpen(true)}
+                                            disabled={isBarBlockedByStartAcceptance}
+                                        >
+                                            Перемещение
+                                        </Button>
+                                    </div>
+                                    <Button
+                                        variant="ghost"
+                                        className="w-full mt-2 h-10 text-xs text-muted-foreground border border-transparent hover:bg-accent hover:border-border hover:text-foreground transition-all"
+                                        onClick={() => setIsRequestWizardOpen(true)}
+                                    >
+                                        Связаться с руководством
+                                        {unreadRequestsCount > 0 && (
+                                            <Badge variant="secondary" className="ml-2 h-4 px-1 text-[9px] bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400">
+                                                {unreadRequestsCount}
+                                            </Badge>
+                                        )}
+                                    </Button>
                                 </div>
-                                <div className="grid gap-4">
-                                    {clubTasks.map((task: any) => (
-                                        <Card key={task.id} className="border-0 shadow-lg bg-white dark:bg-slate-800/50 overflow-hidden relative group">
-                                            <div className="absolute inset-0 bg-blue-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
-                                            <CardContent className="p-5 relative z-10">
-                                                <div className="flex items-start justify-between gap-4">
-                                                    <div className="space-y-1 min-w-0">
-                                                        <div className="flex items-center gap-2">
-                                                            <div className="p-1.5 rounded-lg bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
-                                                                <ShoppingCart className="h-4 w-4" />
-                                                            </div>
-                                                            <span className="text-[10px] font-black uppercase tracking-widest text-blue-600 dark:text-blue-400">Нужно выставить</span>
-                                                        </div>
-                                                        <h3 className="text-lg font-black text-slate-800 dark:text-white truncate mt-1">
-                                                            {task.title.replace('Пополнить: ', '')}
-                                                        </h3>
-                                                        <div className="flex flex-wrap gap-2 mt-1">
-                                                            {task.source_warehouse_name ? (
-                                                                <>
-                                                                    <div className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-[10px] font-bold text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 uppercase">
-                                                                        ОТКУДА: {task.source_warehouse_name}
-                                                                    </div>
-                                                                    <div className="px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-900/20 text-[10px] font-bold text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-blue-800/50 uppercase">
-                                                                        КУДА: {task.target_warehouse_name}
-                                                                    </div>
-                                                                </>
-                                                            ) : task.description.includes('Из:') ? (
-                                                                <>
-                                                                    <div className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-[10px] font-bold text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 uppercase">
-                                                                        ОТКУДА: {task.description.split('Из: ')[1]?.split(' →')[0]}
-                                                                    </div>
-                                                                    <div className="px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-900/20 text-[10px] font-bold text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-blue-800/50 uppercase">
-                                                                        КУДА: {task.description.split('→ В: ')[1]?.split('. ')[0]}
-                                                                    </div>
-                                                                </>
-                                                            ) : (
-                                                                <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                                                                    {task.description}
-                                                                </p>
-                                                            )}
-                                                        </div>
-                                                        {(task.source_warehouse_name || task.description.includes('Из:')) && (
-                                                            <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 leading-relaxed mt-1">
-                                                                {task.description.split('. ').slice(-1)[0]}
-                                                            </p>
-                                                        )}
-                                                    </div>
-                                                    
-                                                    <Button
-                                                        size="sm"
-                                                        className="h-10 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold shadow-lg shadow-blue-900/20 shrink-0"
-                                                        onClick={() => handleCompleteClubTask(task.id)}
-                                                        disabled={isUpdatingTask === task.id}
-                                                    >
-                                                        {isUpdatingTask === task.id ? <Loader2 className="h-4 w-4 animate-spin" /> : "Выполнено"}
-                                                    </Button>
-                                                </div>
-                                            </CardContent>
-                                        </Card>
-                                    ))}
+                            </div>
+                        ) : (
+                            <div className="py-12 space-y-6 flex flex-col items-center justify-center rounded-xl border bg-card">
+                                <div className="text-center space-y-1">
+                                    <h3 className="text-base font-medium text-foreground">Смена закрыта</h3>
+                                    <p className="text-sm text-muted-foreground">Начните смену для учёта рабочего времени</p>
                                 </div>
+
+                                <Button
+                                    className="h-11 px-8 shadow-none"
+                                    onClick={handleStartShift}
+                                >
+                                    {isActionLoading ? (
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    ) : null}
+                                    Начать смену
+                                </Button>
                             </div>
                         )}
-                    </div>
+                    </section>
 
-
-                    {/* Stats Column */}
-                    <div className="space-y-4">
-                        {/* Maintenance Tasks */}
-                        <Link href={`/employee/clubs/${clubId}/tasks`} className="block">
-                            <Card className={cn(
-                                "border-0 shadow-lg",
-                                reworkTasksCount > 0
-                                    ? "bg-gradient-to-br from-rose-500 to-red-600 text-white"
-                                    : pendingTasksCount > 0
-                                        ? "bg-gradient-to-br from-amber-500 to-orange-600 text-white"
-                                        : "bg-white dark:bg-slate-800/50"
-                            )}>
-                                <CardContent className="pt-6">
-                                    <div className="flex items-start justify-between">
-                                        <div>
-                                            <p className={cn(
-                                                "text-sm font-medium",
-                                                (pendingTasksCount > 0 || reworkTasksCount > 0) ? "text-white/80" : "text-muted-foreground"
-                                            )}>Задачи по обслуживанию</p>
-                                            <p className="text-3xl font-bold mt-1">
-                                                {reworkTasksCount > 0 ? reworkTasksCount : pendingTasksCount} задач
-                                            </p>
-                                            <p className={cn(
-                                                "text-sm mt-1",
-                                                reworkTasksCount > 0 
-                                                    ? "text-white font-black underline underline-offset-4" 
-                                                    : pendingTasksCount > 0 
-                                                        ? "text-white/70" 
-                                                        : "text-emerald-500 font-medium"
-                                            )}>
-                                                {reworkTasksCount > 0 
-                                                    ? "ЕСТЬ ДОРАБОТКА!" 
-                                                    : pendingTasksCount > 0 
-                                                        ? "Требуют внимания" 
-                                                        : "Все оборудование чистое"}
-                                            </p>
-                                        </div>
-                                        <div className={cn(
-                                            "p-3 rounded-xl",
-                                            (pendingTasksCount > 0 || reworkTasksCount > 0) ? "bg-white/20" : "bg-amber-500/10"
-                                        )}>
-                                            {reworkTasksCount > 0 ? (
-                                                <AlertCircle className="h-6 w-6 text-white" />
-                                            ) : (
-                                                <Brush className={cn(
-                                                    "h-6 w-6",
-                                                    pendingTasksCount > 0 ? "text-white" : "text-amber-500"
-                                                )} />
-                                            )}
-                                        </div>
-                                    </div>
-                                </CardContent>
-                            </Card>
-                        </Link>
-
-                        {/* Monthly Salary */}
-                        <Card className="border-0 shadow-lg bg-gradient-to-br from-purple-500 to-indigo-600 text-white">
-                            <div className="absolute inset-0 bg-white/5" />
-                            <CardContent className="pt-6 relative z-10">
-                                <div className="flex items-start justify-between">
-                                    <div>
-                                        <p className="text-sm font-medium text-white/70">Зарплата (ориентировочно)</p>
-                                        <p className="text-3xl font-bold mt-1">{formatCurrency(stats?.month_earnings || 0)}</p>
-                                        
-                                        {stats?.breakdown && (
-                                            <div className="mt-4 space-y-1.5 pt-4 border-t border-white/10">
-                                                <div className="flex justify-between text-[11px] text-white/60">
-                                                    <span>Ставка ({stats.total_hours?.toFixed(1) || (stats.today_hours + stats.week_hours)?.toFixed(1)} ч):</span>
-                                                    <span className="font-bold text-white">{formatCurrency(stats.breakdown.base_salary)}</span>
-                                                </div>
-                                                
-                                                {stats.breakdown.shift_bonuses > 0 && (
-                                                    <div className="flex justify-between text-[11px] text-white/60">
-                                                        <span>Бонусы смен:</span>
-                                                        <span className="font-bold text-emerald-300">+{formatCurrency(stats.breakdown.shift_bonuses)}</span>
-                                                    </div>
-                                                )}
-
-                                                {stats.breakdown.revenue_kpi_breakdown?.filter((b: any) => !b.is_virtual).map((bonus: any, idx: number) => (
-                                                    <div key={`real-${idx}`} className="flex justify-between text-[11px] text-white/60">
-                                                        <span>{bonus.name} ({bonus.metPercent}%):</span>
-                                                        <span className="font-bold text-emerald-300">+{formatCurrency(bonus.amount)}</span>
-                                                    </div>
-                                                ))}
-
-                                                {stats.breakdown.checklist_bonuses > 0 && (
-                                                    <div className="flex justify-between text-[11px] text-white/60">
-                                                        <span>Чек-листы (мес):</span>
-                                                        <span className="font-bold text-emerald-300">+{formatCurrency(stats.breakdown.checklist_bonuses)}</span>
-                                                    </div>
-                                                )}
-
-                                                {stats.breakdown.maintenance_bonuses > 0 && (
-                                                    <div className="flex justify-between text-[11px] text-white/60">
-                                                        <span>Обслуживание:</span>
-                                                        <span className="font-bold text-emerald-300">+{formatCurrency(stats.breakdown.maintenance_bonuses)}</span>
-                                                    </div>
-                                                )}
-
-                                                {stats.breakdown.leaderboard_bonuses?.filter((bonus: any) => !bonus.is_virtual).map((bonus: any, idx: number) => (
-                                                    <div key={`leaderboard-real-${idx}`} className="flex justify-between text-[11px] text-white/60">
-                                                        <span>{bonus.name} (#{bonus.rank}):</span>
-                                                        <span className="font-bold text-emerald-300">+{formatCurrency(bonus.amount)}</span>
-                                                    </div>
-                                                ))}
-
-                                                {(stats.breakdown.maintenance_penalty || 0) > 0 && (
-                                                    <div className="flex justify-between text-[11px] text-white/70">
-                                                        <span>Штраф за просрочку:</span>
-                                                        <span className="font-bold text-rose-300">-{formatCurrency(stats.breakdown.maintenance_penalty || 0)}</span>
-                                                    </div>
-                                                )}
-
-                                                {(stats.breakdown.bar_deductions || 0) > 0 && (
-                                                    <div className="flex justify-between text-[11px] text-white/70">
-                                                        <span>Бар в счет ЗП:</span>
-                                                        <span className="font-bold text-rose-300">-{formatCurrency(stats.breakdown.bar_deductions || 0)}</span>
-                                                    </div>
-                                                )}
-
-                                                {stats.breakdown.virtual_bonuses && stats.breakdown.virtual_bonuses.total > 0 && (
-                                                    <div className="mt-2 pt-2 border-t border-white/5 space-y-1">
-                                                        <p className="text-[9px] uppercase tracking-wider text-white/40 font-bold">На бонусный баланс</p>
-                                                        {stats.breakdown.virtual_bonuses.checklist > 0 && (
-                                                            <div className="flex justify-between text-[11px] text-white/60">
-                                                                <span>Чек-листы:</span>
-                                                                <span className="font-bold text-amber-300">+{stats.breakdown.virtual_bonuses.checklist} Б</span>
-                                                            </div>
-                                                        )}
-                                                        {stats.breakdown.virtual_bonuses.maintenance > 0 && (
-                                                            <div className="flex justify-between text-[11px] text-white/60">
-                                                                <span>Обслуживание:</span>
-                                                                <span className="font-bold text-amber-300">+{stats.breakdown.virtual_bonuses.maintenance} Б</span>
-                                                            </div>
-                                                        )}
-                                                        {(stats.breakdown.virtual_bonuses.leaderboard || 0) > 0 && (
-                                                            <div className="flex justify-between text-[11px] text-white/60">
-                                                                <span>Рейтинг:</span>
-                                                                <span className="font-bold text-amber-300">+{stats.breakdown.virtual_bonuses.leaderboard} Б</span>
-                                                            </div>
-                                                        )}
-                                                        {(stats.breakdown.virtual_bonuses.maintenance_penalty || 0) > 0 && (
-                                                            <div className="flex justify-between text-[11px] text-white/60">
-                                                                <span>Штраф обслуж.:</span>
-                                                                <span className="font-bold text-rose-300">-{stats.breakdown.virtual_bonuses.maintenance_penalty} Б</span>
-                                                            </div>
-                                                        )}
-                                                        {stats.breakdown.revenue_kpi_breakdown?.filter(b => b.is_virtual).map((bonus, idx) => (
-                                                            <div key={`virtual-${idx}`} className="flex justify-between text-[11px] text-white/60">
-                                                                <span>{bonus.name} ({bonus.metPercent}%):</span>
-                                                                <span className="font-bold text-amber-300">+{bonus.amount} Б</span>
-                                                            </div>
-                                                        ))}
-                                                    </div>
+                    {/* Warehouse Tasks */}
+                    {clubTasks.length > 0 && (
+                        <section className="space-y-4">
+                            <h2 className="text-lg font-semibold tracking-tight text-foreground">Пополнение склада</h2>
+                            <div className="grid gap-3">
+                                {clubTasks.map((task: any) => (
+                                    <div key={task.id} className="group flex items-start justify-between gap-4 p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors">
+                                        <div className="space-y-1.5 min-w-0">
+                                            <h3 className="text-sm font-medium text-foreground truncate">
+                                                {task.title.replace('Пополнить: ', '')}
+                                            </h3>
+                                            <div className="flex flex-wrap gap-2">
+                                                {task.source_warehouse_name ? (
+                                                    <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+                                                        {task.source_warehouse_name} → {task.target_warehouse_name}
+                                                    </span>
+                                                ) : task.description.includes('Из:') ? (
+                                                    <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+                                                        {task.description.split('Из: ')[1]?.split(' →')[0]} → {task.description.split('→ В: ')[1]?.split('. ')[0]}
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-xs text-muted-foreground">
+                                                        {task.description}
+                                                    </span>
                                                 )}
                                             </div>
-                                        )}
-                                    </div>
-                                    <div className="p-3 rounded-xl bg-white/20">
-                                        <Wallet className="h-6 w-6 text-white" />
-                                    </div>
-                                </div>
-                            </CardContent>
-                        </Card>
-                    </div>
-                </div>
-
-                {stats?.leaderboard && (
-                    <Card className="border-0 shadow-lg bg-gradient-to-br from-amber-500 to-orange-600 text-white overflow-hidden">
-                        <div className="absolute inset-0 bg-white/5" />
-                        <CardContent className="pt-6 relative z-10">
-                            <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
-                                <div className="space-y-4 flex-1">
-                                    <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-                                        <div>
-                                            <p className="text-sm font-medium text-white/70">Рейтинг месяца</p>
-                                            <div className="flex flex-wrap items-end gap-3 mt-1">
-                                                <p className="text-3xl font-bold">{stats.leaderboard.score.toFixed(1)} / 10</p>
-                                                <Badge className="bg-white/20 text-white border-white/10 hover:bg-white/20">
-                                                    #{stats.leaderboard.rank} из {stats.leaderboard.total_participants}
-                                                </Badge>
-                                            </div>
-                                            {stats.leaderboard.leader && (
-                                                <p className="text-xs text-white/80 mt-2">
-                                                    Лидер сейчас: {stats.leaderboard.leader.full_name} • {stats.leaderboard.leader.score.toFixed(1)} / 10
-                                                </p>
-                                            )}
-                                            {stats.leaderboard.is_frozen ? (
-                                                <p className="text-[11px] text-white/80 mt-2 font-bold">
-                                                    Рейтинг заморожен
-                                                </p>
-                                            ) : null}
                                         </div>
-
-                                        <div className="p-3 rounded-xl bg-white/20 shrink-0 w-fit">
-                                            <Trophy className="h-6 w-6 text-white" />
-                                        </div>
+                                        <Button
+                                            size="sm"
+                                            variant="secondary"
+                                            className="h-8 text-xs shadow-none shrink-0"
+                                            onClick={() => handleCompleteClubTask(task.id)}
+                                            disabled={isUpdatingTask === task.id}
+                                        >
+                                            {isUpdatingTask === task.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Выполнено"}
+                                        </Button>
                                     </div>
-
-                                    <div className="grid gap-2 text-[11px] sm:grid-cols-2 lg:grid-cols-4">
-                                        <div className="rounded-xl bg-white/10 px-3 py-2">Выручка: <span className="font-black">{stats.leaderboard.breakdown.revenue.toFixed(1)}</span></div>
-                                        <div className="rounded-xl bg-white/10 px-3 py-2">Чек-листы: <span className="font-black">{stats.leaderboard.breakdown.checklist.toFixed(1)}</span></div>
-                                        <div className="rounded-xl bg-white/10 px-3 py-2">Обслуживание: <span className="font-black">{stats.leaderboard.breakdown.maintenance.toFixed(1)}</span></div>
-                                        <div className="rounded-xl bg-white/10 px-3 py-2">Дисциплина: <span className="font-black">{stats.leaderboard.breakdown.discipline.toFixed(1)}</span></div>
-                                    </div>
-
-                                    <div className="pt-4 border-t border-white/10 space-y-2">
-                                        <p className="text-[10px] uppercase tracking-widest text-white/50 font-black">Топ сотрудников</p>
-                                        <div className="grid gap-2 lg:grid-cols-2">
-                                            {stats.leaderboard.top.map(item => (
-                                                <div key={item.user_id} className={`flex items-center justify-between rounded-xl px-3 py-2 text-sm ${item.rank === stats.leaderboard?.rank ? 'bg-white/20' : 'bg-white/10'}`}>
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="font-black w-6">#{item.rank}</span>
-                                                        <span className="font-medium">{item.full_name}</span>
-                                                    </div>
-                                                    <span className="font-black">{item.score.toFixed(1)}</span>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                </div>
+                                ))}
                             </div>
-                        </CardContent>
-                    </Card>
-                )}
+                        </section>
+                    )}
 
-                <div className="space-y-6">
-                    {/* Revenue KPI (Progressive) */}
-                    {kpiComponents}
-
-                    {/* Checklist and Maintenance KPIs */}
-                    {(checklistComponents || maintenanceComponent) && (
-                        <div className="grid gap-6 md:grid-cols-2">
-                            {checklistComponents}
-                            {maintenanceComponent}
+                    {/* Maintenance Tasks Overview */}
+                    <section className="space-y-4">
+                        <div className="flex items-center justify-between">
+                            <h2 className="text-lg font-semibold tracking-tight text-foreground">Обслуживание</h2>
+                            <Link href={`/employee/clubs/${clubId}/tasks`} className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors">
+                                Все задачи →
+                            </Link>
                         </div>
-                    )}
+                        <Link href={`/employee/clubs/${clubId}/tasks`} className="block">
+                            <div className="flex items-center justify-between p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors">
+                                <div className="space-y-1">
+                                    <p className="text-sm font-medium text-foreground">Задачи на смену</p>
+                                    <p className="text-xs text-muted-foreground">
+                                        {pendingTasksCount > 0 ? `${pendingTasksCount} требуют внимания` : "Всё оборудование чистое"}
+                                    </p>
+                                </div>
+                                {pendingTasksCount > 0 ? (
+                                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400">
+                                        <Brush className="h-4 w-4" />
+                                    </div>
+                                ) : (
+                                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400">
+                                        <ClipboardCheck className="h-4 w-4" />
+                                    </div>
+                                )}
+                            </div>
+                        </Link>
+                    </section>
 
-                    {(!kpiData || (!kpiData.kpi?.length && !kpiData.checklist?.length && !kpiData.maintenance)) && (
-                        <Card className="border-0 shadow-lg bg-white dark:bg-slate-800/50">
-                            <CardContent className="py-8 text-center text-muted-foreground">
-                                <Target className="h-12 w-12 mx-auto mb-4 opacity-20" />
-                                <p>KPI показатели пока не назначены</p>
-                                {kpiData?.message && <p className="text-xs mt-2 opacity-50">{kpiData.message}</p>}
-                            </CardContent>
-                        </Card>
-                    )}
                 </div>
 
-                {/* Workday Progress (if shift active) - Removed */}
+                {/* Sidebar (Stats & Leaderboard) */}
+                <div className="space-y-8 lg:border-l lg:pl-8">
+                    
+                    {/* Salary Estimate */}
+                    <section className="space-y-4">
+                        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Зарплата за месяц</h2>
+                        <div className="space-y-1">
+                            <p className="text-4xl font-bold tracking-tight text-foreground">{formatCurrency(stats?.month_earnings || 0)}</p>
+                            <p className="text-xs text-muted-foreground">Ориентировочный расчет</p>
+                        </div>
 
-                {isHandoverOpen && handoverTemplate && (
+                        {stats?.breakdown && (
+                            <div className="pt-4 space-y-2">
+                                <div className="flex justify-between text-xs">
+                                    <span className="text-muted-foreground">Ставка ({stats.total_hours?.toFixed(1) || (stats.today_hours + stats.week_hours)?.toFixed(1)} ч)</span>
+                                    <span className="font-medium text-foreground">{formatCurrency(stats.breakdown.base_salary)}</span>
+                                </div>
+                                {stats.breakdown.shift_bonuses > 0 && (
+                                    <div className="flex justify-between text-xs">
+                                        <span className="text-muted-foreground">Бонусы смен</span>
+                                        <span className="font-medium text-emerald-600 dark:text-emerald-400">+{formatCurrency(stats.breakdown.shift_bonuses)}</span>
+                                    </div>
+                                )}
+                                {stats.breakdown.revenue_kpi_breakdown?.filter((b: any) => !b.is_virtual).map((bonus: any, idx: number) => (
+                                    <div key={`real-${idx}`} className="flex justify-between text-xs">
+                                        <span className="text-muted-foreground">{bonus.name}</span>
+                                        <span className="font-medium text-emerald-600 dark:text-emerald-400">+{formatCurrency(bonus.amount)}</span>
+                                    </div>
+                                ))}
+                                {stats.breakdown.checklist_bonuses > 0 && (
+                                    <div className="flex justify-between text-xs">
+                                        <span className="text-muted-foreground">Чек-листы</span>
+                                        <span className="font-medium text-emerald-600 dark:text-emerald-400">+{formatCurrency(stats.breakdown.checklist_bonuses)}</span>
+                                    </div>
+                                )}
+                                {stats.breakdown.maintenance_bonuses > 0 && (
+                                    <div className="flex justify-between text-xs">
+                                        <span className="text-muted-foreground">Обслуживание</span>
+                                        <span className="font-medium text-emerald-600 dark:text-emerald-400">+{formatCurrency(stats.breakdown.maintenance_bonuses)}</span>
+                                    </div>
+                                )}
+                                {stats.breakdown.leaderboard_bonuses?.filter((b: any) => !b.is_virtual).map((bonus: any, idx: number) => (
+                                    <div key={`lead-${idx}`} className="flex justify-between text-xs">
+                                        <span className="text-muted-foreground">Рейтинг</span>
+                                        <span className="font-medium text-emerald-600 dark:text-emerald-400">+{formatCurrency(bonus.amount)}</span>
+                                    </div>
+                                ))}
+                                {(stats.breakdown.maintenance_penalty || 0) > 0 && (
+                                    <div className="flex justify-between text-xs">
+                                        <span className="text-muted-foreground">Штраф</span>
+                                        <span className="font-medium text-rose-600 dark:text-rose-400">-{formatCurrency(stats.breakdown.maintenance_penalty || 0)}</span>
+                                    </div>
+                                )}
+                                {(stats.breakdown.bar_deductions || 0) > 0 && (
+                                    <div className="flex justify-between text-xs">
+                                        <span className="text-muted-foreground">Бар в счет ЗП</span>
+                                        <span className="font-medium text-rose-600 dark:text-rose-400">-{formatCurrency(stats.breakdown.bar_deductions || 0)}</span>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </section>
+
+                    {/* Leaderboard */}
+                    {stats?.leaderboard && (
+                        <section className="space-y-4 pt-6 border-t">
+                            <div className="flex items-center justify-between">
+                                <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Рейтинг</h2>
+                                {stats.leaderboard.is_frozen && (
+                                    <Badge variant="outline" className="text-[9px] uppercase">Заморожен</Badge>
+                                )}
+                            </div>
+                            
+                            <div className="flex items-baseline gap-2">
+                                <span className="text-3xl font-bold tracking-tight text-foreground">{stats.leaderboard.score.toFixed(1)}</span>
+                                <span className="text-sm text-muted-foreground">/ 10</span>
+                                <Badge variant="secondary" className="ml-auto bg-accent">
+                                    #{stats.leaderboard.rank} из {stats.leaderboard.total_participants}
+                                </Badge>
+                            </div>
+
+                            <div className="space-y-2 pt-2">
+                                {stats.leaderboard.top.map(item => (
+                                    <div key={item.user_id} className={cn(
+                                        "flex items-center justify-between text-sm py-1.5 px-2 rounded",
+                                        item.rank === stats.leaderboard?.rank ? "bg-accent/50 font-medium text-foreground" : "text-muted-foreground"
+                                    )}>
+                                        <div className="flex items-center gap-3">
+                                            <span className="w-4 text-xs font-semibold">{item.rank}</span>
+                                            <span>{item.full_name}</span>
+                                        </div>
+                                        <span className="font-semibold text-foreground">{item.score.toFixed(1)}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </section>
+                    )}
+                </div>
+            </div>
+
+            {(kpiComponents || checklistComponents || maintenanceComponent) && (
+                <section className="space-y-6 pt-10 mt-10 border-t">
+                    <h2 className="text-lg font-semibold tracking-tight text-foreground">Показатели (KPI)</h2>
+                    <div className="space-y-8">
+                        {kpiComponents}
+                        <div className="grid gap-6 lg:grid-cols-1">
+                            {maintenanceComponent}
+                            {checklistComponents}
+                        </div>
+                    </div>
+                </section>
+            )}
+
+            {(!kpiData || (!kpiData.kpi?.length && !kpiData.checklist?.length && !kpiData.maintenance)) && (
+                <section className="pt-10 mt-10 border-t">
+                    <p className="text-sm text-muted-foreground text-center py-8">KPI показатели пока не назначены</p>
+                </section>
+            )}
+
+            {/* Modals and Wizards */}
+            {isHandoverOpen && handoverTemplate && (
                 <ShiftOpeningWizard
                     isOpen={isHandoverOpen}
                     onClose={() => setIsHandoverOpen(false)}
                     onComplete={async (checklistResponses: Record<number, { score: number, comment: string, photo_urls?: string[] }>, targetShiftId?: string, selectedUserId?: string | null) => {
                         try {
-                            // Find recent closed shift (previous shift) or use selected
                             let targetUserId = selectedUserId || null
-                            
                             if (!targetUserId && targetShiftId) {
                                 const shiftRes = await fetch(`/api/clubs/${clubId}/shifts/${targetShiftId}`)
                                 if (shiftRes.ok) {
@@ -1504,7 +1317,6 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                         } catch (e) {
                             console.error(e)
                         }
-
                         setIsHandoverOpen(false)
                         await executeStartShift()
                     }}
@@ -1512,7 +1324,6 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                 />
             )}
 
-            {/* Report Modal */}
             {activeShift && club && (
                 <SSEProvider clubId={clubId} userId={currentUserId}>
                     <ShiftClosingWizard
@@ -1523,10 +1334,7 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                         userId={currentUserId}
                         reportTemplate={reportTemplate}
                         activeShiftId={activeShift.id}
-                        skipInventory={
-                            hasShiftAccountability ||
-                            !club.inventory_required
-                        }
+                        skipInventory={hasShiftAccountability || !club.inventory_required}
                         checklistTemplates={checklistTemplates}
                         inventorySettings={club.inventory_settings}
                     />
@@ -1587,7 +1395,6 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                 />
             )}
 
-            {/* Supply Wizard */}
             <EmployeeSupplyWizard
                 isOpen={isSupplyWizardOpen}
                 onClose={() => setIsSupplyWizardOpen(false)}
@@ -1596,7 +1403,6 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                 activeShiftId={activeShift?.id?.toString()}
             />
 
-            {/* Write-off Wizard */}
             <EmployeeWriteOffWizard
                 isOpen={isWriteOffWizardOpen}
                 onClose={() => setIsWriteOffWizardOpen(false)}
@@ -1605,7 +1411,6 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                 activeShiftId={activeShift?.id?.toString()}
             />
 
-            {/* Transfer Wizard */}
             <EmployeeTransferWizard
                 isOpen={isTransferWizardOpen}
                 onClose={() => setIsTransferWizardOpen(false)}
@@ -1614,7 +1419,6 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                 activeShiftId={activeShift?.id?.toString()}
             />
 
-            {/* Support Requests Wizard */}
             <EmployeeRequestWizard
                 isOpen={isRequestWizardOpen}
                 onClose={() => setIsRequestWizardOpen(false)}
@@ -1622,44 +1426,36 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                 userId={currentUserId}
             />
 
-            {/* Intermediate Indicators Modal */}
             <Dialog open={isIndicatorsModalOpen} onOpenChange={setIsIndicatorsModalOpen}>
-                <DialogContent className="max-w-md bg-slate-950 border-slate-800 text-white">
+                <DialogContent className="max-w-md">
                     <DialogHeader>
                         <DialogTitle>Промежуточные показатели</DialogTitle>
-                        <DialogDescription className="text-slate-400">
+                        <DialogDescription>
                             Внесите текущие данные, чтобы увидеть обновленный прогноз KPI
                         </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto pr-2">
-                        {reportTemplate?.schema?.map((field: any, idx: number) => {
-                            // Only show INCOME fields for intermediate updates? Or all?
-                            // For simplicity, showing all.
-                            return (
-                                <div key={idx} className="space-y-2">
-                                    <Label>
-                                        {field.custom_label}
-                                    </Label>
-                                    <Input
-                                        type={field.metric_key.includes('comment') ? 'text' : 'number'}
-                                        placeholder="Текущее значение"
-                                        className="bg-slate-900 border-slate-700"
-                                        onChange={(e) => setReportData({ ...reportData, [field.metric_key]: e.target.value })}
-                                        defaultValue={activeShift ? (
-                                            typeof activeShift.report_data === 'string'
-                                                ? JSON.parse(activeShift.report_data || '{}')[field.metric_key]
-                                                : (activeShift.report_data as any)?.[field.metric_key]
-                                        ) : ''}
-                                    />
-                                </div>
-                            )
-                        })}
+                        {reportTemplate?.schema?.map((field: any, idx: number) => (
+                            <div key={idx} className="space-y-2">
+                                <Label>{field.custom_label}</Label>
+                                <Input
+                                    type={field.metric_key.includes('comment') ? 'text' : 'number'}
+                                    placeholder="Текущее значение"
+                                    onChange={(e) => setReportData({ ...reportData, [field.metric_key]: e.target.value })}
+                                    defaultValue={activeShift ? (
+                                        typeof activeShift.report_data === 'string'
+                                            ? JSON.parse(activeShift.report_data || '{}')[field.metric_key]
+                                            : (activeShift.report_data as any)?.[field.metric_key]
+                                    ) : ''}
+                                />
+                            </div>
+                        ))}
                     </div>
                     <DialogFooter>
                         <Button
                             onClick={() => submitUpdateIndicators(reportData)}
                             disabled={isActionLoading}
-                            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+                            className="w-full"
                         >
                             {isActionLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                             Обновить показатели

@@ -68,8 +68,8 @@ export default function EmployeePosPage() {
 
     if (isLoading || !clubId || !userId) {
         return (
-            <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center">
-                <div className="flex items-center gap-2 text-slate-400">
+            <div className="min-h-screen bg-slate-950 text-primary-foreground flex items-center justify-center">
+                <div className="flex items-center gap-2 text-muted-foreground/70">
                     <Loader2 className="h-4 w-4 animate-spin" />
                     Загрузка...
                 </div>
@@ -79,7 +79,7 @@ export default function EmployeePosPage() {
 
     if (!isPosEnabled) {
         return (
-            <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center p-6 text-center">
+            <div className="min-h-screen bg-slate-950 text-primary-foreground flex items-center justify-center p-6 text-center">
                 <div className="text-slate-300">Продажи через POS недоступны для этого клуба.</div>
             </div>
         )
@@ -87,7 +87,7 @@ export default function EmployeePosPage() {
 
     if (isBlockedByAcceptance) {
         return (
-            <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center p-6 text-center">
+            <div className="min-h-screen bg-slate-950 text-primary-foreground flex items-center justify-center p-6 text-center">
                 <div className="max-w-md space-y-3">
                     <div className="text-lg font-bold text-amber-300">Бар временно заблокирован</div>
                     <div className="text-slate-300">

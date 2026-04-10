@@ -64,14 +64,14 @@ export default function ChecklistSettingsPage({ params }: { params: Promise<{ cl
     if (isLoading) return <div className="flex h-screen items-center justify-center"><Loader2 className="animate-spin" /></div>
 
     return (
-        <div className="min-h-screen bg-background pb-24 md:pb-8">
-            <div className="border-b bg-background">
+        <div className="min-h-screen bg-slate-50/30 pb-24 md:pb-8">
+            <div className="border-b bg-white">
                 <div className="mx-auto flex max-w-5xl flex-col gap-4 px-4 py-5 md:flex-row md:items-start md:justify-between md:px-6 md:py-6">
                     <div className="min-w-0">
                         <h1 className="text-2xl font-bold tracking-tight md:text-3xl">Чеклисты</h1>
                         <p className="mt-1 text-sm text-muted-foreground">Шаблоны проверок, приемки смен и аудита клуба</p>
                     </div>
-                    <Button onClick={() => router.push(`/clubs/${clubId}/settings/checklists/new`)} className="hidden bg-black text-white hover:bg-black/90 md:inline-flex">
+                    <Button onClick={() => router.push(`/clubs/${clubId}/settings/checklists/new`)} className="hidden bg-slate-900 h-11 rounded-xl px-6 text-white hover:bg-slate-800 md:inline-flex font-medium">
                         <Plus className="mr-2 h-4 w-4" /> Новый шаблон
                     </Button>
                 </div>
@@ -79,67 +79,75 @@ export default function ChecklistSettingsPage({ params }: { params: Promise<{ cl
 
             <div className="mx-auto max-w-5xl px-4 py-6 md:px-6 md:py-8">
 
-                <div className="grid gap-3 sm:gap-4 md:grid-cols-2 lg:grid-cols-3">
+                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
                     {templates.map(template => (
-                        <Card key={template.id} className="transition-colors hover:border-purple-500/50">
-                            <CardHeader className="space-y-3 p-4 sm:p-6">
-                                <div className="flex items-start justify-between">
-                                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-purple-100 text-purple-600">
-                                        <ClipboardCheck className="h-5 w-5" />
+                        <div key={template.id} className="group relative flex flex-col justify-between rounded-3xl border border-slate-100 bg-white p-6 shadow-sm transition-all hover:border-slate-200 hover:shadow-md">
+                            <div className="space-y-4">
+                                <div className="flex items-start justify-between gap-4">
+                                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-purple-50 text-purple-600 group-hover:scale-105 transition-transform duration-300">
+                                        <ClipboardCheck className="h-6 w-6" />
                                     </div>
-                                    <Badge variant="outline" className="shrink-0 text-[10px] sm:text-xs">
+                                    <Badge variant="outline" className="shrink-0 bg-slate-50 border-slate-200 text-xs font-medium text-slate-600 rounded-lg px-2.5 py-0.5">
                                         {template.type === 'shift_handover' ? 'Приемка смены' : 'Аудит'}
                                     </Badge>
                                 </div>
-                                <div className="space-y-1">
-                                    <CardTitle className="line-clamp-2 text-base sm:text-lg">{template.name}</CardTitle>
-                                    <CardDescription className="line-clamp-3 text-sm">{template.description || 'Нет описания'}</CardDescription>
+                                <div>
+                                    <h3 className="line-clamp-2 text-lg font-semibold text-slate-900 group-hover:text-slate-700 transition-colors">{template.name}</h3>
+                                    <p className="mt-1.5 line-clamp-2 text-sm text-slate-500 leading-relaxed">{template.description || 'Нет описания'}</p>
                                 </div>
-                            </CardHeader>
-                            <CardContent className="p-4 pt-0 sm:p-6 sm:pt-0">
-                                <div className="flex items-center justify-between text-sm">
-                                    <span className="text-muted-foreground">{template.items?.length || 0} пунктов</span>
-                                    <span className="text-xs text-muted-foreground">
+                            </div>
+                            
+                            <div className="mt-6 pt-6 border-t border-slate-100">
+                                <div className="flex items-center justify-between mb-4">
+                                    <div className="flex items-center gap-2">
+                                        <div className="h-6 w-6 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 text-[10px] font-bold">
+                                            {template.items?.length || 0}
+                                        </div>
+                                        <span className="text-sm font-medium text-slate-600">пунктов</span>
+                                    </div>
+                                    <span className="text-xs font-medium text-slate-400">
                                         {new Date(template.created_at).toLocaleDateString()}
                                     </span>
                                 </div>
-                                <div className="mt-4 flex gap-2">
+                                <div className="flex gap-2">
                                     <Button 
-                                        variant="outline" 
+                                        variant="ghost" 
                                         size="icon" 
-                                        className="h-10 w-10 shrink-0 text-red-500 hover:bg-red-50 hover:text-red-600" 
+                                        className="h-11 w-11 shrink-0 rounded-xl text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition-colors" 
                                         onClick={() => handleDeleteTemplate(template.id)}
                                         title="Удалить чеклист"
                                     >
-                                        <Trash2 className="h-4 w-4" />
+                                        <Trash2 className="h-5 w-5" />
                                     </Button>
-                                    <Button variant="outline" className="h-10 flex-1" onClick={() => router.push(`/clubs/${clubId}/settings/checklists/${template.id}`)}>
+                                    <Button variant="secondary" className="h-11 flex-1 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 font-medium" onClick={() => router.push(`/clubs/${clubId}/settings/checklists/${template.id}`)}>
                                         Изменить
                                     </Button>
                                 </div>
-                            </CardContent>
-                        </Card>
+                            </div>
+                        </div>
                     ))}
 
                     {templates.length === 0 && (
-                        <div className="col-span-full rounded-xl border-2 border-dashed bg-white p-8 text-center sm:p-12">
-                            <ClipboardCheck className="mx-auto mb-4 h-12 w-12 text-muted-foreground opacity-20" />
-                            <h3 className="text-lg font-medium">У вас еще нет чеклистов</h3>
-                            <p className="mb-6 text-muted-foreground">Создайте свой первый шаблон</p>
-                            <Button onClick={() => router.push(`/clubs/${clubId}/settings/checklists/new`)}>Начать</Button>
+                        <div className="col-span-full flex flex-col items-center justify-center rounded-3xl border border-dashed border-slate-200 bg-slate-50/50 py-20 text-center">
+                            <div className="h-16 w-16 rounded-2xl bg-white border border-slate-100 flex items-center justify-center mb-4 shadow-sm">
+                                <ClipboardCheck className="h-8 w-8 text-slate-300" />
+                            </div>
+                            <h3 className="text-lg font-semibold text-slate-900">У вас еще нет чеклистов</h3>
+                            <p className="mt-2 text-sm text-slate-500 mb-6 max-w-sm leading-relaxed">Создайте свой первый шаблон для стандартизации работы клуба</p>
+                            <Button onClick={() => router.push(`/clubs/${clubId}/settings/checklists/new`)} className="h-11 rounded-xl bg-slate-900 px-8 text-white hover:bg-slate-800 font-medium">Начать</Button>
                         </div>
                     )}
                 </div>
             </div>
 
-            <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur supports-[backdrop-filter]:bg-background/80 md:hidden">
+            <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-white/95 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] backdrop-blur supports-[backdrop-filter]:bg-white/80 md:hidden">
                 <div className="mx-auto flex max-w-5xl gap-2">
-                    <Button asChild variant="outline" size="icon" className="h-11 w-11 shrink-0">
+                    <Button asChild variant="outline" size="icon" className="h-12 w-12 shrink-0 rounded-xl border-slate-200">
                         <Link href={`/clubs/${clubId}/settings`}>
-                            <ArrowLeft className="h-4 w-4" />
+                            <ArrowLeft className="h-5 w-5 text-slate-600" />
                         </Link>
                     </Button>
-                    <Button onClick={() => router.push(`/clubs/${clubId}/settings/checklists/new`)} className="h-11 flex-1 bg-purple-600 hover:bg-purple-700">
+                    <Button onClick={() => router.push(`/clubs/${clubId}/settings/checklists/new`)} className="h-12 flex-1 rounded-xl bg-slate-900 text-white hover:bg-slate-800 font-medium">
                         <Plus className="mr-2 h-4 w-4" />
                         Новый шаблон
                     </Button>

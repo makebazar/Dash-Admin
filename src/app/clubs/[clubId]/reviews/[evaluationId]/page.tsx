@@ -2,13 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
+import Link from "next/link"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Loader2, ArrowLeft, CheckCircle2, XCircle, AlertTriangle, User, Calendar, Clock, Star } from "lucide-react"
 import { format } from "date-fns"
 import { ru } from "date-fns/locale"
-import { PageShell, PageHeader } from "@/components/layout/PageShell"
+import { PageShell } from "@/components/layout/PageShell"
 import { cn } from "@/lib/utils"
 import { ImageViewer } from "@/components/ui/image-viewer"
 import { Textarea } from "@/components/ui/textarea"
@@ -380,7 +380,7 @@ export default function EvaluationDetailPage({ params }: { params: Promise<{ clu
     const getStatusBadge = (status?: string) => {
         switch (status) {
             case 'approved': return <Badge className="bg-green-100 text-green-700 hover:bg-green-100 border-0"><CheckCircle2 className="w-3 h-3 mr-1" /> Одобрено</Badge>
-            case 'rejected': return <Badge variant="destructive" className="bg-red-100 text-red-700 hover:bg-red-100 border-0"><XCircle className="w-3 h-3 mr-1" /> Отклонено</Badge>
+            case 'rejected': return <Badge variant="outline" className="bg-red-100 text-red-700 hover:bg-red-100 border-0"><XCircle className="w-3 h-3 mr-1" /> Отклонено</Badge>
             default: return <Badge variant="secondary" className="bg-yellow-100 text-yellow-700 hover:bg-yellow-100 border-0"><Clock className="w-3 h-3 mr-1" /> На проверке</Badge>
         }
     }
@@ -413,7 +413,7 @@ export default function EvaluationDetailPage({ params }: { params: Promise<{ clu
                         {totalScoreLabel}
                         <span className="text-slate-400 text-[10px] font-normal ml-0.5">/ {maxScoreLabel}</span>
                     </div>
-                    <div className={cn("text-[9px] font-bold mt-0.5", scorePercentage >= 80 ? "text-green-600" : scorePercentage >= 50 ? "text-amber-600" : "text-red-600")}>
+                    <div className={cn("text-[9px] font-bold mt-0.5", scorePercentage >= 80 ? "text-slate-900" : scorePercentage >= 50 ? "text-amber-600" : "text-red-600")}>
                         {scorePercentage}%
                     </div>
                 </div>
@@ -438,7 +438,7 @@ export default function EvaluationDetailPage({ params }: { params: Promise<{ clu
                                 {totalScoreLabel}
                                 <span className="text-slate-400 text-xs font-normal ml-0.5">/ {maxScoreLabel}</span>
                             </div>
-                            <div className={cn("text-[10px] font-bold mt-0.5", scorePercentage >= 80 ? "text-green-600" : scorePercentage >= 50 ? "text-amber-600" : "text-red-600")}>
+                            <div className={cn("text-[10px] font-bold mt-0.5", scorePercentage >= 80 ? "text-slate-900" : scorePercentage >= 50 ? "text-amber-600" : "text-red-600")}>
                                 {scorePercentage}%
                             </div>
                         </div>
@@ -602,7 +602,7 @@ export default function EvaluationDetailPage({ params }: { params: Promise<{ clu
                                             <p className="text-xs font-semibold uppercase text-slate-500">Проблемные места:</p>
                                             <div className="flex flex-wrap gap-2">
                                                 {workstationIssues.map((ws, idx) => (
-                                                    <Badge key={idx} variant="destructive" className="bg-red-100 text-red-700 hover:bg-red-200 border-red-200">
+                                                    <Badge key={idx} variant="outline" className="border-rose-200 text-rose-600 hover:bg-rose-50">
                                                         {ws}
                                                     </Badge>
                                                 ))}
@@ -740,7 +740,7 @@ export default function EvaluationDetailPage({ params }: { params: Promise<{ clu
                         </div>
                         <div className="flex gap-2 w-full sm:w-auto">
                             <Button 
-                                className="flex-1 sm:flex-none bg-green-600 hover:bg-green-700 w-full sm:w-auto"
+                                className="flex-1 sm:flex-none bg-slate-900 hover:bg-slate-800 text-white w-full sm:w-auto"
                                 onClick={() => handleSubmitReview('approved')}
                                 disabled={isSubmitting}
                             >

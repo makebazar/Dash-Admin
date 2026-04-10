@@ -27,7 +27,7 @@ const statusMeta: Record<ShiftZoneOverview["recent_shifts"][number]["status"], {
     },
     PARTIAL: {
         label: "Частично",
-        className: "border-slate-200 bg-slate-50 text-slate-700",
+        className: "border-border bg-muted text-foreground",
     },
 }
 
@@ -49,7 +49,7 @@ export function ShiftZonesOverviewTab({ clubId, overview }: ShiftZonesOverviewTa
             value: overview.summary.recent_shifts_count,
             hint: "Последние смены с приемкой или сдачей остатков",
             icon: ClipboardList,
-            tone: "text-slate-700 bg-slate-50 border-slate-200",
+            tone: "text-foreground bg-muted border-border",
         },
         {
             label: "Точек учета",
@@ -86,13 +86,13 @@ export function ShiftZonesOverviewTab({ clubId, overview }: ShiftZonesOverviewTa
         <div className="space-y-5">
             <div className="rounded-2xl border bg-gradient-to-br from-white via-slate-50 to-slate-100 p-4 md:p-6 shadow-sm">
                 <div className="space-y-2">
-                    <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
+                    <div className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
                         <Refrigerator className="h-3.5 w-3.5 text-blue-500" />
                         Передача Остатков
                     </div>
                     <div>
-                        <h3 className="text-lg font-bold text-slate-900 md:text-2xl">Общая картина по передаче остатков</h3>
-                        <p className="mt-1 max-w-3xl text-sm text-slate-600">
+                        <h3 className="text-lg font-bold text-foreground md:text-2xl">Общая картина по передаче остатков</h3>
+                        <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
                             Здесь видно, как по сменам проходили приемка и сдача остатков, где цикл завершен полностью и на каких складах накапливаются расхождения.
                         </p>
                     </div>
@@ -102,15 +102,15 @@ export function ShiftZonesOverviewTab({ clubId, overview }: ShiftZonesOverviewTa
                     {cards.map((card) => {
                         const Icon = card.icon
                         return (
-                            <Card key={card.label} className="border-slate-200/80 shadow-none">
+                            <Card key={card.label} className="border-border/80 shadow-none">
                                 <CardContent className="flex items-start justify-between p-4">
                                     <div className="space-y-1">
-                                        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">{card.label}</p>
-                                        <p className="text-2xl font-black text-slate-900">
+                                        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted-foreground">{card.label}</p>
+                                        <p className="text-2xl font-black text-foreground">
                                             {Number(card.value).toLocaleString("ru-RU")}
                                             {card.suffix ? ` ${card.suffix}` : ""}
                                         </p>
-                                        <p className="text-xs text-slate-500">{card.hint}</p>
+                                        <p className="text-xs text-muted-foreground">{card.hint}</p>
                                     </div>
                                     <div className={cn("rounded-xl border p-2.5", card.tone)}>
                                         <Icon className="h-4 w-4" />
@@ -256,7 +256,7 @@ export function ShiftZonesOverviewTab({ clubId, overview }: ShiftZonesOverviewTa
                 </CardContent>
             </Card>
 
-            <div className="rounded-2xl border border-dashed bg-slate-50/70 px-4 py-3 text-xs text-slate-500">
+            <div className="rounded-2xl border border-dashed bg-muted/70 px-4 py-3 text-xs text-muted-foreground">
                             Сейчас обзор считает последние {overview.summary.recent_shifts_count} смен с событиями по передаче остатков и показывает их отдельно от обычных складских инвентаризаций.
             </div>
         </div>

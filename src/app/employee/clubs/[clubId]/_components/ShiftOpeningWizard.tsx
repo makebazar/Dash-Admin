@@ -337,16 +337,16 @@ export function ShiftOpeningWizard({
 
     return (
         <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-            <DialogContent className="w-full h-full max-w-none m-0 rounded-none sm:rounded-lg sm:max-w-2xl sm:h-auto sm:max-h-[90vh] bg-slate-950 border-slate-800 text-white overflow-hidden flex flex-col p-0">
+            <DialogContent className="w-full h-full max-w-none m-0 rounded-none sm:rounded-lg sm:max-w-2xl sm:h-auto sm:max-h-[90vh] bg-slate-950 border-slate-800 text-primary-foreground overflow-hidden flex flex-col p-0">
                 
                 {/* Header with Progress */}
-                <div className="p-4 border-b border-slate-800 bg-slate-900/50 pr-12">
+                <div className="p-4 border-b border-slate-800 bg-primary/50 pr-12">
                     <div className="flex items-center justify-between mb-2">
                         <DialogTitle className="text-lg">
                             {currentStep === -1 ? 'Выбор смены' : 'Приемка смены'}
                         </DialogTitle>
                         {currentStep >= 0 && (
-                            <span className="text-xs text-slate-400 font-mono">
+                            <span className="text-xs text-muted-foreground/70 font-mono">
                                 {currentStep + 1} / {totalSteps}
                             </span>
                         )}
@@ -367,7 +367,7 @@ export function ShiftOpeningWizard({
                         <div className="space-y-6">
                             <div className="space-y-2">
                                 <h2 className="text-xl sm:text-2xl font-bold leading-tight">Какую смену вы принимаете?</h2>
-                                <p className="text-sm text-slate-400">Выберите смену, чтобы привязать к ней результаты проверки.</p>
+                                <p className="text-sm text-muted-foreground/70">Выберите смену, чтобы привязать к ней результаты проверки.</p>
                             </div>
 
                             {isLoadingShifts ? (
@@ -384,11 +384,11 @@ export function ShiftOpeningWizard({
                                                 flex items-center justify-between p-4 rounded-xl border-2 transition-all text-left
                                                 ${selectedShiftId === shift.id
                                                     ? 'bg-purple-500/10 border-purple-500 shadow-lg shadow-purple-500/10'
-                                                    : 'bg-slate-900 border-slate-800 hover:border-slate-700'}
+                                                    : 'bg-primary border-slate-800 hover:border-slate-700'}
                                             `}
                                         >
                                             <div>
-                                                <div className="font-bold text-white flex items-center gap-2">
+                                                <div className="font-bold text-primary-foreground flex items-center gap-2">
                                                     {shift.employee_name}
                                                     {shift.status === 'ACTIVE' && (
                                                         <span className="px-2 py-0.5 rounded-full bg-green-500/20 text-green-400 text-[10px] uppercase tracking-wider font-bold border border-green-500/20">
@@ -396,7 +396,7 @@ export function ShiftOpeningWizard({
                                                         </span>
                                                     )}
                                                 </div>
-                                                <div className="text-xs text-slate-400 mt-1">
+                                                <div className="text-xs text-muted-foreground/70 mt-1">
                                                     {new Date(shift.check_in).toLocaleString('ru-RU', { 
                                                         day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' 
                                                     })}
@@ -410,7 +410,7 @@ export function ShiftOpeningWizard({
                                     ))}
                                     
                                     {shifts.length === 0 && (
-                                        <div className="text-center py-8 text-slate-500 bg-slate-900/50 rounded-xl border border-slate-800 border-dashed">
+                                        <div className="text-center py-8 text-muted-foreground bg-primary/50 rounded-xl border border-slate-800 border-dashed">
                                             Смен за последнее время не найдено
                                         </div>
                                     )}
@@ -422,7 +422,7 @@ export function ShiftOpeningWizard({
                             <div className="space-y-2">
                                 <h2 className="text-xl sm:text-2xl font-bold leading-tight">{currentItem.content}</h2>
                                 {currentItem.description && (
-                                    <p className="text-sm text-slate-400">{currentItem.description}</p>
+                                    <p className="text-sm text-muted-foreground/70">{currentItem.description}</p>
                                 )}
                             </div>
 
@@ -444,7 +444,7 @@ export function ShiftOpeningWizard({
                                         flex flex-col items-center justify-center gap-2 p-4 rounded-xl border-2 transition-all
                                         ${!checklistResponses[currentItem.id]?.is_issue_reported && checklistResponses[currentItem.id]?.score === (currentItem.weight || 1)
                                             ? 'bg-green-500/10 border-green-500 text-green-400'
-                                            : 'bg-slate-900 border-slate-800 text-slate-400 hover:bg-slate-800'}
+                                            : 'bg-primary border-slate-800 text-muted-foreground/70 hover:bg-primary/90'}
                                     `}
                                 >
                                     <CheckCircle2 className="h-8 w-8" />
@@ -475,7 +475,7 @@ export function ShiftOpeningWizard({
                                         flex flex-col items-center justify-center gap-2 p-4 rounded-xl border-2 transition-all
                                         ${checklistResponses[currentItem.id]?.is_issue_reported
                                             ? 'bg-red-500/10 border-red-500 text-red-400'
-                                            : 'bg-slate-900 border-slate-800 text-slate-400 hover:bg-slate-800'}
+                                            : 'bg-primary border-slate-800 text-muted-foreground/70 hover:bg-primary/90'}
                                     `}
                                 >
                                     <Trash2 className="h-8 w-8" />
@@ -485,8 +485,8 @@ export function ShiftOpeningWizard({
 
                             {/* Options Selection (If "Issues" selected and options exist) */}
                             {checklistResponses[currentItem.id]?.is_issue_reported && currentItem.options && currentItem.options.length > 0 && (
-                                <div className="p-4 bg-slate-900/50 rounded-xl border border-slate-800">
-                                    <p className="text-xs text-slate-400 mb-3 font-medium uppercase tracking-wider">Уточните состояние:</p>
+                                <div className="p-4 bg-primary/50 rounded-xl border border-slate-800">
+                                    <p className="text-xs text-muted-foreground/70 mb-3 font-medium uppercase tracking-wider">Уточните состояние:</p>
                                     <div className="grid gap-2">
                                         {currentItem.options
                                             .filter((option: ChecklistOption) => option.score < (currentItem.weight || 1)) // Filter out max score options
@@ -506,12 +506,12 @@ export function ShiftOpeningWizard({
                                                 className={`
                                                     flex items-center justify-between p-3 rounded-lg border text-left transition-all
                                                     ${checklistResponses[currentItem.id]?.score === option.score
-                                                        ? 'bg-red-500/20 border-red-500 text-white'
+                                                        ? 'bg-red-500/20 border-red-500 text-primary-foreground'
                                                         : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'}
                                                 `}
                                             >
                                                 <span>{option.label}</span>
-                                                <span className="text-xs font-mono bg-black/30 px-2 py-1 rounded">{option.score} баллов</span>
+                                                <span className="text-xs font-mono bg-primary/30 px-2 py-1 rounded">{option.score} баллов</span>
                                             </button>
                                         ))}
                                     </div>
@@ -520,8 +520,8 @@ export function ShiftOpeningWizard({
 
                             {/* Workstation Selection Grid */}
                             {checklistResponses[currentItem.id]?.is_issue_reported && currentItem.related_entity_type === 'workstations' && (
-                                <div className="p-4 bg-slate-900/50 rounded-xl border border-slate-800">
-                                    <p className="text-xs text-slate-400 mb-3 font-medium uppercase tracking-wider">Отметьте проблемные места:</p>
+                                <div className="p-4 bg-primary/50 rounded-xl border border-slate-800">
+                                    <p className="text-xs text-muted-foreground/70 mb-3 font-medium uppercase tracking-wider">Отметьте проблемные места:</p>
                                     
                                     {isLoadingWorkstations ? (
                                         <div className="flex justify-center py-4">
@@ -538,8 +538,8 @@ export function ShiftOpeningWizard({
                                                     className={`
                                                         py-2 px-1 text-[10px] sm:text-xs font-medium rounded-lg border transition-all truncate
                                                         ${checklistResponses[currentItem.id]?.selected_workstations?.includes(ws.name)
-                                                            ? 'bg-red-500 border-red-500 text-white shadow-lg shadow-red-500/20'
-                                                            : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700'}
+                                                            ? 'bg-red-500 border-red-500 text-primary-foreground shadow-lg shadow-red-500/20'
+                                                            : 'bg-slate-800 border-slate-700 text-muted-foreground/70 hover:bg-slate-700'}
                                                     `}
                                                 >
                                                     {ws.name}
@@ -557,7 +557,7 @@ export function ShiftOpeningWizard({
                                     {checklistResponses[currentItem.id]?.photo_urls && checklistResponses[currentItem.id].photo_urls.length > 0 && (
                                         <div className="grid grid-cols-2 gap-2">
                                             {checklistResponses[currentItem.id].photo_urls.map((url, idx) => (
-                                                <div key={idx} className="relative rounded-xl overflow-hidden border border-slate-700 aspect-video bg-slate-900 group">
+                                                <div key={idx} className="relative rounded-xl overflow-hidden border border-slate-700 aspect-video bg-primary group">
                                                     <img 
                                                         src={url} 
                                                         alt={`Attached ${idx + 1}`} 
@@ -565,7 +565,7 @@ export function ShiftOpeningWizard({
                                                     />
                                                     <button 
                                                         onClick={() => removePhoto(currentItem.id, url)}
-                                                        className="absolute top-2 right-2 p-2 bg-black/50 hover:bg-red-600 text-white rounded-full backdrop-blur-sm transition-colors opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+                                                        className="absolute top-2 right-2 p-2 bg-primary/50 hover:bg-red-600 text-primary-foreground rounded-full backdrop-blur-sm transition-colors opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
                                                     >
                                                         <Trash2 className="h-4 w-4" />
                                                     </button>
@@ -579,12 +579,12 @@ export function ShiftOpeningWizard({
                                         flex flex-col items-center justify-center gap-3 p-6 rounded-xl border-2 border-dashed cursor-pointer transition-all
                                         ${currentItem.is_photo_required && (!checklistResponses[currentItem.id]?.photo_urls || checklistResponses[currentItem.id].photo_urls.length < (currentItem.min_photos || 1))
                                             ? 'border-purple-500/50 bg-purple-500/5 hover:bg-purple-500/10' 
-                                            : 'border-slate-700 hover:bg-slate-800'}
+                                            : 'border-slate-700 hover:bg-primary/90'}
                                     `}>
                                         {uploadingState[currentItem.id] ? (
                                             <Loader2 className="h-8 w-8 animate-spin text-purple-400" />
                                         ) : (
-                                            <Camera className={`h-8 w-8 ${currentItem.is_photo_required ? 'text-purple-400' : 'text-slate-400'}`} />
+                                            <Camera className={`h-8 w-8 ${currentItem.is_photo_required ? 'text-purple-400' : 'text-muted-foreground/70'}`} />
                                         )}
                                         <div className="text-center">
                                             <p className={`font-medium ${currentItem.is_photo_required ? 'text-purple-300' : 'text-slate-300'}`}>
@@ -592,7 +592,7 @@ export function ShiftOpeningWizard({
                                                     ? `Добавить фото (минимум ${currentItem.min_photos || 1})` 
                                                     : 'Добавить фото')}
                                             </p>
-                                            <p className="text-xs text-slate-500 mt-1">Нажмите, чтобы открыть камеру</p>
+                                            <p className="text-xs text-muted-foreground mt-1">Нажмите, чтобы открыть камеру</p>
                                         </div>
                                         <input 
                                             type="file" 
@@ -610,10 +610,10 @@ export function ShiftOpeningWizard({
                             {/* Comment Input */}
                             {(checklistResponses[currentItem.id]?.is_issue_reported || checklistResponses[currentItem.id]?.comment) && (
                                 <div className="animate-in fade-in">
-                                    <Label className="text-xs text-slate-400 mb-2 block">Комментарий</Label>
+                                    <Label className="text-xs text-muted-foreground/70 mb-2 block">Комментарий</Label>
                                     <Input 
                                         placeholder={checklistResponses[currentItem.id]?.is_issue_reported ? "Опишите проблему..." : "Комментарий (опционально)..."}
-                                        className="bg-slate-900 border-slate-700 focus-visible:ring-purple-500 text-base"
+                                        className="bg-primary border-slate-700 focus-visible:ring-purple-500 text-base"
                                         value={checklistResponses[currentItem.id]?.comment || ''}
                                         onChange={(e) => setChecklistResponses(prev => ({
                                             ...prev,
@@ -627,19 +627,19 @@ export function ShiftOpeningWizard({
                 </div>
 
                 {/* Footer Navigation */}
-                <DialogFooter className="p-4 border-t border-slate-800 bg-slate-900/50 mt-auto">
+                <DialogFooter className="p-4 border-t border-slate-800 bg-primary/50 mt-auto">
                     <div className="flex gap-3 w-full">
                         <Button 
                             variant="outline" 
                             onClick={handleBack}
                             disabled={currentStep === 0}
-                            className="flex-1 border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white"
+                            className="flex-1 border-slate-700 text-slate-300 hover:bg-primary/90 hover:text-primary-foreground"
                         >
                             Назад
                         </Button>
                         <Button 
                             onClick={handleNext} 
-                            className="flex-[2] bg-purple-600 hover:bg-purple-700 text-white font-bold"
+                            className="flex-[2] bg-purple-600 hover:bg-purple-700 text-primary-foreground font-bold"
                         >
                             {currentStep === totalSteps - 1 ? 'Завершить' : 'Далее'}
                             {currentStep < totalSteps - 1 && <ArrowRight className="ml-2 h-4 w-4" />}

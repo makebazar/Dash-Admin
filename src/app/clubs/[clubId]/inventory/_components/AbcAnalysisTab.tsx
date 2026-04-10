@@ -62,7 +62,7 @@ export function AbcAnalysisTab({ clubId, products }: AbcAnalysisTabProps) {
 
     if (isLoading) {
         return (
-            <div className="flex flex-col items-center justify-center py-20 text-slate-400 gap-4">
+            <div className="flex flex-col items-center justify-center py-20 text-muted-foreground/70 gap-4">
                 <RefreshCw className="h-8 w-8 animate-spin" />
                 <p className="text-sm font-medium">Загрузка аналитики...</p>
             </div>
@@ -73,10 +73,10 @@ export function AbcAnalysisTab({ clubId, products }: AbcAnalysisTabProps) {
         <div className="space-y-6">
             <div className="flex justify-between items-center">
                 <div>
-                    <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tight">
+                    <h2 className="text-2xl font-black text-foreground uppercase tracking-tight">
                         Аналитика
                     </h2>
-                    <p className="text-sm text-slate-500">Складские показатели и ABC-анализ продаж за 30 дней</p>
+                    <p className="text-sm text-muted-foreground">Складские показатели и ABC-анализ продаж за 30 дней</p>
                 </div>
                 <Button 
                     onClick={handleRecalculate} 
@@ -91,46 +91,46 @@ export function AbcAnalysisTab({ clubId, products }: AbcAnalysisTabProps) {
 
             {/* Inventory Overview */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+                <div className="bg-card p-4 rounded-2xl border border-border shadow-sm">
                     <div className="flex items-center gap-3 mb-2">
                         <div className="p-2 bg-blue-50 rounded-lg">
                             <Package className="h-4 w-4 text-blue-600" />
                         </div>
-                        <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Товаров в наличии</span>
+                        <span className="text-[10px] text-muted-foreground/70 uppercase font-bold tracking-wider">Товаров в наличии</span>
                     </div>
                     <div className="flex items-baseline gap-2">
-                        <span className="text-2xl font-black text-slate-900">{stats.totalProducts}</span>
-                        <span className="text-xs text-slate-500 font-medium">позиций</span>
+                        <span className="text-2xl font-black text-foreground">{stats.totalProducts}</span>
+                        <span className="text-xs text-muted-foreground font-medium">позиций</span>
                     </div>
                 </div>
 
-                <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+                <div className="bg-card p-4 rounded-2xl border border-border shadow-sm">
                     <div className="flex items-center gap-3 mb-2">
-                        <div className="p-2 bg-slate-50 rounded-lg">
-                            <DollarSign className="h-4 w-4 text-slate-600" />
+                        <div className="p-2 bg-muted rounded-lg">
+                            <DollarSign className="h-4 w-4 text-muted-foreground" />
                         </div>
-                        <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Сумма в закупе</span>
+                        <span className="text-[10px] text-muted-foreground/70 uppercase font-bold tracking-wider">Сумма в закупе</span>
                     </div>
                     <div className="flex items-baseline gap-2">
-                        <span className="text-2xl font-black text-slate-900">{Math.round(stats.stockCost).toLocaleString('ru-RU')} ₽</span>
+                        <span className="text-2xl font-black text-foreground">{Math.round(stats.stockCost).toLocaleString('ru-RU')} ₽</span>
                     </div>
                 </div>
 
-                <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+                <div className="bg-card p-4 rounded-2xl border border-border shadow-sm">
                     <div className="flex items-center gap-3 mb-2">
                         <div className="p-2 bg-green-50 rounded-lg">
                             <TrendingUp className="h-4 w-4 text-green-600" />
                         </div>
-                        <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Сумма в продаже</span>
+                        <span className="text-[10px] text-muted-foreground/70 uppercase font-bold tracking-wider">Сумма в продаже</span>
                     </div>
                     <div className="flex items-baseline gap-2">
-                        <span className="text-2xl font-black text-slate-900">{Math.round(stats.stockValue).toLocaleString('ru-RU')} ₽</span>
+                        <span className="text-2xl font-black text-foreground">{Math.round(stats.stockValue).toLocaleString('ru-RU')} ₽</span>
                     </div>
                 </div>
 
-                <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-100">
+                <div className="bg-card p-4 rounded-2xl border border-border shadow-sm bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-100">
                     <div className="flex items-center gap-3 mb-2">
-                        <div className="p-2 bg-white rounded-lg shadow-sm">
+                        <div className="p-2 bg-card rounded-lg shadow-sm">
                             <PieChart className="h-4 w-4 text-indigo-600" />
                         </div>
                         <span className="text-[10px] text-indigo-400 uppercase font-bold tracking-wider">Потенц. прибыль</span>
@@ -144,70 +144,70 @@ export function AbcAnalysisTab({ clubId, products }: AbcAnalysisTabProps) {
 
             {/* Summary Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="bg-white p-4 md:p-6 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden group">
+                <div className="bg-card p-4 md:p-6 rounded-2xl border border-border shadow-sm relative overflow-hidden group">
                     <div className="absolute top-0 left-0 w-1.5 h-full bg-green-500" />
                     <div className="flex justify-between items-start mb-4">
                         <div className="p-2 bg-green-50 rounded-lg">
                             <TrendingUp className="h-5 w-5 text-green-600" />
                         </div>
-                        <Badge className="bg-green-500 text-white font-black">Группа A</Badge>
+                        <Badge className="bg-green-500 text-primary-foreground font-black">Группа A</Badge>
                     </div>
-                    <h3 className="text-2xl md:text-3xl font-black text-slate-900">{stats.A.length}</h3>
-                    <p className="text-[10px] md:text-xs text-slate-500 mt-1 uppercase font-bold tracking-wider">Товаров-локомотивов</p>
+                    <h3 className="text-2xl md:text-3xl font-black text-foreground">{stats.A.length}</h3>
+                    <p className="text-[10px] md:text-xs text-muted-foreground mt-1 uppercase font-bold tracking-wider">Товаров-локомотивов</p>
                     <div className="mt-4 flex items-center gap-2">
-                        <div className="h-1.5 flex-1 bg-slate-100 rounded-full overflow-hidden">
+                        <div className="h-1.5 flex-1 bg-accent rounded-full overflow-hidden">
                             <div className="h-full bg-green-500" style={{ width: '80%' }} />
                         </div>
                         <span className="text-[10px] md:text-xs font-black text-green-600">~80% выручки</span>
                     </div>
                 </div>
 
-                <div className="bg-white p-4 md:p-6 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden">
+                <div className="bg-card p-4 md:p-6 rounded-2xl border border-border shadow-sm relative overflow-hidden">
                     <div className="absolute top-0 left-0 w-1.5 h-full bg-amber-500" />
                     <div className="flex justify-between items-start mb-4">
                         <div className="p-2 bg-amber-50 rounded-lg">
                             <Info className="h-5 w-5 text-amber-600" />
                         </div>
-                        <Badge className="bg-amber-500 text-white font-black">Группа B</Badge>
+                        <Badge className="bg-amber-500 text-primary-foreground font-black">Группа B</Badge>
                     </div>
-                    <h3 className="text-2xl md:text-3xl font-black text-slate-900">{stats.B.length}</h3>
-                    <p className="text-[10px] md:text-xs text-slate-500 mt-1 uppercase font-bold tracking-wider">Стабильные товары</p>
+                    <h3 className="text-2xl md:text-3xl font-black text-foreground">{stats.B.length}</h3>
+                    <p className="text-[10px] md:text-xs text-muted-foreground mt-1 uppercase font-bold tracking-wider">Стабильные товары</p>
                     <div className="mt-4 flex items-center gap-2">
-                        <div className="h-1.5 flex-1 bg-slate-100 rounded-full overflow-hidden">
+                        <div className="h-1.5 flex-1 bg-accent rounded-full overflow-hidden">
                             <div className="h-full bg-amber-500" style={{ width: '15%' }} />
                         </div>
                         <span className="text-[10px] md:text-xs font-black text-amber-600">~15% выручки</span>
                     </div>
                 </div>
 
-                <div className="bg-white p-4 md:p-6 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden">
+                <div className="bg-card p-4 md:p-6 rounded-2xl border border-border shadow-sm relative overflow-hidden">
                     <div className="absolute top-0 left-0 w-1.5 h-full bg-slate-400" />
                     <div className="flex justify-between items-start mb-4">
-                        <div className="p-2 bg-slate-50 rounded-lg">
-                            <AlertTriangle className="h-5 w-5 text-slate-600" />
+                        <div className="p-2 bg-muted rounded-lg">
+                            <AlertTriangle className="h-5 w-5 text-muted-foreground" />
                         </div>
-                        <Badge className="bg-slate-400 text-white font-black">Группа C</Badge>
+                        <Badge className="bg-slate-400 text-primary-foreground font-black">Группа C</Badge>
                     </div>
-                    <h3 className="text-2xl md:text-3xl font-black text-slate-900">{stats.C.length}</h3>
-                    <p className="text-[10px] md:text-xs text-slate-500 mt-1 uppercase font-bold tracking-wider">Малоценные товары</p>
+                    <h3 className="text-2xl md:text-3xl font-black text-foreground">{stats.C.length}</h3>
+                    <p className="text-[10px] md:text-xs text-muted-foreground mt-1 uppercase font-bold tracking-wider">Малоценные товары</p>
                     <div className="mt-4 flex items-center gap-2">
-                        <div className="h-1.5 flex-1 bg-slate-100 rounded-full overflow-hidden">
+                        <div className="h-1.5 flex-1 bg-accent rounded-full overflow-hidden">
                             <div className="h-full bg-slate-400" style={{ width: '5%' }} />
                         </div>
-                        <span className="text-[10px] md:text-xs font-black text-slate-600">~5% выручки</span>
+                        <span className="text-[10px] md:text-xs font-black text-muted-foreground">~5% выручки</span>
                     </div>
                 </div>
             </div>
 
             {/* Detailed Table */}
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-col md:flex-row md:justify-between md:items-center gap-2">
-                    <h4 className="font-bold text-slate-900 flex items-center gap-2">
+            <div className="bg-card rounded-2xl border border-border shadow-sm overflow-hidden">
+                <div className="p-4 border-b border-border/50 bg-muted/50 flex flex-col md:flex-row md:justify-between md:items-center gap-2">
+                    <h4 className="font-bold text-foreground flex items-center gap-2">
                         <TrendingUp className="h-4 w-4 text-blue-600" />
                         Детализация по товарам
                     </h4>
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-                        <span className="text-[10px] text-slate-400 uppercase font-bold tracking-widest">
+                        <span className="text-[10px] text-muted-foreground/70 uppercase font-bold tracking-widest">
                             Выручка: {stats.totalRevenue.toLocaleString('ru-RU')} ₽
                         </span>
                         <span className="text-[10px] text-green-600 uppercase font-bold tracking-widest">
@@ -223,8 +223,8 @@ export function AbcAnalysisTab({ clubId, products }: AbcAnalysisTabProps) {
                             <div className="flex justify-between items-start gap-4">
                                 <div className="space-y-1 flex-1 min-w-0">
                                     <div className="flex items-center gap-2">
-                                        <span className="text-[10px] text-slate-400 font-mono">#{index + 1}</span>
-                                        <h5 className="font-bold text-slate-900 truncate">{item.name}</h5>
+                                        <span className="text-[10px] text-muted-foreground/70 font-mono">#{index + 1}</span>
+                                        <h5 className="font-bold text-foreground truncate">{item.name}</h5>
                                     </div>
                                     <div className="flex items-center gap-2">
                                         <Badge 
@@ -242,7 +242,7 @@ export function AbcAnalysisTab({ clubId, products }: AbcAnalysisTabProps) {
                                                 "text-[10px] font-bold",
                                                 Number(item.days_left) < 3 ? "text-rose-500" : 
                                                 Number(item.days_left) < 7 ? "text-amber-500" : 
-                                                "text-slate-500"
+                                                "text-muted-foreground"
                                             )}>
                                                 Запас: {Math.round(item.days_left)} дн.
                                             </span>
@@ -250,7 +250,7 @@ export function AbcAnalysisTab({ clubId, products }: AbcAnalysisTabProps) {
                                     </div>
                                 </div>
                                 <div className="text-right">
-                                    <div className="text-sm font-black text-slate-900 leading-none">
+                                    <div className="text-sm font-black text-foreground leading-none">
                                         {Number(item.total_revenue).toLocaleString('ru-RU')} ₽
                                     </div>
                                     <div className="text-[10px] font-bold text-green-600 mt-1">
@@ -259,24 +259,24 @@ export function AbcAnalysisTab({ clubId, products }: AbcAnalysisTabProps) {
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-3 gap-2 py-2 border-y border-slate-50 bg-slate-50/30 rounded-lg px-2">
+                            <div className="grid grid-cols-3 gap-2 py-2 border-y border-slate-50 bg-muted/30 rounded-lg px-2">
                                 <div className="space-y-0.5">
-                                    <div className="text-[9px] text-slate-400 uppercase font-bold tracking-wider">Продано</div>
-                                    <div className="text-xs font-bold text-slate-600">{Number(item.total_sold).toLocaleString('ru-RU')} шт.</div>
+                                    <div className="text-[9px] text-muted-foreground/70 uppercase font-bold tracking-wider">Продано</div>
+                                    <div className="text-xs font-bold text-muted-foreground">{Number(item.total_sold).toLocaleString('ru-RU')} шт.</div>
                                 </div>
                                 <div className="space-y-0.5">
-                                    <div className="text-[9px] text-slate-400 uppercase font-bold tracking-wider">Маржа</div>
-                                    <div className="text-xs font-bold text-slate-900">{item.margin_percent}%</div>
+                                    <div className="text-[9px] text-muted-foreground/70 uppercase font-bold tracking-wider">Маржа</div>
+                                    <div className="text-xs font-bold text-foreground">{item.margin_percent}%</div>
                                 </div>
                                 <div className="space-y-0.5 text-right">
-                                    <div className="text-[9px] text-slate-400 uppercase font-bold tracking-wider">Доля</div>
+                                    <div className="text-[9px] text-muted-foreground/70 uppercase font-bold tracking-wider">Доля</div>
                                     <div className="text-xs font-black text-blue-600">{item.revenue_share}%</div>
                                 </div>
                             </div>
                         </div>
                     ))}
                     {data.length === 0 && (
-                        <div className="py-12 text-center text-slate-400 italic text-sm px-4">
+                        <div className="py-12 text-center text-muted-foreground/70 italic text-sm px-4">
                             Нет данных о продажах за последние 30 дней
                         </div>
                     )}
@@ -300,11 +300,11 @@ export function AbcAnalysisTab({ clubId, products }: AbcAnalysisTabProps) {
                         </TableHeader>
                         <TableBody>
                             {data.map((item, index) => (
-                                <TableRow key={item.product_id} className="group hover:bg-slate-50/50 transition-colors">
-                                    <TableCell className="text-center text-slate-400 font-mono text-xs">
+                                <TableRow key={item.product_id} className="group hover:bg-muted/50 transition-colors">
+                                    <TableCell className="text-center text-muted-foreground/70 font-mono text-xs">
                                         {index + 1}
                                     </TableCell>
-                                    <TableCell className="font-bold text-slate-700">
+                                    <TableCell className="font-bold text-foreground">
                                         {item.name}
                                     </TableCell>
                                     <TableCell className="text-center">
@@ -319,17 +319,17 @@ export function AbcAnalysisTab({ clubId, products }: AbcAnalysisTabProps) {
                                             {item.abc_category}
                                         </Badge>
                                     </TableCell>
-                                    <TableCell className="text-right font-medium text-slate-600">
+                                    <TableCell className="text-right font-medium text-muted-foreground">
                                         {Number(item.total_sold).toLocaleString('ru-RU')} шт.
                                     </TableCell>
-                                    <TableCell className="text-right font-black text-slate-900">
+                                    <TableCell className="text-right font-black text-foreground">
                                         {Number(item.total_revenue).toLocaleString('ru-RU')} ₽
                                     </TableCell>
                                     <TableCell className="text-right font-bold text-green-600">
                                         {Number(item.total_profit).toLocaleString('ru-RU')} ₽
                                     </TableCell>
                                     <TableCell className="text-right">
-                                        <Badge variant="outline" className="font-bold border-slate-200">
+                                        <Badge variant="outline" className="font-bold border-border">
                                             {item.margin_percent}%
                                         </Badge>
                                     </TableCell>
@@ -339,7 +339,7 @@ export function AbcAnalysisTab({ clubId, products }: AbcAnalysisTabProps) {
                                                 "text-xs font-bold",
                                                 Number(item.days_left) < 3 ? "text-rose-500" : 
                                                 Number(item.days_left) < 7 ? "text-amber-500" : 
-                                                "text-slate-500"
+                                                "text-muted-foreground"
                                             )}>
                                                 {Math.round(item.days_left)} дн.
                                             </span>
@@ -350,7 +350,7 @@ export function AbcAnalysisTab({ clubId, products }: AbcAnalysisTabProps) {
                                     <TableCell className="text-right">
                                         <div className="flex flex-col items-end gap-1">
                                             <span className="text-sm font-bold text-blue-600">{item.revenue_share}%</span>
-                                            <div className="w-16 h-1 bg-slate-100 rounded-full overflow-hidden">
+                                            <div className="w-16 h-1 bg-accent rounded-full overflow-hidden">
                                                 <div 
                                                     className={cn(
                                                         "h-full",
@@ -367,7 +367,7 @@ export function AbcAnalysisTab({ clubId, products }: AbcAnalysisTabProps) {
                             ))}
                             {data.length === 0 && (
                                 <TableRow>
-                                    <TableCell colSpan={9} className="h-32 text-center text-slate-400 italic">
+                                    <TableCell colSpan={9} className="h-32 text-center text-muted-foreground/70 italic">
                                         Нет данных о продажах за последние 30 дней
                                     </TableCell>
                                 </TableRow>

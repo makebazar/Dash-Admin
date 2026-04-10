@@ -37,119 +37,78 @@ export function MaintenanceKpiCard({ kpi, formatCurrency }: { kpi: any, formatCu
 
     return (
         <div className="space-y-4">
-            <Card className="border-0 shadow-lg bg-gradient-to-br from-slate-900 to-indigo-900 text-white overflow-hidden relative">
+            <Card className="border-0 shadow-lg bg-card border border-border overflow-hidden relative w-full">
                 <CardContent className="p-6 relative z-10">
                     <div className="flex items-center justify-between mb-6">
                         <div className="flex items-center gap-2">
-                            <div className="p-2 rounded-lg bg-indigo-500/20 border border-indigo-500/30">
-                                <Wrench className="h-5 w-5 text-indigo-400" />
+                            <div className="p-2 rounded-lg bg-accent/50 border border-border">
+                                <Wrench className="h-5 w-5 text-muted-foreground" />
                             </div>
                             <div>
-                                <p className="text-xs text-white/50 uppercase tracking-wider font-bold">{kpi.name}</p>
-                                <p className="text-sm text-indigo-400 font-medium">
-                                    В премию сейчас идет: {adjustedCompletedMonthValue} из {totalMonthTarget} · {(kpi.efficiency || 0).toFixed(1)}%
-                                </p>
+                                <p className="text-xs text-foreground/50 uppercase tracking-wider font-bold">{kpi.name}</p>
                             </div>
                         </div>
                     </div>
 
                     <div className="text-center mb-6">
-                        <p className="text-white/60 text-sm mb-1">Выполнено по плану месяца</p>
+                        <p className="text-muted-foreground text-sm mb-1">Эффективность</p>
                         <div className="flex items-baseline justify-center gap-2">
-                            <span className="text-5xl font-black text-white">{completedMonthValue}</span>
-                            <span className="text-2xl font-bold text-white/40">/ {totalMonthTarget}</span>
+                            <span className="text-4xl font-semibold tracking-tight text-foreground">{(kpi.efficiency || 0).toFixed(1)}</span>
+                            <span className="text-xl font-medium text-muted-foreground">%</span>
                         </div>
-                        <p className="text-xs text-white/50 mt-2">
-                            Выполнение плана месяца: {(kpi.efficiency || 0).toFixed(1)}%
-                        </p>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
-                        <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                            <p className="text-[11px] font-bold uppercase tracking-widest text-white/50 mb-1">Запланировано на месяц</p>
-                            <p className="text-2xl font-black text-white">{totalMonthTarget}</p>
-                            <p className="text-[10px] text-white/40 mt-1">Все задачи, которые входят в план месяца</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
+                        <div className="rounded-2xl border border-border bg-accent/50 p-4 flex flex-col items-center justify-center text-center">
+                            <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground mb-1">Задачи (план месяца)</p>
+                            <p className="text-2xl font-semibold text-foreground">
+                                <span className="text-emerald-400 font-black">{completedMonthValue}</span> <span className="text-muted-foreground">/</span> {totalMonthTarget}
+                            </p>
                         </div>
-                        <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                            <p className="text-[11px] font-bold uppercase tracking-widest text-white/50 mb-1">Закрыто за месяц</p>
-                            <p className="text-2xl font-black text-emerald-400">{completedMonthValue}</p>
-                            <p className="text-[10px] text-white/40 mt-1">Только задачи текущего плана</p>
-                        </div>
-                        <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                            <p className="text-[11px] font-bold uppercase tracking-widest text-white/50 mb-1">Еще в работе</p>
-                            <p className="text-2xl font-black text-amber-300">{Math.max(totalMonthTarget - completedMonthValue, 0)}</p>
-                            <p className="text-[10px] text-white/40 mt-1">Остаток до полного выполнения плана</p>
+                        <div className="rounded-2xl border border-rose-500/20 bg-rose-500/5 p-4 flex flex-col items-center justify-center text-center">
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-rose-500 mb-1">Просрочено</p>
+                            <p className="text-3xl font-black text-rose-500">{kpi.overdue_open_tasks || 0}</p>
+                            <div className="mt-2 space-y-1">
+                                {(kpi.rework_open_tasks || 0) > 0 && (
+                                    <p className="text-[10px] font-medium text-rose-400/80">На доработке: {kpi.rework_open_tasks}</p>
+                                )}
+                                {(kpi.overdue_penalty_amount || 0) > 0 && (
+                                    <p className="text-[10px] font-bold text-rose-500 mt-1">Штраф: -{formatCurrency(kpi.overdue_penalty_amount || 0)}</p>
+                                )}
+                            </div>
                         </div>
                     </div>
 
                     <div className="flex flex-wrap gap-2 mb-6">
                         {oldDebtClosed > 0 && (
-                            <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] text-white/70">
-                                Закрыт старый долг: <span className="font-bold text-white">{oldDebtClosed}</span>
+                            <div className="rounded-full border border-border bg-accent/50 px-3 py-1 text-[11px] text-foreground/70">
+                                Закрыт старый долг: <span className="font-bold text-foreground">{oldDebtClosed}</span>
+                            </div>
+                        )}
+                        {(kpi.overdue_completed_tasks || 0) > 0 && (
+                            <div className="rounded-full border border-rose-500/20 bg-rose-500/10 px-3 py-1 text-[11px] text-rose-400">
+                                С просрочкой: <span className="font-bold">{kpi.overdue_completed_tasks}</span> (в ср. {overdueCompletedAverageDays} дн.)
                             </div>
                         )}
                     </div>
 
                     <div className="space-y-4">
-                        <div className="h-2 w-full bg-white/10 rounded-full overflow-hidden">
+                        <div className="h-2 w-full bg-accent/50 rounded-full overflow-hidden">
                             <div
-                                className="h-full bg-indigo-500"
+                                className="h-full bg-foreground/60"
                                 style={{ width: `${progressPercent}%` }}
                             />
                         </div>
-
-                        <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                            <p className="text-[11px] font-bold uppercase tracking-widest text-white/50 mb-2">Прогноз до конца месяца</p>
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                                <div>
-                                    <p className="text-xs text-white/50">Если держать темп</p>
-                                    <p className="text-lg font-black text-white">{projectedCompletedValue.toFixed(1)} / {totalMonthTarget}</p>
-                                </div>
-                                <div>
-                                    <p className="text-xs text-white/50">Прогноз эффективности</p>
-                                    <p className="text-lg font-black text-indigo-300">{projectedEfficiency.toFixed(1)}%</p>
-                                </div>
-                                <div>
-                                    <p className="text-xs text-white/50">Прогноз бонуса</p>
-                                    <p className="text-lg font-black text-emerald-400">+{formatCurrency(projectedBonusAmount)}</p>
-                                    {projectedTierLabel && (
-                                        <p className="text-[10px] text-white/40 mt-1">{projectedTierLabel}</p>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
                         
-                        <div className="flex justify-between items-center pt-2 border-t border-white/10">
+                        <div className="flex justify-between items-center pt-2 border-t border-border">
                             <div>
-                                <p className="text-xs text-white/50">Премия за задачи</p>
+                                <p className="text-xs text-foreground/50">Текущий бонус</p>
                                 <p className="text-xl font-bold text-emerald-400">+{formatCurrency(kpi.bonus_amount)}</p>
-                                {(kpi.base_bonus_amount || 0) > (kpi.bonus_amount || 0) && (
-                                    <p className="text-[10px] text-white/40 mt-1">
-                                        Было по порогу: {formatCurrency(kpi.base_bonus_amount || 0)}
-                                    </p>
-                                )}
-                                {(kpi.overdue_penalty_amount || 0) > 0 && (
-                                    <p className="text-xs text-rose-300 mt-1">Штраф: -{formatCurrency(kpi.overdue_penalty_amount || 0)}</p>
-                                )}
-                            </div>
-                            <div className="text-right">
-                                <p className="text-xs text-white/50">Просрочено сейчас</p>
-                                <p className="text-sm font-bold text-rose-300">{kpi.overdue_open_tasks || 0}</p>
-                                {(kpi.rework_open_tasks || 0) > 0 && (
-                                    <p className="text-[10px] text-white/40 mt-1">
-                                        На доработке: {kpi.rework_open_tasks} · старых: {kpi.stale_rework_tasks || 0}
-                                    </p>
-                                )}
-                                {(kpi.overdue_completed_tasks || 0) > 0 && (
-                                    <p className="text-[10px] text-white/40 mt-1">
-                                        Закрыто с просрочкой: {kpi.overdue_completed_tasks} · ср. {overdueCompletedAverageDays} дн.
-                                    </p>
-                                )}
                             </div>
                             {nextThreshold && (
                                 <div className="text-right">
-                                    <p className="text-xs text-white/50">Следующий порог</p>
-                                    <p className="text-sm font-bold text-indigo-300">{nextThreshold.from}% эфф. → {formatCurrency(nextThreshold.amount)}</p>
+                                    <p className="text-xs text-foreground/50">Цель</p>
+                                    <p className="text-sm font-bold text-foreground">эфф. ≥ {nextThreshold.from}% → {formatCurrency(nextThreshold.amount)}</p>
                                 </div>
                             )}
                         </div>
@@ -157,7 +116,7 @@ export function MaintenanceKpiCard({ kpi, formatCurrency }: { kpi: any, formatCu
                         {kpi.thresholds?.length > 0 && (
                             <button
                                 onClick={() => setShowDetails(!showDetails)}
-                                className="w-full flex items-center justify-center gap-2 text-sm text-white/40 hover:text-white/70 transition-colors pt-2 border-t border-white/5 mt-2"
+                                className="w-full flex items-center justify-center gap-2 text-sm text-foreground/40 hover:text-foreground/70 transition-colors pt-2 border-t border-border mt-2"
                             >
                                 <span>{showDetails ? 'Скрыть уровни' : 'Показать все уровни'}</span>
                                 <ChevronRight className={cn("h-4 w-4 transition-transform", showDetails && "rotate-90")} />
@@ -168,7 +127,7 @@ export function MaintenanceKpiCard({ kpi, formatCurrency }: { kpi: any, formatCu
             </Card>
 
             {showDetails && kpi.thresholds && (
-                <Card className="border-0 shadow-xl bg-white dark:bg-slate-900 overflow-hidden">
+                <Card className="border border-border shadow-lg bg-card overflow-hidden">
                     <CardContent className="p-4 space-y-2">
                         {kpi.thresholds.map((t: any) => (
                             <div 
@@ -178,25 +137,25 @@ export function MaintenanceKpiCard({ kpi, formatCurrency }: { kpi: any, formatCu
                                     t.is_met 
                                         ? "bg-emerald-50 dark:bg-emerald-900/10 border-emerald-200 dark:border-emerald-900/30" 
                                         : t.level === nextThreshold?.level
-                                            ? "bg-indigo-50 dark:bg-indigo-900/10 border-indigo-200 dark:border-indigo-900/30 ring-1 ring-indigo-500/30"
-                                            : "bg-slate-50 dark:bg-slate-800/50 border-slate-100 dark:border-slate-800 opacity-50"
+                                            ? "bg-accent/50 border-border ring-1 ring-foreground/15"
+                                            : "bg-accent/30 border-border opacity-50"
                                 )}
                             >
                                 <div className="flex items-center gap-3">
                                     <div className={cn(
                                         "w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold",
-                                        t.is_met ? "bg-emerald-500 text-white" : "bg-slate-200 dark:bg-slate-700 text-slate-500"
+                                        t.is_met ? "bg-emerald-500 text-foreground" : "bg-accent/80 text-muted-foreground"
                                     )}>
                                         {t.is_met ? "✓" : t.level}
                                     </div>
                                     <div>
                                         <p className="font-bold text-sm">Эффективность ≥ {t.from}%</p>
                                         {t.level === nextThreshold?.level && (
-                                            <p className="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold">Текущая цель</p>
+                                            <p className="text-[10px] text-muted-foreground font-bold">Текущая цель</p>
                                         )}
                                     </div>
                                 </div>
-                                <p className="font-black text-lg text-indigo-600 dark:text-indigo-400">{formatCurrency(t.amount)}</p>
+                                <p className="font-black text-lg text-foreground">{formatCurrency(t.amount)}</p>
                             </div>
                         ))}
                     </CardContent>
@@ -213,45 +172,57 @@ export function ChecklistKpiCard({ kpi, formatCurrency }: { kpi: any, formatCurr
 
     return (
         <div className="space-y-4">
-            <Card className="border-0 shadow-lg bg-gradient-to-br from-slate-900 to-fuchsia-900 text-white overflow-hidden relative">
+            <Card className="border-0 shadow-lg bg-card border border-border overflow-hidden relative w-full">
                 <CardContent className="p-6 relative z-10">
                     <div className="flex items-center justify-between mb-6">
                         <div className="flex items-center gap-2">
-                            <div className="p-2 rounded-lg bg-fuchsia-500/20 border border-fuchsia-500/30">
-                                <ClipboardCheck className="h-5 w-5 text-fuchsia-400" />
+                            <div className="p-2 rounded-lg bg-accent/50 border border-border">
+                                <ClipboardCheck className="h-5 w-5 text-muted-foreground" />
                             </div>
                             <div>
-                                <p className="text-xs text-white/50 uppercase tracking-wider font-bold">{kpi.name}</p>
-                                <p className="text-sm text-fuchsia-400 font-medium">Проверок: {kpi.count}</p>
+                                <p className="text-xs text-foreground/50 uppercase tracking-wider font-bold">{kpi.name}</p>
                             </div>
                         </div>
                     </div>
 
                     <div className="text-center mb-6">
-                        <p className="text-white/60 text-sm mb-1">Средний балл</p>
+                        <p className="text-muted-foreground text-sm mb-1">Средний балл</p>
                         <div className="flex items-baseline justify-center gap-2">
-                            <span className="text-5xl font-black text-white">{(kpi.current_value || 0).toFixed(1)}</span>
-                            <span className="text-2xl font-bold text-white/40">%</span>
+                            <span className="text-4xl font-semibold tracking-tight text-foreground">{(kpi.current_value || 0).toFixed(1)}</span>
+                            <span className="text-xl font-medium text-muted-foreground">%</span>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
+                        <div className="rounded-2xl border border-border bg-accent/50 p-4 flex flex-col items-center justify-center text-center">
+                            <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground mb-1">Количество проверок</p>
+                            <p className="text-2xl font-semibold text-foreground">
+                                <span className="text-emerald-400 font-black">{kpi.count}</span>
+                            </p>
+                        </div>
+                        <div className="rounded-2xl border border-border bg-accent/50 p-4 flex flex-col items-center justify-center text-center">
+                            <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground mb-1">Текущий бонус</p>
+                            <p className="text-2xl font-black text-emerald-400">+{formatCurrency(kpi.bonus_amount)}</p>
                         </div>
                     </div>
 
                     <div className="space-y-4">
-                        <div className="h-2 w-full bg-white/10 rounded-full overflow-hidden">
+                        <div className="h-2 w-full bg-accent/50 rounded-full overflow-hidden">
                             <div
-                                className="h-full bg-fuchsia-500"
+                                className="h-full bg-foreground/60"
                                 style={{ width: `${progressPercent}%` }}
                             />
                         </div>
                         
-                        <div className="flex justify-between items-center pt-2 border-t border-white/10">
+                        <div className="flex justify-between items-center pt-2 border-t border-border">
                             <div>
-                                <p className="text-xs text-white/50">Текущий бонус</p>
-                                <p className="text-xl font-bold text-emerald-400">+{formatCurrency(kpi.bonus_amount)}</p>
+                                <p className="text-xs text-foreground/50">Прогресс</p>
+                                <p className="text-xl font-bold text-foreground">{(kpi.current_value || 0).toFixed(1)}%</p>
                             </div>
                             {nextThreshold && (
                                 <div className="text-right">
-                                    <p className="text-xs text-white/50">Цель</p>
-                                    <p className="text-sm font-bold text-fuchsia-300">балл ≥ {nextThreshold.from}% → {formatCurrency(nextThreshold.amount)}</p>
+                                    <p className="text-xs text-foreground/50">Цель</p>
+                                    <p className="text-sm font-bold text-foreground">балл ≥ {nextThreshold.from}% → {formatCurrency(nextThreshold.amount)}</p>
                                 </div>
                             )}
                         </div>
@@ -259,7 +230,7 @@ export function ChecklistKpiCard({ kpi, formatCurrency }: { kpi: any, formatCurr
                         {kpi.thresholds?.length > 0 && (
                             <button
                                 onClick={() => setShowDetails(!showDetails)}
-                                className="w-full flex items-center justify-center gap-2 text-sm text-white/40 hover:text-white/70 transition-colors pt-2 border-t border-white/5 mt-2"
+                                className="w-full flex items-center justify-center gap-2 text-sm text-foreground/40 hover:text-foreground/70 transition-colors pt-2 border-t border-border mt-2"
                             >
                                 <span>{showDetails ? 'Скрыть уровни' : 'Показать все уровни'}</span>
                                 <ChevronRight className={cn("h-4 w-4 transition-transform", showDetails && "rotate-90")} />
@@ -270,7 +241,7 @@ export function ChecklistKpiCard({ kpi, formatCurrency }: { kpi: any, formatCurr
             </Card>
 
             {showDetails && kpi.thresholds && (
-                <Card className="border-0 shadow-xl bg-white dark:bg-slate-900 overflow-hidden">
+                <Card className="border border-border shadow-lg bg-card overflow-hidden">
                     <CardContent className="p-4 space-y-2">
                         {kpi.thresholds.map((t: any) => (
                             <div 
@@ -280,25 +251,25 @@ export function ChecklistKpiCard({ kpi, formatCurrency }: { kpi: any, formatCurr
                                     t.is_met 
                                         ? "bg-emerald-50 dark:bg-emerald-900/10 border-emerald-200 dark:border-emerald-900/30" 
                                         : t.level === nextThreshold?.level
-                                            ? "bg-fuchsia-50 dark:bg-fuchsia-900/10 border-fuchsia-200 dark:border-fuchsia-900/30 ring-1 ring-fuchsia-500/30"
-                                            : "bg-slate-50 dark:bg-slate-800/50 border-slate-100 dark:border-slate-800 opacity-50"
+                                            ? "bg-accent/50 border-border ring-1 ring-foreground/15"
+                                            : "bg-accent/30 border-border opacity-50"
                                 )}
                             >
                                 <div className="flex items-center gap-3">
                                     <div className={cn(
                                         "w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold",
-                                        t.is_met ? "bg-emerald-500 text-white" : "bg-slate-200 dark:bg-slate-700 text-slate-500"
+                                        t.is_met ? "bg-emerald-500 text-foreground" : "bg-accent/80 text-muted-foreground"
                                     )}>
                                         {t.is_met ? "✓" : t.level}
                                     </div>
                                     <div>
                                         <p className="font-bold text-sm">Средний балл ≥ {t.from}%</p>
                                         {t.level === nextThreshold?.level && (
-                                            <p className="text-[10px] text-fuchsia-600 dark:text-fuchsia-400 font-bold">Текущая цель</p>
+                                            <p className="text-[10px] text-muted-foreground font-bold">Текущая цель</p>
                                         )}
                                     </div>
                                 </div>
-                                <p className="font-black text-lg text-fuchsia-600 dark:text-fuchsia-400">{formatCurrency(t.amount)}</p>
+                                <p className="font-black text-lg text-foreground">{formatCurrency(t.amount)}</p>
                             </div>
                         ))}
                     </CardContent>
@@ -328,11 +299,11 @@ export function KpiOverview({
     // No thresholds defined - simple progress or misconfiguration
     if (!kpi.all_thresholds || kpi.all_thresholds.length === 0) {
         return (
-            <Card className="border-0 shadow-xl bg-slate-900 text-white p-6">
+            <Card className="border border-border shadow-lg bg-card text-foreground p-6">
                 <div className="flex items-center gap-3">
-                    <Target className="h-6 w-6 text-purple-400" />
+                    <Target className="h-6 w-6 text-muted-foreground" />
                     <div>
-                        <p className="text-xs text-white/50 uppercase tracking-wider font-bold">{kpi.name}</p>
+                        <p className="text-xs text-foreground/50 uppercase tracking-wider font-bold">{kpi.name}</p>
                         <p className="text-lg font-bold">Прогресс: {formatCurrency(kpi.current_value)}</p>
                     </div>
                 </div>
@@ -343,15 +314,15 @@ export function KpiOverview({
     // Карточка максимального уровня
     if (maxLevel) {
         return (
-            <Card className="border-0 shadow-lg bg-gradient-to-br from-emerald-500 via-green-600 to-teal-600 text-white overflow-hidden relative">
+            <Card className="border-0 shadow-lg bg-card border border-border overflow-hidden relative w-full">
                 <CardContent className="p-6 md:p-8 relative z-10">
                     <div className="text-center space-y-4">
-                        <div className="inline-flex items-center justify-center p-4 rounded-full bg-white/20">
+                        <div className="inline-flex items-center justify-center p-4 rounded-full bg-accent/50">
                             <Trophy className="h-12 w-12 text-yellow-300" />
                         </div>
                         <div>
                             <h2 className="text-3xl font-black mb-2">Максимальный бонус!</h2>
-                            <p className="text-lg text-white/80">
+                            <p className="text-lg text-foreground/80">
                                 {kpi.all_thresholds?.length > 0 && kpi.all_thresholds[kpi.all_thresholds.length - 1]?.percent > 0 
                                     ? `Вы получаете ${kpi.all_thresholds[kpi.all_thresholds.length - 1]?.percent}% бонус`
                                     : `Вы получили максимальную премию`}
@@ -360,7 +331,7 @@ export function KpiOverview({
                                 +{formatCurrency(kpi.bonus_amount)}
                             </p>
                         </div>
-                        <p className="text-white/70 text-sm">
+                        <p className="text-foreground/70 text-sm">
                             Продолжайте в том же духе, чтобы сохранить уровень до конца месяца!
                         </p>
                     </div>
@@ -369,8 +340,10 @@ export function KpiOverview({
         );
     }
 
-    const progressPercent = Math.min((kpi.current_value / (nextThreshold.planned_month_threshold || nextThreshold.monthly_threshold)) * 100, 100);
-    const onTrack = kpi.avg_per_shift >= nextThreshold.per_shift_to_reach;
+    const targetMonthValue = nextThreshold?.planned_month_threshold || nextThreshold?.monthly_threshold || 0
+    const progressPercent = targetMonthValue > 0 ? Math.min((kpi.current_value / targetMonthValue) * 100, 100) : 0
+    const requiredPerShift = nextThreshold?.per_shift_to_reach || 0
+    const onTrack = requiredPerShift > 0 ? kpi.avg_per_shift >= requiredPerShift : true
 
     // Мотивирующие сообщения
     const getMessageIndex = (seed: string, length: number) => {
@@ -405,168 +378,123 @@ export function KpiOverview({
 
     // Label count for revenue
     const revenueShiftLabel = completedShiftsCount !== undefined 
-        ? (completedShiftsCount === 1 ? '1 закрытая смена' : `${completedShiftsCount} закр. смены`)
+        ? (completedShiftsCount === 1 ? '1 смена' : `${completedShiftsCount} смен`)
         : `${shiftsCount} смен`;
 
     return (
         <div className="space-y-4">
-            {/* Main Focus Card - Что нужно сегодня */}
-            <Card className="border-0 shadow-lg bg-gradient-to-br from-slate-900 via-purple-900 to-indigo-900 text-white overflow-hidden relative">
+            <Card className="border-0 shadow-lg bg-card border border-border overflow-hidden relative w-full">
                 <CardContent className="p-6 md:p-8 relative z-10">
-                    {/* Header */}
                     <div className="flex items-center justify-between mb-6">
                         <div className="flex items-center gap-2">
-                            <div className="p-2 rounded-lg bg-purple-500/20 border border-purple-500/30">
-                                <Target className="h-5 w-5 text-purple-400" />
+                            <div className="p-2 rounded-lg bg-accent/50 border border-border">
+                                <Target className="h-5 w-5 text-muted-foreground" />
                             </div>
                             <div>
-                                <p className="text-xs text-white/50 uppercase tracking-wider font-bold">{kpi.name || 'KPI'}</p>
-                                <p className="text-sm text-purple-400 font-medium">
-                                    {currentAchievedLevel
-                                        ? `${currentAchievedLevel.label} ${currentAchievedLevel.percent > 0 ? currentAchievedLevel.percent + '%' : formatCurrency(currentAchievedLevel.amount)} → ${nextThreshold.label} ${nextThreshold.percent > 0 ? nextThreshold.percent + '%' : formatCurrency(nextThreshold.amount)}`
-                                        : `Следующая цель: ${nextThreshold.label} ${nextThreshold.percent > 0 ? nextThreshold.percent + '%' : formatCurrency(nextThreshold.amount)}`
-                                    }
-                                </p>
+                                <p className="text-xs text-foreground/50 uppercase tracking-wider font-bold">{kpi.name || 'KPI'}</p>
+                                {nextThreshold ? (
+                                    <p className="text-sm text-muted-foreground font-medium">
+                                        Следующая цель: {nextThreshold.label}{' '}
+                                        {nextThreshold.percent > 0 ? `${nextThreshold.percent}%` : formatCurrency(nextThreshold.amount)}
+                                    </p>
+                                ) : null}
                             </div>
                         </div>
                         <div className="text-right">
-                            <p className="text-xs text-white/50">Осталось</p>
+                            <p className="text-xs text-foreground/50">Осталось</p>
                             <p className="text-lg font-bold">{remainingShifts} {remainingShifts === 1 ? 'смена' : remainingShifts < 5 ? 'смены' : 'смен'}</p>
                         </div>
                     </div>
 
-                    {/* Current Level Indicator */}
                     {currentAchievedLevel && (
                         <div className="flex justify-center mb-4">
-                            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-500/20 border border-emerald-500/30">
-                                <span className="text-xs font-bold text-emerald-400">
-                                    ✓ Ваш уровень: {currentAchievedLevel.label} {currentAchievedLevel.percent}%
+                            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-accent/50 border border-border">
+                                <span className="text-xs font-semibold text-foreground">
+                                    Уровень сейчас: {currentAchievedLevel.label}{' '}
+                                    {currentAchievedLevel.percent > 0 ? `${currentAchievedLevel.percent}%` : formatCurrency(currentAchievedLevel.amount)}
                                 </span>
                             </div>
                         </div>
                     )}
 
-                    {/* Main Target */}
-                    <div className="text-center space-y-4">
-                        <div>
-                            <p className="text-white/60 text-sm mb-2">
-                                {activeShift 
-                                    ? <span>Чтобы достичь <span className="text-purple-300 font-bold">{nextThreshold.label} ({nextThreshold.percent}%)</span>, сегодня нужно:</span>
-                                    : <span>Чтобы достичь <span className="text-purple-300 font-bold">{nextThreshold.label} ({nextThreshold.percent}%)</span>, делайте в смену:</span>
-                                }
+                        <div className="rounded-xl border border-border bg-accent/30 p-5">
+                            <p className="text-xs font-medium text-muted-foreground">План на смену</p>
+                            <p className="mt-2 text-4xl font-semibold tracking-tight text-foreground">
+                                {requiredPerShift ? formatCurrency(requiredPerShift) : "—"}
                             </p>
-                            <div className="flex items-baseline justify-center gap-2">
-                                <span className="text-4xl md:text-6xl font-black bg-gradient-to-r from-purple-400 via-pink-400 to-blue-400 bg-clip-text text-transparent">
-                                    {formatCurrency(nextThreshold.per_shift_to_reach).replace(' ₽', '')}
-                                </span>
-                                <span className="text-2xl font-bold text-white/40">₽</span>
-                            </div>
+                            {nextThreshold ? (
+                                <p className="mt-2 text-xs text-muted-foreground">
+                                    Для уровня “{nextThreshold.label}”
+                                </p>
+                            ) : null}
                         </div>
 
-                        {/* Current Progress Today - only if shift is active */}
-                        {activeShift && kpi.current_shift_value > 0 && (
-                            <div className="inline-flex items-center gap-3 px-4 py-2 rounded-full bg-white/10 backdrop-blur border border-white/20">
-                                <div className="flex items-center gap-2">
-                                    <Zap className="h-4 w-4 text-yellow-400" />
-                                    <span className="text-sm text-white/80">Сейчас:</span>
-                                    <span className="text-lg font-bold text-white">{formatCurrency(kpi.current_shift_value)}</span>
-                                </div>
-                                {kpi.current_shift_value < nextThreshold.per_shift_to_reach ? (
-                                    <span className="text-sm text-orange-400 font-medium">
-                                        еще {formatCurrency(nextThreshold.per_shift_to_reach - kpi.current_shift_value)}
-                                    </span>
-                                ) : (
-                                    <span className="text-sm text-emerald-400 font-bold">✓ План выполнен!</span>
-                                )}
-                            </div>
-                        )}
-
-                        {/* Reward */}
-                        <div className="pt-4 border-t border-white/10">
-                            <p className="text-xs text-white/50 mb-1">Ваша текущая премия</p>
-                            <p className="text-3xl font-black text-emerald-400">+{formatCurrency(kpi.bonus_amount || 0)}</p>
+                    <div className="mt-6 grid gap-4 md:grid-cols-4">
+                        <div className="rounded-lg border border-border bg-card p-4">
+                            <p className="text-[11px] text-muted-foreground">Выручка за месяц</p>
+                            <p className="mt-1 text-sm font-semibold text-foreground">{formatCurrency(kpi.current_value)}</p>
+                        </div>
+                        <div className="rounded-lg border border-border bg-card p-4">
+                            <p className="text-[11px] text-muted-foreground">Цель месяца</p>
+                            <p className="mt-1 text-sm font-semibold text-foreground">{targetMonthValue ? formatCurrency(targetMonthValue) : "—"}</p>
+                            <p className="mt-1 text-[11px] text-muted-foreground">{plannedShifts} смен</p>
+                        </div>
+                        <div className="rounded-lg border border-border bg-card p-4">
+                            <p className="text-[11px] text-muted-foreground">Средняя за смену</p>
+                            <p className="mt-1 text-sm font-semibold text-foreground">{formatCurrency(kpi.avg_per_shift || 0)}</p>
+                            <p className="mt-1 text-[11px] text-muted-foreground">{daysRemaining} дн. осталось</p>
+                        </div>
+                        <div className="rounded-lg border border-border bg-card p-4">
+                            <p className="text-[11px] text-muted-foreground">Премия сейчас</p>
+                            <p className="mt-1 text-sm font-semibold text-emerald-500">+{formatCurrency(kpi.bonus_amount || 0)}</p>
+                            {nextThreshold ? (
+                                <p className="mt-1 text-[11px] text-muted-foreground">
+                                    След. уровень: {nextThreshold.percent > 0 ? `${nextThreshold.percent}%` : formatCurrency(nextThreshold.amount)}
+                                </p>
+                            ) : null}
                         </div>
                     </div>
 
-                    {/* Progress Bar */}
-                    <div className="mt-8 space-y-4">
-                        <div className="flex justify-between text-xs text-white/60">
-                            <span>Прогресс к бонусу {nextThreshold.percent}%</span>
+                    <div className="mt-8 space-y-3">
+                        <div className="flex items-center justify-between text-xs text-muted-foreground">
+                            <span>Прогресс к цели месяца</span>
+                            <span>{Math.round(progressPercent)}%</span>
                         </div>
-                        <div className="relative h-3 w-full bg-white/10 rounded-full backdrop-blur border border-white/20">
+                        <div className="relative h-2.5 w-full bg-accent/50 rounded-full border border-border overflow-hidden">
                             <div
                                 className={cn(
-                                    "h-full rounded-full shadow-[0_0_20px_currentColor]",
+                                    "h-full rounded-full ",
                                     onTrack
-                                        ? "bg-gradient-to-r from-emerald-500 to-green-400"
-                                        : "bg-gradient-to-r from-orange-500 to-amber-400"
+                                        ? "bg-emerald-500"
+                                        : "bg-orange-500"
                                 )}
                                 style={{ width: `${progressPercent}%` }}
                             />
-                            {/* Floating percentage label */}
-                            <div 
-                                className="absolute -top-9 z-10"
-                                style={{ left: `${progressPercent}%`, transform: 'translateX(-50%)' }}
-                            >
-                                <div className={cn(
-                                    "px-2 py-0.5 rounded text-xs font-bold shadow-sm whitespace-nowrap mb-0.5",
-                                    onTrack ? "bg-emerald-500 text-white" : "bg-orange-500 text-white"
-                                )}>
-                                    {Math.round(progressPercent)}%
-                                </div>
-                                <div className={cn(
-                                    "w-0 h-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-t-[4px] mx-auto",
-                                    onTrack ? "border-t-emerald-500" : "border-t-orange-500"
-                                )} />
-                            </div>
-                        </div>
-                        <div className="flex justify-between text-xs pt-1">
-                            <div>
-                                <p className="text-white/50 mb-0.5">Выручка ({revenueShiftLabel})</p>
-                                <p className="font-bold text-white text-sm">{formatCurrency(kpi.current_value)}</p>
-                            </div>
-                            <div className="text-right">
-                                <p className="text-white/50 mb-0.5">Цель</p>
-                                <p className="font-bold text-white text-sm">{formatCurrency(nextThreshold.planned_month_threshold || nextThreshold.monthly_threshold)}</p>
-                            </div>
                         </div>
                     </div>
 
-                    {/* Info about maintaining current level */}
-                    {currentAchievedLevel && nextThreshold && currentAchievedLevel.level < nextThreshold.level && (
-                        <div className="mt-4 p-3 rounded-lg bg-blue-500/20 border border-blue-500/30 text-blue-300 text-sm">
-                            <p className="font-medium">
-                                💡 Чтобы сохранить <span className="font-bold text-blue-200">{currentAchievedLevel.label} ({currentAchievedLevel.percent}%)</span>, нужно минимум{' '}
-                                <span className="font-bold text-white">
-                                    {remainingShifts > 0 
-                                        ? formatCurrency(Math.max(0, (currentAchievedLevel.planned_month_threshold - kpi.current_value) / remainingShifts))
-                                        : '0 ₽'
-                                    }
-                                </span> за смену в оставшиеся дни
-                            </p>
-                        </div>
-                    )}
-
-                    {/* Status Indicator */}
                     <div className={cn(
-                        "mt-4 p-3 rounded-lg flex items-start gap-3 text-sm font-medium",
+                        "mt-6 p-4 rounded-lg flex items-start gap-3 text-sm font-medium border",
                         onTrack
-                            ? "bg-emerald-500/20 border border-emerald-500/30 text-emerald-400"
-                            : "bg-orange-500/20 border border-orange-500/30 text-orange-400"
+                            ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
+                            : "bg-orange-500/10 border-orange-500/20 text-orange-400"
                     )}>
                         <div className={cn("w-2 h-2 rounded-full animate-pulse mt-1.5 shrink-0", onTrack ? "bg-emerald-400" : "bg-orange-400")} />
                         <div>
-                            {getMotivationMessage()}
-                            <p className="text-xs opacity-70 mt-1 font-normal">
-                                Средняя выручка: {formatCurrency(kpi.avg_per_shift)} / План: {formatCurrency(nextThreshold.per_shift_to_reach)}
-                            </p>
+                            {onTrack
+                                ? "Темп нормальный: идёте к следующему уровню."
+                                : `Не хватает примерно ${formatCurrency(Math.max(0, requiredPerShift - (kpi.avg_per_shift || 0)))} в среднем на смену.`}
+                            {requiredPerShift > 0 ? (
+                                <p className="text-xs opacity-70 mt-1 font-normal">
+                                    Средняя: {formatCurrency(kpi.avg_per_shift || 0)} · План: {formatCurrency(requiredPerShift)}
+                                </p>
+                            ) : null}
                         </div>
                     </div>
 
-                    {/* Toggle Details */}
                     <button
                         onClick={() => setShowDetails(!showDetails)}
-                        className="mt-4 w-full flex items-center justify-center gap-2 text-sm text-white/60 hover:text-white/90 transition-colors group/btn"
+                        className="mt-4 w-full flex items-center justify-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
                     >
                         <span>{showDetails ? 'Скрыть детали' : 'Показать все уровни'}</span>
                         <ChevronRight className={cn(
@@ -577,18 +505,17 @@ export function KpiOverview({
                 </CardContent>
             </Card>
 
-            {/* Detailed Ladder - Collapsible */}
             {showDetails && (
-                <Card className="border-0 shadow-xl bg-white dark:bg-slate-900 overflow-hidden">
+                <Card className="border border-border shadow-lg bg-card overflow-hidden">
                     <CardContent className="p-6">
                         <h3 className="text-lg font-bold mb-4 flex flex-col md:flex-row md:items-center justify-between gap-2">
                             <div className="flex items-center gap-2">
-                                <Trophy className="h-5 w-5 text-yellow-500" />
+                                <Trophy className="h-5 w-5 text-muted-foreground" />
                                 Все уровни бонусов
                             </div>
-                            <div className="flex items-center gap-2 text-xs font-normal text-muted-foreground bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-700">
-                                <Zap className="h-3 w-3 text-yellow-500 fill-current" />
-                                Ваша выручка: <span className="font-bold text-foreground">{formatCurrency(kpi.current_value)}</span> ({revenueShiftLabel})
+                            <div className="flex items-center gap-2 text-xs font-normal text-muted-foreground bg-accent/30 px-3 py-1.5 rounded-full border border-border">
+                                <Zap className="h-3 w-3" />
+                                Выручка: <span className="font-semibold text-foreground">{formatCurrency(kpi.current_value)}</span>
                             </div>
                         </h3>
                         <div className="space-y-3">
@@ -602,10 +529,10 @@ export function KpiOverview({
                                         className={cn(
                                             "p-4 rounded-xl border transition-all",
                                             isCompleted
-                                                ? "bg-emerald-50 dark:bg-emerald-900/10 border-emerald-200 dark:border-emerald-900/30"
+                                                ? "bg-emerald-500/10 border-emerald-500/20"
                                                 : isNext
-                                                    ? "bg-purple-50 dark:bg-purple-900/10 border-purple-300 dark:border-purple-900/50 ring-2 ring-purple-500/20"
-                                                    : "bg-slate-50 dark:bg-slate-800/30 border-slate-200 dark:border-slate-700 opacity-50"
+                                                    ? "bg-accent/50 border-border ring-1 ring-foreground/15"
+                                                    : "bg-accent/20 border-border opacity-60"
                                         )}
                                     >
                                         <div className="flex items-center justify-between">
@@ -613,10 +540,10 @@ export function KpiOverview({
                                                 <div className={cn(
                                                     "w-10 h-10 rounded-full flex items-center justify-center font-bold",
                                                     isCompleted
-                                                        ? "bg-emerald-500 text-white"
+                                                        ? "bg-emerald-500 text-foreground"
                                                         : isNext
-                                                            ? "bg-purple-500 text-white"
-                                                            : "bg-slate-200 dark:bg-slate-700 text-slate-400"
+                                                            ? "bg-foreground/15 text-foreground"
+                                                            : "bg-foreground/10 text-muted-foreground"
                                                 )}>
                                                     {isCompleted ? "✓" : level.level}
                                                 </div>
@@ -629,24 +556,26 @@ export function KpiOverview({
                                                     </p>
 
                                                     {/* Актуальный порог для закрытых смен */}
-                                                    <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
-                                                        План на {level.display_shifts_count || shiftsCount} {
-                                                            (level.display_shifts_count || shiftsCount) === 1 ? 'смену' : 
-                                                            (level.display_shifts_count || shiftsCount) < 5 ? 'смены' : 'смен'
-                                                        }: {formatCurrency(level.scaled_threshold)}
-                                                        {isCompleted && ' ✓'}
-                                                    </p>
+                                                    {level.display_shifts_count > 0 ? (
+                                                        <p className="text-xs text-muted-foreground mt-0.5">
+                                                            План на {level.display_shifts_count} {
+                                                                level.display_shifts_count === 1 ? 'закрытую смену' : 
+                                                                level.display_shifts_count < 5 ? 'закрытые смены' : 'закрытых смен'
+                                                            }: {formatCurrency(level.scaled_threshold)}
+                                                            {isCompleted && ' ✓'}
+                                                        </p>
+                                                    ) : null}
                                                 </div>
                                             </div>
                                             <div className="text-right">
                                                 <p className={cn(
                                                     "text-2xl font-black",
-                                                    isCompleted ? "text-emerald-600" : isNext ? "text-purple-600" : "text-slate-400"
+                                                    isCompleted ? "text-emerald-400" : isNext ? "text-foreground" : "text-muted-foreground"
                                                 )}>
                                                     {level.percent > 0 ? `${level.percent}%` : formatCurrency(level.amount)}
                                                 </p>
                                                 {isNext && (
-                                                    <p className="text-xs text-purple-600 font-bold">Текущая цель</p>
+                                                    <p className="text-xs text-muted-foreground font-semibold">Текущая цель</p>
                                                 )}
                                             </div>
                                         </div>

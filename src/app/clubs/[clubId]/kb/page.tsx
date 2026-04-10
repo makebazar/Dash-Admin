@@ -241,7 +241,7 @@ export default function KnowledgeBasePage() {
                     <div 
                         className={cn(
                             "group flex items-center justify-between py-2 px-3 rounded-lg cursor-pointer transition-colors",
-                            selectedCategoryId === cat.id && selectedArticleId === null ? "bg-indigo-50 text-indigo-700" : "hover:bg-slate-50"
+                            selectedCategoryId === cat.id && selectedArticleId === null ? "bg-slate-100 text-slate-900" : "hover:bg-slate-50"
                         )}
                         style={{ paddingLeft: `${depth * 16 + 12}px` }}
                         onClick={() => {
@@ -255,7 +255,7 @@ export default function KnowledgeBasePage() {
                             ) : (
                                 <div className="w-4" />
                             )}
-                            <BookOpen className={cn("h-4 w-4 shrink-0", selectedCategoryId === cat.id && selectedArticleId === null ? "text-indigo-600" : "text-slate-400")} />
+                            <BookOpen className={cn("h-4 w-4 shrink-0", selectedCategoryId === cat.id && selectedArticleId === null ? "text-slate-900" : "text-slate-400")} />
                             <span className="truncate text-sm font-medium">{cat.name}</span>
                         </div>
 
@@ -304,7 +304,7 @@ export default function KnowledgeBasePage() {
                                     key={art.id}
                                     className={cn(
                                         "group flex items-center justify-between py-1.5 px-3 ml-6 rounded-md cursor-pointer text-sm transition-colors",
-                                        selectedArticleId === art.id ? "bg-indigo-50 text-indigo-700 font-medium" : "hover:bg-slate-50 text-slate-600"
+                                        selectedArticleId === art.id ? "bg-slate-100 text-slate-900 font-medium" : "hover:bg-slate-50 text-slate-600"
                                     )}
                                     style={{ paddingLeft: `${(depth + 1) * 16 + 12}px` }}
                                     onClick={() => {
@@ -355,7 +355,7 @@ export default function KnowledgeBasePage() {
     if (isLoading) {
         return (
             <div className="flex h-screen items-center justify-center bg-slate-50/30">
-                <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
+                <Loader2 className="h-8 w-8 animate-spin text-slate-900" />
             </div>
         )
     }
@@ -364,8 +364,8 @@ export default function KnowledgeBasePage() {
         <div className="flex flex-col h-full w-full min-w-0">
             <div className="p-4 space-y-4">
                 <div className="flex items-center justify-between gap-3">
-                    <h2 className="text-lg font-bold flex items-center gap-2 min-w-0">
-                        <BookOpen className="h-5 w-5 text-indigo-600 shrink-0" />
+                    <h2 className="text-2xl font-bold flex items-center gap-2 min-w-0 tracking-tight text-slate-900">
+                        <BookOpen className="h-5 w-5 text-slate-900 shrink-0" />
                         <span className="truncate">База знаний</span>
                     </h2>
                     {isFullAccess && (
@@ -383,7 +383,7 @@ export default function KnowledgeBasePage() {
                     <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
                     <Input
                         placeholder="Поиск..."
-                        className="pl-9 bg-slate-50 border-none shadow-none w-full max-w-full"
+                        className="pl-9 bg-slate-50 border-none shadow-none w-full max-w-full h-11 rounded-xl"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                     />
@@ -403,7 +403,7 @@ export default function KnowledgeBasePage() {
             <div className="border-b bg-white px-4 py-4">
                 <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                        <h1 className="text-xl font-bold text-slate-900">База знаний</h1>
+                        <h1 className="text-3xl font-bold tracking-tight text-slate-900">База знаний</h1>
                         <p className="mt-1 text-sm text-slate-500">Выберите раздел или найдите нужную инструкцию</p>
                     </div>
                     {isFullAccess && (
@@ -447,7 +447,7 @@ export default function KnowledgeBasePage() {
                 {sidebarContent}
             </div>
 
-            <div className="flex-1 flex flex-col overflow-hidden bg-white">
+            <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-white">
                     {isArticleDialogOpen ? (
                         <div className="flex-1 flex flex-col overflow-hidden">
                             <div className="border-b px-4 md:px-8 py-4 bg-white shrink-0">
@@ -472,7 +472,7 @@ export default function KnowledgeBasePage() {
                                         <Button
                                             onClick={handleSaveArticle}
                                             disabled={!articleForm.title || !articleForm.content}
-                                            className="bg-indigo-600 hover:bg-indigo-700 text-white"
+                                            className="bg-slate-900 hover:bg-slate-800 text-white"
                                         >
                                             Сохранить
                                         </Button>
@@ -491,7 +491,7 @@ export default function KnowledgeBasePage() {
                             </div>
                         </div>
                     ) : selectedArticle ? (
-                        <div className="flex-1 flex flex-col overflow-hidden">
+                        <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
                             <div className="border-b px-4 md:px-8 py-4 flex items-start justify-between gap-3 bg-white shrink-0">
                                 <div className="flex items-start gap-3 min-w-0">
                                     <div className="min-w-0">
@@ -509,7 +509,7 @@ export default function KnowledgeBasePage() {
                                 </div>
                                 {isFullAccess && (
                                     <div className="hidden gap-2 shrink-0 md:flex">
-                                        <Button variant="outline" size="sm" onClick={() => {
+                                        <Button variant="outline"  onClick={() => {
                                             setEditingArticle(selectedArticle)
                                             setArticleForm({
                                                 title: selectedArticle.title,
@@ -540,7 +540,7 @@ export default function KnowledgeBasePage() {
                             </div>
                         </div>
                     ) : selectedCategory ? (
-                        <div className="flex-1 flex flex-col overflow-hidden">
+                        <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
                             <div className="border-b px-4 md:px-8 py-4 flex items-start justify-between gap-3 bg-white shrink-0">
                                 <div className="flex items-start gap-3 min-w-0">
                                     <div className="min-w-0">
@@ -552,7 +552,7 @@ export default function KnowledgeBasePage() {
                                 </div>
                                 {isFullAccess && (
                                     <div className="hidden md:flex gap-2 shrink-0">
-                                        <Button variant="outline" size="sm" onClick={() => {
+                                        <Button variant="outline"  onClick={() => {
                                             setCategoryForm({ name: "", description: "", parent_id: selectedCategory.id })
                                             setEditingCategory(null)
                                             setIsCategoryDialogOpen(true)
@@ -560,7 +560,7 @@ export default function KnowledgeBasePage() {
                                             <FolderPlus className="h-4 w-4 mr-2" />
                                             Добавить подкатегорию
                                         </Button>
-                                        <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700 text-white" onClick={() => {
+                                        <Button  className="bg-slate-900 hover:bg-slate-800 text-white" onClick={() => {
                                             setArticleForm({ title: "", content: "", category_id: selectedCategory.id })
                                             setEditingArticle(null)
                                             setIsArticleDialogOpen(true)
@@ -570,7 +570,7 @@ export default function KnowledgeBasePage() {
                                         </Button>
                                         <DropdownMenu>
                                             <DropdownMenuTrigger asChild>
-                                                <Button variant="outline" size="sm">
+                                                <Button variant="outline" >
                                                     Шаблоны
                                                 </Button>
                                             </DropdownMenuTrigger>
@@ -598,7 +598,7 @@ export default function KnowledgeBasePage() {
                                     <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-4">Статьи в категории</h3>
                                     <div className="space-y-2">
                                         {articles.filter(a => a.category_id === selectedCategory.id).length === 0 ? (
-                                            <div className="rounded-lg border border-dashed p-6 text-center text-sm text-slate-500">
+                                            <div className="rounded-3xl border-2 border-dashed border-slate-200 bg-slate-50/50 p-12 text-center text-slate-500 font-medium">
                                                 В этой категории пока нет статей
                                             </div>
                                         ) : (
@@ -607,12 +607,12 @@ export default function KnowledgeBasePage() {
                                                 .map(article => (
                                                     <button
                                                         key={article.id}
-                                                        className="w-full text-left rounded-lg border px-4 py-3 hover:bg-slate-50 transition-colors"
+                                                        className="w-full text-left rounded-xl border border-slate-200 px-6 py-4 hover:bg-slate-50 hover:border-slate-300 transition-colors shadow-sm"
                                                         onClick={() => {
                                                             setSelectedArticleId(article.id)
                                                         }}
                                                     >
-                                                        <div className="font-medium text-slate-900">{article.title}</div>
+                                                        <div className="text-lg font-bold text-slate-900">{article.title}</div>
                                                         <div className="text-xs text-slate-500 mt-1">
                                                             Обновлено: {new Date(article.updated_at).toLocaleDateString("ru-RU")}
                                                         </div>
@@ -653,7 +653,7 @@ export default function KnowledgeBasePage() {
                             <Button
                                 type="button"
                                 variant="outline"
-                                className="h-11 w-full justify-center"
+                                className="h-12 w-full justify-center rounded-xl font-medium"
                                 onClick={() => {
                                     setSelectedArticleId(null)
                                     setSelectedCategoryId(selectedArticleCategory?.id ?? null)
@@ -690,7 +690,7 @@ export default function KnowledgeBasePage() {
                             <Button
                                 type="button"
                                 variant="outline"
-                                className="h-11 w-full justify-center"
+                                className="h-12 w-full justify-center rounded-xl font-medium"
                                 onClick={() => {
                                     setSelectedCategoryId(null)
                                     setSelectedArticleId(null)
@@ -715,7 +715,7 @@ export default function KnowledgeBasePage() {
                                     </Button>
                                     <DropdownMenu>
                                         <DropdownMenuTrigger asChild>
-                                            <Button type="button" variant="outline" size="icon" className="h-11 w-11 justify-center rounded-md">
+                                            <Button type="button" variant="outline" size="icon" className="h-12 w-12 justify-center rounded-xl">
                                                 <MoreVertical className="h-4 w-4" />
                                             </Button>
                                         </DropdownMenuTrigger>
@@ -754,7 +754,7 @@ export default function KnowledgeBasePage() {
                             <Button
                                 type="button"
                                 variant="outline"
-                                className="h-11 w-full justify-center"
+                                className="h-12 w-full justify-center rounded-xl font-medium"
                                 onClick={() => setIsArticleDialogOpen(false)}
                             >
                                 Отмена

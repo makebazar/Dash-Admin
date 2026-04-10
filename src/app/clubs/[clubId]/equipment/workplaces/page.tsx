@@ -6,6 +6,7 @@ import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
 import { AlertTriangle, ChevronLeft, Loader2, MapPin, Plus, Settings2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { PageShell } from "@/components/layout/PageShell"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import ZoneSection from "./ZoneSection"
 import type { Equipment, EquipmentType, Workstation } from "./types"
@@ -584,27 +585,28 @@ export default function WorkplacesPage() {
     ])
 
     return (
-        <div className="mx-auto max-w-[1600px] space-y-6 p-4 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:space-y-8 sm:p-6 sm:pb-[calc(6.5rem+env(safe-area-inset-bottom))] md:pb-8 lg:p-8">
+        <PageShell maxWidth="5xl">
+            <div className="space-y-8 pb-28 sm:pb-12">
             <div className="flex flex-col gap-4">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between mb-8">
                     <div className="min-w-0">
-                        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Рабочие места</h1>
-                        <p className="mt-1 text-sm text-muted-foreground sm:text-base">Обзор зон, мест и подключенного оборудования</p>
+                        <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-slate-900 truncate">Рабочие места</h1>
+                        <p className="text-slate-500 text-lg mt-2">Обзор зон, мест и подключенного оборудования</p>
                     </div>
                     <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap lg:justify-end">
-                        <Button asChild variant="outline" className="hidden w-full md:inline-flex md:w-auto">
+                        <Button asChild variant="outline" className="hidden w-full md:inline-flex md:w-auto rounded-xl h-11 px-6 font-medium">
                             <Link href={`/clubs/${clubId}/equipment`}>
                                 <ChevronLeft className="mr-2 h-4 w-4" />
                                 Назад
                             </Link>
                         </Button>
-                        <Button asChild variant="outline" className="w-full sm:w-auto">
+                        <Button asChild variant="outline" className="w-full sm:w-auto rounded-xl h-11 px-6 font-medium">
                             <Link href={`/clubs/${clubId}/equipment/settings?tab=zones`}>
                                 <Settings2 className="mr-2 h-4 w-4" />
                                 Настройки зон
                             </Link>
                         </Button>
-                        <Button onClick={() => handleCreate()} disabled={zones.length === 0} className="w-full bg-primary shadow-md hover:bg-primary/90 disabled:opacity-60 sm:w-auto">
+                        <Button onClick={() => handleCreate()} disabled={zones.length === 0} className="w-full bg-slate-900 text-white shadow-sm hover:bg-slate-800 disabled:opacity-60 sm:w-auto rounded-xl h-11 px-6 font-medium">
                             <Plus className="mr-2 h-4 w-4" />
                             Создать место
                         </Button>
@@ -644,9 +646,9 @@ export default function WorkplacesPage() {
                     setPendingUnassignEquipmentId(null)
                 }
             }}>
-                <DialogContent className="[&>button]:hidden sm:max-w-md">
+                <DialogContent className="[&>button]:hidden sm:max-w-md rounded-3xl p-6 sm:p-8">
                     <DialogHeader>
-                        <DialogTitle className="flex items-center gap-2">
+                        <DialogTitle className="flex items-center gap-2 text-2xl font-bold tracking-tight text-slate-900 mb-2">
                             <AlertTriangle className="h-5 w-5 text-amber-500" />
                             Убрать оборудование с места?
                         </DialogTitle>
@@ -666,14 +668,15 @@ export default function WorkplacesPage() {
                     </DialogHeader>
                     <DialogFooter className="gap-2">
                         <Button
-                            variant="outline"
+                            variant="ghost"
+                            className="rounded-xl font-bold"
                             onClick={() => setPendingUnassignEquipmentId(null)}
                             disabled={Boolean(isUnassigningEquipmentId)}
                         >
                             Отмена
                         </Button>
                         <Button
-                            variant="destructive"
+                            className="rounded-xl font-bold bg-rose-600 hover:bg-rose-700 text-white"
                             onClick={confirmUnassignEquipment}
                             disabled={Boolean(isUnassigningEquipmentId)}
                         >
@@ -684,9 +687,9 @@ export default function WorkplacesPage() {
                 </DialogContent>
             </Dialog>
 
-            <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur supports-[backdrop-filter]:bg-background/80 md:hidden">
-                <div className="mx-auto flex max-w-7xl gap-2">
-                    <Button asChild variant="outline" className="h-11 flex-1">
+            <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/80 p-4 backdrop-blur-xl md:hidden pb-[calc(1rem+env(safe-area-inset-bottom))]">
+                <div className="mx-auto flex max-w-[1600px] gap-2">
+                    <Button asChild variant="outline" className="flex-1 h-12 rounded-xl border-slate-200 text-slate-700 bg-white font-medium">
                         <Link href={`/clubs/${clubId}/equipment`}>
                             <ChevronLeft className="mr-2 h-4 w-4" />
                             Назад
@@ -694,6 +697,7 @@ export default function WorkplacesPage() {
                     </Button>
                 </div>
             </div>
-        </div>
+            </div>
+        </PageShell>
     )
 }

@@ -209,14 +209,14 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
     return (
         <>
             <Dialog open={isOpen} onOpenChange={handleClose}>
-                <DialogContent className="max-w-none w-screen h-[100dvh] m-0 p-0 rounded-none bg-slate-950 border-none text-white overflow-hidden flex flex-col fixed inset-0 translate-x-0 translate-y-0 left-0 top-0">
+                <DialogContent className="max-w-none w-screen h-[100dvh] m-0 p-0 rounded-none bg-slate-950 border-none text-primary-foreground overflow-hidden flex flex-col fixed inset-0 translate-x-0 translate-y-0 left-0 top-0">
                     <DialogHeader className="p-4 border-b border-slate-800 flex-row items-center justify-between space-y-0 shrink-0">
                         <div className="space-y-0.5">
                             <DialogTitle className="flex items-center gap-2 text-base">
                                 <Ban className="h-4 w-4 text-red-400" />
                                 {step === 1 ? "Списание товара" : "Причина списания"}
                             </DialogTitle>
-                            <DialogDescription className="text-slate-400 text-[10px] leading-tight">
+                            <DialogDescription className="text-muted-foreground/70 text-[10px] leading-tight">
                                 {step === 1 ? "Выберите товары для списания." : "Укажите причину (брак, просрочка и т.д.)"}
                             </DialogDescription>
                         </div>
@@ -227,7 +227,7 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
                             <div className="space-y-4 pb-4">
                                 {/* Warehouse Selector */}
                                 <div className="space-y-2">
-                                    <Label className="text-[10px] text-slate-500 uppercase tracking-wider flex items-center gap-2">
+                                    <Label className="text-[10px] text-muted-foreground uppercase tracking-wider flex items-center gap-2">
                                         <Warehouse className="h-3 w-3" />
                                         Списать со склада
                                     </Label>
@@ -237,7 +237,7 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
                                                 key={wh.id}
                                                 variant="outline"
                                                 className={cn(
-                                                    "h-10 border-slate-800 bg-slate-900/50 hover:bg-slate-800 text-[10px] justify-start px-3",
+                                                    "h-10 border-slate-800 bg-primary/50 hover:bg-primary/90 text-[10px] justify-start px-3",
                                                     selectedWarehouseId === wh.id.toString() && "border-red-500 bg-red-500/10 text-red-400"
                                                 )}
                                                 onClick={() => setSelectedWarehouseId(wh.id.toString())}
@@ -254,7 +254,7 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
                                 <div className="grid grid-cols-2 gap-2">
                                     <Button 
                                         variant="outline" 
-                                        className="h-12 border-slate-800 bg-slate-900/50 hover:bg-slate-800 text-xs"
+                                        className="h-12 border-slate-800 bg-primary/50 hover:bg-primary/90 text-xs"
                                         onClick={() => setIsScannerOpen(true)}
                                     >
                                         <Camera className="mr-2 h-4 w-4 text-red-400" />
@@ -262,7 +262,7 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
                                     </Button>
                                     <Button 
                                         variant="outline" 
-                                        className="h-12 border-slate-800 bg-slate-900/50 hover:bg-slate-800 text-xs"
+                                        className="h-12 border-slate-800 bg-primary/50 hover:bg-primary/90 text-xs"
                                         onClick={() => setIsAddDialogOpen(true)}
                                     >
                                         <Search className="mr-2 h-4 w-4 text-red-400" />
@@ -271,7 +271,7 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
                                 </div>
 
                                 <div className="space-y-4">
-                                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center justify-between">
+                                    <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center justify-between">
                                         <div className="flex items-center gap-2">
                                             <ShoppingCart className="h-3 w-3" />
                                             Список списания ({items.length})
@@ -279,22 +279,22 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
                                     </h4>
                                     
                                     {items.length === 0 ? (
-                                        <div className="border border-dashed border-slate-800 rounded-2xl p-10 text-center text-slate-500">
+                                        <div className="border border-dashed border-slate-800 rounded-2xl p-10 text-center text-muted-foreground">
                                             <Ban className="h-10 w-10 mx-auto mb-3 opacity-20" />
                                             <p className="text-sm">Ничего не выбрано</p>
                                         </div>
                                     ) : (
-                                        <div className="border border-slate-800 rounded-2xl overflow-hidden bg-slate-900/30">
+                                        <div className="border border-slate-800 rounded-2xl overflow-hidden bg-primary/30">
                                             <Table>
                                                 <TableBody>
                                                     {items.map((item, idx) => (
-                                                        <TableRow key={`${item.product_id}-${item.type}-${idx}`} className="border-slate-800 hover:bg-slate-800/50">
+                                                        <TableRow key={`${item.product_id}-${item.type}-${idx}`} className="border-slate-800 hover:bg-primary/90/50">
                                                             <TableCell className="py-3">
                                                                 <div className="flex flex-col">
                                                                     <span className="text-sm font-medium text-slate-200">{item.name}</span>
                                                                     <div className="flex items-center gap-2 mt-1">
                                                                         <Badge className="bg-red-500/10 text-red-500 border-none text-[9px] px-1.5 h-4">Списание</Badge>
-                                                                        <span className="text-[10px] text-slate-500">{item.price} ₽</span>
+                                                                        <span className="text-[10px] text-muted-foreground">{item.price} ₽</span>
                                                                     </div>
                                                                 </div>
                                                             </TableCell>
@@ -305,7 +305,7 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
                                                                         variant="ghost" 
                                                                         size="icon" 
                                                                         onClick={() => removeItem(item.product_id, item.type)}
-                                                                        className="h-8 w-8 text-slate-600 hover:text-red-400"
+                                                                        className="h-8 w-8 text-muted-foreground hover:text-red-400"
                                                                     >
                                                                         <Trash2 className="h-4 w-4" />
                                                                     </Button>
@@ -322,12 +322,12 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
                         ) : (
                             <div className="space-y-6">
                                 <div className="space-y-2">
-                                    <Label className="text-xs text-slate-500 uppercase tracking-wider">Причина списания / Комментарий</Label>
+                                    <Label className="text-xs text-muted-foreground uppercase tracking-wider">Причина списания / Комментарий</Label>
                                     <Input 
                                         placeholder="Например: Брак, Истек срок годности, Личное потребление..."
                                         value={notes}
                                         onChange={e => setNotes(e.target.value)}
-                                        className="bg-slate-900 border-slate-800 h-12 rounded-xl"
+                                        className="bg-primary border-slate-800 h-12 rounded-xl"
                                     />
                                 </div>
 
@@ -335,12 +335,12 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
                         )}
                     </div>
 
-                    <DialogFooter className="p-6 border-t border-slate-800 bg-slate-900/50">
+                    <DialogFooter className="p-6 border-t border-slate-800 bg-primary/50">
                         {step === 1 ? (
                             <Button 
                                 className={cn(
                                     "w-full h-12 font-bold rounded-xl shadow-lg",
-                                    "bg-red-600 hover:bg-red-700 text-white shadow-red-900/20"
+                                    "bg-red-600 hover:bg-red-700 text-primary-foreground shadow-red-900/20"
                                 )}
                                 disabled={items.length === 0}
                                 onClick={() => setStep(2)}
@@ -352,13 +352,13 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
                             <div className="flex gap-3 w-full">
                                 <Button 
                                     variant="outline" 
-                                    className="h-12 w-14 border-slate-800 text-slate-400 rounded-xl"
+                                    className="h-12 w-14 border-slate-800 text-muted-foreground/70 rounded-xl"
                                     onClick={() => setStep(1)}
                                 >
                                     <ArrowLeft className="h-5 w-5" />
                                 </Button>
                                 <Button 
-                                    className="flex-1 h-12 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl shadow-lg shadow-green-900/20"
+                                    className="flex-1 h-12 bg-green-600 hover:bg-green-700 text-primary-foreground font-bold rounded-xl shadow-lg shadow-green-900/20"
                                     onClick={handleFinalize}
                                     disabled={isPending}
                                 >
@@ -372,16 +372,16 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
             </Dialog>
 
             <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-                <DialogContent className="bg-slate-950 border-slate-800 text-white max-w-[90vw] rounded-2xl">
+                <DialogContent className="bg-slate-950 border-slate-800 text-primary-foreground max-w-[90vw] rounded-2xl">
                     <DialogHeader>
                         <DialogTitle>Выбор товара</DialogTitle>
                     </DialogHeader>
                     <div className="py-4 space-y-4">
                         <div className="relative">
-                            <Search className="absolute left-3 top-3 h-4 w-4 text-slate-500" />
+                            <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                             <Input 
                                 placeholder="Название..."
-                                className="bg-slate-900 border-slate-800 pl-10 h-10"
+                                className="bg-primary border-slate-800 pl-10 h-10"
                                 value={searchQuery}
                                 onChange={e => setSearchQuery(e.target.value)}
                             />
@@ -394,7 +394,7 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
                                         "w-full text-left p-4 rounded-2xl transition-all text-sm border",
                                         selectedProductId === p.id.toString() 
                                             ? "bg-red-500/10 border-red-500/50 text-red-400 font-bold" 
-                                            : "bg-slate-900/30 border-slate-800/50 text-slate-400 hover:bg-slate-900 hover:border-slate-700"
+                                            : "bg-primary/30 border-slate-800/50 text-muted-foreground/70 hover:bg-primary hover:border-slate-700"
                                     )}
                                     onClick={() => setSelectedProductId(p.id.toString())}
                                 >
@@ -407,16 +407,16 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
                             <div className="space-y-6 pt-6 border-t border-slate-800/50">
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="space-y-2">
-                                        <Label className="text-[10px] uppercase text-slate-500 font-bold tracking-wider">Количество</Label>
+                                        <Label className="text-[10px] uppercase text-muted-foreground font-bold tracking-wider">Количество</Label>
                                         <Input 
                                             type="number" 
                                             value={itemQty} 
                                             onChange={e => setItemQty(e.target.value)}
-                                            className="bg-slate-900/50 border-slate-800 h-14 text-xl font-black text-center rounded-2xl focus:ring-red-500/20 focus:border-red-500/50 transition-all text-base"
+                                            className="bg-primary/50 border-slate-800 h-14 text-xl font-black text-center rounded-2xl focus:ring-red-500/20 focus:border-red-500/50 transition-all text-base"
                                         />
                                     </div>
                                     <div className="space-y-2">
-                                        <Label className="text-[10px] uppercase text-slate-500 font-bold tracking-wider">Тип операции</Label>
+                                        <Label className="text-[10px] uppercase text-muted-foreground font-bold tracking-wider">Тип операции</Label>
                                         <div className="h-14 rounded-2xl border border-red-500/50 bg-red-500/10 text-red-400 flex items-center justify-center gap-3 px-4">
                                             <Trash2 className="h-4 w-4" />
                                             <span className="text-xs font-bold uppercase">Списание</span>
@@ -427,12 +427,12 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
                                 {inventorySettings?.allow_cost_price_sale && (
                                     <div className="space-y-2">
                                         <div className="flex justify-between items-center">
-                                            <Label className="text-[10px] uppercase text-slate-500 font-bold tracking-wider">Цена за единицу (₽)</Label>
+                                            <Label className="text-[10px] uppercase text-muted-foreground font-bold tracking-wider">Цена за единицу (₽)</Label>
                                             <div className="flex gap-2">
                                                 <Button 
                                                     variant="outline" 
                                                     size="sm" 
-                                                    className="h-6 text-[9px] bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
+                                                    className="h-6 text-[9px] bg-primary border-slate-800 text-muted-foreground/70 hover:text-primary-foreground"
                                                     onClick={() => {
                                                         const p = allProducts.find(p => p.id === Number(selectedProductId))
                                                         if (p) setItemCustomPrice(p.cost_price.toString())
@@ -443,7 +443,7 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
                                                 <Button 
                                                     variant="outline" 
                                                     size="sm" 
-                                                    className="h-6 text-[9px] bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
+                                                    className="h-6 text-[9px] bg-primary border-slate-800 text-muted-foreground/70 hover:text-primary-foreground"
                                                     onClick={() => setItemCustomPrice("")}
                                                 >
                                                     Сбросить
@@ -455,9 +455,9 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
                                             value={itemCustomPrice} 
                                             onChange={(e) => setItemCustomPrice(e.target.value)}
                                             placeholder={allProducts.find(p => p.id === Number(selectedProductId))?.selling_price?.toString() || "0"}
-                                            className="bg-slate-900/50 border-slate-800 h-14 text-xl font-black text-center rounded-2xl focus:ring-blue-500/20 focus:border-blue-500/50 transition-all text-blue-400"
+                                            className="bg-primary/50 border-slate-800 h-14 text-xl font-black text-center rounded-2xl focus:ring-blue-500/20 focus:border-blue-500/50 transition-all text-blue-400"
                                         />
-                                        <p className="text-[10px] text-slate-500 text-center italic">
+                                        <p className="text-[10px] text-muted-foreground text-center italic">
                                             {!itemCustomPrice ? "Используется стандартная цена продажи" : "Установлена специальная цена"}
                                         </p>
                                     </div>
@@ -470,14 +470,14 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
                         <Button 
                             variant="ghost" 
                             onClick={() => setIsAddDialogOpen(false)} 
-                            className="flex-1 h-12 rounded-xl text-slate-500 hover:text-slate-300 hover:bg-slate-900 transition-colors"
+                            className="flex-1 h-12 rounded-xl text-muted-foreground hover:text-slate-300 hover:bg-primary transition-colors"
                         >
                             Отмена
                         </Button>
                         <Button 
                             onClick={handleAddProduct} 
                             disabled={!selectedProductId} 
-                            className="flex-1 bg-red-600 hover:bg-red-700 text-white h-12 rounded-xl font-bold shadow-lg shadow-red-900/20 transition-all active:scale-[0.98]"
+                            className="flex-1 bg-red-600 hover:bg-red-700 text-primary-foreground h-12 rounded-xl font-bold shadow-lg shadow-red-900/20 transition-all active:scale-[0.98]"
                         >
                             <Plus className="h-4 w-4 mr-2" />
                             Добавить

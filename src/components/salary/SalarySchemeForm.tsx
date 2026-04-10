@@ -316,76 +316,75 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
     if (isLoading) return <div className="flex h-96 items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-purple-600" /></div>
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-6 max-w-5xl mx-auto">
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
-                    <Button variant="ghost" size="icon" onClick={() => router.back()}><ArrowLeft className="h-5 w-5" /></Button>
+                    <Button variant="ghost" size="icon" onClick={() => router.back()} className="h-11 w-11 rounded-full bg-white border border-slate-200 hover:bg-slate-100 shadow-sm"><ArrowLeft className="h-5 w-5" /></Button>
                     <div>
-                        <h1 className="text-2xl font-bold tracking-tight">{isNew ? 'Создание схемы оплаты' : `Редактирование: ${schemeName}`}</h1>
+                        <h1 className="text-2xl font-semibold tracking-tight">{isNew ? 'Создание схемы оплаты' : `Редактирование: ${schemeName}`}</h1>
                         <p className="text-muted-foreground text-sm">{isNew ? 'Настройте новую формулу расчёта зарплаты' : 'Измените параметры схемы. Это создаст новую версию.'}</p>
                     </div>
                 </div>
                 <div className="flex gap-2">
-                    <Button variant="outline" onClick={() => router.back()}>Отмена</Button>
-                    <Button onClick={handleSave} disabled={isSaving} className="gap-2">{isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}Сохранить</Button>
+                    <Button variant="outline" className="h-11 rounded-xl px-6 border-slate-200" onClick={() => router.back()}>Отмена</Button>
+                    <Button onClick={handleSave} disabled={isSaving} className="h-11 rounded-xl px-6 gap-2 bg-slate-900 text-white hover:bg-slate-800">{isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}Сохранить</Button>
                 </div>
             </div>
 
             <Tabs defaultValue="base" className="space-y-6">
-                <TabsList className="grid w-full max-w-xl grid-cols-2 bg-muted/50 p-1 rounded-2xl h-14">
-                    <TabsTrigger value="base" className="rounded-xl data-[state=active]:bg-white data-[state=active]:shadow-sm font-bold text-xs uppercase tracking-widest">1. База и Условия</TabsTrigger>
-                    <TabsTrigger value="motivation" className="rounded-xl data-[state=active]:bg-white data-[state=active]:shadow-sm font-bold text-xs uppercase tracking-widest">2. Мотивация</TabsTrigger>
+                <TabsList className="inline-flex h-11 items-center justify-center rounded-xl bg-slate-100/50 p-1 text-muted-foreground w-full max-w-md">
+                    <TabsTrigger value="base" className="inline-flex items-center justify-center whitespace-nowrap rounded-lg px-4 py-2 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-white data-[state=active]:text-foreground data-[state=active]:shadow-sm w-full">1. База и Условия</TabsTrigger>
+                    <TabsTrigger value="motivation" className="inline-flex items-center justify-center whitespace-nowrap rounded-lg px-4 py-2 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-white data-[state=active]:text-foreground data-[state=active]:shadow-sm w-full">2. Мотивация</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="base" className="space-y-6 animate-in fade-in slide-in-from-left-4 duration-500">
-                    <Card className="border-none shadow-sm rounded-[2rem] overflow-hidden">
-                        <CardHeader className="bg-slate-50/50 pb-6">
-                            <CardTitle className="text-xl font-black tracking-tight flex items-center gap-2">
-                                <div className="h-8 w-8 rounded-xl bg-purple-100 flex items-center justify-center"><Edit className="h-4 w-4 text-purple-600" /></div>
-                                Базовые настройки
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-6 pt-6">
-                            <div className="grid md:grid-cols-2 gap-6">
-                                <div className="space-y-2">
-                                    <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">Название схемы *</Label>
-                                    <Input value={schemeName} onChange={e => setSchemeName(e.target.value)} placeholder="Например: Старший администратор (Ночь)" className="h-12 rounded-xl border-muted-foreground/10 focus:border-purple-500/50 bg-muted/5" />
-                                    <p className="text-[10px] text-muted-foreground ml-1">Укажите понятное название, чтобы не запутаться при назначении сотрудникам.</p>
-                                </div>
-                                <div className="space-y-2">
-                                    <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">Эталон смен</Label>
-                                    <div className="flex items-center gap-3">
-                                        <Input type="number" value={standardMonthlyShifts} onChange={e => setStandardMonthlyShifts(parseInt(e.target.value) || 15)} className="h-12 w-24 rounded-xl border-muted-foreground/10 focus:border-purple-500/50 bg-muted/5 text-center font-bold" />
-                                        <span className="text-xs text-muted-foreground font-medium">смен в месяц (норма)</span>
-                                    </div>
-                                    <p className="text-[10px] text-muted-foreground ml-1">Используется для расчета KPI. Если сотрудник работает больше нормы — план растет.</p>
-                                </div>
+                    <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
+                        <div className="p-6 md:p-8 space-y-8">
+                            <div className="flex items-center gap-3">
+                                <div className="h-10 w-10 rounded-xl bg-purple-50 flex items-center justify-center"><Edit className="h-5 w-5 text-purple-600" /></div>
+                                <h2 className="text-xl font-semibold">Базовые настройки</h2>
                             </div>
+                            <div className="space-y-6">
+                                <div className="grid md:grid-cols-2 gap-6">
+                                    <div className="space-y-2">
+                                        <Label className="text-sm font-medium ml-1">Название схемы *</Label>
+                                        <Input value={schemeName} onChange={e => setSchemeName(e.target.value)} placeholder="Например: Старший администратор (Ночь)" className="h-11 rounded-xl bg-slate-50/50" />
+                                        <p className="text-xs text-muted-foreground ml-1">Укажите понятное название, чтобы не запутаться при назначении сотрудникам.</p>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label className="text-sm font-medium ml-1">Эталон смен</Label>
+                                        <div className="flex items-center gap-3">
+                                            <Input type="number" value={standardMonthlyShifts} onChange={e => setStandardMonthlyShifts(parseInt(e.target.value) || 15)} className="h-11 w-24 rounded-xl bg-slate-50/50 text-center font-bold" />
+                                            <span className="text-xs text-muted-foreground font-medium">смен в месяц (норма)</span>
+                                        </div>
+                                        <p className="text-xs text-muted-foreground ml-1">Используется для расчета KPI. Если сотрудник работает больше нормы — план растет.</p>
+                                    </div>
+                                </div>
 
-                            <div className="space-y-4 pt-4 border-t border-dashed">
-                                <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                        <div className="h-8 w-8 rounded-xl bg-emerald-100 flex items-center justify-center"><DollarSign className="h-4 w-4 text-emerald-600" /></div>
-                                        <div>
-                                            <h3 className="font-bold text-sm">Базовая ставка</h3>
-                                            <p className="text-[10px] text-muted-foreground">Фиксированная оплата за выход или часы</p>
+                            <div className="space-y-4 pt-4 border-t border-slate-100">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-3">
+                                            <div className="h-10 w-10 rounded-xl bg-emerald-50 flex items-center justify-center"><DollarSign className="h-5 w-5 text-emerald-600" /></div>
+                                            <div>
+                                                <h3 className="font-medium text-sm">Базовая ставка</h3>
+                                                <p className="text-xs text-muted-foreground">Фиксированная оплата за выход или часы</p>
+                                            </div>
+                                        </div>
+                                        <div className="flex p-1 bg-slate-100/50 rounded-xl h-11 items-center">
+                                            <button type="button" onClick={() => handleUpdateBaseType('hourly')} className={`px-4 h-9 rounded-lg text-sm font-medium transition-all ${formula.base.type === 'hourly' ? 'bg-white shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}>Почасовая</button>
+                                            <button type="button" onClick={() => handleUpdateBaseType('per_shift')} className={`px-4 h-9 rounded-lg text-sm font-medium transition-all ${formula.base.type === 'per_shift' ? 'bg-white shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}>За смену</button>
                                         </div>
                                     </div>
-                                    <div className="flex p-1 bg-muted/30 rounded-xl">
-                                        <button type="button" onClick={() => handleUpdateBaseType('hourly')} className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${formula.base.type === 'hourly' ? 'bg-white shadow-sm text-purple-600' : 'text-muted-foreground hover:bg-white/50'}`}>Почасовая</button>
-                                        <button type="button" onClick={() => handleUpdateBaseType('per_shift')} className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${formula.base.type === 'per_shift' ? 'bg-white shadow-sm text-purple-600' : 'text-muted-foreground hover:bg-white/50'}`}>За смену</button>
-                                    </div>
-                                </div>
 
                                 {formula.base.type !== 'none' && (
                                     <div className="bg-slate-50/50 rounded-2xl p-6 space-y-6 animate-in zoom-in-95 duration-300 border border-slate-100">
-                                        <div className="flex items-start justify-between gap-6">
-                                            <div className="space-y-4 flex-1">
+                                        <div className="flex flex-col md:flex-row items-start justify-between gap-8">
+                                            <div className="space-y-4 flex-1 w-full">
                                                 <div className="flex items-center justify-between">
-                                                    <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Размер ставки</Label>
+                                                    <Label className="text-sm font-medium">Размер ставки</Label>
                                                     <div className="flex items-center gap-2">
-                                                        <span className="text-[10px] font-bold text-muted-foreground uppercase">Ночной тариф</span>
-                                                        <Switch checked={!!(formula.base.day_rate || formula.base.night_rate)} onCheckedChange={checked => { if (checked) { updateBaseAmount('day_rate', formula.base.amount || 500); updateBaseAmount('night_rate', (formula.base.amount || 500) * 1.2) } else { setFormula(prev => ({ ...prev, base: { type: prev.base.type, amount: prev.base.day_rate || prev.base.amount || 500 } })) } }} className="scale-75 data-[state=checked]:bg-purple-600" />
+                                                        <span className="text-xs font-medium text-muted-foreground">Ночной тариф</span>
+                                                        <Switch checked={!!(formula.base.day_rate || formula.base.night_rate)} onCheckedChange={checked => { if (checked) { updateBaseAmount('day_rate', formula.base.amount || 500); updateBaseAmount('night_rate', (formula.base.amount || 500) * 1.2) } else { setFormula(prev => ({ ...prev, base: { type: prev.base.type, amount: prev.base.day_rate || prev.base.amount || 500 } })) } }} className="data-[state=checked]:bg-emerald-600" />
                                                     </div>
                                                 </div>
                                                 
@@ -394,26 +393,26 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                                                         <div className="grid grid-cols-2 gap-4">
                                                             <div className="relative group">
                                                                 <div className="absolute left-3 top-1/2 -translate-y-1/2 text-orange-500"><Sun className="h-4 w-4" /></div>
-                                                                <Input type="number" value={formula.base.day_rate} onChange={e => updateBaseAmount('day_rate', parseFloat(e.target.value) || 0)} className="h-10 rounded-xl border-muted-foreground/10 bg-white pl-10 pr-8 text-sm font-black text-slate-700" />
-                                                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-black uppercase text-muted-foreground">₽</span>
+                                                                <Input type="number" value={formula.base.day_rate} onChange={e => updateBaseAmount('day_rate', parseFloat(e.target.value) || 0)} className="h-11 rounded-xl border-slate-200 bg-white pl-10 pr-8 text-sm font-medium" />
+                                                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-muted-foreground">₽</span>
                                                             </div>
                                                             <div className="relative group">
                                                                 <div className="absolute left-3 top-1/2 -translate-y-1/2 text-indigo-500"><Moon className="h-4 w-4" /></div>
-                                                                <Input type="number" value={formula.base.night_rate} onChange={e => updateBaseAmount('night_rate', parseFloat(e.target.value) || 0)} className="h-10 rounded-xl border-muted-foreground/10 bg-white pl-10 pr-8 text-sm font-black text-slate-700" />
-                                                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-black uppercase text-muted-foreground">₽</span>
+                                                                <Input type="number" value={formula.base.night_rate} onChange={e => updateBaseAmount('night_rate', parseFloat(e.target.value) || 0)} className="h-11 rounded-xl border-slate-200 bg-white pl-10 pr-8 text-sm font-medium" />
+                                                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-muted-foreground">₽</span>
                                                             </div>
                                                         </div>
-                                                        <p className="text-[10px] text-muted-foreground leading-snug">
+                                                        <p className="text-xs text-muted-foreground leading-snug">
                                                             Ночной тариф применяется автоматически для смен, которые начинаются или заканчиваются в ночное время (обычно с 22:00 до 08:00).
                                                         </p>
                                                     </div>
                                                 ) : (
                                                     <div className="space-y-2">
-                                                        <div className="relative group max-w-[120px]">
-                                                            <Input type="number" value={formula.base.amount} onChange={e => updateBaseAmount('amount', parseFloat(e.target.value) || 0)} className="h-10 rounded-xl border-muted-foreground/10 bg-white pl-4 pr-8 text-sm font-black text-slate-700" />
-                                                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-black uppercase text-muted-foreground">₽</span>
+                                                        <div className="relative group max-w-[160px]">
+                                                            <Input type="number" value={formula.base.amount} onChange={e => updateBaseAmount('amount', parseFloat(e.target.value) || 0)} className="h-11 rounded-xl border-slate-200 bg-white pl-4 pr-8 text-sm font-medium" />
+                                                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-muted-foreground">₽</span>
                                                         </div>
-                                                        <p className="text-[10px] text-muted-foreground leading-snug">
+                                                        <p className="text-xs text-muted-foreground leading-snug">
                                                             {formula.base.type === 'hourly' 
                                                                 ? "Оплата за один час работы. Умножается на количество отработанных часов."
                                                                 : "Фиксированная сумма за одну смену. Выплачивается при выполнении нормы часов."}
@@ -422,30 +421,30 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                                                 )}
                                             </div>
 
-                                            <div className="w-px bg-slate-200 self-stretch mx-2" />
+                                            <div className="hidden md:block w-px bg-slate-200 self-stretch" />
 
-                                            <div className="space-y-4 flex-1">
-                                                <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Условия выплаты</Label>
+                                            <div className="space-y-4 flex-1 w-full">
+                                                <Label className="text-sm font-medium">Условия выплаты</Label>
                                                 <div className="space-y-3">
                                                     <div className="flex flex-col gap-2">
-                                                        <span className="text-[10px] font-bold text-slate-500">Когда выплачивать?</span>
-                                                        <div className="flex p-1 bg-white rounded-xl border border-slate-200 w-fit">
+                                                        <span className="text-xs font-medium text-slate-500">Когда выплачивать?</span>
+                                                        <div className="flex p-1 bg-slate-100/50 rounded-xl h-11 items-center w-fit">
                                                             <button 
                                                                 type="button" 
                                                                 onClick={() => setFormula(prev => ({ ...prev, base: { ...prev.base, payout_timing: 'MONTH' } }))}
-                                                                className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all ${(!formula.base.payout_timing || formula.base.payout_timing === 'MONTH') ? 'bg-emerald-50 text-emerald-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                                                                className={`px-3 h-9 rounded-lg text-xs font-medium transition-all ${(!formula.base.payout_timing || formula.base.payout_timing === 'MONTH') ? 'bg-white text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
                                                             >
                                                                 В конце месяца
                                                             </button>
                                                             <button 
                                                                 type="button" 
                                                                 onClick={() => setFormula(prev => ({ ...prev, base: { ...prev.base, payout_timing: 'SHIFT' } }))}
-                                                                className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all ${formula.base.payout_timing === 'SHIFT' ? 'bg-emerald-50 text-emerald-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                                                                className={`px-3 h-9 rounded-lg text-xs font-medium transition-all ${formula.base.payout_timing === 'SHIFT' ? 'bg-white text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
                                                             >
                                                                 В конце смены
                                                             </button>
                                                         </div>
-                                                        <p className="text-[10px] text-muted-foreground leading-snug">
+                                                        <p className="text-xs text-muted-foreground leading-snug">
                                                             {(!formula.base.payout_timing || formula.base.payout_timing === 'MONTH') 
                                                                 ? "Сумма будет копиться на балансе и выплачиваться в расчетный день." 
                                                                 : "Система предложит выдать деньги из кассы сразу после закрытия смены."}
@@ -453,15 +452,15 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                                                     </div>
                                                     
                                                     {formula.base.type === 'per_shift' && (
-                                                        <div className="space-y-1">
-                                                            <div className="flex items-center gap-2 text-xs">
-                                                                <span className="text-slate-500 font-medium">Полная смена от:</span>
-                                                                <div className="relative w-16">
-                                                                    <Input type="number" value={formula.base.full_shift_hours || 12} onChange={e => updateBaseAmount('full_shift_hours', parseFloat(e.target.value) || 12)} className="h-8 rounded-lg border-slate-200 text-center font-bold text-slate-700 pr-6" />
-                                                                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400">ч</span>
+                                                        <div className="space-y-2 mt-4 pt-4 border-t border-slate-100">
+                                                            <div className="flex items-center gap-3">
+                                                                <span className="text-sm font-medium">Полная смена от:</span>
+                                                                <div className="relative w-20">
+                                                                    <Input type="number" value={formula.base.full_shift_hours || 12} onChange={e => updateBaseAmount('full_shift_hours', parseFloat(e.target.value) || 12)} className="h-11 rounded-xl border-slate-200 text-center font-medium pr-6" />
+                                                                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">ч</span>
                                                                 </div>
                                                             </div>
-                                                            <p className="text-[10px] text-muted-foreground leading-snug">Если отработано меньше — оплата снизится пропорционально.</p>
+                                                            <p className="text-xs text-muted-foreground leading-snug">Если отработано меньше — оплата снизится пропорционально.</p>
                                                         </div>
                                                     )}
                                                 </div>
@@ -470,26 +469,25 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                                     </div>
                                 )}
                             </div>
-                        </CardContent>
-                    </Card>
+                        </div>
+                    </div>
+                </div>
                 </TabsContent>
 
                 <TabsContent value="motivation" className="space-y-12 animate-in fade-in slide-in-from-right-4 duration-500">
                     {/* Daily Bonuses Section */}
                     <div className="space-y-6">
-                        <Card className="border-none shadow-sm rounded-[2rem] overflow-hidden">
-                            <CardHeader className="bg-slate-50/50 pb-8">
+                        <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
+                            <div className="p-6 md:p-8 space-y-8">
                                 <div className="flex flex-col gap-2">
-                                    <CardTitle className="text-xl font-black tracking-tight flex items-center gap-2">
-                                        Мотивация
-                                    </CardTitle>
-                                    <p className="text-xs font-medium text-muted-foreground leading-relaxed">
+                                    <h2 className="text-xl font-semibold">Мотивация</h2>
+                                    <p className="text-sm text-muted-foreground leading-relaxed max-w-3xl">
                                         Настройте систему поощрений, чтобы сотрудники зарабатывали больше, принося пользу клубу. 
                                         Комбинируйте бонусы за выручку, выполнение задач и качество работы (чек-листы). 
                                         Прозрачная система мотивации повышает эффективность персонала.
                                     </p>
                                 </div>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-6">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                                     {BONUS_TYPES.map((item) => {
                                         const isActive = isBonusActive(item.type)
                                         return (
@@ -532,28 +530,26 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                                         )
                                     })}
                                 </div>
-                            </CardHeader>
-                            <CardContent className="pt-8">
                                 {formula.bonuses.length === 0 ? (
                                     <div className="flex flex-col items-center justify-center py-16 text-muted-foreground border-2 border-dashed rounded-[2rem] bg-slate-50/50 border-slate-200/50"><div className="h-16 w-16 rounded-full bg-white flex items-center justify-center shadow-sm mb-4"><Percent className="h-8 w-8 opacity-20" /></div><p className="text-sm font-bold uppercase tracking-widest opacity-40">Список бонусов пуст</p><p className="text-xs mt-2 font-medium opacity-40">Выберите тип выше, чтобы добавить его в схему</p></div>
                                 ) : (
                                     <div className="grid gap-6">
                                         {formula.bonuses.map((bonus, index) => (
-                                            <div id={`bonus-${index}`} key={index} className={`group relative rounded-[2rem] p-8 border shadow-sm transition-all duration-300 ${'bg-white hover:shadow-xl hover:border-purple-200'}`}>
+                                            <div id={`bonus-${index}`} key={index} className={`group relative rounded-3xl p-6 md:p-8 border border-slate-100 shadow-sm transition-all duration-300 ${'bg-white hover:shadow-md'}`}>
                                                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
                                                     <div className="flex items-center gap-4 flex-1">
                                                         <div className={`h-12 w-12 rounded-2xl flex items-center justify-center shadow-sm ${bonus.type === 'progressive_percent' ? 'bg-emerald-600 text-white' : bonus.type === 'leaderboard_rank' ? 'bg-amber-500 text-white' : 'bg-purple-600 text-white'}`}>{bonus.type === 'percent_revenue' && <Percent className="h-6 w-6" />}{bonus.type === 'fixed' && <Coins className="h-6 w-6" />}{bonus.type === 'progressive_percent' && <TrendingUp className="h-6 w-6" />}{bonus.type === 'checklist' && <ClipboardCheck className="h-6 w-6" />}{bonus.type === 'maintenance_kpi' && <Wrench className="h-6 w-6" />}{bonus.type === 'leaderboard_rank' && <Trophy className="h-6 w-6" />}</div>
-                                                        <div className="space-y-1"><Badge variant="secondary" className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-lg ${bonus.type === 'progressive_percent' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : bonus.type === 'leaderboard_rank' ? 'bg-amber-50 text-amber-700 border-amber-100' : ''}`}>{bonus.type === 'percent_revenue' && 'Процент от выручки'}{bonus.type === 'fixed' && 'Фиксированный бонус'}{bonus.type === 'progressive_percent' && 'Бонус за выполнение плана'}{bonus.type === 'checklist' && 'Бонус за чек-лист'}{bonus.type === 'maintenance_kpi' && 'Бонус за обслуживание'}{bonus.type === 'leaderboard_rank' && 'Бонус за место'}</Badge><Input value={bonus.name || ''} onChange={(e) => updateBonus(index, 'name', e.target.value)} className="h-10 text-xl font-black bg-transparent border-none p-0 focus-visible:ring-0 focus-visible:outline-none placeholder:opacity-20" placeholder="Название бонуса..." /></div>
+                                                        <div className="space-y-1.5"><Badge variant="secondary" className={`text-xs font-medium px-2.5 py-0.5 rounded-lg ${bonus.type === 'progressive_percent' ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100' : bonus.type === 'leaderboard_rank' ? 'bg-amber-50 text-amber-700 hover:bg-amber-100' : 'bg-purple-50 text-purple-700 hover:bg-purple-100'}`}>{bonus.type === 'percent_revenue' && 'Процент от выручки'}{bonus.type === 'fixed' && 'Фиксированный бонус'}{bonus.type === 'progressive_percent' && 'Бонус за выполнение плана'}{bonus.type === 'checklist' && 'Бонус за чек-лист'}{bonus.type === 'maintenance_kpi' && 'Бонус за обслуживание'}{bonus.type === 'leaderboard_rank' && 'Бонус за место'}</Badge><Input value={bonus.name || ''} onChange={(e) => updateBonus(index, 'name', e.target.value)} className="h-10 text-xl font-semibold bg-transparent border-none p-0 focus-visible:ring-0 focus-visible:outline-none placeholder:text-slate-300" placeholder="Название бонуса..." /></div>
                                                     </div>
                                                     <Button type="button" variant="ghost" size="icon" className="h-10 w-10 rounded-xl hover:bg-red-500 hover:text-white transition-all shrink-0" onClick={() => removeBonus(index)}><Trash2 className="h-5 w-5" /></Button>
                                                 </div>
                                                 <div className="space-y-8">
-                                                    <div className="bg-slate-50 border border-slate-100 rounded-2xl p-6">
+                                                    <div className="bg-slate-50 border border-slate-100 rounded-2xl p-5">
                                                         <div className="flex items-start gap-3">
-                                                            <HelpCircle className="h-5 w-5 text-purple-400 shrink-0 mt-0.5" />
-                                                            <div className="space-y-2">
-                                                                <h5 className="text-xs font-black uppercase tracking-tight text-slate-700">Как это работает?</h5>
-                                                                <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
+                                                            <HelpCircle className="h-5 w-5 text-purple-500 shrink-0 mt-0.5" />
+                                                            <div className="space-y-1">
+                                                                <h5 className="text-sm font-medium text-slate-700">Как это работает?</h5>
+                                                                <p className="text-xs text-slate-500 leading-relaxed">
                                                                     {bonus.type === 'percent_revenue' && "Сотрудник получает указанный % от каждой заработанной суммы. Если выручка 50,000₽, а бонус 5%, то к зарплате добавится 2,500₽."}
                                                                     {bonus.type === 'fixed' && "Просто фиксированная сумма за выход в смену. Добавляется к базовой ставке независимо от выручки."}
 
@@ -569,44 +565,44 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
 
                                                     <div className="flex flex-col sm:flex-row gap-6">
                                                         <div className="flex flex-col gap-3">
-                                                            <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">Куда зачислять бонус?</Label>
-                                                            <div className="flex p-1.5 bg-muted/30 rounded-2xl w-fit">
-                                                                <button type="button" className={`flex items-center gap-2 px-6 py-3 rounded-xl text-xs font-bold transition-all ${bonus.payout_type === 'REAL_MONEY' || !bonus.payout_type ? 'bg-white shadow-md scale-[1.02] text-emerald-600' : 'text-muted-foreground hover:bg-white/50'}`} onClick={() => updateBonus(index, 'payout_type', 'REAL_MONEY')}><Coins className="h-4 w-4" /> Деньги</button>
-                                                                <button type="button" className={`flex items-center gap-2 px-6 py-3 rounded-xl text-xs font-bold transition-all ${bonus.payout_type === 'VIRTUAL_BALANCE' ? 'bg-white shadow-md scale-[1.02] text-purple-600' : 'text-muted-foreground hover:bg-white/50'}`} onClick={() => updateBonus(index, 'payout_type', 'VIRTUAL_BALANCE')}><Wallet className="h-4 w-4" /> На депозит</button>
+                                                            <Label className="text-sm font-medium ml-1">Куда зачислять бонус?</Label>
+                                                            <div className="flex p-1 bg-slate-100/50 rounded-xl h-11 items-center w-fit">
+                                                                <button type="button" className={`flex items-center gap-2 px-6 h-9 rounded-lg text-sm font-medium transition-all ${bonus.payout_type === 'REAL_MONEY' || !bonus.payout_type ? 'bg-white shadow-sm text-emerald-600' : 'text-muted-foreground hover:text-foreground'}`} onClick={() => updateBonus(index, 'payout_type', 'REAL_MONEY')}><Coins className="h-4 w-4" /> Деньги</button>
+                                                                <button type="button" className={`flex items-center gap-2 px-6 h-9 rounded-lg text-sm font-medium transition-all ${bonus.payout_type === 'VIRTUAL_BALANCE' ? 'bg-white shadow-sm text-purple-600' : 'text-muted-foreground hover:text-foreground'}`} onClick={() => updateBonus(index, 'payout_type', 'VIRTUAL_BALANCE')}><Wallet className="h-4 w-4" /> На депозит</button>
                                                             </div>
                                                         </div>
 
                                                         {bonus.payout_type !== 'VIRTUAL_BALANCE' && bonus.type !== 'leaderboard_rank' && (
                                                             <div className="flex flex-col gap-3">
-                                                                <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">Когда выплачивать?</Label>
-                                                                <div className="flex p-1.5 bg-emerald-50/50 rounded-2xl w-fit border border-emerald-100/50">
-                                                                    <button type="button" className={`flex items-center gap-2 px-6 py-3 rounded-xl text-xs font-bold transition-all ${(!bonus.payout_timing || bonus.payout_timing === 'MONTH') ? 'bg-white shadow-md scale-[1.02] text-emerald-600' : 'text-emerald-700/50 hover:bg-white/50'}`} onClick={() => updateBonus(index, 'payout_timing', 'MONTH')}>В конце месяца</button>
-                                                                    <button type="button" className={`flex items-center gap-2 px-6 py-3 rounded-xl text-xs font-bold transition-all ${bonus.payout_timing === 'SHIFT' ? 'bg-white shadow-md scale-[1.02] text-emerald-600' : 'text-emerald-700/50 hover:bg-white/50'}`} onClick={() => updateBonus(index, 'payout_timing', 'SHIFT')}>Выдавать в конце смены</button>
+                                                                <Label className="text-sm font-medium ml-1">Когда выплачивать?</Label>
+                                                                <div className="flex p-1 bg-emerald-50/50 rounded-xl h-11 items-center w-fit border border-emerald-100/50">
+                                                                    <button type="button" className={`flex items-center gap-2 px-6 h-9 rounded-lg text-sm font-medium transition-all ${(!bonus.payout_timing || bonus.payout_timing === 'MONTH') ? 'bg-white shadow-sm text-emerald-600' : 'text-emerald-700/50 hover:text-emerald-700'}`} onClick={() => updateBonus(index, 'payout_timing', 'MONTH')}>В конце месяца</button>
+                                                                    <button type="button" className={`flex items-center gap-2 px-6 h-9 rounded-lg text-sm font-medium transition-all ${bonus.payout_timing === 'SHIFT' ? 'bg-white shadow-sm text-emerald-600' : 'text-emerald-700/50 hover:text-emerald-700'}`} onClick={() => updateBonus(index, 'payout_timing', 'SHIFT')}>В конце смены</button>
                                                                 </div>
                                                             </div>
                                                         )}
 
                                                         {bonus.type === 'leaderboard_rank' && (
                                                             <div className="flex flex-col gap-3">
-                                                                <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">Когда выплачивать?</Label>
-                                                                <div className="flex items-center gap-2 px-6 py-3 rounded-2xl text-xs font-bold bg-amber-50 text-amber-700 border border-amber-100 w-fit">
+                                                                <Label className="text-sm font-medium ml-1">Когда выплачивать?</Label>
+                                                                <div className="flex items-center gap-2 px-6 h-11 rounded-xl text-sm font-medium bg-amber-50 text-amber-700 border border-amber-100 w-fit">
                                                                     <Trophy className="h-4 w-4" />
                                                                     Только в конце месяца
                                                                 </div>
                                                             </div>
                                                         )}
                                                     </div>
-                                                    <div className="grid md:grid-cols-2 gap-8 items-end">
-                                                        <div className="space-y-4"><Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">Настройки расчета</Label>
+                                                    <div className="grid md:grid-cols-2 gap-8 items-start">
+                                                        <div className="space-y-4"><Label className="text-sm font-medium ml-1">Настройки расчета</Label>
                                                             {bonus.type === 'percent_revenue' && (
-                                                                <div className="flex items-center gap-4 bg-muted/20 p-4 rounded-[1.5rem] border border-muted-foreground/5">
+                                                                <div className="flex items-center gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-100">
                                                                     <div className="relative w-24">
-                                                                        <Input type="number" value={bonus.percent} onChange={e => updateBonus(index, 'percent', parseFloat(e.target.value) || 0)} className="h-12 rounded-xl text-center font-black text-lg border-muted-foreground/10" />
-                                                                        <span className="absolute right-3 top-1/2 -translate-y-1/2 font-black text-muted-foreground">%</span>
+                                                                        <Input type="number" value={bonus.percent} onChange={e => updateBonus(index, 'percent', parseFloat(e.target.value) || 0)} className="h-11 rounded-xl text-center font-medium text-lg border-slate-200" />
+                                                                        <span className="absolute right-3 top-1/2 -translate-y-1/2 font-medium text-muted-foreground">%</span>
                                                                     </div>
-                                                                    <span className="text-xs font-bold text-muted-foreground uppercase">от</span>
+                                                                    <span className="text-xs font-medium text-muted-foreground">от</span>
                                                                     <Select value={bonus.source || 'total'} onValueChange={value => updateBonus(index, 'source', value as any)}>
-                                                                        <SelectTrigger className="flex-1 h-12 rounded-xl border-muted-foreground/10 bg-white font-bold text-sm outline-none focus:ring-0 focus:border-purple-500">
+                                                                        <SelectTrigger className="flex-1 h-11 rounded-xl border-slate-200 bg-white font-medium text-sm">
                                                                             <SelectValue placeholder="Выберите показатель" />
                                                                         </SelectTrigger>
                                                                         <SelectContent>
@@ -626,7 +622,7 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                                                                     </Select>
                                                                 </div>
                                                             )}
-                                                            {bonus.type === 'fixed' && <div className="relative max-w-xs group"><Input type="number" value={bonus.amount} onChange={e => updateBonus(index, 'amount', parseFloat(e.target.value) || 0)} className="h-14 rounded-2xl border-muted-foreground/10 bg-muted/5 pl-6 pr-12 text-xl font-black text-slate-700" /><span className="absolute right-6 top-1/2 -translate-y-1/2 text-sm font-black text-muted-foreground">₽</span></div>}
+                                                            {bonus.type === 'fixed' && <div className="relative max-w-xs group"><Input type="number" value={bonus.amount} onChange={e => updateBonus(index, 'amount', parseFloat(e.target.value) || 0)} className="h-11 rounded-xl border-slate-200 bg-slate-50 pl-6 pr-12 text-lg font-medium text-slate-700" /><span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted-foreground">₽</span></div>}
 
                                                             {bonus.type === 'leaderboard_rank' && (
                                                                 <div className="space-y-4">
@@ -931,8 +927,8 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                                         ))}
                                     </div>
                                 )}
-                            </CardContent>
-                        </Card>
+                            </div>
+                        </div>
                     </div>
                 </TabsContent>
             </Tabs>

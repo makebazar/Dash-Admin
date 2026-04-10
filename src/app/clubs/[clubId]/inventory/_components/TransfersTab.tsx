@@ -128,9 +128,9 @@ export function TransfersTab({ warehouses, products, currentUserId }: TransfersT
             case "INVENTORY_CORRECTION":
                 return { label: "Коррекция инв.", className: "bg-orange-50 text-orange-700" }
             case "ADJUSTMENT":
-                return { label: "Корректировка", className: "bg-slate-100 text-slate-700" }
+                return { label: "Корректировка", className: "bg-accent text-foreground" }
             default:
-                return { label: movement.type || "Движение", className: "bg-slate-100 text-slate-700" }
+                return { label: movement.type || "Движение", className: "bg-accent text-foreground" }
         }
     }
 
@@ -173,14 +173,14 @@ export function TransfersTab({ warehouses, products, currentUserId }: TransfersT
     return (
         <div className="space-y-6">
             {/* Actions Area */}
-            <div className="flex items-center justify-between bg-white p-4 sm:p-6 rounded-2xl border shadow-sm gap-4">
+            <div className="flex items-center justify-between bg-card p-4 sm:p-6 rounded-2xl border shadow-sm gap-4">
                 <div className="flex items-center gap-3 sm:gap-4 min-w-0">
                     <div className="h-10 w-10 sm:h-12 sm:w-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center shrink-0">
                         <ArrowRightLeft className="h-5 w-5 sm:h-6 sm:w-6" />
                     </div>
                     <div className="min-w-0">
                         <h3 className="text-sm sm:text-lg font-bold truncate">Перемещения</h3>
-                        <p className="text-[10px] sm:text-sm text-muted-foreground text-slate-500 truncate">Между складами клуба</p>
+                        <p className="text-[10px] sm:text-sm text-muted-foreground text-muted-foreground truncate">Между складами клуба</p>
                     </div>
                 </div>
                 <Button 
@@ -193,22 +193,22 @@ export function TransfersTab({ warehouses, products, currentUserId }: TransfersT
                 </Button>
             </div>
 
-            <div className="bg-white border rounded-2xl shadow-sm p-4 space-y-4">
-                <div className="flex items-center gap-2 text-slate-500">
+            <div className="bg-card border rounded-2xl shadow-sm p-4 space-y-4">
+                <div className="flex items-center gap-2 text-muted-foreground">
                     <Filter className="h-4 w-4" />
                     <span className="text-sm font-bold uppercase tracking-wider">Фильтры журнала</span>
-                    <Badge variant="secondary" className="ml-auto bg-slate-100 text-slate-700">
+                    <Badge variant="secondary" className="ml-auto bg-accent text-foreground">
                         {filteredMovements.length} из {movements.length}
                     </Badge>
                 </div>
 
                 <div className="relative">
-                    <Search className="absolute left-3 top-3.5 h-4 w-4 text-slate-400" />
+                    <Search className="absolute left-3 top-3.5 h-4 w-4 text-muted-foreground/70" />
                     <Input
                         value={movementSearch}
                         onChange={(e) => setMovementSearch(e.target.value)}
                         placeholder="Поиск по товару, складу, комментарию или пользователю..."
-                        className="pl-10 h-11 rounded-xl border-slate-200"
+                        className="pl-10 h-11 rounded-xl border-border"
                     />
                 </div>
 
@@ -221,8 +221,8 @@ export function TransfersTab({ warehouses, products, currentUserId }: TransfersT
                             className={cn(
                                 "h-9 rounded-xl text-xs",
                                 movementFilter === button.value
-                                    ? "bg-slate-900 hover:bg-slate-800"
-                                    : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                                    ? "bg-primary hover:bg-primary/90"
+                                    : "border-border text-muted-foreground hover:bg-muted"
                             )}
                             onClick={() => setMovementFilter(button.value)}
                         >
@@ -233,28 +233,28 @@ export function TransfersTab({ warehouses, products, currentUserId }: TransfersT
             </div>
 
             {/* Desktop Table */}
-            <div className="hidden md:block bg-white border rounded-2xl overflow-hidden shadow-sm">
-                <div className="p-4 border-b bg-slate-50/50 flex items-center gap-2">
-                    <History className="h-4 w-4 text-slate-400" />
-                    <span className="text-sm font-bold uppercase tracking-wider text-slate-500">История движений</span>
+            <div className="hidden md:block bg-card border rounded-2xl overflow-hidden shadow-sm">
+                <div className="p-4 border-b bg-muted/50 flex items-center gap-2">
+                    <History className="h-4 w-4 text-muted-foreground/70" />
+                    <span className="text-sm font-bold uppercase tracking-wider text-muted-foreground">История движений</span>
                 </div>
                 <Table>
-                    <TableHeader className="bg-slate-50/50">
+                    <TableHeader className="bg-muted/50">
                         <TableRow>
-                            <TableHead className="text-[10px] font-bold uppercase text-slate-400">Дата</TableHead>
-                            <TableHead className="text-[10px] font-bold uppercase text-slate-400">Товар</TableHead>
-                            <TableHead className="text-[10px] font-bold uppercase text-slate-400">Склад</TableHead>
-                            <TableHead className="text-[10px] font-bold uppercase text-slate-400">Тип</TableHead>
-                            <TableHead className="text-[10px] font-bold uppercase text-slate-400">Изменение</TableHead>
-                            <TableHead className="text-[10px] font-bold uppercase text-slate-400">Комментарий</TableHead>
-                            <TableHead className="text-[10px] font-bold uppercase text-slate-400 text-right">Пользователь</TableHead>
+                            <TableHead className="text-[10px] font-bold uppercase text-muted-foreground/70">Дата</TableHead>
+                            <TableHead className="text-[10px] font-bold uppercase text-muted-foreground/70">Товар</TableHead>
+                            <TableHead className="text-[10px] font-bold uppercase text-muted-foreground/70">Склад</TableHead>
+                            <TableHead className="text-[10px] font-bold uppercase text-muted-foreground/70">Тип</TableHead>
+                            <TableHead className="text-[10px] font-bold uppercase text-muted-foreground/70">Изменение</TableHead>
+                            <TableHead className="text-[10px] font-bold uppercase text-muted-foreground/70">Комментарий</TableHead>
+                            <TableHead className="text-[10px] font-bold uppercase text-muted-foreground/70 text-right">Пользователь</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
                         {filteredMovements.map((m) => {
                             const meta = getMovementMeta(m)
                             return (
-                            <TableRow key={m.id} className="hover:bg-slate-50 transition-colors">
+                            <TableRow key={m.id} className="hover:bg-muted transition-colors">
                                 <TableCell className="py-4 text-xs">
                                     {new Date(m.created_at).toLocaleString('ru-RU', { 
                                         day: '2-digit', month: '2-digit', 
@@ -266,7 +266,7 @@ export function TransfersTab({ warehouses, products, currentUserId }: TransfersT
                                 </TableCell>
                                 <TableCell className="py-4">
                                     <div className="flex items-center gap-1.5">
-                                        <WarehouseIcon className="h-3 w-3 text-slate-400" />
+                                        <WarehouseIcon className="h-3 w-3 text-muted-foreground/70" />
                                         <span className="text-xs">{m.warehouse_name || "Неизвестно"}</span>
                                     </div>
                                 </TableCell>
@@ -286,7 +286,7 @@ export function TransfersTab({ warehouses, products, currentUserId }: TransfersT
                                         {m.change_amount > 0 ? "+" : ""}{m.change_amount} шт
                                     </Badge>
                                 </TableCell>
-                                <TableCell className="py-4 text-xs text-slate-500 italic max-w-[200px] truncate">
+                                <TableCell className="py-4 text-xs text-muted-foreground italic max-w-[200px] truncate">
                                     {m.reason || "—"}
                                 </TableCell>
                                 <TableCell className="py-4 text-right text-xs font-medium">
@@ -296,7 +296,7 @@ export function TransfersTab({ warehouses, products, currentUserId }: TransfersT
                         )})}
                         {filteredMovements.length === 0 && (
                             <TableRow>
-                                <TableCell colSpan={7} className="h-32 text-center text-slate-400">
+                                <TableCell colSpan={7} className="h-32 text-center text-muted-foreground/70">
                                     По текущим фильтрам ничего не найдено
                                 </TableCell>
                             </TableRow>
@@ -308,27 +308,27 @@ export function TransfersTab({ warehouses, products, currentUserId }: TransfersT
             {/* Mobile Cards */}
             <div className="md:hidden space-y-3">
                 <div className="flex items-center gap-2 px-1 mb-1">
-                    <History className="h-4 w-4 text-slate-400" />
-                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">История движений</span>
+                    <History className="h-4 w-4 text-muted-foreground/70" />
+                    <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">История движений</span>
                 </div>
                 {filteredMovements.length === 0 ? (
-                    <div className="h-32 flex flex-col items-center justify-center text-muted-foreground bg-white rounded-xl border border-dashed">
+                    <div className="h-32 flex flex-col items-center justify-center text-muted-foreground bg-card rounded-xl border border-dashed">
                         <Package className="h-8 w-8 opacity-10 mb-2" />
                         <p className="italic text-sm">По текущим фильтрам ничего не найдено</p>
                     </div>
                 ) : filteredMovements.map(m => {
                     const meta = getMovementMeta(m)
                     return (
-                    <div key={m.id} className="bg-white rounded-xl border p-4 shadow-sm relative">
+                    <div key={m.id} className="bg-card rounded-xl border p-4 shadow-sm relative">
                         <div className="flex justify-between items-start mb-2">
                             <div className="flex flex-col">
-                                <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">
+                                <span className="text-[9px] text-muted-foreground/70 font-bold uppercase tracking-wider mb-0.5">
                                     {new Date(m.created_at).toLocaleString('ru-RU', { 
                                         day: '2-digit', month: '2-digit', 
                                         hour: '2-digit', minute: '2-digit' 
                                     })}
                                 </span>
-                                <h4 className="font-bold text-slate-900 text-sm leading-tight">{m.product_name}</h4>
+                                <h4 className="font-bold text-foreground text-sm leading-tight">{m.product_name}</h4>
                             </div>
                             <Badge 
                                 variant="secondary" 
@@ -348,17 +348,17 @@ export function TransfersTab({ warehouses, products, currentUserId }: TransfersT
                         
                         <div className="flex justify-between items-center mt-3 pt-2 border-t border-slate-50">
                             <div className="flex items-center gap-3">
-                                <div className="flex items-center gap-1 text-[10px] text-slate-500">
+                                <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
                                     <WarehouseIcon className="h-3 w-3" />
                                     <span>{m.warehouse_name || "???"}</span>
                                 </div>
-                                <div className="flex items-center gap-1 text-[10px] text-slate-500">
+                                <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
                                     <User className="h-3 w-3" />
                                     <span>{m.user_name?.split(' ')[0] || "Система"}</span>
                                 </div>
                             </div>
                             {m.reason && (
-                                <p className="text-[10px] text-slate-400 italic truncate max-w-[120px]">
+                                <p className="text-[10px] text-muted-foreground/70 italic truncate max-w-[120px]">
                                     {m.reason}
                                 </p>
                             )}
@@ -369,13 +369,13 @@ export function TransfersTab({ warehouses, products, currentUserId }: TransfersT
 
             {/* Transfer Dialog */}
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                <DialogContent className="max-w-md p-0 overflow-hidden bg-white border-none shadow-2xl rounded-3xl">
-                    <DialogHeader className="p-6 bg-slate-900 text-white">
+                <DialogContent className="max-w-md p-0 overflow-hidden bg-card border-none shadow-2xl rounded-3xl">
+                    <DialogHeader className="p-6 bg-primary text-primary-foreground">
                         <DialogTitle className="flex items-center gap-2 text-xl">
                             <ArrowRightLeft className="h-5 w-5 text-blue-400" />
                             Оформить перемещение
                         </DialogTitle>
-                        <DialogDescription className="text-slate-400">
+                        <DialogDescription className="text-muted-foreground/70">
                             Товар будет списан с одного склада и зачислен на другой.
                         </DialogDescription>
                     </DialogHeader>
@@ -384,12 +384,12 @@ export function TransfersTab({ warehouses, products, currentUserId }: TransfersT
                         {/* Warehouse Choice */}
                         <div className="grid grid-cols-[1fr,40px,1fr] items-center gap-2">
                             <div className="space-y-2">
-                                <Label className="text-[10px] font-bold uppercase text-slate-400">ОТКУДА</Label>
+                                <Label className="text-[10px] font-bold uppercase text-muted-foreground/70">ОТКУДА</Label>
                                 <Select 
                                     value={formData.source_warehouse_id} 
                                     onValueChange={v => setFormData(p => ({ ...p, source_warehouse_id: v }))}
                                 >
-                                    <SelectTrigger className="h-12 rounded-xl border-slate-200">
+                                    <SelectTrigger className="h-12 rounded-xl border-border">
                                         <SelectValue placeholder="Склад" />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -403,12 +403,12 @@ export function TransfersTab({ warehouses, products, currentUserId }: TransfersT
                                 <ArrowRight className="h-4 w-4 text-slate-300" />
                             </div>
                             <div className="space-y-2">
-                                <Label className="text-[10px] font-bold uppercase text-slate-400">КУДА</Label>
+                                <Label className="text-[10px] font-bold uppercase text-muted-foreground/70">КУДА</Label>
                                 <Select 
                                     value={formData.target_warehouse_id} 
                                     onValueChange={v => setFormData(p => ({ ...p, target_warehouse_id: v }))}
                                 >
-                                    <SelectTrigger className="h-12 rounded-xl border-slate-200">
+                                    <SelectTrigger className="h-12 rounded-xl border-border">
                                         <SelectValue placeholder="Склад" />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -422,12 +422,12 @@ export function TransfersTab({ warehouses, products, currentUserId }: TransfersT
 
                         {/* Product Search */}
                         <div className="space-y-2">
-                            <Label className="text-[10px] font-bold uppercase text-slate-400">ТОВАР</Label>
+                            <Label className="text-[10px] font-bold uppercase text-muted-foreground/70">ТОВАР</Label>
                             <div className="relative">
-                                <Search className="absolute left-3 top-3.5 h-4 w-4 text-slate-400" />
+                                <Search className="absolute left-3 top-3.5 h-4 w-4 text-muted-foreground/70" />
                                 <Input 
                                     placeholder="Поиск по названию..."
-                                    className="pl-10 h-12 rounded-xl border-slate-200"
+                                    className="pl-10 h-12 rounded-xl border-border"
                                     value={searchQuery}
                                     onChange={e => setSearchQuery(e.target.value)}
                                 />
@@ -440,7 +440,7 @@ export function TransfersTab({ warehouses, products, currentUserId }: TransfersT
                                             "w-full text-left p-3 rounded-xl transition-all text-sm border",
                                             formData.product_id === p.id.toString() 
                                                 ? "bg-blue-50 border-blue-200 text-blue-600 font-bold" 
-                                                : "hover:bg-slate-50 border-transparent text-slate-600"
+                                                : "hover:bg-muted border-transparent text-muted-foreground"
                                         )}
                                         onClick={() => setFormData(prev => ({ ...prev, product_id: p.id.toString() }))}
                                     >
@@ -453,37 +453,37 @@ export function TransfersTab({ warehouses, products, currentUserId }: TransfersT
                         {/* Qty & Notes */}
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
-                                <Label className="text-[10px] font-bold uppercase text-slate-400">КОЛИЧЕСТВО</Label>
+                                <Label className="text-[10px] font-bold uppercase text-muted-foreground/70">КОЛИЧЕСТВО</Label>
                                 <Input 
                                     type="number"
                                     min="1"
                                     value={formData.quantity}
                                     onChange={e => setFormData(p => ({ ...p, quantity: e.target.value }))}
-                                    className="h-12 rounded-xl border-slate-200 font-bold text-lg"
+                                    className="h-12 rounded-xl border-border font-bold text-lg"
                                 />
                             </div>
                             <div className="space-y-2">
-                                <Label className="text-[10px] font-bold uppercase text-slate-400">ПРИМЕЧАНИЕ</Label>
+                                <Label className="text-[10px] font-bold uppercase text-muted-foreground/70">ПРИМЕЧАНИЕ</Label>
                                 <Input 
                                     placeholder="Необязательно"
                                     value={formData.notes}
                                     onChange={e => setFormData(p => ({ ...p, notes: e.target.value }))}
-                                    className="h-12 rounded-xl border-slate-200"
+                                    className="h-12 rounded-xl border-border"
                                 />
                             </div>
                         </div>
                     </div>
 
-                    <DialogFooter className="p-6 bg-slate-50 border-t flex-row gap-3">
+                    <DialogFooter className="p-6 bg-muted border-t flex-row gap-3">
                         <Button 
                             variant="ghost" 
-                            className="flex-1 h-12 rounded-xl text-slate-500"
+                            className="flex-1 h-12 rounded-xl text-muted-foreground"
                             onClick={() => setIsDialogOpen(false)}
                         >
                             Отмена
                         </Button>
                         <Button 
-                            className="flex-1 h-12 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl"
+                            className="flex-1 h-12 bg-blue-600 hover:bg-blue-700 text-primary-foreground font-bold rounded-xl"
                             onClick={handleTransfer}
                             disabled={isPending || !formData.product_id || !formData.source_warehouse_id || !formData.target_warehouse_id}
                         >

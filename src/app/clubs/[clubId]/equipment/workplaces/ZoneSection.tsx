@@ -48,7 +48,7 @@ const DeferredViewportItem = memo(function DeferredViewportItem({
                 children
             ) : (
                 <div
-                    className="rounded-xl border border-slate-200 bg-slate-50/70"
+                    className="rounded-xl border border-border bg-muted/70"
                     style={{
                         height: WORKSTATION_CARD_PLACEHOLDER_HEIGHT,
                         contain: "layout paint style",
@@ -87,14 +87,14 @@ export default memo(function ZoneSection({
         <section className="space-y-4">
             <div className="group sticky top-0 z-10 flex items-center justify-between border-b bg-background px-1 py-2 sm:px-2">
                 <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-                    <h2 className="flex items-center gap-2.5 text-base font-black uppercase tracking-widest text-slate-500 sm:gap-3 sm:text-lg">
+                    <h2 className="flex items-center gap-2.5 text-base font-black uppercase tracking-widest text-muted-foreground sm:gap-3 sm:text-lg">
                         <Layers className="h-5 w-5 text-primary" />
                         {zone}
-                        <Badge variant="secondary" className="border-none bg-slate-100 px-2 text-slate-600">{workstations.length}</Badge>
+                        <Badge variant="secondary" className="border-none bg-accent px-2 text-muted-foreground">{workstations.length}</Badge>
                     </h2>
                     <div className="flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-wider">
                         {zoneAssignedUserName ? (
-                            <Badge variant="outline" className="border-slate-200 bg-white text-slate-600">
+                            <Badge variant="outline" className="border-border bg-card text-muted-foreground">
                                 {zoneAssignedUserName}
                             </Badge>
                         ) : null}
@@ -116,7 +116,7 @@ export default memo(function ZoneSection({
                             </Badge>
                         ) : null}
                         {zoneDisabledMaintenanceCount > 0 ? (
-                            <Badge variant="outline" className="border-slate-300 bg-slate-100 text-slate-600">
+                            <Badge variant="outline" className="border-border bg-accent text-muted-foreground">
                                 Без ТО {zoneDisabledMaintenanceCount}
                             </Badge>
                         ) : null}
@@ -126,7 +126,7 @@ export default memo(function ZoneSection({
                             </Badge>
                         ) : null}
                         {zoneEmptyCount > 0 ? (
-                            <Badge variant="outline" className="border-slate-200 bg-slate-50 text-slate-600">
+                            <Badge variant="outline" className="border-border bg-muted text-muted-foreground">
                                 Пустых {zoneEmptyCount}
                             </Badge>
                         ) : null}
@@ -160,16 +160,16 @@ export default memo(function ZoneSection({
                         <DeferredViewportItem key={ws.id}>
                             <Card
                                 className={cn(
-                                    "group flex h-full cursor-pointer flex-col overflow-hidden border-slate-200 transition-colors hover:border-primary/50",
+                                    "group flex h-full cursor-pointer flex-col overflow-hidden border-border transition-colors hover:border-primary/50",
                                     wsIssueCount > 0 && "border-orange-200 bg-orange-50/[0.04]"
                                 )}
                                 style={{ contentVisibility: "auto", containIntrinsicSize: "320px" }}
                                 onClick={() => onOpenDetails(ws.id)}
                             >
-                                <CardHeader className="flex flex-row items-center justify-between space-y-0 border-b border-slate-100 bg-slate-50 p-3 pb-2 sm:p-4 sm:pb-2">
+                                <CardHeader className="flex flex-row items-center justify-between space-y-0 border-b border-border/50 bg-muted p-3 pb-2 sm:p-4 sm:pb-2">
                                     <div className="flex items-center gap-3">
                                         <div className={cn(
-                                            "relative flex h-10 w-10 items-center justify-center rounded-xl border bg-white font-bold text-slate-400",
+                                            "relative flex h-10 w-10 items-center justify-center rounded-xl border bg-card font-bold text-muted-foreground/70",
                                             wsIssueCount > 0 && "border-orange-200 text-orange-500"
                                         )}>
                                             {ws.name.replace(/[^0-9]/g, '') || <Monitor className="h-5 w-5" />}
@@ -178,14 +178,14 @@ export default memo(function ZoneSection({
                                             ) : null}
                                         </div>
                                         <div>
-                                            <h4 className="flex items-center gap-2 font-bold leading-tight text-slate-900">
+                                            <h4 className="flex items-center gap-2 font-bold leading-tight text-foreground">
                                                 {ws.name}
                                             </h4>
                                             <div className="mt-0.5 flex flex-col gap-0.5">
                                                 <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{wsEquipment.length} устройств</p>
                                                 <div className="flex items-center gap-1.5" title={ws.assigned_user_name || "Не назначено"}>
-                                                    <User className={cn("h-3 w-3", ws.assigned_user_name ? "text-primary" : "text-slate-400")} />
-                                                    <span className={cn("max-w-[100px] truncate text-[10px] font-medium", ws.assigned_user_name ? "text-primary" : "text-slate-400")}>
+                                                    <User className={cn("h-3 w-3", ws.assigned_user_name ? "text-primary" : "text-muted-foreground/70")} />
+                                                    <span className={cn("max-w-[100px] truncate text-[10px] font-medium", ws.assigned_user_name ? "text-primary" : "text-muted-foreground/70")}>
                                                         {ws.assigned_user_name || "Не назначено"}
                                                     </span>
                                                 </div>
@@ -196,7 +196,7 @@ export default memo(function ZoneSection({
                                                         </span>
                                                     ) : null}
                                                     {wsDisabledMaintenanceCount > 0 ? (
-                                                        <span className="text-[10px] font-medium text-slate-500">
+                                                        <span className="text-[10px] font-medium text-muted-foreground">
                                                             Без ТО: {wsDisabledMaintenanceCount}
                                                         </span>
                                                     ) : null}
@@ -206,9 +206,9 @@ export default memo(function ZoneSection({
                                     </div>
                                 </CardHeader>
 
-                                <CardContent className="flex-1 bg-white p-3 sm:p-4">
+                                <CardContent className="flex-1 bg-card p-3 sm:p-4">
                                     {wsEquipment.length === 0 ? (
-                                        <div className="flex h-full min-h-[100px] flex-col items-center justify-center rounded-lg border-2 border-dashed border-slate-100 p-4 text-center">
+                                        <div className="flex h-full min-h-[100px] flex-col items-center justify-center rounded-lg border-2 border-dashed border-border/50 p-4 text-center">
                                             <Monitor className="mb-2 h-8 w-8 text-slate-200" />
                                             <p className="text-xs font-medium text-muted-foreground">Оборудование не назначено</p>
                                             <Button variant="link" size="sm" className="mt-1 h-auto p-0 text-xs text-primary" onClick={(e) => { e.stopPropagation(); onOpenAssignDialog(ws.id) }}>
@@ -226,20 +226,20 @@ export default memo(function ZoneSection({
                                                     <div
                                                         key={item.id}
                                                         className={cn(
-                                                            "group/item relative flex items-center justify-between overflow-hidden rounded-lg border border-slate-100 bg-slate-50 p-2 pl-3 transition-colors hover:border-primary/20 hover:bg-primary/5",
+                                                            "group/item relative flex items-center justify-between overflow-hidden rounded-lg border border-border/50 bg-muted p-2 pl-3 transition-colors hover:border-primary/20 hover:bg-primary/5",
                                                             itemIssueCount > 0 && "border-l-[3px] border-l-orange-500 border-orange-200 bg-orange-50/20 pl-2.5",
                                                             itemIssueCount === 0 && maintenanceStatus === "overdue" && "border-l-[3px] border-l-rose-500 border-rose-200 bg-rose-50/20 pl-2.5",
                                                             itemIssueCount === 0 && maintenanceStatus === "serviced" && "border-l-[3px] border-l-emerald-500 border-emerald-200 bg-emerald-50/20 pl-2.5",
-                                                            itemIssueCount === 0 && maintenanceStatus === "disabled" && "border-l-[3px] border-l-slate-400 border-slate-200 bg-slate-100/70 pl-2.5"
+                                                            itemIssueCount === 0 && maintenanceStatus === "disabled" && "border-l-[3px] border-l-slate-400 border-border bg-accent/70 pl-2.5"
                                                         )}
                                                     >
                                                         <div className="relative z-10 min-w-0 overflow-hidden">
                                                             <p className={cn(
-                                                                "truncate text-xs font-semibold text-slate-700 group-hover/item:text-primary",
+                                                                "truncate text-xs font-semibold text-foreground group-hover/item:text-primary",
                                                                 itemIssueCount > 0 && "text-orange-700",
                                                                 itemIssueCount === 0 && maintenanceStatus === "overdue" && "text-rose-700",
                                                                 itemIssueCount === 0 && maintenanceStatus === "serviced" && "text-emerald-700",
-                                                                itemIssueCount === 0 && maintenanceStatus === "disabled" && "text-slate-600"
+                                                                itemIssueCount === 0 && maintenanceStatus === "disabled" && "text-muted-foreground"
                                                             )}>{item.name}</p>
                                                             <div className="flex flex-wrap items-center gap-1.5">
                                                                 <span className="text-[10px] text-muted-foreground">
@@ -261,7 +261,7 @@ export default memo(function ZoneSection({
                                                                     </span>
                                                                 ) : null}
                                                                 {itemIssueCount === 0 && maintenanceStatus === "disabled" ? (
-                                                                    <span className="text-[10px] font-medium text-slate-500">
+                                                                    <span className="text-[10px] font-medium text-muted-foreground">
                                                                         • Без ТО
                                                                     </span>
                                                                 ) : null}
@@ -270,7 +270,7 @@ export default memo(function ZoneSection({
                                                         <Button
                                                             variant="ghost"
                                                             size="icon"
-                                                            className="h-6 w-6 shrink-0 text-slate-400 opacity-100 transition-opacity hover:bg-rose-50 hover:text-rose-500 md:opacity-0 md:group-hover/item:opacity-100"
+                                                            className="h-6 w-6 shrink-0 text-muted-foreground/70 opacity-100 transition-opacity hover:bg-rose-50 hover:text-rose-500 md:opacity-0 md:group-hover/item:opacity-100"
                                                             title="Убрать с места (на склад)"
                                                             onClick={(e) => { e.stopPropagation(); onUnassignEquipment(item.id) }}
                                                         >
@@ -283,11 +283,11 @@ export default memo(function ZoneSection({
                                     )}
                                 </CardContent>
 
-                                <CardFooter className="border-t border-slate-100 bg-slate-50 p-3">
+                                <CardFooter className="border-t border-border/50 bg-muted p-3">
                                     <Button
                                         variant="outline"
                                         size="sm"
-                                        className="h-9 w-full bg-white text-xs transition-colors hover:border-primary hover:bg-primary hover:text-primary-foreground"
+                                        className="h-9 w-full bg-card text-xs transition-colors hover:border-primary hover:bg-primary hover:text-primary-foreground"
                                         onClick={(e) => { e.stopPropagation(); onOpenAssignDialog(ws.id) }}
                                     >
                                         <Plus className="mr-1.5 h-3 w-3" /> Добавить оборудование
@@ -301,9 +301,9 @@ export default memo(function ZoneSection({
                 <DeferredViewportItem>
                     <button
                         onClick={() => onCreate(zone)}
-                        className="group flex min-h-[220px] w-full flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-slate-200 p-6 text-slate-400 transition-colors hover:border-primary/50 hover:bg-primary/5 hover:text-primary sm:min-h-[250px]"
+                        className="group flex min-h-[220px] w-full flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-border p-6 text-muted-foreground/70 transition-colors hover:border-primary/50 hover:bg-primary/5 hover:text-primary sm:min-h-[250px]"
                     >
-                        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 transition-colors group-hover:bg-primary/10">
+                        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-accent transition-colors group-hover:bg-primary/10">
                             <Plus className="h-6 w-6" />
                         </div>
                         <span className="text-sm font-bold uppercase tracking-widest">Новое место в {zone}</span>

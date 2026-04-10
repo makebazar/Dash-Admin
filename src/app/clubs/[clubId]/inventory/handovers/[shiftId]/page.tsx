@@ -269,7 +269,7 @@ export default function InventoryHandoverDetailsPage() {
             <Badge variant="outline" className={cn(
                 row.responsibility_type === "SHIFT_RESPONSIBILITY" ? "border-red-200 bg-red-50 text-red-700" :
                 row.responsibility_type === "INHERITED_FROM_PREVIOUS_SHIFT" ? "border-amber-200 bg-amber-50 text-amber-700" :
-                "border-slate-200 bg-slate-50 text-slate-700"
+                "border-border bg-muted text-foreground"
             )}>
                 {row.responsibility_label}
             </Badge>
@@ -291,7 +291,7 @@ export default function InventoryHandoverDetailsPage() {
                 <Badge variant="outline" className={cn(
                     row.resolution.resolution_type === "SALARY_DEDUCTION"
                         ? "border-rose-200 bg-rose-50 text-rose-700"
-                        : "border-slate-200 bg-slate-50 text-slate-700"
+                        : "border-border bg-muted text-foreground"
                 )}>
                     {row.resolution.resolution_type === "SALARY_DEDUCTION"
                         ? `В счет ЗП · ${formatMoney(row.resolution.resolution_amount)}`
@@ -378,30 +378,30 @@ export default function InventoryHandoverDetailsPage() {
                     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                         <Card>
                             <CardContent className="p-5">
-                                <div className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Смена</div>
-                                <div className="mt-2 text-lg font-bold text-slate-900">{details?.shift.employee_name || "—"}</div>
-                                <div className="mt-1 text-sm text-slate-500">{formatDateTime(details?.shift.check_in || null)}</div>
+                                <div className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Смена</div>
+                                <div className="mt-2 text-lg font-bold text-foreground">{details?.shift.employee_name || "—"}</div>
+                                <div className="mt-1 text-sm text-muted-foreground">{formatDateTime(details?.shift.check_in || null)}</div>
                             </CardContent>
                         </Card>
                         <Card>
                             <CardContent className="p-5">
-                                <div className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Расхождений</div>
-                                <div className="mt-2 text-lg font-bold text-slate-900">{details?.shift_zone_discrepancies.length || 0}</div>
-                                <div className="mt-1 text-sm text-slate-500">Строк в передаче остатков</div>
+                                <div className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Расхождений</div>
+                                <div className="mt-2 text-lg font-bold text-foreground">{details?.shift_zone_discrepancies.length || 0}</div>
+                                <div className="mt-1 text-sm text-muted-foreground">Строк в передаче остатков</div>
                             </CardContent>
                         </Card>
                         <Card>
                             <CardContent className="p-5">
-                                <div className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Не обработано</div>
+                                <div className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Не обработано</div>
                                 <div className="mt-2 text-lg font-bold text-amber-700">{unresolvedCount}</div>
-                                <div className="mt-1 text-sm text-slate-500">Требует решения владельца</div>
+                                <div className="mt-1 text-sm text-muted-foreground">Требует решения владельца</div>
                             </CardContent>
                         </Card>
                         <Card>
                             <CardContent className="p-5">
-                                <div className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Сумма риска</div>
+                                <div className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Сумма риска</div>
                                 <div className="mt-2 text-lg font-bold text-red-700">{formatMoney(totalDiscrepancyAmount)}</div>
-                                <div className="mt-1 text-sm text-slate-500">По цене товара на строках расхождения</div>
+                                <div className="mt-1 text-sm text-muted-foreground">По цене товара на строках расхождения</div>
                             </CardContent>
                         </Card>
                     </div>
@@ -414,20 +414,20 @@ export default function InventoryHandoverDetailsPage() {
                             {details?.handover_source?.accepted_from_shift_id ? (
                                 <div className="grid gap-4 md:grid-cols-3">
                                     <div>
-                                        <div className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Сотрудник</div>
-                                        <div className="mt-1 text-sm font-semibold text-slate-900">
+                                        <div className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Сотрудник</div>
+                                        <div className="mt-1 text-sm font-semibold text-foreground">
                                             {details.handover_source.accepted_from_employee_name || "Неизвестно"}
                                         </div>
                                     </div>
                                     <div>
-                                        <div className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Смена</div>
-                                        <div className="mt-1 text-sm text-slate-700">
+                                        <div className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Смена</div>
+                                        <div className="mt-1 text-sm text-foreground">
                                             {details.handover_source.accepted_from_shift_id}
                                         </div>
                                     </div>
                                     <div>
-                                        <div className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Закрыта</div>
-                                        <div className="mt-1 text-sm text-slate-700">
+                                        <div className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Закрыта</div>
+                                        <div className="mt-1 text-sm text-foreground">
                                             {formatDateTime(details.handover_source.accepted_from_shift_check_out || details.handover_source.accepted_from_shift_check_in)}
                                         </div>
                                     </div>
@@ -496,7 +496,7 @@ export default function InventoryHandoverDetailsPage() {
                                                             <TableCell className="text-right tabular-nums">{row.opening_counted_quantity ?? "—"}</TableCell>
                                                             <TableCell className={cn(
                                                                 "text-right font-semibold tabular-nums",
-                                                                discrepancyValue > 0 ? "text-green-600" : discrepancyValue < 0 ? "text-red-600" : "text-slate-500"
+                                                                discrepancyValue > 0 ? "text-green-600" : discrepancyValue < 0 ? "text-red-600" : "text-muted-foreground"
                                                             )}>
                                                                 {discrepancyValue > 0 ? "+" : ""}{discrepancyValue}
                                                             </TableCell>
@@ -552,7 +552,7 @@ export default function InventoryHandoverDetailsPage() {
                                                             <TableCell className="text-right tabular-nums">{row.actual_closing_quantity ?? "—"}</TableCell>
                                                             <TableCell className={cn(
                                                                 "text-right font-semibold tabular-nums",
-                                                                discrepancyValue > 0 ? "text-green-600" : discrepancyValue < 0 ? "text-red-600" : "text-slate-500"
+                                                                discrepancyValue > 0 ? "text-green-600" : discrepancyValue < 0 ? "text-red-600" : "text-muted-foreground"
                                                             )}>
                                                                 {discrepancyValue > 0 ? "+" : ""}{discrepancyValue}
                                                             </TableCell>
@@ -614,7 +614,7 @@ export default function InventoryHandoverDetailsPage() {
                                                             <TableCell className="text-right tabular-nums">{row.actual_closing_quantity ?? "—"}</TableCell>
                                                             <TableCell className={cn(
                                                                 "text-right font-semibold tabular-nums",
-                                                                discrepancyValue > 0 ? "text-green-600" : discrepancyValue < 0 ? "text-red-600" : "text-slate-500"
+                                                                discrepancyValue > 0 ? "text-green-600" : discrepancyValue < 0 ? "text-red-600" : "text-muted-foreground"
                                                             )}>
                                                                 {discrepancyValue > 0 ? "+" : ""}{discrepancyValue}
                                                             </TableCell>
@@ -643,7 +643,7 @@ export default function InventoryHandoverDetailsPage() {
                     </DialogHeader>
                     {resolutionTarget && (
                         <div className="space-y-4">
-                            <div className="rounded-xl border bg-slate-50/70 p-4">
+                            <div className="rounded-xl border bg-muted/70 p-4">
                                 <div className="font-medium">{resolutionTarget.warehouse_name} · {resolutionTarget.product_name}</div>
                                 <div className="mt-1 text-sm text-muted-foreground">
                                     Расхождение: {Number(resolutionTarget.difference_quantity || 0) > 0 ? "+" : ""}{Number(resolutionTarget.difference_quantity || 0)} шт. · Цена: {formatMoney(resolutionTarget.selling_price)}

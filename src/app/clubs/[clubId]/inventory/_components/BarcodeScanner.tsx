@@ -285,20 +285,20 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
 
     return (
         <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-            <DialogContent className="w-[95vw] sm:max-w-[500px] p-0 overflow-hidden bg-black border-slate-800 z-[10000] rounded-3xl border shadow-2xl">
-                <DialogHeader className="p-4 bg-slate-900/90 backdrop-blur-md sticky top-0 left-0 right-0 z-[10001] flex-row items-center justify-between space-y-0 border-b border-slate-800">
+            <DialogContent className="w-[95vw] sm:max-w-[500px] p-0 overflow-hidden bg-primary border-slate-800 z-[10000] rounded-3xl border shadow-2xl">
+                <DialogHeader className="p-4 bg-primary/90 backdrop-blur-md sticky top-0 left-0 right-0 z-[10001] flex-row items-center justify-between space-y-0 border-b border-slate-800">
                     <div className="flex items-center gap-3 overflow-hidden mr-2">
                         <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse shrink-0" />
                         
                         {cameras.length > 1 ? (
                             <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
-                                    <Button variant="ghost" className="p-0 h-auto hover:bg-transparent text-white text-sm font-bold flex items-center gap-1 truncate max-w-[200px]">
+                                    <Button variant="ghost" className="p-0 h-auto hover:bg-transparent text-primary-foreground text-sm font-bold flex items-center gap-1 truncate max-w-[200px]">
                                         <span className="truncate">{cameras.find(c => c.id === currentCameraId)?.label || 'Сканер'}</span>
                                         <ChevronDown className="h-3 w-3 shrink-0 opacity-50" />
                                     </Button>
                                 </DropdownMenuTrigger>
-                                <DropdownMenuContent className="bg-slate-900 border-slate-800 text-white min-w-[240px]">
+                                <DropdownMenuContent className="bg-primary border-slate-800 text-primary-foreground min-w-[240px]">
                                     {cameras.map((camera, index) => {
                                         const label = camera.label || `Камера ${index + 1}`
                                         const isWide = /wide|ultra|широко/i.test(label) || /0\.5x/i.test(label)
@@ -308,7 +308,7 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
                                             <DropdownMenuItem 
                                                 key={camera.id} 
                                                 onClick={() => switchCamera(camera.id)}
-                                                className={`text-xs p-3 focus:bg-slate-800 focus:text-white ${camera.id === currentCameraId ? 'bg-blue-600/20 text-blue-400' : ''}`}
+                                                className={`text-xs p-3 focus:bg-slate-800 focus:text-primary-foreground ${camera.id === currentCameraId ? 'bg-blue-600/20 text-blue-400' : ''}`}
                                             >
                                                 <div className="flex flex-col">
                                                     <div className="flex items-center">
@@ -327,7 +327,7 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
                                 </DropdownMenuContent>
                             </DropdownMenu>
                         ) : (
-                            <DialogTitle className="text-white text-base font-bold truncate">
+                            <DialogTitle className="text-primary-foreground text-base font-bold truncate">
                                 Сканер
                             </DialogTitle>
                         )}
@@ -339,7 +339,7 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
                                 variant="outline" 
                                 size="icon" 
                                 onClick={cycleCamera}
-                                className="h-9 w-9 rounded-xl border-slate-800 bg-slate-800/50 text-slate-400 hover:text-white"
+                                className="h-9 w-9 rounded-xl border-slate-800 bg-slate-800/50 text-muted-foreground/70 hover:text-primary-foreground"
                             >
                                 <RefreshCcw className="h-5 w-5" />
                             </Button>
@@ -349,7 +349,7 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
                                 variant="outline" 
                                 size="icon" 
                                 onClick={toggleTorch}
-                                className={`h-9 w-9 rounded-xl border-slate-800 ${isTorchOn ? 'bg-yellow-500 text-black border-yellow-400' : 'bg-slate-800/50 text-slate-400'}`}
+                                className={`h-9 w-9 rounded-xl border-slate-800 ${isTorchOn ? 'bg-yellow-500 text-foreground border-yellow-400' : 'bg-slate-800/50 text-muted-foreground/70'}`}
                             >
                                 {isTorchOn ? <Zap className="h-5 w-5 fill-current" /> : <ZapOff className="h-5 w-5" />}
                             </Button>
@@ -358,14 +358,14 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
                             variant="outline" 
                             size="icon" 
                             onClick={onClose} 
-                            className="text-slate-400 hover:text-white border-slate-800 bg-slate-800/50 h-9 w-9 rounded-xl"
+                            className="text-muted-foreground/70 hover:text-primary-foreground border-slate-800 bg-slate-800/50 h-9 w-9 rounded-xl"
                         >
                             <X className="h-5 w-5" />
                         </Button>
                     </div>
                 </DialogHeader>
 
-                <div className="relative aspect-[16/9] w-full bg-black flex items-center justify-center overflow-hidden">
+                <div className="relative aspect-[16/9] w-full bg-primary flex items-center justify-center overflow-hidden">
                     <div id="barcode-reader" className="w-full h-full [&_video]:object-cover" onClick={triggerFocus}></div>
                     
                     {/* Scanner Overlay UI */}
@@ -382,8 +382,8 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
 
                     {/* Zoom Control Overlay */}
                      {maxZoom > 1 && (
-                         <div className="absolute bottom-4 left-1/2 -translate-x-1/2 w-[60%] bg-black/40 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 flex items-center gap-3 pointer-events-auto">
-                             <span className="text-[10px] text-white/60 font-bold">1x</span>
+                         <div className="absolute bottom-4 left-1/2 -translate-x-1/2 w-[60%] bg-primary/40 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 flex items-center gap-3 pointer-events-auto">
+                             <span className="text-[10px] text-primary-foreground/60 font-bold">1x</span>
                              <input 
                                  type="range" 
                                  min={1} 
@@ -391,9 +391,9 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
                                  step={0.1} 
                                  value={zoom}
                                  onChange={(e) => handleZoomChange([parseFloat(e.target.value)])}
-                                 className="flex-1 h-1 bg-white/20 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                                 className="flex-1 h-1 bg-card/20 rounded-lg appearance-none cursor-pointer accent-blue-500"
                              />
-                             <span className="text-[10px] text-white/60 font-bold">{Math.round(maxZoom)}x</span>
+                             <span className="text-[10px] text-primary-foreground/60 font-bold">{Math.round(maxZoom)}x</span>
                          </div>
                      )}
 
@@ -402,7 +402,7 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
                         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[10002] animate-in slide-in-from-top-2 duration-300">
                             <div className={cn(
                                 "px-4 py-2 rounded-full border shadow-lg flex items-center gap-2 backdrop-blur-md",
-                                scanStatus.type === 'success' ? "bg-green-500/90 border-green-400 text-white" : "bg-red-500/90 border-red-400 text-white"
+                                scanStatus.type === 'success' ? "bg-green-500/90 border-green-400 text-primary-foreground" : "bg-red-500/90 border-red-400 text-primary-foreground"
                             )}>
                                 {scanStatus.type === 'success' ? <CheckCircle2 className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />}
                                 <span className="font-bold text-xs uppercase tracking-wider">{scanStatus.message}</span>
@@ -411,19 +411,19 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
                     )}
 
                     {isInitializing && (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 z-20">
+                        <div className="absolute inset-0 flex flex-col items-center justify-center bg-primary/80 z-20">
                             <RefreshCcw className="h-8 w-8 text-blue-500 animate-spin mb-4" />
-                            <p className="text-white text-sm font-medium">Запуск камеры...</p>
+                            <p className="text-primary-foreground text-sm font-medium">Запуск камеры...</p>
                         </div>
                     )}
 
                     {error && (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/90 z-30 px-6 text-center">
+                        <div className="absolute inset-0 flex flex-col items-center justify-center bg-primary/90 z-30 px-6 text-center">
                             <div className="bg-red-500/20 p-4 rounded-full mb-4">
                                 <X className="h-8 w-8 text-red-500" />
                             </div>
-                            <p className="text-white font-medium mb-2">{error}</p>
-                            <Button variant="outline" onClick={() => window.location.reload()} className="mt-4 bg-white/10 border-white/20 text-white rounded-xl">
+                            <p className="text-primary-foreground font-medium mb-2">{error}</p>
+                            <Button variant="outline" onClick={() => window.location.reload()} className="mt-4 bg-card/10 border-white/20 text-primary-foreground rounded-xl">
                                 Обновить страницу
                             </Button>
                         </div>
@@ -432,9 +432,9 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
                     {/* Scan Status Feedback */}
                     {scanStatus.type !== 'idle' && (
                         <div className={`absolute bottom-10 left-1/2 -translate-x-1/2 px-6 py-3 rounded-2xl flex items-center gap-2 animate-in zoom-in slide-in-from-bottom-4 duration-300 z-50 shadow-2xl ${
-                            scanStatus.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'
+                            scanStatus.type === 'success' ? 'bg-green-600 text-primary-foreground' : 'bg-red-600 text-primary-foreground'
                         }`}>
-                            <div className="bg-white/20 p-1 rounded-full">
+                            <div className="bg-card/20 p-1 rounded-full">
                                 <Barcode className="h-4 w-4" />
                             </div>
                             <span className="font-bold text-sm whitespace-nowrap">{scanStatus.message}</span>

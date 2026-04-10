@@ -325,121 +325,116 @@ export default function EmployeeShiftHistoryPage() {
     }
 
     return (
-        <div className="p-4 md:p-8 space-y-6 md:space-y-8 min-h-screen bg-background">
+        <div className="w-full max-w-6xl mx-auto px-4 py-8 md:px-8 md:py-12 space-y-8 relative z-0">
             {/* Header */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-border pb-4">
                 <div>
-                    <h1 className="text-2xl md:text-3xl font-bold tracking-tight">История смен</h1>
-                    <p className="text-sm md:text-base text-muted-foreground">Архив ваших смен и отчетов</p>
+                    <h1 className="text-2xl font-bold tracking-tight text-foreground">История смен</h1>
+                    <p className="text-sm text-muted-foreground mt-1">Архив ваших смен и отчетов</p>
                 </div>
             </div>
 
             {/* Date Filters */}
-            <Card className="border-dashed">
-                <CardContent className="pt-6">
-                    <div className="flex flex-col md:flex-row flex-wrap items-start md:items-center gap-4">
-                        <div className="flex flex-wrap items-center gap-2">
-                            <CalendarDays className="h-4 w-4 text-muted-foreground" />
-                            <span className="text-sm text-muted-foreground">Месяц:</span>
-                            <div className="flex items-center gap-1 bg-muted/50 rounded-lg p-1">
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={() => handleMonthSelect(parseInt(selectedMonth) - 1)}
-                                    className="h-8 w-8"
-                                >
-                                    <ChevronLeft className="h-4 w-4" />
-                                </Button>
-                                <span className="text-sm font-medium w-32 text-center capitalize">
-                                    {selectedMonth === '0' ? 'Текущий месяц' : getMonthName(parseInt(selectedMonth))}
-                                </span>
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={() => handleMonthSelect(parseInt(selectedMonth) + 1)}
-                                    className="h-8 w-8"
-                                    disabled={parseInt(selectedMonth) >= 0}
-                                >
-                                    <ChevronRight className="h-4 w-4" />
-                                </Button>
-                            </div>
-                        </div>
-
-                        <div className="hidden md:block h-6 w-px bg-border" />
-
-                            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
-                                <span className="text-sm text-muted-foreground">Период:</span>
-                                <div className="flex items-center gap-2">
-                                    <Input
-                                        type="date"
-                                        value={filterStartDate}
-                                        onChange={e => {
-                                            setFilterStartDate(e.target.value)
-                                            handleCustomDateFilter()
-                                        }}
-                                        className="w-[140px] h-9 text-sm"
-                                    />
-                                    <span className="text-muted-foreground">—</span>
-                                    <Input
-                                        type="date"
-                                        value={filterEndDate}
-                                        onChange={e => {
-                                            setFilterEndDate(e.target.value)
-                                            handleCustomDateFilter()
-                                        }}
-                                        className="w-[140px] h-9 text-sm"
-                                    />
-                                </div>
-                            </div>
-                        {(filterStartDate || filterEndDate || selectedMonth !== '0') && (
-                            <Button size="sm" variant="ghost" onClick={clearFilters} className="text-muted-foreground w-full md:w-auto md:ml-auto">
-                                Сбросить
-                            </Button>
-                        )}
+            <div className="flex flex-col md:flex-row flex-wrap items-start md:items-center gap-4 p-4 rounded-xl bg-card border border-border shadow-sm">
+                <div className="flex flex-wrap items-center gap-2">
+                    <CalendarDays className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">Месяц:</span>
+                    <div className="flex items-center gap-1 bg-accent/50 rounded-lg p-1 border border-border">
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleMonthSelect(parseInt(selectedMonth) - 1)}
+                            className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                        >
+                            <ChevronLeft className="h-4 w-4" />
+                        </Button>
+                        <span className="text-xs font-bold w-32 text-center uppercase tracking-wider text-foreground">
+                            {selectedMonth === '0' ? 'Текущий месяц' : getMonthName(parseInt(selectedMonth))}
+                        </span>
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleMonthSelect(parseInt(selectedMonth) + 1)}
+                            className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                            disabled={parseInt(selectedMonth) >= 0}
+                        >
+                            <ChevronRight className="h-4 w-4" />
+                        </Button>
                     </div>
-                </CardContent>
-            </Card>
+                </div>
+
+                <div className="hidden md:block h-6 w-px bg-border" />
+
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full md:w-auto">
+                    <span className="text-sm text-muted-foreground">Период:</span>
+                    <div className="flex items-center gap-2 w-full sm:w-auto">
+                        <Input
+                            type="date"
+                            value={filterStartDate}
+                            onChange={e => {
+                                setFilterStartDate(e.target.value)
+                                handleCustomDateFilter()
+                            }}
+                            className="w-full sm:w-[140px] h-9 text-xs bg-background border-border"
+                        />
+                        <span className="text-muted-foreground">—</span>
+                        <Input
+                            type="date"
+                            value={filterEndDate}
+                            onChange={e => {
+                                setFilterEndDate(e.target.value)
+                                handleCustomDateFilter()
+                            }}
+                            className="w-full sm:w-[140px] h-9 text-xs bg-background border-border"
+                        />
+                    </div>
+                </div>
+                
+                {(filterStartDate || filterEndDate || selectedMonth !== '0') && (
+                    <Button size="sm" variant="ghost" onClick={clearFilters} className="text-muted-foreground hover:text-foreground w-full md:w-auto md:ml-auto h-9">
+                        Сбросить
+                    </Button>
+                )}
+            </div>
 
             {/* Summary Cards */}
             <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5">
-                <Card className="overflow-hidden relative border-none bg-purple-500/5 shadow-none">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
-                        <CardTitle className="text-sm font-medium text-purple-600">Всего смен</CardTitle>
-                        <Clock className="h-4 w-4 text-purple-500" />
+                <Card className="overflow-hidden relative bg-card border-border shadow-sm">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative bg-accent/30 border-b border-border/50">
+                        <CardTitle className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Всего смен</CardTitle>
+                        <Clock className="h-4 w-4 text-muted-foreground/70" />
                     </CardHeader>
-                    <CardContent className="relative">
-                        <div className="text-3xl font-bold flex items-baseline">
+                    <CardContent className="relative p-4">
+                        <div className="text-2xl font-bold flex items-baseline text-foreground">
                             {shifts.length}
                             {renderDiff(summary?.shifts_count?.diff)}
                         </div>
-                        <p className="text-xs text-muted-foreground mt-1">за выбранный период</p>
+                        <p className="text-[10px] text-muted-foreground mt-1 uppercase tracking-wider">за выбранный период</p>
                     </CardContent>
                 </Card>
 
-                <Card className="overflow-hidden relative border-none bg-indigo-500/5 shadow-none">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
-                        <CardTitle className="text-sm font-medium text-indigo-600">Общая выручка</CardTitle>
-                        <TrendingUp className="h-4 w-4 text-indigo-500" />
+                <Card className="overflow-hidden relative bg-card border-border shadow-sm">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative bg-primary/5 border-b border-primary/10">
+                        <CardTitle className="text-xs font-bold uppercase tracking-wider text-primary">Общая выручка</CardTitle>
+                        <TrendingUp className="h-4 w-4 text-primary" />
                     </CardHeader>
-                    <CardContent className="relative">
-                        <div className="text-3xl font-bold text-indigo-600 flex items-baseline">
+                    <CardContent className="relative p-4 bg-primary/5">
+                        <div className="text-2xl font-bold text-primary flex items-baseline">
                             {formatMoney(totalRevenue)}
                             {renderDiff(summary?.revenue?.diff)}
                         </div>
                     </CardContent>
                 </Card>
 
-
-
                 {/* Dynamic Cards (Income + Other) */}
                 {customFieldTotals.filter(f => f.field_type !== 'EXPENSE' && f.show_in_stats !== false && f.show_for_employee !== false).map(field => (
-                    <Card key={field.metric_key} className="overflow-hidden relative border-none bg-cyan-500/5 shadow-none">
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
-                            <CardTitle className="text-sm font-medium text-cyan-600">{field.custom_label}</CardTitle>
-                            <TrendingUp className="h-4 w-4 text-cyan-500" />
+                    <Card key={field.metric_key} className="overflow-hidden relative bg-card border-border shadow-sm">
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative bg-accent/30 border-b border-border/50">
+                            <CardTitle className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{field.custom_label}</CardTitle>
+                            <TrendingUp className="h-4 w-4 text-muted-foreground/70" />
                         </CardHeader>
-                        <CardContent className="relative">
-                            <div className="text-3xl font-bold text-cyan-600 flex items-baseline">
+                        <CardContent className="relative p-4">
+                            <div className="text-2xl font-bold text-foreground flex items-baseline">
                                 {formatMoney(field.total)}
                                 {renderDiff(summary?.custom_metrics?.[field.metric_key]?.diff)}
                             </div>
@@ -449,17 +444,17 @@ export default function EmployeeShiftHistoryPage() {
             </div>
 
             {/* Shifts Table (Desktop) */}
-            <Card className="hidden md:block border-0 shadow-lg">
-                <CardHeader>
-                    <CardTitle>История смен</CardTitle>
-                    <CardDescription>Последние смены с отчетами</CardDescription>
+            <Card className="hidden md:block bg-card border-border shadow-sm overflow-hidden">
+                <CardHeader className="bg-accent/30 border-b border-border">
+                    <CardTitle className="text-lg">История смен</CardTitle>
+                    <CardDescription className="text-muted-foreground">Последние смены с отчетами</CardDescription>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="p-0">
                     <Table>
                         <TableHeader>
-                            <TableRow>
+                            <TableRow className="bg-accent/10 border-b border-border hover:bg-accent/10">
                                 <TableHead
-                                    className="cursor-pointer hover:bg-muted/50 select-none"
+                                    className="cursor-pointer hover:bg-accent/50 select-none text-xs uppercase tracking-wider text-muted-foreground"
                                     onClick={() => handleSort('check_in')}
                                 >
                                     <div className="flex items-center gap-1">
@@ -467,10 +462,10 @@ export default function EmployeeShiftHistoryPage() {
                                         <ArrowUpDown className="h-3 w-3" />
                                     </div>
                                 </TableHead>
-                                <TableHead>Тип</TableHead>
-                                <TableHead>Время</TableHead>
+                                <TableHead className="text-xs uppercase tracking-wider text-muted-foreground">Тип</TableHead>
+                                <TableHead className="text-xs uppercase tracking-wider text-muted-foreground">Время</TableHead>
                                 <TableHead
-                                    className="cursor-pointer hover:bg-muted/50 select-none"
+                                    className="cursor-pointer hover:bg-accent/50 select-none text-xs uppercase tracking-wider text-muted-foreground"
                                     onClick={() => handleSort('total_hours')}
                                 >
                                     <div className="flex items-center gap-1">
@@ -479,7 +474,7 @@ export default function EmployeeShiftHistoryPage() {
                                     </div>
                                 </TableHead>
                                 <TableHead
-                                    className="text-right cursor-pointer hover:bg-muted/50 select-none text-green-600 font-bold"
+                                    className="text-right cursor-pointer hover:bg-accent/50 select-none text-emerald-500 font-bold text-xs uppercase tracking-wider"
                                     onClick={() => handleSort('total_revenue')}
                                 >
                                     <div className="flex items-center justify-end gap-1">
@@ -488,49 +483,48 @@ export default function EmployeeShiftHistoryPage() {
                                     </div>
                                 </TableHead>
                                 <TableHead
-                                    className="text-right cursor-pointer hover:bg-muted/50 select-none"
+                                    className="text-right cursor-pointer hover:bg-accent/50 select-none text-xs uppercase tracking-wider text-muted-foreground"
                                     onClick={() => handleSort('cash_income')}
                                 >
-                                    <div className="flex items-center justify-end gap-1 text-green-500">
+                                    <div className="flex items-center justify-end gap-1">
                                         Нал
                                         <ArrowUpDown className="h-3 w-3" />
                                     </div>
                                 </TableHead>
                                 <TableHead
-                                    className="text-right cursor-pointer hover:bg-muted/50 select-none"
+                                    className="text-right cursor-pointer hover:bg-accent/50 select-none text-xs uppercase tracking-wider text-muted-foreground"
                                     onClick={() => handleSort('card_income')}
                                 >
-                                    <div className="flex items-center justify-end gap-1 text-blue-500">
+                                    <div className="flex items-center justify-end gap-1">
                                         Безнал
                                         <ArrowUpDown className="h-3 w-3" />
                                     </div>
                                 </TableHead>
                                 <TableHead
-                                    className="text-right cursor-pointer hover:bg-muted/50 select-none"
+                                    className="text-right cursor-pointer hover:bg-accent/50 select-none text-xs uppercase tracking-wider text-muted-foreground"
                                     onClick={() => handleSort('expenses')}
                                 >
-                                    <div className="flex items-center justify-end gap-1 text-orange-500">
+                                    <div className="flex items-center justify-end gap-1">
                                         Расходы
                                         <ArrowUpDown className="h-3 w-3" />
                                     </div>
                                 </TableHead>
                                 {reportFields.map((field: any) => (
-                                    <TableHead key={field.metric_key} className="text-right min-w-[100px]">{field.custom_label || field.label || field.metric_key}</TableHead>
+                                    <TableHead key={field.metric_key} className="text-right min-w-[100px] text-xs uppercase tracking-wider text-muted-foreground">{field.custom_label || field.label || field.metric_key}</TableHead>
                                 ))}
-                                <TableHead>Статус</TableHead>
-                                <TableHead className="text-right">Детали</TableHead>
+                                <TableHead className="text-xs uppercase tracking-wider text-muted-foreground">Статус</TableHead>
                             </TableRow>
                         </TableHeader>
-                        <TableBody>
+                        <TableBody className="divide-y divide-border">
                             {isLoading ? (
                                 <TableRow>
-                                    <TableCell colSpan={8 + reportFields.length} className="text-center py-12">
+                                    <TableCell colSpan={9 + reportFields.length} className="text-center py-12">
                                         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground mx-auto" />
                                     </TableCell>
                                 </TableRow>
                             ) : sortedShifts.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={8 + reportFields.length} className="text-center text-muted-foreground py-12">
+                                    <TableCell colSpan={9 + reportFields.length} className="text-center text-muted-foreground py-12">
                                         <div className="flex flex-col items-center gap-2">
                                             <Clock className="h-8 w-8 opacity-30" />
                                             <p>Смен пока нет</p>
@@ -541,10 +535,10 @@ export default function EmployeeShiftHistoryPage() {
                                 const isWeekend = isWeekendDate(shift.check_in)
 
                                 return (
-                                <TableRow key={shift.id} className="hover:bg-muted/50">
+                                <TableRow key={shift.id} className="hover:bg-accent/30 border-b border-border">
                                     <TableCell className={cn(
-                                        "font-medium whitespace-nowrap",
-                                        isWeekend && "text-rose-600 bg-rose-50/60 dark:bg-rose-950/20 dark:text-rose-400"
+                                        "font-bold whitespace-nowrap",
+                                        isWeekend ? "text-rose-500 bg-rose-500/5" : "text-foreground"
                                     )}>
                                         {formatDate(shift.check_in)}
                                     </TableCell>
@@ -555,7 +549,7 @@ export default function EmployeeShiftHistoryPage() {
                                                 <span className="text-xs">Ночь</span>
                                             </div>
                                         ) : (
-                                            <div className="flex items-center gap-1 text-orange-500">
+                                            <div className="flex items-center gap-1 text-amber-500">
                                                 <Sun className="h-4 w-4" />
                                                 <span className="text-xs">День</span>
                                             </div>
@@ -564,17 +558,17 @@ export default function EmployeeShiftHistoryPage() {
                                     <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
                                         {formatTime(shift.check_in)} — {shift.check_out ? formatTime(shift.check_out) : '...'}
                                     </TableCell>
-                                    <TableCell className="font-mono whitespace-nowrap">
+                                    <TableCell className="font-mono whitespace-nowrap text-foreground font-medium">
                                         {shift.total_hours && !isNaN(Number(shift.total_hours))
                                             ? `${Number(shift.total_hours).toFixed(1)}ч`
                                             : '-'}
                                     </TableCell>
-                                    <TableCell className="text-right font-bold text-green-600 whitespace-nowrap bg-green-500/5">{formatMoney(calculateShiftTotalIncome(shift))}</TableCell>
-                                    <TableCell className="text-right font-medium text-green-500 whitespace-nowrap">{formatMoney(getMetricValue(shift, 'cash_income'))}</TableCell>
-                                    <TableCell className="text-right font-medium text-blue-500 whitespace-nowrap">{formatMoney(getMetricValue(shift, 'card_income'))}</TableCell>
-                                    <TableCell className="text-right font-medium text-orange-500 whitespace-nowrap">{formatMoney(getMetricValue(shift, 'expenses'))}</TableCell>
+                                    <TableCell className="text-right font-bold text-emerald-500 whitespace-nowrap bg-emerald-500/5">{formatMoney(calculateShiftTotalIncome(shift))}</TableCell>
+                                    <TableCell className="text-right font-medium text-emerald-500/80 whitespace-nowrap">{formatMoney(getMetricValue(shift, 'cash_income'))}</TableCell>
+                                    <TableCell className="text-right font-medium text-blue-400 whitespace-nowrap">{formatMoney(getMetricValue(shift, 'card_income'))}</TableCell>
+                                    <TableCell className="text-right font-medium text-amber-500 whitespace-nowrap">{formatMoney(getMetricValue(shift, 'expenses'))}</TableCell>
                                     {reportFields.map((field: any) => (
-                                        <TableCell key={field.metric_key} className="text-right whitespace-nowrap">
+                                        <TableCell key={field.metric_key} className="text-right whitespace-nowrap text-foreground/80">
                                             {shift.report_data && shift.report_data[field.metric_key] !== undefined
                                                 ? formatMoney(getMetricValue(shift, field.metric_key))
                                                 : '-'}
@@ -582,19 +576,6 @@ export default function EmployeeShiftHistoryPage() {
                                     ))}
                                     <TableCell className="whitespace-nowrap">
                                         {getStatusBadge(shift.status, !!shift.check_out)}
-                                    </TableCell>
-                                    <TableCell className="whitespace-nowrap text-right">
-                                        {shift.report_data && Object.keys(shift.report_data).length > 0 && (
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                className="h-8 w-8 hover:bg-purple-500/10 hover:text-purple-500"
-                                                onClick={() => setSelectedShift(shift)}
-                                                title="Просмотр отчета"
-                                            >
-                                                <Eye className="h-4 w-4" />
-                                            </Button>
-                                        )}
                                     </TableCell>
                                 </TableRow>
                                 )
@@ -606,13 +587,13 @@ export default function EmployeeShiftHistoryPage() {
 
             {/* Shifts List (Mobile) */}
             <div className="md:hidden space-y-4">
-                <h3 className="font-semibold text-lg px-1">История смен</h3>
+                <h3 className="font-semibold text-lg px-1 text-foreground">История смен</h3>
                 {isLoading ? (
                     <div className="flex justify-center py-8">
                         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                     </div>
                 ) : sortedShifts.length === 0 ? (
-                    <Card className="border-0 shadow-sm bg-muted/30">
+                    <Card className="border border-border shadow-sm bg-card">
                         <CardContent className="flex flex-col items-center justify-center py-12 text-muted-foreground">
                             <Clock className="h-10 w-10 opacity-20 mb-3" />
                             <p>Смен пока нет</p>
@@ -623,11 +604,11 @@ export default function EmployeeShiftHistoryPage() {
                         const isWeekend = isWeekendDate(shift.check_in)
 
                         return (
-                        <Card key={shift.id} className="border-0 shadow-md overflow-hidden">
-                            <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between space-y-0 bg-muted/20">
+                        <Card key={shift.id} className="border border-border bg-card shadow-sm overflow-hidden">
+                            <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between space-y-0 bg-accent/10 border-b border-border/50">
                                 <div className={cn(
                                     "font-bold text-lg",
-                                    isWeekend && "text-rose-600 dark:text-rose-400"
+                                    isWeekend ? "text-rose-500" : "text-foreground"
                                 )}>
                                     {formatDate(shift.check_in)}
                                 </div>
@@ -637,42 +618,42 @@ export default function EmployeeShiftHistoryPage() {
                                 <div className="flex justify-between items-center">
                                     <div className="flex items-center gap-2">
                                         {shift.shift_type === 'NIGHT' ? (
-                                            <div className="p-1.5 rounded-full bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400">
+                                            <div className="p-1.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20">
                                                 <Moon className="h-4 w-4" />
                                             </div>
                                         ) : (
-                                            <div className="p-1.5 rounded-full bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400">
+                                            <div className="p-1.5 rounded-full bg-amber-500/10 text-amber-500 border border-amber-500/20">
                                                 <Sun className="h-4 w-4" />
                                             </div>
                                         )}
-                                        <span className="font-medium">
+                                        <span className="font-medium text-foreground">
                                             {formatTime(shift.check_in)} — {shift.check_out ? formatTime(shift.check_out) : '...'}
                                         </span>
                                     </div>
-                                    <div className="font-mono font-bold text-muted-foreground">
+                                    <div className="font-mono font-bold text-muted-foreground bg-accent/50 px-2 py-0.5 rounded-md border border-border">
                                         {shift.total_hours && !isNaN(Number(shift.total_hours))
                                             ? `${Number(shift.total_hours).toFixed(1)}ч`
                                             : '-'}
                                     </div>
                                 </div>
 
-                                <div className="grid grid-cols-2 gap-3 pt-2 border-t border-border/50">
-                                    <div>
-                                        <p className="text-xs text-muted-foreground mb-0.5">Наличные</p>
-                                        <p className="font-bold text-green-600">{formatMoney(getMetricValue(shift, 'cash_income'))}</p>
+                                <div className="grid grid-cols-2 gap-3 pt-4 border-t border-border">
+                                    <div className="bg-accent/30 p-2 rounded-lg border border-border/50">
+                                        <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-0.5">Наличные</p>
+                                        <p className="font-bold text-emerald-500">{formatMoney(getMetricValue(shift, 'cash_income'))}</p>
                                     </div>
-                                    <div>
-                                        <p className="text-xs text-muted-foreground mb-0.5">Безнал</p>
-                                        <p className="font-bold text-blue-600">{formatMoney(getMetricValue(shift, 'card_income'))}</p>
+                                    <div className="bg-accent/30 p-2 rounded-lg border border-border/50">
+                                        <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-0.5">Безнал</p>
+                                        <p className="font-bold text-blue-400">{formatMoney(getMetricValue(shift, 'card_income'))}</p>
                                     </div>
-                                    <div>
-                                        <p className="text-xs text-muted-foreground mb-0.5">Расходы</p>
-                                        <p className="font-bold text-orange-600">{formatMoney(getMetricValue(shift, 'expenses'))}</p>
+                                    <div className="bg-accent/30 p-2 rounded-lg border border-border/50">
+                                        <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-0.5">Расходы</p>
+                                        <p className="font-bold text-amber-500">{formatMoney(getMetricValue(shift, 'expenses'))}</p>
                                     </div>
                                     {reportFields.map((field: any) => (
-                                        <div key={field.metric_key}>
-                                            <p className="text-xs text-muted-foreground mb-0.5">{field.custom_label || field.label}</p>
-                                            <p className="font-medium">
+                                        <div key={field.metric_key} className="bg-accent/30 p-2 rounded-lg border border-border/50">
+                                            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-0.5 truncate" title={field.custom_label || field.label}>{field.custom_label || field.label}</p>
+                                            <p className="font-bold text-foreground">
                                                 {shift.report_data && shift.report_data[field.metric_key] !== undefined
                                                     ? formatMoney(getMetricValue(shift, field.metric_key))
                                                     : '-'}
@@ -685,7 +666,7 @@ export default function EmployeeShiftHistoryPage() {
                                     <Button
                                         variant="outline"
                                         size="sm"
-                                        className="w-full mt-2"
+                                        className="w-full mt-2 border-primary/20 text-primary hover:bg-primary/10 transition-colors bg-transparent"
                                         onClick={() => setSelectedShift(shift)}
                                     >
                                         <Eye className="h-4 w-4 mr-2" />
@@ -701,19 +682,19 @@ export default function EmployeeShiftHistoryPage() {
 
             {/* View Report Modal */}
             <Dialog open={!!selectedShift} onOpenChange={() => setSelectedShift(null)}>
-                <DialogContent className="max-w-lg">
-                    <DialogHeader>
-                        <DialogTitle className="flex items-center gap-2">
-                            <div className="h-10 w-10 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center">
-                                <FileText className="h-5 w-5 text-white" />
+                <DialogContent className="sm:max-w-lg p-0 overflow-hidden bg-card border-border dark text-foreground">
+                    <DialogHeader className="px-6 py-4 border-b border-border bg-accent/30">
+                        <DialogTitle className="flex items-center gap-3 text-lg">
+                            <div className="h-8 w-8 rounded-lg bg-background border border-border flex items-center justify-center">
+                                <FileText className="h-4 w-4 text-muted-foreground" />
                             </div>
                             Отчет о смене
                         </DialogTitle>
-                        <DialogDescription>
+                        <DialogDescription className="text-muted-foreground mt-1">
                             {selectedShift && formatDate(selectedShift.check_in)}
                         </DialogDescription>
                     </DialogHeader>
-                    <div className="space-y-3 py-4 max-h-[60vh] overflow-y-auto">
+                    <div className="space-y-3 p-6 max-h-[60vh] overflow-y-auto">
                         {selectedShift?.report_data && Object.entries(selectedShift.report_data).map(([key, value]) => {
                             // Find label
                             const field = reportFields.find(f => f.metric_key === key);
@@ -725,7 +706,7 @@ export default function EmployeeShiftHistoryPage() {
                                     if (total === 0 && value.length === 0) return '-';
                                     return (
                                         <div className="flex flex-col items-end gap-1">
-                                            <span className="font-bold">{total.toLocaleString()} ₽</span>
+                                            <span className="font-bold text-foreground">{total.toLocaleString()} ₽</span>
                                             {value.map((item: any, i: number) => (
                                                 <span key={i} className="text-[10px] text-muted-foreground leading-none">
                                                     {item.amount}₽: {item.comment}
@@ -741,16 +722,16 @@ export default function EmployeeShiftHistoryPage() {
                             };
 
                             return (
-                                <div key={key} className="flex justify-between items-center bg-muted/50 rounded-lg px-4 py-3">
-                                    <span className="text-muted-foreground capitalize mr-4">{label}</span>
-                                    <span className="font-semibold text-right">{renderValue()}</span>
+                                <div key={key} className="flex justify-between items-center bg-accent/30 rounded-lg px-4 py-3 border border-border/50">
+                                    <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground mr-4">{label}</span>
+                                    <span className="font-bold text-foreground text-right">{renderValue()}</span>
                                 </div>
                             );
                         })}
                         {selectedShift?.report_comment && (
                             <div className="pt-2">
-                                <p className="text-sm text-muted-foreground mb-2">Комментарий:</p>
-                                <p className="text-sm bg-muted p-4 rounded-lg">{selectedShift.report_comment}</p>
+                                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-2">Комментарий</p>
+                                <p className="text-sm bg-accent/30 border border-border/50 p-4 rounded-lg text-foreground">{selectedShift.report_comment}</p>
                             </div>
                         )}
                     </div>

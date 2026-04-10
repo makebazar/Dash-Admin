@@ -188,7 +188,7 @@ export default function RevenueTrendChart({
     }, [currentRevenueChartPoints, chartPlotWidth])
 
     return (
-        <div className="min-w-0 overflow-hidden rounded-none border-0 bg-transparent p-0 sm:rounded-3xl sm:border sm:border-slate-200 sm:bg-gradient-to-b sm:from-slate-50 sm:to-white sm:p-4">
+        <div className="min-w-0 overflow-hidden rounded-none border-0 bg-transparent p-0 sm:rounded-3xl sm:border sm:border-border sm:bg-gradient-to-b sm:from-slate-50 sm:to-white sm:p-4">
             <div className="min-w-0 overflow-x-auto overscroll-x-contain pb-2 [-ms-overflow-style:none] [-webkit-overflow-scrolling:touch] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 <svg
                     viewBox={`0 0 ${chartWidth} ${chartHeight}`}
@@ -206,7 +206,7 @@ export default function RevenueTrendChart({
                                     x2={chartPaddingLeft + chartPlotWidth}
                                     y1={y}
                                     y2={y}
-                                    stroke="#E2E8F0"
+                                    className="stroke-border"
                                     strokeDasharray="4 4"
                                 />
                                 <text
@@ -214,7 +214,7 @@ export default function RevenueTrendChart({
                                     y={y + 4}
                                     textAnchor="end"
                                     fontSize="11"
-                                    fill="#64748B"
+                                    className="fill-muted-foreground"
                                 >
                                     {formatCompactCurrency(tick)}
                                 </text>
@@ -228,7 +228,7 @@ export default function RevenueTrendChart({
                             x2={activeCurrentPoint.x}
                             y1={chartPaddingTop}
                             y2={chartPaddingTop + chartPlotHeight}
-                            stroke="#CBD5E1"
+                            className="stroke-border/70"
                             strokeDasharray="4 4"
                         />
                     ) : null}
@@ -237,7 +237,7 @@ export default function RevenueTrendChart({
                         <path
                             d={previousRevenueLinePath}
                             fill="none"
-                            stroke="#94A3B8"
+                            className="stroke-muted-foreground/50"
                             strokeWidth="2.5"
                             strokeLinecap="round"
                             strokeLinejoin="round"
@@ -258,7 +258,7 @@ export default function RevenueTrendChart({
                         <path
                             d={revenueLinePath}
                             fill="none"
-                            stroke="#2563EB"
+                            className="stroke-primary"
                             strokeWidth="3"
                             strokeLinecap="round"
                             strokeLinejoin="round"
@@ -271,8 +271,7 @@ export default function RevenueTrendChart({
                             cx={point.x}
                             cy={point.y}
                             r={activeIndex === index ? 4 : 2.5}
-                            fill="#FFFFFF"
-                            stroke="#94A3B8"
+                            className="fill-background stroke-muted-foreground/50"
                             strokeWidth="2"
                         />
                     ))}
@@ -286,8 +285,7 @@ export default function RevenueTrendChart({
                                     cx={point.x}
                                     cy={point.y}
                                     r={activeIndex === index ? 5 : index === currentRevenueChartPoints.length - 1 ? 4.5 : 3}
-                                    fill={point.revenue === 0 ? "#CBD5E1" : "#2563EB"}
-                                    stroke="#fff"
+                                    className={`${point.revenue === 0 ? "fill-muted-foreground" : "fill-primary"} stroke-background`}
                                     strokeWidth="2"
                                 />
                                 {showLabel ? (
@@ -296,7 +294,7 @@ export default function RevenueTrendChart({
                                         y={chartHeight - 10}
                                         textAnchor="middle"
                                         fontSize="11"
-                                        fill="#64748B"
+                                        className="fill-muted-foreground"
                                     >
                                         {formatDate(point.date)}
                                     </text>
@@ -313,15 +311,14 @@ export default function RevenueTrendChart({
                                 width={tooltip.width}
                                 height={tooltip.height}
                                 rx="14"
-                                fill="#FFFFFF"
-                                stroke="#BFDBFE"
+                                className="fill-background stroke-primary/30"
                             />
                             <text
                                 x={tooltip.x + 12}
                                 y={tooltip.y + 16}
                                 fontSize="11"
                                 fontWeight="600"
-                                fill="#64748B"
+                                className="fill-muted-foreground"
                             >
                                 {formatDate(activeCurrentPoint.date)}
                             </text>
@@ -339,7 +336,7 @@ export default function RevenueTrendChart({
                                 y={tooltip.y + 49}
                                 fontSize="11"
                                 fontWeight="600"
-                                fill="#64748B"
+                                className="fill-muted-foreground"
                             >
                                 Прошлый: {formatCompactCurrency(activePreviousPoint?.revenue ?? 0)}
                             </text>

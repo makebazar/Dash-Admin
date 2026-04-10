@@ -125,7 +125,7 @@ export default function MyMaintenanceTasks() {
                                 <p className="text-xs font-black uppercase tracking-widest text-blue-600 mb-1">Всего задач</p>
                                 <p className="text-3xl font-black text-blue-900">{stats.total}</p>
                             </div>
-                            <div className="h-12 w-12 bg-white rounded-2xl flex items-center justify-center text-blue-600 shadow-sm">
+                            <div className="h-12 w-12 bg-card rounded-2xl flex items-center justify-center text-blue-600 shadow-sm">
                                 <Monitor className="h-6 w-6" />
                             </div>
                         </div>
@@ -138,7 +138,7 @@ export default function MyMaintenanceTasks() {
                                 <p className="text-xs font-black uppercase tracking-widest text-indigo-600 mb-1">В процессе</p>
                                 <p className="text-3xl font-black text-indigo-900">{stats.in_progress}</p>
                             </div>
-                            <div className="h-12 w-12 bg-white rounded-2xl flex items-center justify-center text-indigo-600 shadow-sm">
+                            <div className="h-12 w-12 bg-card rounded-2xl flex items-center justify-center text-indigo-600 shadow-sm">
                                 <Play className="h-6 w-6" />
                             </div>
                         </div>
@@ -151,7 +151,7 @@ export default function MyMaintenanceTasks() {
                                 <p className="text-xs font-black uppercase tracking-widest text-rose-600 mb-1">Просрочено</p>
                                 <p className="text-3xl font-black text-rose-900">{stats.overdue}</p>
                             </div>
-                            <div className="h-12 w-12 bg-white rounded-2xl flex items-center justify-center text-rose-600 shadow-sm">
+                            <div className="h-12 w-12 bg-card rounded-2xl flex items-center justify-center text-rose-600 shadow-sm">
                                 <AlertCircle className="h-6 w-6" />
                             </div>
                         </div>
@@ -176,8 +176,8 @@ export default function MyMaintenanceTasks() {
                         <Loader2 className="h-8 w-8 animate-spin" />
                     </div>
                 ) : tasks.length === 0 ? (
-                    <div className="text-center py-20 bg-slate-50 rounded-[40px] border-2 border-dashed border-slate-200">
-                        <div className="h-20 w-20 bg-white rounded-3xl flex items-center justify-center mx-auto mb-4 shadow-sm text-green-500">
+                    <div className="text-center py-20 bg-muted rounded-[40px] border-2 border-dashed border-border">
+                        <div className="h-20 w-20 bg-card rounded-3xl flex items-center justify-center mx-auto mb-4 shadow-sm text-green-500">
                             <CheckCircle2 className="h-10 w-10" />
                         </div>
                         <h3 className="text-lg font-bold">Все чисто!</h3>
@@ -192,7 +192,7 @@ export default function MyMaintenanceTasks() {
                             return (
                                 <Card key={task.id} className={cn(
                                     "group border-none shadow-sm overflow-hidden",
-                                    isInProgress ? "ring-2 ring-indigo-500 bg-indigo-50/10" : "bg-white"
+                                    isInProgress ? "ring-2 ring-indigo-500 bg-indigo-50/10" : "bg-card"
                                 )}>
                                     <CardContent className="p-0">
                                         <div className="flex items-stretch min-h-[100px]">
@@ -204,18 +204,18 @@ export default function MyMaintenanceTasks() {
                                                 <div className="flex items-center gap-4">
                                                     <div className={cn(
                                                         "h-12 w-12 rounded-2xl flex items-center justify-center transition-colors",
-                                                        isInProgress ? "bg-indigo-500 text-white" : "bg-slate-50 text-slate-400 group-hover:bg-white border group-hover:border-slate-100 shadow-none"
+                                                        isInProgress ? "bg-indigo-500 text-primary-foreground" : "bg-muted text-muted-foreground/70 group-hover:bg-card border group-hover:border-border/50 shadow-none"
                                                     )}>
                                                         <Monitor className="h-6 w-6" />
                                                     </div>
                                                     <div className="space-y-1">
                                                         <div className="flex items-center gap-2">
-                                                            <h4 className="font-bold text-slate-900">{task.equipment_name}</h4>
+                                                            <h4 className="font-bold text-foreground">{task.equipment_name}</h4>
                                                             {isOverdue && <Badge className="h-5 bg-rose-50 text-rose-600 border-none text-[9px] font-black uppercase tracking-tighter shadow-none">Просрочено</Badge>}
                                                         </div>
                                                         <div className="flex items-center gap-3 text-xs text-muted-foreground">
                                                             <span className="flex items-center gap-1"><Badge variant="outline" className="text-[10px] font-medium">{task.equipment_type_name}</Badge></span>
-                                                            <span className="flex items-center gap-1 font-bold text-slate-500 uppercase tracking-tighter">{task.workstation_name || "Склад"}</span>
+                                                            <span className="flex items-center gap-1 font-bold text-muted-foreground uppercase tracking-tighter">{task.workstation_name || "Склад"}</span>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -225,7 +225,7 @@ export default function MyMaintenanceTasks() {
                                                         <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest mb-1">Дедлайн</p>
                                                         <p className={cn(
                                                             "text-sm font-bold",
-                                                            isOverdue ? "text-rose-600" : "text-slate-700"
+                                                            isOverdue ? "text-rose-600" : "text-foreground"
                                                         )}>
                                                             {new Date(task.due_date).toLocaleDateString("ru-RU", { day: 'numeric', month: 'long' })}
                                                         </p>
@@ -267,10 +267,10 @@ export default function MyMaintenanceTasks() {
             </div>
 
             {/* Disclaimer / Info */}
-            <div className="p-6 rounded-3xl bg-slate-100/50 border border-slate-200 border-dashed flex items-start gap-4">
-                <AlertCircle className="h-6 w-6 text-slate-400 shrink-0 mt-0.5" />
+            <div className="p-6 rounded-3xl bg-accent/50 border border-border border-dashed flex items-start gap-4">
+                <AlertCircle className="h-6 w-6 text-muted-foreground/70 shrink-0 mt-0.5" />
                 <div className="space-y-1">
-                    <p className="text-sm font-bold text-slate-700">Как это работает?</p>
+                    <p className="text-sm font-bold text-foreground">Как это работает?</p>
                     <p className="text-xs text-muted-foreground leading-relaxed">
                         За каждую выполненную чистку вы получаете баллы согласно настройкам клуба.
                         Баллы конвертируются в денежный бонус в конце месяца при расчете зарплаты.

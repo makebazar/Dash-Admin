@@ -258,11 +258,11 @@ export function ShiftZoneSnapshotWizard({
             <Dialog open={isOpen} onOpenChange={(open) => {
                 if (!open && allowSkip && !isPending) onClose()
             }}>
-                <DialogContent className="h-screen w-screen max-w-none rounded-none border-slate-800 bg-slate-950 p-0 text-white">
+                <DialogContent className="h-screen w-screen max-w-none rounded-none border-slate-800 bg-slate-950 p-0 text-primary-foreground">
                     <div className="flex h-full flex-col overflow-hidden px-3 pb-[calc(env(safe-area-inset-bottom)+12px)] pt-[max(env(safe-area-inset-top),12px)] sm:p-6">
                     <DialogHeader className="shrink-0">
                         <DialogTitle>{title}</DialogTitle>
-                        <DialogDescription className="text-slate-400">
+                        <DialogDescription className="text-muted-foreground/70">
                             {description}
                         </DialogDescription>
                     </DialogHeader>
@@ -270,20 +270,20 @@ export function ShiftZoneSnapshotWizard({
                     <div className="mt-4 flex-1 overflow-y-auto pr-0 sm:pr-2">
                     {isLoading ? (
                         <div className="py-16 flex items-center justify-center">
-                            <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+                            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground/70" />
                         </div>
                     ) : warehouses.length === 0 ? (
-                        <div className="rounded-2xl border border-dashed border-slate-700 p-8 text-center text-slate-400">
+                        <div className="rounded-2xl border border-dashed border-slate-700 p-8 text-center text-muted-foreground/70">
                             Для этой смены не настроены склады для передачи остатков.
                         </div>
                     ) : (
                         <div className="space-y-4">
                             {snapshotType === "OPEN" && (
-                                <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-3 sm:p-4">
-                                    <div className="mb-2 text-sm font-semibold text-white">У какой смены принимаешь остатки</div>
+                                <div className="rounded-2xl border border-slate-800 bg-primary/60 p-3 sm:p-4">
+                                    <div className="mb-2 text-sm font-semibold text-primary-foreground">У какой смены принимаешь остатки</div>
                                     {handoverSourceCandidates.length > 0 ? (
                                         <Select value={selectedHandoverSourceShiftId} onValueChange={setSelectedHandoverSourceShiftId}>
-                                            <SelectTrigger className="h-11 border-slate-700 bg-slate-950 text-white sm:h-10">
+                                            <SelectTrigger className="h-11 border-slate-700 bg-slate-950 text-primary-foreground sm:h-10">
                                                 <SelectValue placeholder="Выберите смену-источник" />
                                             </SelectTrigger>
                                             <SelectContent>
@@ -298,7 +298,7 @@ export function ShiftZoneSnapshotWizard({
                                             </SelectContent>
                                         </Select>
                                     ) : (
-                                        <div className="text-sm text-slate-400">
+                                        <div className="text-sm text-muted-foreground/70">
                                             Подходящих закрытых смен до этой приемки не найдено. Приемка сохранится без привязки к предыдущей смене.
                                         </div>
                                     )}
@@ -315,7 +315,7 @@ export function ShiftZoneSnapshotWizard({
                                     <Button
                                         type="button"
                                         variant="outline"
-                                        className="h-11 w-full border-slate-200 bg-white text-slate-900 hover:bg-slate-100 hover:text-slate-900 sm:h-10 sm:w-auto"
+                                        className="h-11 w-full border-border bg-card text-foreground hover:bg-accent hover:text-foreground sm:h-10 sm:w-auto"
                                         onClick={openAddDialog}
                                     >
                                         <Plus className="mr-2 h-4 w-4" />
@@ -330,7 +330,7 @@ export function ShiftZoneSnapshotWizard({
 
                     <DialogFooter className="mt-4 shrink-0 border-t border-slate-800 bg-slate-950/95 pt-4 backdrop-blur sm:border-t-0 sm:bg-transparent sm:pt-0">
                         {allowSkip && (
-                            <Button variant="outline" className="h-11 border-slate-700 text-white sm:h-10" onClick={onClose} disabled={isPending}>
+                            <Button variant="outline" className="h-11 border-slate-700 text-primary-foreground sm:h-10" onClick={onClose} disabled={isPending}>
                                 Позже
                             </Button>
                         )}
@@ -348,10 +348,10 @@ export function ShiftZoneSnapshotWizard({
             </Dialog>
 
             <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-                <DialogContent className="max-w-[96vw] rounded-2xl border-slate-800 bg-slate-950 text-white sm:max-w-[90vw]">
+                <DialogContent className="max-w-[96vw] rounded-2xl border-slate-800 bg-slate-950 text-primary-foreground sm:max-w-[90vw]">
                     <DialogHeader>
                         <DialogTitle>Добавить товар в передачу остатков</DialogTitle>
-                        <DialogDescription className="text-slate-400">
+                        <DialogDescription className="text-muted-foreground/70">
                             Если товар физически есть на складе, но еще не попал в список, добавь его вручную.
                         </DialogDescription>
                     </DialogHeader>
@@ -359,10 +359,10 @@ export function ShiftZoneSnapshotWizard({
                         <div className="space-y-2">
                             <div className="text-sm text-slate-300">Склад</div>
                             <Select value={selectedWarehouseId} onValueChange={setSelectedWarehouseId}>
-                                <SelectTrigger className="bg-slate-900 border-slate-800 h-12 rounded-xl">
+                                <SelectTrigger className="bg-primary border-slate-800 h-12 rounded-xl">
                                     <SelectValue placeholder="Выберите склад..." />
                                 </SelectTrigger>
-                                <SelectContent className="bg-slate-900 border-slate-800">
+                                <SelectContent className="bg-primary border-slate-800">
                                     {warehouses.map((warehouse) => (
                                         <SelectItem key={warehouse.id} value={String(warehouse.id)}>
                                             {warehouse.name} · {warehouse.shift_zone_label}
@@ -375,10 +375,10 @@ export function ShiftZoneSnapshotWizard({
                         <div className="space-y-2">
                             <div className="text-sm text-slate-300">Товар</div>
                             <Select value={selectedProductId} onValueChange={setSelectedProductId}>
-                                <SelectTrigger className="bg-slate-900 border-slate-800 h-12 rounded-xl">
+                                <SelectTrigger className="bg-primary border-slate-800 h-12 rounded-xl">
                                     <SelectValue placeholder="Выберите товар..." />
                                 </SelectTrigger>
-                                <SelectContent className="bg-slate-900 border-slate-800 max-h-[320px]">
+                                <SelectContent className="bg-primary border-slate-800 max-h-[320px]">
                                     {allProducts.map((product) => (
                                         <SelectItem key={product.id} value={String(product.id)}>
                                             {product.name}
@@ -389,7 +389,7 @@ export function ShiftZoneSnapshotWizard({
                         </div>
                     </div>
                     <DialogFooter className="flex-row gap-3">
-                        <Button variant="outline" onClick={() => setIsAddDialogOpen(false)} className="flex-1 border-slate-700 text-white">
+                        <Button variant="outline" onClick={() => setIsAddDialogOpen(false)} className="flex-1 border-slate-700 text-primary-foreground">
                             Отмена
                         </Button>
                         <Button

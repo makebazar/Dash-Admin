@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react"
 import { useParams } from "next/navigation"
 import { Edit3, Loader2, Plus, RotateCcw, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -186,26 +185,27 @@ export function EquipmentTypesTab() {
     return (
         <>
             <div className="space-y-6">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                    <div>
-                        <h2 className="text-xl font-semibold tracking-tight text-slate-950">Типы оборудования</h2>
-                        <p className="mt-1 text-sm text-muted-foreground">
-                            Системные типы доступны всем клубам, а свои типы ты можешь добавлять и настраивать отдельно.
-                        </p>
+                <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 sm:p-8">
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between mb-8">
+                        <div>
+                            <h2 className="text-xl font-bold text-slate-900">Типы оборудования</h2>
+                            <p className="text-sm text-slate-500 mt-1">
+                                Системные типы доступны всем клубам, а свои типы ты можешь добавлять и настраивать отдельно.
+                            </p>
+                        </div>
+                        <Button onClick={openCreateDialog} className="sm:self-start rounded-xl h-11 px-6 font-medium bg-slate-900 text-white hover:bg-slate-800">
+                            <Plus className="mr-2 h-4 w-4" />
+                            Добавить тип
+                        </Button>
                     </div>
-                    <Button onClick={openCreateDialog} className="h-10 rounded-xl">
-                        <Plus className="mr-2 h-4 w-4" />
-                        Добавить тип
-                    </Button>
-                </div>
 
-                <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
-                    <Card className="border-none shadow-sm">
-                        <CardHeader>
-                            <CardTitle>Типы клуба</CardTitle>
-                            <CardDescription>Собственные типы оборудования для этого клуба</CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-3">
+                    <div className="grid gap-8 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
+                        <div>
+                            <div className="mb-4">
+                                <h3 className="text-lg font-bold text-slate-900">Типы клуба</h3>
+                                <p className="text-sm text-slate-500 mt-1">Собственные типы оборудования для этого клуба</p>
+                            </div>
+                            <div className="space-y-4">
                             {customTypes.length === 0 ? (
                                 <div className="rounded-2xl border border-dashed bg-slate-50 px-4 py-6 text-sm text-muted-foreground">
                                     Клубных типов пока нет. Добавь свой тип, если системного списка недостаточно.
@@ -258,15 +258,15 @@ export function EquipmentTypesTab() {
                                     </div>
                                 ))
                             )}
-                        </CardContent>
-                    </Card>
+                        </div>
+                        </div>
 
-                    <Card className="border-none shadow-sm">
-                        <CardHeader>
-                            <CardTitle>Системные типы</CardTitle>
-                            <CardDescription>Базовые типы, которые доступны всем клубам</CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-3">
+                    <div>
+                            <div className="mb-4">
+                                <h3 className="text-lg font-bold text-slate-900">Системные типы</h3>
+                                <p className="text-sm text-slate-500 mt-1">Базовые типы, которые доступны всем клубам</p>
+                            </div>
+                            <div className="space-y-3">
                             {systemTypes.map(type => (
                                 <div key={type.code} className="flex items-center justify-between gap-3 rounded-2xl border bg-slate-50/60 px-4 py-3">
                                     <div className="min-w-0">
@@ -283,9 +283,10 @@ export function EquipmentTypesTab() {
                                     <Badge variant="outline">Системный</Badge>
                                 </div>
                             ))}
-                        </CardContent>
-                    </Card>
+                        </div>
+                        </div>
                 </div>
+            </div>
             </div>
 
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>

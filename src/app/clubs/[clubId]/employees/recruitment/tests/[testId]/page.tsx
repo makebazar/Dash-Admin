@@ -301,16 +301,16 @@ export default function RecruitmentTestEditPage() {
             <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between mb-8">
                 <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                        <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-slate-900 truncate">{test.name}</h1>
+                        <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-foreground truncate">{test.name}</h1>
                         {!isActive && <Badge variant="outline" className="text-[10px] uppercase tracking-wider">Неактивен</Badge>}
                     </div>
-                    <p className="text-slate-500 text-lg mt-2">Редактор теста (вопросы + автоскор)</p>
+                    <p className="text-muted-foreground text-lg mt-2">Редактор теста (вопросы + автоскор)</p>
                 </div>
                 <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap lg:justify-end">
                     <Button asChild variant="outline" className="hidden sm:inline-flex sm:w-auto rounded-xl h-11">
                         <Link href={`/clubs/${clubId}/employees/recruitment/templates`}>К настройкам</Link>
                     </Button>
-                    <Button onClick={handleSave} disabled={isSaving || (!rawMode && Boolean(schemaValidationError))} className="hidden w-full bg-slate-900 text-white shadow-sm hover:bg-slate-800 rounded-xl h-11 px-6 font-medium sm:inline-flex sm:w-auto">
+                    <Button onClick={handleSave} disabled={isSaving || (!rawMode && Boolean(schemaValidationError))} className="hidden w-full bg-primary text-primary-foreground shadow-sm hover:bg-primary/90 rounded-xl h-11 px-6 font-medium sm:inline-flex sm:w-auto">
                         {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                         Сохранить
                     </Button>
@@ -318,30 +318,30 @@ export default function RecruitmentTestEditPage() {
             </div>
 
             <div className="grid gap-4 lg:grid-cols-3">
-                <div className="bg-white rounded-3xl border border-slate-200 p-6 lg:col-span-1 flex flex-col gap-6">
+                <div className="bg-card rounded-3xl border border-border p-6 lg:col-span-1 flex flex-col gap-6">
                     <div className="space-y-6">
                         <div className="space-y-1.5">
-                            <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Название</Label>
-                            <Input value={name} onChange={(e) => setName(e.target.value)} className="h-12 bg-slate-50/50 border-slate-200 rounded-xl font-medium text-slate-900 focus:bg-white" />
+                            <Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70">Название</Label>
+                            <Input value={name} onChange={(e) => setName(e.target.value)} className="h-12 bg-muted/50 border-border rounded-xl font-medium text-foreground focus:bg-card" />
                         </div>
                         <div className="space-y-1.5">
-                            <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Описание</Label>
-                            <Input value={description} onChange={(e) => setDescription(e.target.value)} className="h-12 bg-slate-50/50 border-slate-200 rounded-xl font-medium text-slate-900 focus:bg-white" />
+                            <Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70">Описание</Label>
+                            <Input value={description} onChange={(e) => setDescription(e.target.value)} className="h-12 bg-muted/50 border-border rounded-xl font-medium text-foreground focus:bg-card" />
                         </div>
-                        <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50/50 p-4">
+                        <div className="flex items-center justify-between rounded-2xl border border-border bg-muted/50 p-4">
                             <div>
-                                <p className="text-sm font-bold text-slate-900">Активен</p>
-                                <p className="text-xs text-slate-500 font-medium mt-0.5">Если выключить — не будет доступен кандидатам</p>
+                                <p className="text-sm font-bold text-foreground">Активен</p>
+                                <p className="text-xs text-muted-foreground font-medium mt-0.5">Если выключить — не будет доступен кандидатам</p>
                             </div>
                             <Switch checked={isActive} onCheckedChange={setIsActive} />
                         </div>
-                        <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4">
-                            <p className="text-sm font-bold text-slate-900">Максимальный балл</p>
+                        <div className="rounded-2xl border border-border bg-muted/50 p-4">
+                            <p className="text-sm font-bold text-foreground">Максимальный балл</p>
                             <p className="mt-1 text-2xl font-bold tracking-tight">{maxScore}</p>
-                            <p className="text-xs text-slate-500 font-medium mt-0.5">Считается автоматически из вопросов и баллов</p>
+                            <p className="text-xs text-muted-foreground font-medium mt-0.5">Считается автоматически из вопросов и баллов</p>
                         </div>
                         <div className="space-y-1.5">
-                            <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Лимит времени, минут</Label>
+                            <Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70">Лимит времени, минут</Label>
                             <Input
                                 value={typeof schema.time_limit_minutes === "number" ? String(schema.time_limit_minutes) : ""}
                                 onChange={(e) => {
@@ -351,10 +351,10 @@ export default function RecruitmentTestEditPage() {
                                         time_limit_minutes: value === "" ? undefined : Number(value)
                                     }))
                                 }}
-                                className="h-12 bg-slate-50/50 border-slate-200 rounded-xl font-medium text-slate-900 focus:bg-white"
+                                className="h-12 bg-muted/50 border-border rounded-xl font-medium text-foreground focus:bg-card"
                                 placeholder="Без таймера"
                             />
-                            <p className="text-xs text-slate-500 font-medium mt-0.5">Если пусто, тест будет без ограничения по времени</p>
+                            <p className="text-xs text-muted-foreground font-medium mt-0.5">Если пусто, тест будет без ограничения по времени</p>
                         </div>
                         {schemaValidationError ? (
                             <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
@@ -366,17 +366,17 @@ export default function RecruitmentTestEditPage() {
                                 <span className="font-bold">Ошибка:</span> {saveError}
                             </div>
                         ) : null}
-                        <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50/50 p-4">
+                        <div className="flex items-center justify-between rounded-2xl border border-border bg-muted/50 p-4">
                             <div>
-                                <p className="text-sm font-bold text-slate-900">RAW JSON</p>
-                                <p className="text-xs text-slate-500 font-medium mt-0.5">Для прямого редактирования схемы теста</p>
+                                <p className="text-sm font-bold text-foreground">RAW JSON</p>
+                                <p className="text-xs text-muted-foreground font-medium mt-0.5">Для прямого редактирования схемы теста</p>
                             </div>
                             <Switch checked={rawMode} onCheckedChange={setRawMode} />
                         </div>
                     </div>
                 </div>
 
-                <div className="bg-white rounded-3xl border border-slate-200 p-6 lg:col-span-2">
+                <div className="bg-card rounded-3xl border border-border p-6 lg:col-span-2">
                     <div className="space-y-6">
                         {rawMode ? (
                             <Textarea
@@ -386,11 +386,11 @@ export default function RecruitmentTestEditPage() {
                             />
                         ) : (
                         <div className="space-y-3">
-                                <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-5 space-y-3">
+                                <div className="rounded-2xl border border-border bg-muted/50 p-5 space-y-3">
                                     <div className="flex items-center justify-between gap-2">
                                         <div>
                                             <p className="text-sm font-bold">Результаты по диапазонам</p>
-                                            <p className="text-xs text-slate-500 font-medium mt-0.5">Диапазоны должны полностью покрывать тест от 0 до {maxScore} баллов</p>
+                                            <p className="text-xs text-muted-foreground font-medium mt-0.5">Диапазоны должны полностью покрывать тест от 0 до {maxScore} баллов</p>
                                         </div>
                                         <Button variant="outline" size="sm" onClick={addBand}>
                                             <Plus className="mr-2 h-4 w-4" />
@@ -401,13 +401,13 @@ export default function RecruitmentTestEditPage() {
                                     <div className="space-y-2">
                                         {Array.isArray((schema as any).score_bands) && (schema as any).score_bands.length > 0 ? (
                                             (schema as any).score_bands.map((b: any) => (
-                                                <div key={b.id} className="grid gap-2 rounded-2xl border border-slate-200 bg-slate-50/50 p-4 sm:grid-cols-[90px_90px_1fr_1fr_40px]">
+                                                <div key={b.id} className="grid gap-2 rounded-2xl border border-border bg-muted/50 p-4 sm:grid-cols-[90px_90px_1fr_1fr_40px]">
                                                     <div className="space-y-1">
                                                         <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">МИН. БАЛЛ</p>
                                                         <Input
                                                             value={b.min_score ?? 0}
                                                             onChange={(e) => updateBand(b.id, { min_score: Number(e.target.value) })}
-                                                            className="h-11 bg-slate-50/50 border-slate-200 rounded-xl font-medium text-slate-900 focus:bg-white"
+                                                            className="h-11 bg-muted/50 border-border rounded-xl font-medium text-foreground focus:bg-card"
                                                         />
                                                     </div>
                                                     <div className="space-y-1">
@@ -415,7 +415,7 @@ export default function RecruitmentTestEditPage() {
                                                         <Input
                                                             value={b.max_score ?? maxScore}
                                                             onChange={(e) => updateBand(b.id, { max_score: Number(e.target.value) })}
-                                                            className="h-11 bg-slate-50/50 border-slate-200 rounded-xl font-medium text-slate-900 focus:bg-white"
+                                                            className="h-11 bg-muted/50 border-border rounded-xl font-medium text-foreground focus:bg-card"
                                                         />
                                                     </div>
                                                     <div className="space-y-1">
@@ -423,7 +423,7 @@ export default function RecruitmentTestEditPage() {
                                                         <Input
                                                             value={b.label || ""}
                                                             onChange={(e) => updateBand(b.id, { label: e.target.value })}
-                                                            className="h-11 bg-slate-50/50 border-slate-200 rounded-xl font-medium text-slate-900 focus:bg-white"
+                                                            className="h-11 bg-muted/50 border-border rounded-xl font-medium text-foreground focus:bg-card"
                                                             placeholder="Напр: Подходит"
                                                         />
                                                     </div>
@@ -432,7 +432,7 @@ export default function RecruitmentTestEditPage() {
                                                         <Input
                                                             value={b.decision || ""}
                                                             onChange={(e) => updateBand(b.id, { decision: e.target.value })}
-                                                            className="h-11 bg-slate-50/50 border-slate-200 rounded-xl font-medium text-slate-900 focus:bg-white"
+                                                            className="h-11 bg-muted/50 border-border rounded-xl font-medium text-foreground focus:bg-card"
                                                             placeholder="Напр: звать на собеседование"
                                                         />
                                                     </div>
@@ -444,14 +444,14 @@ export default function RecruitmentTestEditPage() {
                                                 </div>
                                             ))
                                         ) : (
-                                            <div className="text-xs text-slate-500 font-medium mt-0.5">Нет диапазонов — будет только числовой скор</div>
+                                            <div className="text-xs text-muted-foreground font-medium mt-0.5">Нет диапазонов — будет только числовой скор</div>
                                         )}
                                     </div>
                                 </div>
 
                                 <div className="space-y-3">
                                     {(schema.questions || []).map((q: any, index: number) => (
-                                        <div key={q.id} className="rounded-2xl border border-slate-200 bg-slate-50/50 p-5 space-y-3">
+                                        <div key={q.id} className="rounded-2xl border border-border bg-muted/50 p-5 space-y-3">
                                             <div className="flex items-center justify-between gap-2 border-b border-muted-foreground/10 pb-3">
                                                 <p className="text-sm font-bold">Вопрос {index + 1}</p>
                                                 <Badge variant="outline" className="text-[10px] uppercase tracking-wider">
@@ -461,28 +461,28 @@ export default function RecruitmentTestEditPage() {
                                             <div className="flex items-start justify-between gap-3">
                                                 <div className="min-w-0 flex-1 space-y-2">
                                                     <div className="space-y-1.5">
-                                                        <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Текст вопроса</Label>
+                                                        <Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70">Текст вопроса</Label>
                                                         <Textarea
                                                             value={q.label || ""}
                                                             onChange={(e) => updateQuestion(q.id, { label: e.target.value })}
-                                                            className="min-h-[88px] resize-y bg-slate-50/50 border-slate-200 rounded-xl font-medium text-slate-900 focus:bg-white p-3"
+                                                            className="min-h-[88px] resize-y bg-muted/50 border-border rounded-xl font-medium text-foreground focus:bg-card p-3"
                                                             placeholder="Введите вопрос"
                                                         />
                                                     </div>
                                                     <div className="space-y-1.5">
-                                                        <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Описание</Label>
+                                                        <Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70">Описание</Label>
                                                         <Textarea
                                                             value={q.description || ""}
                                                             onChange={(e) => updateQuestion(q.id, { description: e.target.value })}
-                                                            className="min-h-[88px] resize-y bg-slate-50/50 border-slate-200 rounded-xl font-medium text-slate-900 focus:bg-white p-3"
+                                                            className="min-h-[88px] resize-y bg-muted/50 border-border rounded-xl font-medium text-foreground focus:bg-card p-3"
                                                             placeholder="Описание вопроса"
                                                         />
                                                     </div>
                                                     <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                                                         <div className="space-y-1.5 sm:w-[220px]">
-                                                            <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Тип вопроса</Label>
+                                                            <Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70">Тип вопроса</Label>
                                                             <Select value={q.type} onValueChange={(v) => updateQuestion(q.id, { type: v as any })}>
-                                                                <SelectTrigger className="h-12 bg-slate-50/50 border-slate-200 rounded-xl font-medium text-slate-900 focus:bg-white">
+                                                                <SelectTrigger className="h-12 bg-muted/50 border-border rounded-xl font-medium text-foreground focus:bg-card">
                                                                     <SelectValue />
                                                                 </SelectTrigger>
                                                                 <SelectContent>
@@ -501,9 +501,9 @@ export default function RecruitmentTestEditPage() {
                                                     </div>
 
                                                     <div className="space-y-1.5">
-                                                        <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Фото к вопросу</Label>
+                                                        <Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70">Фото к вопросу</Label>
                                                         <div className="flex flex-col gap-2 sm:flex-row">
-                                                            <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-md border border-input bg-background px-4 py-2 text-sm font-bold text-slate-900 shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground">
+                                                            <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-md border border-input bg-background px-4 py-2 text-sm font-bold text-foreground shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground">
                                                                 {uploadingState[q.id] ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
                                                                 {uploadingState[q.id] ? "Загрузка..." : (q.image_url ? "Заменить фото" : "Загрузить фото")}
                                                                 <input
@@ -530,7 +530,7 @@ export default function RecruitmentTestEditPage() {
                                                     {(q.type === "choice" || q.type === "multi_choice") && (
                                                         <div className="space-y-2">
                                                             <div className="flex items-center justify-between">
-                                                                <p className="text-sm font-bold text-slate-900">Варианты</p>
+                                                                <p className="text-sm font-bold text-foreground">Варианты</p>
                                                                 <Button
                                                                     variant="outline"
                                                                     size="sm"
@@ -542,7 +542,7 @@ export default function RecruitmentTestEditPage() {
                                                             </div>
                                                             <div className="space-y-2">
                                                                 {(q.options || []).map((opt: any) => (
-                                                                    <div key={opt.id} className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4">
+                                                                    <div key={opt.id} className="rounded-2xl border border-border bg-muted/50 p-4">
                                                                         <div className="grid gap-2 sm:grid-cols-[1fr_120px_40px]">
                                                                             <Input
                                                                                 value={opt.label || ""}
@@ -550,7 +550,7 @@ export default function RecruitmentTestEditPage() {
                                                                                     const next = (q.options || []).map((o: any) => o.id === opt.id ? { ...o, label: e.target.value } : o)
                                                                                     updateQuestion(q.id, { options: next })
                                                                                 }}
-                                                                                className="h-12 bg-slate-50/50 border-slate-200 rounded-xl font-medium text-slate-900 focus:bg-white"
+                                                                                className="h-12 bg-muted/50 border-border rounded-xl font-medium text-foreground focus:bg-card"
                                                                                 placeholder="Текст варианта"
                                                                             />
                                                                             <Input
@@ -560,7 +560,7 @@ export default function RecruitmentTestEditPage() {
                                                                                     const next = (q.options || []).map((o: any) => o.id === opt.id ? { ...o, points: Number.isFinite(n) ? n : 0 } : o)
                                                                                     updateQuestion(q.id, { options: next })
                                                                                 }}
-                                                                                className="h-12 bg-slate-50/50 border-slate-200 rounded-xl font-medium text-slate-900 focus:bg-white"
+                                                                                className="h-12 bg-muted/50 border-border rounded-xl font-medium text-foreground focus:bg-card"
                                                                                 placeholder="баллы"
                                                                             />
                                                                             <Button
@@ -583,19 +583,19 @@ export default function RecruitmentTestEditPage() {
                                                     {q.type === "scale" && (
                                                         <div className="grid gap-2 sm:grid-cols-2">
                                                             <div className="space-y-1.5">
-                                                                <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Мин. значение</Label>
+                                                                <Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70">Мин. значение</Label>
                                                                 <Input
                                                                     value={q.min ?? 1}
                                                                     onChange={(e) => updateQuestion(q.id, { min: Number(e.target.value) })}
-                                                                    className="h-12 bg-slate-50/50 border-slate-200 rounded-xl font-medium text-slate-900 focus:bg-white"
+                                                                    className="h-12 bg-muted/50 border-border rounded-xl font-medium text-foreground focus:bg-card"
                                                                 />
                                                             </div>
                                                             <div className="space-y-1.5">
-                                                                <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Макс. значение</Label>
+                                                                <Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70">Макс. значение</Label>
                                                                 <Input
                                                                     value={q.max ?? 5}
                                                                     onChange={(e) => updateQuestion(q.id, { max: Number(e.target.value) })}
-                                                                    className="h-12 bg-slate-50/50 border-slate-200 rounded-xl font-medium text-slate-900 focus:bg-white"
+                                                                    className="h-12 bg-muted/50 border-border rounded-xl font-medium text-foreground focus:bg-card"
                                                                 />
                                                             </div>
                                                         </div>
@@ -604,19 +604,19 @@ export default function RecruitmentTestEditPage() {
                                                     {q.type === "boolean" && (
                                                         <div className="grid gap-2 sm:grid-cols-2">
                                                             <div className="space-y-1.5">
-                                                                <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Баллы за Да</Label>
+                                                                <Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70">Баллы за Да</Label>
                                                                 <Input
                                                                     value={q.truePoints ?? 1}
                                                                     onChange={(e) => updateQuestion(q.id, { truePoints: Number(e.target.value) })}
-                                                                    className="h-12 bg-slate-50/50 border-slate-200 rounded-xl font-medium text-slate-900 focus:bg-white"
+                                                                    className="h-12 bg-muted/50 border-border rounded-xl font-medium text-foreground focus:bg-card"
                                                                 />
                                                             </div>
                                                             <div className="space-y-1.5">
-                                                                <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Баллы за Нет</Label>
+                                                                <Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70">Баллы за Нет</Label>
                                                                 <Input
                                                                     value={q.falsePoints ?? 0}
                                                                     onChange={(e) => updateQuestion(q.id, { falsePoints: Number(e.target.value) })}
-                                                                    className="h-12 bg-slate-50/50 border-slate-200 rounded-xl font-medium text-slate-900 focus:bg-white"
+                                                                    className="h-12 bg-muted/50 border-border rounded-xl font-medium text-foreground focus:bg-card"
                                                                 />
                                                             </div>
                                                         </div>
@@ -650,14 +650,14 @@ export default function RecruitmentTestEditPage() {
                 </div>
             </div>
             </div>
-            <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/80 p-4 backdrop-blur-xl sm:hidden pb-[calc(1rem+env(safe-area-inset-bottom))]">
+            <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card/80 p-4 backdrop-blur-xl sm:hidden pb-[calc(1rem+env(safe-area-inset-bottom))]">
                 <div className="mx-auto flex max-w-[1600px] gap-2">
-                    <Button asChild variant="outline" className="flex-1 h-12 rounded-xl border-slate-200 text-slate-700 bg-white font-medium">
+                    <Button asChild variant="outline" className="flex-1 h-12 rounded-xl border-border text-foreground bg-card font-medium">
                         <Link href={`/clubs/${clubId}/employees/recruitment/templates`}>
                             Назад
                         </Link>
                     </Button>
-                    <Button onClick={handleSave} disabled={isSaving || (!rawMode && Boolean(schemaValidationError))} className="flex-1 h-12 rounded-xl bg-slate-900 text-white hover:bg-slate-800 font-medium shadow-sm">
+                    <Button onClick={handleSave} disabled={isSaving || (!rawMode && Boolean(schemaValidationError))} className="flex-1 h-12 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 font-medium shadow-sm">
                         {isSaving ? <Loader2 className="h-5 w-5 animate-spin" /> : <><span>Сохранить</span></>}
                     </Button>
                 </div>

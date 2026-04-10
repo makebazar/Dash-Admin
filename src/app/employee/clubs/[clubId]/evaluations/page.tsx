@@ -74,27 +74,28 @@ export default function EmployeeEvaluationsPage() {
 
     if (isLoading) {
         return (
-            <div className="flex min-h-screen items-center justify-center bg-slate-50 dark:bg-slate-900/50">
+            <div className="flex min-h-screen items-center justify-center bg-background">
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
             </div>
         )
     }
 
     return (
-        <div className="min-h-screen bg-slate-50 dark:bg-slate-900/50 p-4 md:p-6 pb-24">
-            <div className="mx-auto max-w-2xl space-y-6">
+        <div className="w-full max-w-5xl mx-auto px-4 py-8 md:px-8 md:py-12 space-y-8 relative z-0">
                 {/* Header */}
-                <div>
-                    <h1 className="text-2xl font-bold tracking-tight">Мои проверки</h1>
-                    <p className="text-muted-foreground">История оценок и чеклистов</p>
+                <div className="border-b border-border pb-4">
+                    <h1 className="text-2xl font-bold tracking-tight text-foreground">Мои проверки</h1>
+                    <p className="text-sm text-muted-foreground mt-1">История оценок и чеклистов</p>
                 </div>
 
                 {evaluations.length === 0 ? (
-                    <Card className="border-dashed">
-                        <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-                            <ClipboardCheck className="h-12 w-12 text-muted-foreground/30 mb-4" />
-                            <h3 className="text-lg font-medium">Нет проверок</h3>
-                            <p className="text-muted-foreground text-sm">Вас еще не оценивали по чеклистам</p>
+                    <Card className="border border-border bg-card shadow-sm">
+                        <CardContent className="flex flex-col items-center justify-center py-14 text-center">
+                            <div className="h-16 w-16 rounded-2xl bg-accent flex items-center justify-center mb-4">
+                                <ClipboardCheck className="h-8 w-8 text-muted-foreground" />
+                            </div>
+                            <h3 className="text-lg font-bold text-foreground">Нет проверок</h3>
+                            <p className="text-muted-foreground text-sm mt-1">Вас еще не оценивали по чеклистам</p>
                         </CardContent>
                     </Card>
                 ) : (
@@ -103,23 +104,23 @@ export default function EmployeeEvaluationsPage() {
                             const total = Number(evaluation.total_score || 0)
                             const max = Number(evaluation.max_score || 0)
                             const scoreValue = max > 0 ? Math.round((total / max) * 100) : 0
-                            const scoreClass = scoreValue >= 80 ? "text-green-600" : scoreValue >= 50 ? "text-amber-600" : "text-red-600"
+                            const scoreClass = scoreValue >= 80 ? "text-emerald-500" : scoreValue >= 50 ? "text-amber-500" : "text-rose-500"
                             const statusLabel = evaluation.status === 'approved' ? 'Проверено' : evaluation.status === 'rejected' ? 'Отклонено' : 'Ожидает'
                             const statusClass = evaluation.status === 'approved'
-                                ? "bg-green-100 text-green-700 border-green-200"
+                                ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
                                 : evaluation.status === 'rejected'
-                                    ? "bg-red-100 text-red-700 border-red-200"
-                                    : "bg-amber-100 text-amber-700 border-amber-200"
+                                    ? "bg-rose-500/10 text-rose-500 border-rose-500/20"
+                                    : "bg-amber-500/10 text-amber-500 border-amber-500/20"
                             return (
                                 <Card
                                     key={evaluation.id}
-                                    className="cursor-pointer hover:shadow-md transition-all active:scale-[0.99]"
+                                    className="cursor-pointer bg-card border border-border shadow-sm hover:bg-accent/30"
                                     onClick={() => router.push(`/employee/clubs/${clubId}/evaluations/${evaluation.id}`)}
                                 >
                                     <CardContent className="p-4">
                                         <div className="flex items-start justify-between gap-4">
                                             <div className="space-y-2">
-                                                <div className="font-semibold">{evaluation.template_name}</div>
+                                                <div className="font-bold text-foreground">{evaluation.template_name}</div>
                                                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                                                     <Calendar className="h-3 w-3" />
                                                     {new Date(evaluation.evaluation_date || evaluation.created_at).toLocaleDateString()}
@@ -132,7 +133,7 @@ export default function EmployeeEvaluationsPage() {
                                                 </div>
                                             </div>
                                             <div className="flex flex-col items-end gap-2">
-                                                <Badge variant="outline" className={`text-[10px] h-5 px-2 ${statusClass}`}>
+                                                <Badge variant="outline" className={`text-[10px] h-5 px-2 font-bold uppercase tracking-wider ${statusClass}`}>
                                                     {statusLabel}
                                                 </Badge>
                                                 <div className={`text-xl font-black ${scoreClass}`}>
@@ -146,7 +147,6 @@ export default function EmployeeEvaluationsPage() {
                         })}
                     </div>
                 )}
-            </div>
         </div>
     )
 }

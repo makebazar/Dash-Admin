@@ -207,14 +207,14 @@ export function EmployeeTransferWizard({ isOpen, onClose, clubId, userId, active
     return (
         <>
             <Dialog open={isOpen} onOpenChange={handleClose}>
-                <DialogContent className="max-w-none w-screen h-[100dvh] m-0 p-0 rounded-none bg-slate-950 border-none text-white overflow-hidden flex flex-col fixed inset-0 translate-x-0 translate-y-0 left-0 top-0">
+                <DialogContent className="max-w-none w-screen h-[100dvh] m-0 p-0 rounded-none bg-slate-950 border-none text-primary-foreground overflow-hidden flex flex-col fixed inset-0 translate-x-0 translate-y-0 left-0 top-0">
                     <DialogHeader className="p-4 border-b border-slate-800 flex-row items-center justify-between space-y-0 shrink-0">
                         <div className="space-y-0.5">
                             <DialogTitle className="flex items-center gap-2 text-base">
                                 <ArrowRightLeft className="h-4 w-4 text-purple-400" />
                                 {step === 1 ? "Склады" : step === 2 ? "Товары" : "Подтверждение"}
                             </DialogTitle>
-                            <DialogDescription className="text-slate-400 text-[10px]">
+                            <DialogDescription className="text-muted-foreground/70 text-[10px]">
                                 {step === 1 ? "Откуда и куда перемещаем?" : step === 2 ? "Выберите товары для перемещения." : "Проверьте данные."}
                             </DialogDescription>
                         </div>
@@ -224,7 +224,7 @@ export function EmployeeTransferWizard({ isOpen, onClose, clubId, userId, active
                         {step === 1 ? (
                             <div className="space-y-6">
                                 <div className="space-y-3">
-                                    <Label className="text-[10px] text-slate-500 uppercase tracking-wider flex items-center gap-2">
+                                    <Label className="text-[10px] text-muted-foreground uppercase tracking-wider flex items-center gap-2">
                                         <Warehouse className="h-3 w-3" />
                                         Склад отправления (Откуда)
                                     </Label>
@@ -234,7 +234,7 @@ export function EmployeeTransferWizard({ isOpen, onClose, clubId, userId, active
                                                 key={wh.id}
                                                 variant="outline"
                                                 className={cn(
-                                                    "h-12 border-slate-800 bg-slate-900/50 hover:bg-slate-800 text-[10px] justify-start px-3",
+                                                    "h-12 border-slate-800 bg-primary/50 hover:bg-primary/90 text-[10px] justify-start px-3",
                                                     sourceWarehouseId === wh.id.toString() && "border-purple-500 bg-purple-500/10 text-purple-400"
                                                 )}
                                                 onClick={() => {
@@ -256,12 +256,12 @@ export function EmployeeTransferWizard({ isOpen, onClose, clubId, userId, active
 
                                 <div className="flex justify-center">
                                     <div className="bg-slate-800 p-2 rounded-full">
-                                        <ArrowRightLeft className="h-4 w-4 text-slate-500 rotate-90" />
+                                        <ArrowRightLeft className="h-4 w-4 text-muted-foreground rotate-90" />
                                     </div>
                                 </div>
 
                                 <div className="space-y-3">
-                                    <Label className="text-[10px] text-slate-500 uppercase tracking-wider flex items-center gap-2">
+                                    <Label className="text-[10px] text-muted-foreground uppercase tracking-wider flex items-center gap-2">
                                         <Warehouse className="h-3 w-3" />
                                         Склад назначения (Куда)
                                     </Label>
@@ -272,7 +272,7 @@ export function EmployeeTransferWizard({ isOpen, onClose, clubId, userId, active
                                                 variant="outline"
                                                 disabled={sourceWarehouseId === wh.id.toString()}
                                                 className={cn(
-                                                    "h-12 border-slate-800 bg-slate-900/50 hover:bg-slate-800 text-[10px] justify-start px-3",
+                                                    "h-12 border-slate-800 bg-primary/50 hover:bg-primary/90 text-[10px] justify-start px-3",
                                                     targetWarehouseId === wh.id.toString() && "border-emerald-500 bg-emerald-500/10 text-emerald-400",
                                                     sourceWarehouseId === wh.id.toString() && "opacity-50 grayscale"
                                                 )}
@@ -293,7 +293,7 @@ export function EmployeeTransferWizard({ isOpen, onClose, clubId, userId, active
                                 <div className="grid grid-cols-2 gap-2">
                                     <Button 
                                         variant="outline" 
-                                        className="h-12 border-slate-800 bg-slate-900/50 hover:bg-slate-800 text-xs"
+                                        className="h-12 border-slate-800 bg-primary/50 hover:bg-primary/90 text-xs"
                                         onClick={() => setIsScannerOpen(true)}
                                     >
                                         <Camera className="mr-2 h-4 w-4 text-purple-400" />
@@ -301,7 +301,7 @@ export function EmployeeTransferWizard({ isOpen, onClose, clubId, userId, active
                                     </Button>
                                     <Button 
                                         variant="outline" 
-                                        className="h-12 border-slate-800 bg-slate-900/50 hover:bg-slate-800 text-xs"
+                                        className="h-12 border-slate-800 bg-primary/50 hover:bg-primary/90 text-xs"
                                         onClick={() => setIsAddDialogOpen(true)}
                                     >
                                         <Search className="mr-2 h-4 w-4 text-purple-400" />
@@ -311,33 +311,33 @@ export function EmployeeTransferWizard({ isOpen, onClose, clubId, userId, active
 
                                 {/* Items List */}
                                 <div className="space-y-4">
-                                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-2">
+                                    <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
                                         <ShoppingCart className="h-3 w-3" />
                                         Выбранные товары ({items.length})
                                     </h4>
                                     
                                     {items.length === 0 ? (
-                                        <div className="border border-dashed border-slate-800 rounded-2xl p-10 text-center text-slate-500">
+                                        <div className="border border-dashed border-slate-800 rounded-2xl p-10 text-center text-muted-foreground">
                                             <ArrowRightLeft className="h-10 w-10 mx-auto mb-3 opacity-20" />
                                             <p className="text-sm">Список пуст. Добавьте товары через поиск или сканер.</p>
                                         </div>
                                     ) : (
-                                        <div className="border border-slate-800 rounded-2xl overflow-hidden bg-slate-900/30">
+                                        <div className="border border-slate-800 rounded-2xl overflow-hidden bg-primary/30">
                                             <Table>
                                                 <TableBody>
                                                     {items.map((item) => (
-                                                        <TableRow key={item.product_id} className="border-slate-800 hover:bg-slate-800/50">
+                                                        <TableRow key={item.product_id} className="border-slate-800 hover:bg-primary/90/50">
                                                             <TableCell className="py-3 pr-0">
                                                                 <div className="flex flex-col">
                                                                     <span className="text-sm font-medium text-slate-200 truncate max-w-[140px]">{item.name}</span>
-                                                                    <span className="text-[10px] text-slate-500 mt-1">Доступно: {item.available_stock} шт</span>
+                                                                    <span className="text-[10px] text-muted-foreground mt-1">Доступно: {item.available_stock} шт</span>
                                                                 </div>
                                                             </TableCell>
                                                             <TableCell className="text-right py-3">
                                                                 <div className="flex items-center justify-end gap-3">
-                                                                    <div className="flex items-center gap-1 bg-slate-900 border border-slate-800 rounded-lg p-1">
+                                                                    <div className="flex items-center gap-1 bg-primary border border-slate-800 rounded-lg p-1">
                                                                         <button 
-                                                                            className="w-6 h-6 flex items-center justify-center text-slate-500 hover:text-white"
+                                                                            className="w-6 h-6 flex items-center justify-center text-muted-foreground hover:text-primary-foreground"
                                                                             onClick={() => updateItemQty(item.product_id, Math.max(1, item.quantity - 1))}
                                                                         >
                                                                             -
@@ -349,7 +349,7 @@ export function EmployeeTransferWizard({ isOpen, onClose, clubId, userId, active
                                                                             className="w-10 bg-transparent text-center text-sm font-bold text-purple-400 focus:outline-none"
                                                                         />
                                                                         <button 
-                                                                            className="w-6 h-6 flex items-center justify-center text-slate-500 hover:text-white"
+                                                                            className="w-6 h-6 flex items-center justify-center text-muted-foreground hover:text-primary-foreground"
                                                                             onClick={() => updateItemQty(item.product_id, Math.min(item.available_stock, item.quantity + 1))}
                                                                         >
                                                                             +
@@ -359,7 +359,7 @@ export function EmployeeTransferWizard({ isOpen, onClose, clubId, userId, active
                                                                         variant="ghost" 
                                                                         size="icon" 
                                                                         onClick={() => removeItem(item.product_id)}
-                                                                        className="h-8 w-8 text-slate-600 hover:text-red-400 hover:bg-red-400/10"
+                                                                        className="h-8 w-8 text-muted-foreground hover:text-red-400 hover:bg-red-400/10"
                                                                     >
                                                                         <Trash2 className="h-4 w-4" />
                                                                     </Button>
@@ -375,39 +375,39 @@ export function EmployeeTransferWizard({ isOpen, onClose, clubId, userId, active
                             </div>
                         ) : (
                             <div className="space-y-6">
-                                <div className="p-4 bg-slate-900/50 border border-slate-800 rounded-2xl space-y-3">
+                                <div className="p-4 bg-primary/50 border border-slate-800 rounded-2xl space-y-3">
                                     <div className="flex items-center justify-between text-xs">
-                                        <span className="text-slate-500">Откуда:</span>
+                                        <span className="text-muted-foreground">Откуда:</span>
                                         <span className="font-bold text-purple-400">{warehouses.find(w => w.id.toString() === sourceWarehouseId)?.name}</span>
                                     </div>
                                     <div className="flex items-center justify-center">
-                                        <ArrowRightLeft className="h-3 w-3 text-slate-700 rotate-90" />
+                                        <ArrowRightLeft className="h-3 w-3 text-foreground rotate-90" />
                                     </div>
                                     <div className="flex items-center justify-between text-xs">
-                                        <span className="text-slate-500">Куда:</span>
+                                        <span className="text-muted-foreground">Куда:</span>
                                         <span className="font-bold text-emerald-400">{warehouses.find(w => w.id.toString() === targetWarehouseId)?.name}</span>
                                     </div>
                                 </div>
 
                                 <div className="space-y-2">
-                                    <Label className="text-xs text-slate-500 uppercase tracking-wider">Примечание</Label>
+                                    <Label className="text-xs text-muted-foreground uppercase tracking-wider">Примечание</Label>
                                     <Input 
                                         placeholder="Например: Пополнил холодильник"
                                         value={notes}
                                         onChange={e => setNotes(e.target.value)}
-                                        className="bg-slate-900 border-slate-800 h-12 rounded-xl"
+                                        className="bg-primary border-slate-800 h-12 rounded-xl"
                                     />
                                 </div>
 
-                                <div className="border border-slate-800 rounded-2xl overflow-hidden bg-slate-900/30">
-                                    <div className="p-3 bg-slate-900 border-b border-slate-800 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                                <div className="border border-slate-800 rounded-2xl overflow-hidden bg-primary/30">
+                                    <div className="p-3 bg-primary border-b border-slate-800 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                                         Итого товаров: {items.length}
                                     </div>
                                     <div className="max-h-[200px] overflow-y-auto">
                                         {items.map(item => (
                                             <div key={item.product_id} className="p-3 border-b border-slate-800/50 flex justify-between items-center text-sm">
                                                 <span className="text-slate-300 truncate max-w-[200px]">{item.name}</span>
-                                                <span className="font-bold text-white">{item.quantity} шт</span>
+                                                <span className="font-bold text-primary-foreground">{item.quantity} шт</span>
                                             </div>
                                         ))}
                                     </div>
@@ -416,12 +416,12 @@ export function EmployeeTransferWizard({ isOpen, onClose, clubId, userId, active
                         )}
                     </div>
 
-                    <DialogFooter className="p-6 border-t border-slate-800 bg-slate-900/50">
+                    <DialogFooter className="p-6 border-t border-slate-800 bg-primary/50">
                         <div className="flex gap-3 w-full">
                             {step > 1 && (
                                 <Button 
                                     variant="outline" 
-                                    className="h-12 w-14 border-slate-800 text-slate-400 rounded-xl"
+                                    className="h-12 w-14 border-slate-800 text-muted-foreground/70 rounded-xl"
                                     onClick={() => setStep(step - 1)}
                                 >
                                     <ArrowLeft className="h-5 w-5" />
@@ -430,7 +430,7 @@ export function EmployeeTransferWizard({ isOpen, onClose, clubId, userId, active
                             <Button 
                                 className={cn(
                                     "flex-1 h-12 font-bold rounded-xl shadow-lg",
-                                    step === 3 ? "bg-green-600 hover:bg-green-700 text-white shadow-green-900/20" : "bg-purple-600 hover:bg-purple-700 text-white shadow-purple-900/20"
+                                    step === 3 ? "bg-green-600 hover:bg-green-700 text-primary-foreground shadow-green-900/20" : "bg-purple-600 hover:bg-purple-700 text-primary-foreground shadow-purple-900/20"
                                 )}
                                 disabled={(step === 2 && items.length === 0) || isPending}
                                 onClick={() => step < 3 ? setStep(step + 1) : handleFinalize()}
@@ -450,26 +450,26 @@ export function EmployeeTransferWizard({ isOpen, onClose, clubId, userId, active
 
             {/* Manual Add Dialog */}
             <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-                <DialogContent className="bg-slate-950 border-slate-800 text-white max-w-[90vw] rounded-2xl">
+                <DialogContent className="bg-slate-950 border-slate-800 text-primary-foreground max-w-[90vw] rounded-2xl">
                     <DialogHeader>
                         <DialogTitle>Поиск товара</DialogTitle>
-                        <DialogDescription className="text-[10px] text-slate-500">
+                        <DialogDescription className="text-[10px] text-muted-foreground">
                             Показываются товары, которые есть на складе отправления
                         </DialogDescription>
                     </DialogHeader>
                     <div className="py-4 space-y-4">
                         <div className="relative">
-                            <Search className="absolute left-3 top-3 h-4 w-4 text-slate-500" />
+                            <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                             <Input 
                                 placeholder="Название или штрихкод..."
-                                className="bg-slate-900 border-slate-800 pl-10 h-10"
+                                className="bg-primary border-slate-800 pl-10 h-10"
                                 value={searchQuery}
                                 onChange={e => setSearchQuery(e.target.value)}
                             />
                         </div>
                         <div className="max-h-[200px] overflow-y-auto space-y-1 pr-2 custom-scrollbar">
                             {filteredProducts.length === 0 ? (
-                                <p className="text-center py-4 text-slate-500 text-sm italic">Товары не найдены или закончились на складе</p>
+                                <p className="text-center py-4 text-muted-foreground text-sm italic">Товары не найдены или закончились на складе</p>
                             ) : (
                                 filteredProducts.map(p => {
                                     const stock = p.stocks?.find((s: any) => s.warehouse_id === Number(sourceWarehouseId))?.quantity || 0
@@ -480,7 +480,7 @@ export function EmployeeTransferWizard({ isOpen, onClose, clubId, userId, active
                                                 "w-full text-left p-3 rounded-xl transition-all text-sm border flex justify-between items-center",
                                                 selectedProductId === p.id.toString() 
                                                     ? "bg-purple-600/20 border-purple-500 text-purple-400" 
-                                                    : "hover:bg-slate-900 border-transparent text-slate-300"
+                                                    : "hover:bg-primary border-transparent text-slate-300"
                                             )}
                                             onClick={() => setSelectedProductId(p.id.toString())}
                                         >
@@ -495,18 +495,18 @@ export function EmployeeTransferWizard({ isOpen, onClose, clubId, userId, active
                         {selectedProductId && (
                             <div className="pt-4 border-t border-slate-800">
                                 <div className="space-y-2">
-                                    <Label className="text-[10px] uppercase text-slate-500 font-bold">Количество для перемещения</Label>
+                                    <Label className="text-[10px] uppercase text-muted-foreground font-bold">Количество для перемещения</Label>
                                     <div className="flex items-center gap-4">
                                         <Input 
                                             type="number" 
                                             value={itemQty} 
                                             max={allProducts.find(p => p.id === Number(selectedProductId))?.stocks?.find((s: any) => s.warehouse_id === Number(sourceWarehouseId))?.quantity || 0}
                                             onChange={e => setItemQty(e.target.value)}
-                                            className="bg-slate-900 border-slate-800 h-12 text-lg font-bold flex-1"
+                                            className="bg-primary border-slate-800 h-12 text-lg font-bold flex-1"
                                         />
                                         <Button 
                                             variant="ghost" 
-                                            className="text-[10px] h-12 text-slate-500"
+                                            className="text-[10px] h-12 text-muted-foreground"
                                             onClick={() => {
                                                 const max = allProducts.find(p => p.id === Number(selectedProductId))?.stocks?.find((s: any) => s.warehouse_id === Number(sourceWarehouseId))?.quantity || 0
                                                 setItemQty(max.toString())

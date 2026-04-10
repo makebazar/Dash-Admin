@@ -30,6 +30,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
+import { PageShell } from "@/components/layout/PageShell"
 import { renderEquipmentIcon } from "@/lib/equipment-icons"
 import type { Employee, Equipment, EquipmentType, Workstation } from "../types"
 import AssignEquipmentDialog from "../AssignEquipmentDialog"
@@ -127,18 +128,18 @@ const ThermalMaintenanceCard = memo(function ThermalMaintenanceCard({
             </button>
 
             {isOpen && !disabled ? (
-                <div className="space-y-3 border-t border-slate-200 px-4 py-4">
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="space-y-4 border-t border-slate-200 px-4 py-4">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <div className="flex flex-col gap-1.5">
                             <Label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Дата замены</Label>
-                            <Input type="date" className="bg-white text-xs" value={dateValue} onChange={(e) => onDateChange(e.target.value)} />
+                            <Input type="date" className="bg-white text-sm h-10 rounded-lg" value={dateValue} onChange={(e) => onDateChange(e.target.value)} />
                         </div>
                         <div className="flex flex-col gap-1.5">
                             <Label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Интервал (дней)</Label>
                             <Input
                                 type="number"
                                 min={1}
-                                className="bg-white text-xs"
+                                className="bg-white text-sm h-10 rounded-lg"
                                 value={intervalValue}
                                 onChange={(e) => onIntervalChange(e.target.value)}
                                 placeholder="Например, 180"
@@ -146,20 +147,21 @@ const ThermalMaintenanceCard = memo(function ThermalMaintenanceCard({
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <div className="flex flex-col gap-1.5">
                             <Label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Тип / материал</Label>
-                            <Input className="bg-white text-xs" value={typeValue} onChange={(e) => onTypeChange(e.target.value)} placeholder={typePlaceholder} />
+                            <Input className="bg-white text-sm h-10 rounded-lg" value={typeValue} onChange={(e) => onTypeChange(e.target.value)} placeholder={typePlaceholder} />
                         </div>
                         <div className="flex flex-col gap-1.5">
                             <Label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Заметка</Label>
-                            <Input className="bg-white text-xs" value={noteValue} onChange={(e) => onNoteChange(e.target.value)} placeholder={notePlaceholder} />
+                            <Input className="bg-white text-sm h-10 rounded-lg" value={noteValue} onChange={(e) => onNoteChange(e.target.value)} placeholder={notePlaceholder} />
                         </div>
                     </div>
 
-                    <div className="flex justify-end">
-                        <Button size="sm" className="bg-slate-900 text-white hover:bg-slate-800" disabled={isSaving} onClick={onSave}>
-                            {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : "Сохранить"}
+                    <div className="flex justify-end pt-2">
+                        <Button size="sm" className="h-10 px-4 rounded-lg font-medium bg-slate-900 text-white hover:bg-slate-800" disabled={isSaving} onClick={onSave}>
+                            {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                            Сохранить
                         </Button>
                     </div>
                 </div>
@@ -230,19 +232,20 @@ const PeripheralMaintenanceItem = memo(function PeripheralMaintenanceItem({
                             Для этого устройства обслуживание отключено. Чистка и напоминания по нему не ведутся, пока переключатель не включён.
                         </div>
                     ) : null}
-                    <div className="grid grid-cols-1 items-end gap-3 sm:grid-cols-[minmax(0,1fr)_140px]">
+                    <div className="grid grid-cols-1 items-end gap-3 xl:grid-cols-[minmax(0,1fr)_140px]">
                         <div className="flex flex-col gap-1.5">
                             <Label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Последняя чистка</Label>
-                            <Input type="date" className="h-9 bg-white text-xs" disabled={!maintenanceEnabled} value={lastCleanedValue} onChange={(e) => onLastCleanedChange(item.id, e.target.value)} />
+                            <Input type="date" className="h-10 bg-white text-sm rounded-lg" disabled={!maintenanceEnabled} value={lastCleanedValue} onChange={(e) => onLastCleanedChange(item.id, e.target.value)} />
                         </div>
                         <div>
                             <Button
                                 size="sm"
-                                className="h-9 w-full bg-slate-900 text-white hover:bg-slate-800"
+                                className="h-10 w-full rounded-lg font-medium bg-slate-900 text-white hover:bg-slate-800"
                                 disabled={isSaving || !maintenanceEnabled}
                                 onClick={() => onSaveMaintenance(item.id, { lastCleanedAt: lastCleanedValue || null })}
                             >
-                                {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : "Сохранить"}
+                                {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                Сохранить
                             </Button>
                         </div>
                     </div>
@@ -936,49 +939,52 @@ export default function WorkstationDetailsPage() {
 
     if (isLoading) {
         return (
-            <div className="mx-auto max-w-[1200px] p-4 sm:p-6 lg:p-8">
+            <PageShell maxWidth="5xl">
                 <div className="flex h-[40vh] items-center justify-center">
-                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                    <Loader2 className="h-8 w-8 animate-spin text-slate-900" />
                 </div>
-            </div>
+            </PageShell>
         )
     }
 
     if (!workstation) {
         return (
-            <div className="mx-auto max-w-[1200px] space-y-6 p-4 sm:p-6 lg:p-8">
-                <Button asChild variant="outline">
-                    <Link href={`/clubs/${clubId}/equipment/workplaces`}>
-                        <ArrowLeft className="mr-2 h-4 w-4" />
-                        Назад к местам
-                    </Link>
-                </Button>
-                <Card className="border-dashed">
-                    <CardContent className="py-16 text-center text-muted-foreground">
-                        Рабочее место не найдено
-                    </CardContent>
-                </Card>
-            </div>
+            <PageShell maxWidth="5xl">
+                <div className="space-y-6">
+                    <Button asChild variant="outline" className="rounded-xl h-11 px-6 font-medium">
+                        <Link href={`/clubs/${clubId}/equipment/workplaces`}>
+                            <ArrowLeft className="mr-2 h-4 w-4" />
+                            Назад к местам
+                        </Link>
+                    </Button>
+                    <div className="border-dashed border-2 border-slate-200 rounded-3xl bg-slate-50/50">
+                        <div className="py-16 text-center text-muted-foreground">
+                            Рабочее место не найдено
+                        </div>
+                    </div>
+                </div>
+            </PageShell>
         )
     }
 
     return (
-        <div className="mx-auto max-w-[1200px] space-y-5 p-4 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:space-y-6 sm:p-6 md:pb-8 lg:p-8">
-            <div className="hidden md:flex md:flex-wrap md:items-center md:justify-between md:gap-3">
-                <Button asChild variant="outline">
+        <PageShell maxWidth="5xl">
+            <div className="space-y-8 pb-28 sm:pb-12">
+            <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between mb-8">
+                <Button asChild variant="outline" className="hidden md:inline-flex rounded-xl h-11 px-6 font-medium">
                     <Link href={`/clubs/${clubId}/equipment/workplaces`}>
                         <ArrowLeft className="mr-2 h-4 w-4" />
                         Назад
                     </Link>
                 </Button>
                 <div className="flex flex-wrap items-center gap-2">
-                    <Button variant="outline" onClick={() => handleEdit(workstation)}>
+                    <Button variant="outline" className="flex-1 md:flex-none rounded-xl h-11 px-6 font-medium" onClick={() => handleEdit(workstation)}>
                         <Pencil className="mr-2 h-4 w-4" />
                         Изменить название
                     </Button>
                     <Button
                         variant="outline"
-                        className="border-rose-200 text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+                        className="flex-1 md:flex-none border-rose-200 text-rose-600 hover:bg-rose-50 hover:text-rose-700 rounded-xl h-11 px-6 font-medium"
                         disabled={deletingWorkstationId === workstation.id}
                         onClick={() => requestDeleteWorkstation(workstation.id)}
                     >
@@ -989,12 +995,12 @@ export default function WorkstationDetailsPage() {
             </div>
 
             <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-                <Card className="border-slate-200 shadow-sm">
-                    <CardContent className="p-5 sm:p-6">
+                <div className="bg-white rounded-3xl border border-slate-200 shadow-sm">
+                    <div className="p-6 sm:p-8">
                         <div className="flex flex-col gap-4">
                             <div className="min-w-0">
-                                <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{workstation.name}</h1>
-                                <p className="mt-1 text-sm text-muted-foreground">Карточка рабочего места и привязанного оборудования</p>
+                                <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-slate-900 truncate">{workstation.name}</h1>
+                                <p className="text-slate-500 text-lg mt-2">Карточка рабочего места и привязанного оборудования</p>
                             </div>
 
                             <div className="flex flex-wrap gap-2">
@@ -1017,11 +1023,11 @@ export default function WorkstationDetailsPage() {
                                 </Badge>
                             </div>
                         </div>
-                    </CardContent>
-                </Card>
+                    </div>
+                </div>
 
-                <Card className="border-slate-200 shadow-sm">
-                    <CardContent className="space-y-4 p-5 sm:p-6">
+                <div className="bg-white rounded-3xl border border-slate-200 shadow-sm">
+                    <div className="space-y-6 p-6 sm:p-8">
                         <div className="space-y-2">
                             <Label className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Ответственный</Label>
                             <Select
@@ -1029,7 +1035,7 @@ export default function WorkstationDetailsPage() {
                                 onValueChange={(value) => handleAssignWorkstation(value === "none" ? null : value)}
                                 disabled={isAssigningWorkstationId === workstation.id}
                             >
-                                <SelectTrigger className="w-full">
+                                <SelectTrigger className="w-full h-12 bg-slate-50/50 border-slate-200 rounded-xl font-medium text-slate-900 focus:bg-white">
                                     <SelectValue placeholder="Не назначено" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -1043,41 +1049,41 @@ export default function WorkstationDetailsPage() {
                                 Выбранный сотрудник становится ответственным за это место. Это помогает понимать, кто обслуживает рабочее место и за кем закреплён его комплект оборудования.
                             </p>
                         </div>
-                    </CardContent>
-                </Card>
+                    </div>
+                </div>
             </div>
 
             <div className="space-y-6">
                 <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as "equipment" | "maintenance" | "history")} className="pt-0">
-                    <TabsList className="h-auto w-full justify-start gap-4 overflow-x-auto rounded-none border-b bg-transparent p-0">
-                        <TabsTrigger value="equipment" variant="underline" className="shrink-0 px-0">Оборудование</TabsTrigger>
-                        <TabsTrigger value="maintenance" variant="underline" className="shrink-0 px-0">Обслуживание</TabsTrigger>
-                        <TabsTrigger value="history" variant="underline" className="shrink-0 px-0">История</TabsTrigger>
+                    <TabsList className="h-auto w-full justify-start gap-8 overflow-x-auto rounded-none border-b border-slate-200 bg-transparent p-0 mb-8">
+                        <TabsTrigger value="equipment" className="relative shrink-0 rounded-none border-b-2 border-transparent px-0 pb-4 pt-2 font-medium text-slate-500 hover:text-slate-700 data-[state=active]:border-slate-900 data-[state=active]:text-slate-900 data-[state=active]:shadow-none data-[state=active]:bg-transparent">Оборудование</TabsTrigger>
+                        <TabsTrigger value="maintenance" className="relative shrink-0 rounded-none border-b-2 border-transparent px-0 pb-4 pt-2 font-medium text-slate-500 hover:text-slate-700 data-[state=active]:border-slate-900 data-[state=active]:text-slate-900 data-[state=active]:shadow-none data-[state=active]:bg-transparent">Обслуживание</TabsTrigger>
+                        <TabsTrigger value="history" className="relative shrink-0 rounded-none border-b-2 border-transparent px-0 pb-4 pt-2 font-medium text-slate-500 hover:text-slate-700 data-[state=active]:border-slate-900 data-[state=active]:text-slate-900 data-[state=active]:shadow-none data-[state=active]:bg-transparent">История</TabsTrigger>
                     </TabsList>
 
-                    <TabsContent value="equipment" className="mt-4">
+                    <TabsContent value="equipment" className="mt-0">
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                             <div className="min-w-0">
                                 <div className="text-sm font-semibold text-slate-900">Оборудование на месте</div>
                                 <div className="truncate text-xs text-muted-foreground">Добавляй со склада или отвязывай оборудование от этого места</div>
                             </div>
-                            <Button size="sm" className="w-full shrink-0 sm:w-auto" onClick={() => setIsAssignDialogOpen(true)}>
+                            <Button className="w-full shrink-0 sm:w-auto rounded-xl bg-slate-900 text-white hover:bg-slate-800" onClick={() => setIsAssignDialogOpen(true)}>
                                 <Plus className="mr-1.5 h-4 w-4" />
                                 Добавить
                             </Button>
                         </div>
 
                         <div className="mt-4 space-y-4">
-                            <Card className="border-slate-200">
-                                <CardHeader className="pb-2">
-                                    <CardTitle className="text-base">{primaryLabel}</CardTitle>
-                                    <CardDescription>{primaryDescription}</CardDescription>
-                                </CardHeader>
-                                <CardContent>
+                            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm">
+                                <div className="p-6 sm:p-8 pb-4">
+                                    <h3 className="text-lg font-bold text-slate-900">{primaryLabel}</h3>
+                                    <p className="text-sm text-slate-500 mt-1">{primaryDescription}</p>
+                                </div>
+                                <div className="p-6 sm:p-8 pt-0">
                                     {!primaryEquipment ? (
                                         <div className="flex flex-col gap-3 rounded-lg border border-dashed border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between">
                                             <div className="text-sm text-muted-foreground">Основное устройство не назначено</div>
-                                            <Button size="sm" variant="outline" className="w-full sm:w-auto" onClick={() => setIsAssignDialogOpen(true)}>
+                                            <Button variant="outline" className="w-full sm:w-auto rounded-xl font-medium" onClick={() => setIsAssignDialogOpen(true)}>
                                                 Назначить
                                             </Button>
                                         </div>
@@ -1103,15 +1109,15 @@ export default function WorkstationDetailsPage() {
                                             </Button>
                                         </div>
                                     )}
-                                </CardContent>
-                            </Card>
+                                </div>
+                            </div>
 
-                            <Card className="border-slate-200">
-                                <CardHeader className="pb-2">
-                                    <CardTitle className="text-base">Периферия</CardTitle>
-                                    <CardDescription>Устройства, привязанные к месту</CardDescription>
-                                </CardHeader>
-                                <CardContent className="space-y-2">
+                            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm">
+                                <div className="p-6 sm:p-8 pb-4">
+                                    <h3 className="text-lg font-bold text-slate-900">Периферия</h3>
+                                    <p className="text-sm text-slate-500 mt-1">Устройства, привязанные к месту</p>
+                                </div>
+                                <div className="space-y-4 p-6 sm:p-8 pt-0">
                                     {peripheralEquipment.length === 0 ? (
                                         <div className="text-sm text-muted-foreground">Периферия не назначена</div>
                                     ) : peripheralEquipment.map(item => (
@@ -1136,20 +1142,20 @@ export default function WorkstationDetailsPage() {
                                             </Button>
                                         </div>
                                     ))}
-                                </CardContent>
-                            </Card>
+                                </div>
+                            </div>
                         </div>
                     </TabsContent>
 
-                    <TabsContent value="maintenance" className="mt-4">
+                    <TabsContent value="maintenance" className="mt-0">
                         <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.05fr)_minmax(320px,0.95fr)]">
                             <div className="space-y-6">
-                                <Card className="border-slate-200">
-                                    <CardHeader className="pb-2">
-                                        <CardTitle className="text-base">{primaryLabel}</CardTitle>
-                                        <CardDescription>{primaryDescription}</CardDescription>
-                                    </CardHeader>
-                                    <CardContent className="space-y-3">
+                                <div className="bg-white rounded-3xl border border-slate-200 shadow-sm">
+                                    <div className="p-6 sm:p-8 pb-4">
+                                        <h3 className="text-lg font-bold text-slate-900">{primaryLabel}</h3>
+                                        <p className="text-sm text-slate-500 mt-1">{primaryDescription}</p>
+                                    </div>
+                                    <div className="space-y-6 p-6 sm:p-8 pt-0">
                                         {!primaryEquipment ? (
                                             <div className="text-sm text-muted-foreground">Основное устройство не назначено</div>
                                         ) : (
@@ -1189,10 +1195,10 @@ export default function WorkstationDetailsPage() {
                                                     </div>
                                                 </div>
 
-                                                <div className="grid grid-cols-1 items-end gap-3 lg:grid-cols-[180px_minmax(0,1fr)_auto_auto]">
+                                                <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2 lg:grid-cols-[160px_100px_minmax(0,1fr)]">
                                                     <div className="flex flex-col gap-1.5">
                                                         <Label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Посл. чистка</Label>
-                                                        <Input type="date" disabled={primaryEquipment.maintenance_enabled === false} className="h-9 w-full bg-white text-xs" value={lastCleanedDrafts[primaryEquipment.id] ?? ""} onChange={(e) => setLastCleanedDrafts(prev => ({ ...prev, [primaryEquipment.id]: e.target.value }))} />
+                                                        <Input type="date" disabled={primaryEquipment.maintenance_enabled === false} className="h-10 w-full bg-white text-sm rounded-lg" value={lastCleanedDrafts[primaryEquipment.id] ?? ""} onChange={(e) => setLastCleanedDrafts(prev => ({ ...prev, [primaryEquipment.id]: e.target.value }))} />
                                                     </div>
                                                     <div className="flex flex-col gap-1.5">
                                                         <Label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Интервал (дн.)</Label>
@@ -1200,34 +1206,35 @@ export default function WorkstationDetailsPage() {
                                                             type="number"
                                                             min={1}
                                                             disabled={primaryEquipment.maintenance_enabled === false}
-                                                            className="h-9 bg-white text-xs"
+                                                            className="h-10 bg-white text-sm rounded-lg"
                                                             value={currentIntervalDraft}
                                                             onChange={(e) => setCleaningIntervalDrafts(prev => ({ ...prev, [primaryEquipment.id]: e.target.value }))}
                                                         />
                                                     </div>
-                                                    <div className="flex flex-col gap-1.5">
+                                                    <div className="flex flex-col gap-1.5 sm:col-span-2 lg:col-span-1">
                                                         <Label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Статус</Label>
-                                                        <div className="flex h-9 items-center rounded-md border bg-white px-3 text-xs text-slate-600">
-                                                            {isCustomInterval ? `Индивидуально • стандарт ${standardInterval} дн.` : `По стандарту • ${standardInterval} дн.`}
+                                                        <div className="flex h-10 items-center rounded-lg border bg-white px-3 text-sm text-slate-600 truncate">
+                                                            {isCustomInterval ? `Индивидуально • станд. ${standardInterval} дн.` : `По стандарту • ${standardInterval} дн.`}
                                                         </div>
                                                     </div>
-                                                    <div className="flex gap-2">
+                                                    <div className="flex justify-end gap-2 sm:col-span-2 lg:col-span-3 mt-2 border-t border-slate-100 pt-4">
                                                         <Button
                                                             size="sm"
                                                             variant="outline"
-                                                            className="h-9"
+                                                            className="h-10 px-6 rounded-lg"
                                                             disabled={savingMaintenanceId === primaryEquipment.id || primaryEquipment.maintenance_enabled === false || !isCustomInterval}
                                                             onClick={() => handleResetCleaningInterval(primaryEquipment.id, primaryEquipment.type, lastCleanedDrafts[primaryEquipment.id] || null)}
                                                         >
-                                                            Сбросить
+                                                            Сброс
                                                         </Button>
-                                                        <Button size="sm" className="h-9 bg-slate-900 text-white hover:bg-slate-800" disabled={savingMaintenanceId === primaryEquipment.id || primaryEquipment.maintenance_enabled === false} onClick={() => handleSaveMaintenance(primaryEquipment.id, {
+                                                        <Button size="sm" className="h-10 px-6 rounded-lg bg-slate-900 text-white hover:bg-slate-800" disabled={savingMaintenanceId === primaryEquipment.id || primaryEquipment.maintenance_enabled === false} onClick={() => handleSaveMaintenance(primaryEquipment.id, {
                                                             lastCleanedAt: lastCleanedDrafts[primaryEquipment.id] || null,
                                                             cleaningIntervalOverrideDays: currentIntervalDraft && parseInt(currentIntervalDraft, 10) !== standardInterval
                                                                 ? parseInt(currentIntervalDraft, 10)
                                                                 : null
                                                         })}>
-                                                            {savingMaintenanceId === primaryEquipment.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Сохранить"}
+                                                            {savingMaintenanceId === primaryEquipment.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                                            Сохранить
                                                         </Button>
                                                     </div>
                                                 </div>
@@ -1235,15 +1242,15 @@ export default function WorkstationDetailsPage() {
                                                 )
                                             })()
                                         )}
-                                    </CardContent>
-                                </Card>
+                                    </div>
+                                </div>
 
-                                <Card className="border-slate-200">
-                                    <CardHeader className="pb-2">
-                                        <CardTitle className="text-base">Термосервис</CardTitle>
-                                        <CardDescription>CPU и GPU обслуживание основного устройства</CardDescription>
-                                    </CardHeader>
-                                    <CardContent className="space-y-3">
+                                <div className="bg-white rounded-3xl border border-slate-200 shadow-sm">
+                                    <div className="p-6 sm:p-8 pb-4">
+                                        <h3 className="text-lg font-bold text-slate-900">Термосервис</h3>
+                                        <p className="text-sm text-slate-500 mt-1">CPU и GPU обслуживание основного устройства</p>
+                                    </div>
+                                    <div className="space-y-6 p-6 sm:p-8 pt-0">
                                         {!primaryEquipment ? (
                                             <div className="text-sm text-muted-foreground">Основное устройство не назначено</div>
                                         ) : !thermalEligible ? (
@@ -1307,17 +1314,17 @@ export default function WorkstationDetailsPage() {
                                                 )}
                                             </div>
                                         )}
-                                    </CardContent>
-                                </Card>
+                                    </div>
+                                </div>
                             </div>
 
                             <div className="space-y-6">
-                                <Card className="border-slate-200">
-                                    <CardHeader className="pb-2">
-                                        <CardTitle className="text-base">Периферия</CardTitle>
-                                        <CardDescription>Плановое обслуживание подключённых устройств</CardDescription>
-                                    </CardHeader>
-                                    <CardContent className="space-y-3">
+                                <div className="bg-white rounded-3xl border border-slate-200 shadow-sm">
+                                    <div className="p-6 sm:p-8 pb-4">
+                                        <h3 className="text-lg font-bold text-slate-900">Периферия</h3>
+                                        <p className="text-sm text-slate-500 mt-1">Плановое обслуживание подключённых устройств</p>
+                                    </div>
+                                    <div className="space-y-6 p-6 sm:p-8 pt-0">
                                         {peripheralEquipment.length === 0 ? (
                                             <div className="text-sm text-muted-foreground">Периферия не назначена</div>
                                         ) : peripheralEquipment.map(item => {
@@ -1344,47 +1351,48 @@ export default function WorkstationDetailsPage() {
                                                         })}
                                                     />
                                                     {expandedPeripheralIds[item.id] ? (
-                                                        <div className="grid grid-cols-1 gap-3 rounded-lg border border-slate-100 bg-slate-50 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_220px_auto_auto]">
-                                                            <div className="text-xs text-muted-foreground">
+                                                        <div className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-lg border border-slate-100 bg-slate-50 px-4 py-3">
+                                                            <div className="flex-1 text-xs text-muted-foreground leading-snug">
                                                                 {isCustomInterval
                                                                     ? `Индивидуальный интервал • стандарт ${standardInterval} дн.`
                                                                     : `По стандарту типа • ${standardInterval} дн.`}
                                                             </div>
-                                                            <Input
-                                                                type="number"
-                                                                min={1}
-                                                                disabled={item.maintenance_enabled === false}
-                                                                className="h-9 bg-white text-xs"
-                                                                value={currentIntervalDraft}
-                                                                onChange={(e) => setCleaningIntervalDrafts(prev => ({ ...prev, [item.id]: e.target.value }))}
-                                                            />
-                                                            <Button
-                                                                size="sm"
-                                                                variant="outline"
-                                                                className="h-9"
-                                                                disabled={savingMaintenanceId === item.id || item.maintenance_enabled === false || !isCustomInterval}
-                                                                onClick={() => handleResetCleaningInterval(item.id, item.type, lastCleanedDrafts[item.id] || null)}
-                                                            >
-                                                                Сбросить
-                                                            </Button>
-                                                            <div className="hidden sm:block" />
+                                                            <div className="flex items-center gap-2">
+                                                                <Input
+                                                                    type="number"
+                                                                    min={1}
+                                                                    disabled={item.maintenance_enabled === false}
+                                                                    className="h-10 w-24 bg-white text-sm rounded-lg"
+                                                                    value={currentIntervalDraft}
+                                                                    onChange={(e) => setCleaningIntervalDrafts(prev => ({ ...prev, [item.id]: e.target.value }))}
+                                                                />
+                                                                <Button
+                                                                    size="sm"
+                                                                    variant="outline"
+                                                                    className="h-10 px-4 rounded-lg"
+                                                                    disabled={savingMaintenanceId === item.id || item.maintenance_enabled === false || !isCustomInterval}
+                                                                    onClick={() => handleResetCleaningInterval(item.id, item.type, lastCleanedDrafts[item.id] || null)}
+                                                                >
+                                                                    Сброс
+                                                                </Button>
+                                                            </div>
                                                         </div>
                                                     ) : null}
                                                 </div>
                                             )
                                         })}
-                                    </CardContent>
-                                </Card>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </TabsContent>
 
-                    <TabsContent value="history" className="mt-4">
-                        <Card className="border-slate-200">
-                            <CardHeader className="gap-4 pb-2">
+                    <TabsContent value="history" className="mt-0">
+                        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm">
+                            <div className="p-6 sm:p-8 pb-4 flex flex-col gap-4">
                                 <div>
-                                    <CardTitle className="text-base">История места</CardTitle>
-                                    <CardDescription>События по всему оборудованию, которое закреплено за этим местом</CardDescription>
+                                    <h3 className="text-lg font-bold text-slate-900">История места</h3>
+                                    <p className="text-sm text-slate-500 mt-1">События по всему оборудованию, которое закреплено за этим местом</p>
                                 </div>
                                 <div className="flex flex-wrap gap-2">
                                     {[
@@ -1442,8 +1450,8 @@ export default function WorkstationDetailsPage() {
                                         ))}
                                     </div>
                                 ) : null}
-                            </CardHeader>
-                            <CardContent>
+                            </div>
+                            <div className="p-6 sm:p-8 pt-0">
                                 {isHistoryLoading ? (
                                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                                         <Loader2 className="h-4 w-4 animate-spin" />
@@ -1534,8 +1542,8 @@ export default function WorkstationDetailsPage() {
                                         ))}
                                     </div>
                                 )}
-                            </CardContent>
-                        </Card>
+                            </div>
+                        </div>
                     </TabsContent>
                 </Tabs>
             </div>
@@ -1568,9 +1576,9 @@ export default function WorkstationDetailsPage() {
                     setPendingUnassignEquipmentId(null)
                 }
             }}>
-                <DialogContent className="[&>button]:hidden sm:max-w-md">
+                <DialogContent className="[&>button]:hidden sm:max-w-md rounded-3xl p-6 sm:p-8">
                     <DialogHeader>
-                        <DialogTitle className="flex items-center gap-2">
+                        <DialogTitle className="flex items-center gap-2 text-2xl font-bold tracking-tight text-slate-900 mb-2">
                             <AlertTriangle className="h-5 w-5 text-amber-500" />
                             Отвязать оборудование?
                         </DialogTitle>
@@ -1584,10 +1592,10 @@ export default function WorkstationDetailsPage() {
                         </DialogDescription>
                     </DialogHeader>
                     <DialogFooter className="gap-2">
-                        <Button variant="outline" onClick={() => setPendingUnassignEquipmentId(null)} disabled={Boolean(isUnassigningEquipmentId)}>
+                        <Button variant="ghost" className="rounded-xl font-bold" onClick={() => setPendingUnassignEquipmentId(null)} disabled={Boolean(isUnassigningEquipmentId)}>
                             Отмена
                         </Button>
-                        <Button variant="destructive" onClick={confirmUnassignEquipment} disabled={Boolean(isUnassigningEquipmentId)}>
+                        <Button className="rounded-xl font-bold bg-rose-600 hover:bg-rose-700 text-white" onClick={confirmUnassignEquipment} disabled={Boolean(isUnassigningEquipmentId)}>
                             {isUnassigningEquipmentId ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                             Отвязать
                         </Button>
@@ -1600,9 +1608,9 @@ export default function WorkstationDetailsPage() {
                     setPendingDeleteWorkstationId(null)
                 }
             }}>
-                <DialogContent className="[&>button]:hidden sm:max-w-lg">
+                <DialogContent className="[&>button]:hidden sm:max-w-lg rounded-3xl p-6 sm:p-8">
                     <DialogHeader>
-                        <DialogTitle className="flex items-center gap-2">
+                        <DialogTitle className="flex items-center gap-2 text-2xl font-bold tracking-tight text-slate-900 mb-2">
                             <AlertTriangle className="h-5 w-5 text-rose-500" />
                             Удалить рабочее место?
                         </DialogTitle>
@@ -1626,14 +1634,15 @@ export default function WorkstationDetailsPage() {
                     </DialogHeader>
                     <DialogFooter className="gap-2">
                         <Button
-                            variant="outline"
+                            variant="ghost"
+                            className="rounded-xl font-bold"
                             onClick={() => setPendingDeleteWorkstationId(null)}
                             disabled={Boolean(deletingWorkstationId)}
                         >
                             Отмена
                         </Button>
                         <Button
-                            variant="destructive"
+                            className="rounded-xl font-bold bg-rose-600 hover:bg-rose-700 text-white"
                             onClick={() => pendingDeleteWorkstationId && handleDeleteWorkstation(pendingDeleteWorkstationId)}
                             disabled={Boolean(deletingWorkstationId)}
                         >
@@ -1695,9 +1704,9 @@ export default function WorkstationDetailsPage() {
                 </DialogContent>
             </Dialog>
 
-            <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur supports-[backdrop-filter]:bg-background/80 md:hidden">
-                <div className="mx-auto flex max-w-7xl gap-2">
-                    <Button asChild variant="outline" className="h-11 flex-1">
+            <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/80 p-4 backdrop-blur-xl md:hidden pb-[calc(1rem+env(safe-area-inset-bottom))]">
+                <div className="mx-auto flex max-w-[1600px] gap-2">
+                    <Button asChild variant="outline" className="flex-1 h-12 rounded-xl border-slate-200 text-slate-700 bg-white font-medium">
                         <Link href={`/clubs/${clubId}/equipment/workplaces`}>
                             <ArrowLeft className="mr-2 h-4 w-4" />
                             Назад
@@ -1705,6 +1714,7 @@ export default function WorkstationDetailsPage() {
                     </Button>
                 </div>
             </div>
-        </div>
+            </div>
+        </PageShell>
     )
 }

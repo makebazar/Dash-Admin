@@ -201,22 +201,22 @@ export function MaintenanceSessionWizard({ isOpen, onClose, tasks, onComplete }:
 
     return (
         <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-            <DialogContent className="p-0 gap-0 overflow-hidden flex flex-col w-full h-full max-h-none sm:h-[90vh] sm:max-h-[850px] sm:max-w-[900px] sm:rounded-3xl border-none shadow-2xl">
+            <DialogContent className="p-0 gap-0 overflow-hidden flex flex-col w-full h-full max-h-none sm:h-[90vh] sm:max-h-[850px] sm:max-w-[900px] sm:rounded-xl border border-border shadow-md bg-background dark text-foreground">
                 {/* Header */}
-                <div className="relative bg-white border-b pt-4 sm:pt-6 px-4 sm:px-8 pb-6">
+                <div className="relative bg-card border-b border-border pt-4 sm:pt-6 px-4 sm:px-8 pb-6">
                     <div className="flex items-center justify-between mb-0">
                         <div className="flex items-center gap-3 sm:gap-4">
                             <div>
-                                <DialogTitle className="text-lg sm:text-xl font-bold text-slate-900 leading-tight">
+                                <DialogTitle className="text-lg sm:text-xl font-bold text-foreground leading-tight">
                                     {currentTask.equipment_name}
                                 </DialogTitle>
                                 <div className="flex items-center gap-2 mt-1">
-                                    <Badge variant="secondary" className="bg-slate-100 text-slate-600 border-none text-[10px] font-bold uppercase tracking-wider">
+                                    <Badge variant="secondary" className="bg-accent text-muted-foreground border-none text-[10px] font-bold uppercase tracking-wider">
                                         {currentTask.equipment_type_name}
                                     </Badge>
                                     {currentTask.workstation_name && (
-                                        <span className="text-xs text-slate-400 flex items-center gap-1">
-                                            <span className="h-1 w-1 rounded-full bg-slate-300" />
+                                        <span className="text-xs text-muted-foreground/70 flex items-center gap-1">
+                                            <span className="h-1 w-1 rounded-full bg-muted-foreground/30" />
                                             {currentTask.workstation_name} ({currentTask.workstation_zone})
                                         </span>
                                     )}
@@ -224,44 +224,44 @@ export function MaintenanceSessionWizard({ isOpen, onClose, tasks, onComplete }:
                             </div>
                         </div>
                         <div className="hidden sm:flex flex-col items-end gap-1 opacity-0">
-                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Прогресс</span>
-                            <span className="text-sm font-black text-indigo-600">{Math.round(progress)}%</span>
+                            <span className="text-[10px] font-bold text-muted-foreground/70 uppercase tracking-widest">Прогресс</span>
+                            <span className="text-sm font-black text-primary">{Math.round(progress)}%</span>
                         </div>
                     </div>
                 </div>
 
-                <div className="flex-1 overflow-hidden flex flex-col md:flex-row bg-slate-50/50">
+                <div className="flex-1 overflow-hidden flex flex-col md:flex-row bg-background">
                     {/* Instructions Panel */}
-                    <div className="flex-1 p-4 sm:p-8 overflow-y-auto bg-white sm:rounded-br-3xl">
+                    <div className="flex-1 p-4 sm:p-8 overflow-y-auto bg-card">
                         <div className="max-w-2xl">
-                            <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-6 flex items-center gap-2">
-                                <CheckCircle2 className="h-4 w-4 text-indigo-500" />
+                            <h3 className="text-sm font-bold text-muted-foreground/70 uppercase tracking-widest mb-6 flex items-center gap-2">
+                                <CheckCircle2 className="h-4 w-4 text-primary" />
                                 Порядок действий
                             </h3>
                             
                             {isLoading ? (
                                 <div className="flex flex-col items-center justify-center py-20 gap-4">
-                                    <Loader2 className="h-10 w-10 animate-spin text-indigo-200" />
-                                    <p className="text-sm text-slate-400 font-medium">Загрузка инструкции...</p>
+                                    <Loader2 className="h-10 w-10 animate-spin text-muted-foreground" />
+                                    <p className="text-sm text-muted-foreground/70 font-medium">Загрузка инструкции...</p>
                                 </div>
                             ) : (
-                                <div className="text-slate-700 leading-relaxed space-y-4">
+                                <div className="text-foreground leading-relaxed space-y-4">
                                     {hasInstruction ? (
                                         <div
-                                            className="equipment-instruction-content p-6 bg-slate-50 rounded-2xl border border-slate-100 text-sm"
+                                            className="equipment-instruction-content p-6 bg-accent/30 rounded-xl border border-border text-sm"
                                             dangerouslySetInnerHTML={{ __html: instructionContent }}
                                         />
                                     ) : (
-                                        <div className="p-6 bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-sm text-slate-500 font-medium">
+                                        <div className="p-6 bg-accent/30 rounded-xl border border-dashed border-border text-sm text-muted-foreground font-medium">
                                             Инструкция отсутствует.
                                         </div>
                                     )}
                                     
-                                    <div className="p-4 rounded-xl bg-indigo-50/50 border border-indigo-100/50 flex gap-3 items-start mt-8">
-                                        <div className="h-5 w-5 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center shrink-0 mt-0.5">
+                                    <div className="p-4 rounded-xl bg-primary/5 border border-primary/20 flex gap-3 items-start mt-8">
+                                        <div className="h-5 w-5 rounded-full bg-primary/20 text-primary flex items-center justify-center shrink-0 mt-0.5">
                                             <span className="text-[10px] font-bold">i</span>
                                         </div>
-                                        <p className="text-xs text-indigo-700 leading-normal">
+                                        <p className="text-xs text-primary leading-normal">
                                             Убедитесь, что оборудование выключено перед началом физической чистки. Сообщайте о любых видимых повреждениях.
                                         </p>
                                     </div>
@@ -271,21 +271,21 @@ export function MaintenanceSessionWizard({ isOpen, onClose, tasks, onComplete }:
                     </div>
 
                     {/* Action Panel */}
-                    <div className="w-full md:w-[320px] p-4 sm:p-6 flex flex-col gap-4 overflow-y-auto border-t md:border-t-0 md:border-l border-slate-200">
+                    <div className="w-full md:w-[320px] p-4 sm:p-6 flex flex-col gap-4 overflow-y-auto border-t md:border-t-0 md:border-l border-border bg-card">
                         <div className="space-y-4">
                             <div>
-                                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Статус проверки</h3>
+                                <h3 className="text-[10px] font-bold text-muted-foreground/70 uppercase tracking-widest mb-2">Статус проверки</h3>
                                 <div className={cn("grid gap-2", isLaundryEquipment ? "grid-cols-3" : "grid-cols-2")}>
                                     <div 
                                         className={cn(
-                                            "p-3 rounded-xl border-2 transition-all cursor-pointer flex flex-col items-center justify-center gap-2 text-center",
+                                            "p-3 rounded-xl border transition-all cursor-pointer flex flex-col items-center justify-center gap-2 text-center",
                                             reportMode === "OK"
-                                                ? "bg-green-50 border-green-200 text-green-700" 
-                                                : "bg-white border-slate-100 text-slate-400 hover:border-slate-200"
+                                                ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-500" 
+                                                : "bg-accent/30 border-border text-muted-foreground hover:bg-accent/50"
                                         )}
                                         onClick={() => setReportMode("OK")}
                                     >
-                                        <div className={cn("h-8 w-8 rounded-full flex items-center justify-center transition-colors", reportMode === "OK" ? "bg-green-500 text-white" : "bg-slate-100")}>
+                                        <div className={cn("h-8 w-8 rounded-full flex items-center justify-center transition-colors", reportMode === "OK" ? "bg-emerald-500 text-primary-foreground" : "bg-background border border-border")}>
                                             <CheckCircle2 className="h-5 w-5" />
                                         </div>
                                         <span className="font-bold text-xs leading-none">В порядке</span>
@@ -293,14 +293,14 @@ export function MaintenanceSessionWizard({ isOpen, onClose, tasks, onComplete }:
 
                                     <div 
                                         className={cn(
-                                            "p-3 rounded-xl border-2 transition-all cursor-pointer flex flex-col items-center justify-center gap-2 text-center",
+                                            "p-3 rounded-xl border transition-all cursor-pointer flex flex-col items-center justify-center gap-2 text-center",
                                             reportMode === "ISSUE"
-                                                ? "bg-amber-50 border-amber-200 text-amber-700" 
-                                                : "bg-white border-slate-100 text-slate-400 hover:border-slate-200"
+                                                ? "bg-amber-500/10 border-amber-500/30 text-amber-500" 
+                                                : "bg-accent/30 border-border text-muted-foreground hover:bg-accent/50"
                                         )}
                                         onClick={() => setReportMode("ISSUE")}
                                     >
-                                        <div className={cn("h-8 w-8 rounded-full flex items-center justify-center transition-colors", reportMode === "ISSUE" ? "bg-amber-500 text-white" : "bg-slate-100")}>
+                                        <div className={cn("h-8 w-8 rounded-full flex items-center justify-center transition-colors", reportMode === "ISSUE" ? "bg-amber-500 text-primary-foreground" : "bg-background border border-border")}>
                                             <AlertTriangle className="h-5 w-5" />
                                         </div>
                                         <span className="font-bold text-xs leading-none">Проблема</span>
@@ -309,14 +309,14 @@ export function MaintenanceSessionWizard({ isOpen, onClose, tasks, onComplete }:
                                     {isLaundryEquipment && (
                                         <div
                                             className={cn(
-                                                "p-3 rounded-xl border-2 transition-all cursor-pointer flex flex-col items-center justify-center gap-2 text-center",
+                                                "p-3 rounded-xl border transition-all cursor-pointer flex flex-col items-center justify-center gap-2 text-center",
                                                 reportMode === "LAUNDRY"
-                                                    ? "bg-blue-50 border-blue-200 text-blue-700"
-                                                    : "bg-white border-slate-100 text-slate-400 hover:border-slate-200"
+                                                    ? "bg-blue-500/10 border-blue-500/30 text-blue-500"
+                                                    : "bg-accent/30 border-border text-muted-foreground hover:bg-accent/50"
                                             )}
                                             onClick={() => setReportMode("LAUNDRY")}
                                         >
-                                            <div className={cn("h-8 w-8 rounded-full flex items-center justify-center transition-colors", reportMode === "LAUNDRY" ? "bg-blue-500 text-white" : "bg-slate-100")}>
+                                            <div className={cn("h-8 w-8 rounded-full flex items-center justify-center transition-colors", reportMode === "LAUNDRY" ? "bg-blue-500 text-primary-foreground" : "bg-background border border-border")}>
                                                 <ImageIcon className="h-5 w-5" />
                                             </div>
                                             <span className="font-bold text-xs leading-none">В стирку</span>
@@ -325,28 +325,28 @@ export function MaintenanceSessionWizard({ isOpen, onClose, tasks, onComplete }:
                                 </div>
                             </div>
 
-                            <div className="space-y-4 pt-4 border-t border-slate-100">
-                                <Label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-between">
+                            <div className="space-y-4 pt-4 border-t border-border/50">
+                                <Label className="text-[10px] font-bold text-muted-foreground/70 uppercase tracking-widest flex items-center justify-between">
                                     Фотоотчет
-                                    <span className="text-rose-500 normal-case tracking-normal font-bold bg-rose-50 px-2 py-0.5 rounded-md">Обязательно</span>
+                                    <span className="text-rose-500 normal-case tracking-normal font-bold bg-rose-500/10 px-2 py-0.5 rounded-md border border-rose-500/20">Обязательно</span>
                                 </Label>
                                 <div className="flex flex-wrap gap-2">
                                     {photos.map((file, idx) => (
-                                        <div key={idx} className="relative h-20 w-20 rounded-xl border-2 border-slate-100 overflow-hidden group shadow-sm">
+                                        <div key={idx} className="relative h-20 w-20 rounded-xl border border-border overflow-hidden group shadow-sm bg-accent/30">
                                             <img src={URL.createObjectURL(file)} alt="preview" className="h-full w-full object-cover" />
                                             <button 
                                                 onClick={() => setPhotos(prev => prev.filter((_, i) => i !== idx))}
-                                                className="absolute top-0 right-0 bg-black/50 text-white p-1 opacity-0 group-hover:opacity-100 transition-opacity rounded-bl-xl backdrop-blur-sm"
+                                                className="absolute top-0 right-0 bg-background/80 text-foreground p-1 opacity-0 group-hover:opacity-100 transition-opacity rounded-bl-xl backdrop-blur-sm hover:bg-background hover:text-rose-500"
                                             >
                                                 <X className="h-4 w-4" />
                                             </button>
                                         </div>
                                     ))}
-                                    <label className="h-20 w-20 border-2 border-dashed border-indigo-200 bg-indigo-50/50 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-indigo-400 hover:bg-indigo-100 transition-all group">
-                                        <div className="h-8 w-8 rounded-full bg-indigo-100 flex items-center justify-center mb-1 group-hover:bg-indigo-200 transition-colors">
-                                            <ImageIcon className="h-4 w-4 text-indigo-500" />
+                                    <label className="h-20 w-20 border border-dashed border-border bg-accent/30 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-primary/50 hover:bg-accent/50 transition-all group">
+                                        <div className="h-8 w-8 rounded-full bg-background border border-border flex items-center justify-center mb-1 group-hover:border-primary/30 transition-colors">
+                                            <ImageIcon className="h-4 w-4 text-primary" />
                                         </div>
-                                        <span className="text-[10px] font-bold text-indigo-500 uppercase tracking-wider">Фото</span>
+                                        <span className="text-[10px] font-bold text-primary uppercase tracking-wider">Фото</span>
                                         <input 
                                             type="file" 
                                             className="hidden" 
@@ -366,21 +366,21 @@ export function MaintenanceSessionWizard({ isOpen, onClose, tasks, onComplete }:
                             {hasReport ? (
                                 <div className="space-y-4 animate-in fade-in slide-in-from-top-4 duration-300">
                                     <div className="space-y-2">
-                                        <Label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                                        <Label className="text-[10px] font-bold text-muted-foreground/70 uppercase tracking-widest ml-1">
                                             {isLaundryReport ? "Что отправить в стирку?" : "Что случилось?"}
                                         </Label>
                                         <Input 
                                             placeholder={isLaundryReport ? "Напр: Коврик сильно загрязнен" : "Напр: Залипает кнопка"} 
                                             value={issueTitle}
                                             onChange={(e) => setIssueTitle(e.target.value)}
-                                            className="rounded-xl border-slate-200 focus:ring-indigo-500/20"
+                                            className="rounded-xl border-border bg-background focus-visible:ring-primary/20"
                                         />
                                     </div>
                                     <div className="space-y-2">
-                                        <Label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Подробности</Label>
+                                        <Label className="text-[10px] font-bold text-muted-foreground/70 uppercase tracking-widest ml-1">Подробности</Label>
                                         <Textarea 
                                             placeholder={isLaundryReport ? "Опишите состояние и причину отправки в стирку..." : "Опишите подробнее..."} 
-                                            className="resize-none h-24 rounded-xl border-slate-200 focus:ring-indigo-500/20" 
+                                            className="resize-none h-24 rounded-xl border-border bg-background focus-visible:ring-primary/20" 
                                             value={issueDescription}
                                             onChange={(e) => setIssueDescription(e.target.value)}
                                         />
@@ -389,10 +389,10 @@ export function MaintenanceSessionWizard({ isOpen, onClose, tasks, onComplete }:
                             ) : (
                                 <div className="space-y-4 animate-in fade-in slide-in-from-top-4 duration-300">
                                     <div className="space-y-2">
-                                        <Label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Примечание (необязательно)</Label>
+                                        <Label className="text-[10px] font-bold text-muted-foreground/70 uppercase tracking-widest ml-1">Примечание (необязательно)</Label>
                                         <Textarea 
                                             placeholder="Напр: Есть небольшая потертость, в целом всё ок" 
-                                            className="resize-none h-24 rounded-xl border-slate-200 focus:ring-indigo-500/20" 
+                                            className="resize-none h-24 rounded-xl border-border bg-background focus-visible:ring-primary/20" 
                                             value={generalNotes}
                                             onChange={(e) => setGeneralNotes(e.target.value)}
                                         />
@@ -403,8 +403,8 @@ export function MaintenanceSessionWizard({ isOpen, onClose, tasks, onComplete }:
                     </div>
                 </div>
 
-                <div className="p-4 sm:p-6 bg-white border-t flex flex-col sm:flex-row gap-4 items-center justify-between">
-                    <div className="flex items-center gap-3 text-slate-400 order-2 sm:order-1 opacity-0 pointer-events-none">
+                <div className="p-4 sm:p-6 bg-card border-t border-border flex flex-col sm:flex-row gap-4 items-center justify-between">
+                    <div className="flex items-center gap-3 text-muted-foreground/70 order-2 sm:order-1 opacity-0 pointer-events-none">
                         <span className="text-xs font-bold tracking-tight">
                             {isLastTask ? "Финальный этап" : `Осталось: ${tasks.length - currentIndex - 1}`}
                         </span>
@@ -414,7 +414,7 @@ export function MaintenanceSessionWizard({ isOpen, onClose, tasks, onComplete }:
                         <Button 
                             onClick={handleCompleteTask} 
                             disabled={isSubmitting || isUploading || (hasReport && !issueTitle) || (photos.length === 0)}
-                            className="w-full sm:w-auto h-12 px-8 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold shadow-lg shadow-indigo-200 transition-all hover:translate-y-[-2px] active:translate-y-0 disabled:opacity-50"
+                            className="w-full sm:w-auto h-12 px-8 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold transition-all disabled:opacity-50"
                         >
                             {isSubmitting || isUploading ? (
                                 <Loader2 className="h-5 w-5 animate-spin" />
@@ -428,38 +428,41 @@ export function MaintenanceSessionWizard({ isOpen, onClose, tasks, onComplete }:
                     </div>
                 </div>
                 <style jsx global>{`
-                    .equipment-instruction-content h1 { font-size: 1.75rem; font-weight: 700; margin-bottom: 1rem; line-height: 1.2; }
-                    .equipment-instruction-content h2 { font-size: 1.375rem; font-weight: 700; margin-top: 1.75rem; margin-bottom: 0.75rem; line-height: 1.3; }
-                    .equipment-instruction-content h3 { font-size: 1.125rem; font-weight: 600; margin-top: 1.25rem; margin-bottom: 0.5rem; line-height: 1.35; }
-                    .equipment-instruction-content p { margin-bottom: 0.875rem; line-height: 1.65; }
+                    .equipment-instruction-content h1 { font-size: 1.75rem; font-weight: 700; margin-bottom: 1rem; line-height: 1.2; color: hsl(var(--foreground)); }
+                    .equipment-instruction-content h2 { font-size: 1.375rem; font-weight: 700; margin-top: 1.75rem; margin-bottom: 0.75rem; line-height: 1.3; color: hsl(var(--foreground)); }
+                    .equipment-instruction-content h3 { font-size: 1.125rem; font-weight: 600; margin-top: 1.25rem; margin-bottom: 0.5rem; line-height: 1.35; color: hsl(var(--foreground)); }
+                    .equipment-instruction-content p { margin-bottom: 0.875rem; line-height: 1.65; color: hsl(var(--muted-foreground)); }
                     .equipment-instruction-content ul,
-                    .equipment-instruction-content ol { margin: 0 0 1rem 1.25rem; }
+                    .equipment-instruction-content ol { margin: 0 0 1rem 1.25rem; color: hsl(var(--muted-foreground)); }
                     .equipment-instruction-content li { margin-bottom: 0.5rem; }
-                    .equipment-instruction-content a { color: #4f46e5; text-decoration: underline; }
+                    .equipment-instruction-content a { color: hsl(var(--primary)); text-decoration: underline; }
                     .equipment-instruction-content img { max-width: 100%; height: auto; border-radius: 0.75rem; margin: 1rem auto; }
                     .equipment-instruction-content blockquote {
                         margin: 1rem 0;
                         padding-left: 1rem;
-                        border-left: 3px solid #cbd5e1;
-                        color: #475569;
+                        border-left: 3px solid hsl(var(--border));
+                        color: hsl(var(--muted-foreground));
                     }
                     .equipment-instruction-content pre {
                         margin: 1rem 0;
                         padding: 1rem;
                         overflow-x: auto;
                         border-radius: 0.75rem;
-                        background: #0f172a;
-                        color: #e2e8f0;
+                        background: hsl(var(--background));
+                        border: 1px solid hsl(var(--border));
+                        color: hsl(var(--foreground));
                     }
                     .equipment-instruction-content code {
                         padding: 0.125rem 0.375rem;
                         border-radius: 0.375rem;
-                        background: rgba(15, 23, 42, 0.06);
+                        background: hsl(var(--accent));
+                        color: hsl(var(--foreground));
                         font-size: 0.875em;
                     }
                     .equipment-instruction-content pre code {
                         padding: 0;
                         background: transparent;
+                        border: none;
                     }
                 `}</style>
             </DialogContent>

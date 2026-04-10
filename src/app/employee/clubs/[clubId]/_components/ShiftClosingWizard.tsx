@@ -1348,8 +1348,8 @@ export function ShiftClosingWizard({
     if (!isOpen || !isPortalReady) return null
 
     return createPortal((
-        <div className="fixed inset-0 h-[100dvh] bg-slate-950 text-white flex flex-col z-[9999] overflow-hidden overscroll-none">
-            <header className="px-4 py-4 border-b border-slate-800 bg-slate-900/50 backdrop-blur-md sticky top-0 z-50">
+        <div className="fixed inset-0 h-[100dvh] bg-slate-950 text-primary-foreground flex flex-col z-[9999] overflow-hidden overscroll-none">
+            <header className="px-4 py-4 border-b border-slate-800 bg-primary/50 backdrop-blur-md sticky top-0 z-50">
                 <div className="space-y-4">
                     <div className="flex items-center justify-between gap-4">
                         <h2 className="text-lg font-bold truncate">{headerTitle}</h2>
@@ -1358,7 +1358,7 @@ export function ShiftClosingWizard({
                                 variant="outline" 
                                 size="icon" 
                                 onClick={onClose} 
-                                className="text-slate-400 hover:text-white border-slate-800 hover:bg-slate-800 shrink-0 h-10 w-10 rounded-xl"
+                                className="text-muted-foreground/70 hover:text-primary-foreground border-slate-800 hover:bg-primary/90 shrink-0 h-10 w-10 rounded-xl"
                             >
                                 <X className="h-5 w-5" />
                             </Button>
@@ -1414,7 +1414,7 @@ export function ShiftClosingWizard({
                                                  <div key={item.id} className="space-y-3 py-2">
                                                      <div className="flex items-center justify-between">
                                                          <span className="text-sm font-medium text-slate-200">{item.content}</span>
-                                                         <div className="text-xs font-mono bg-slate-900 px-2 py-1 rounded border border-slate-800">
+                                                         <div className="text-xs font-mono bg-primary px-2 py-1 rounded border border-slate-800">
                                                              <span className={currentScore < 10 ? "text-red-400" : "text-green-400"}>{currentScore}</span>
                                                              <span className="opacity-50 mx-1">/</span>
                                                              <span>10</span>
@@ -1426,7 +1426,7 @@ export function ShiftClosingWizard({
                                                                  key={ws.id}
                                                                  variant="outline"
                                                                  size="sm"
-                                                                 className={`h-8 text-[10px] ${currentProblematic.includes(ws.id) ? 'bg-red-950/50 border-red-800 text-red-200' : 'bg-slate-900/50 border-slate-800'}`}
+                                                                 className={`h-8 text-[10px] ${currentProblematic.includes(ws.id) ? 'bg-red-950/50 border-red-800 text-red-200' : 'bg-primary/50 border-slate-800'}`}
                                                                  onClick={() => toggleProblematicWorkstation(item.id, ws.id, 10, targetWs)}
                                                              >
                                                                  {ws.name}
@@ -1441,11 +1441,11 @@ export function ShiftClosingWizard({
                                             <div key={item.id} className="space-y-4 py-2 border-b border-orange-900/20 last:border-0">
                                                 <div className="flex items-center justify-between gap-4">
                                                     <span className="text-sm font-medium text-slate-200">{item.content}</span>
-                                                    <div className="flex gap-1 bg-slate-900 p-1 rounded-lg border border-slate-800 shrink-0">
+                                                    <div className="flex gap-1 bg-primary p-1 rounded-lg border border-slate-800 shrink-0">
                                                         <Button 
                                                             variant={checklistResponses[item.id]?.score === 1 ? 'default' : 'ghost'} 
                                                             size="sm"
-                                                            className={`h-7 px-3 text-xs ${checklistResponses[item.id]?.score === 1 ? 'bg-green-600' : 'text-slate-400'}`}
+                                                            className={`h-7 px-3 text-xs ${checklistResponses[item.id]?.score === 1 ? 'bg-green-600' : 'text-muted-foreground/70'}`}
                                                             onClick={() => handleChecklistChange(item.id, 1)}
                                                         >
                                                             Да
@@ -1453,7 +1453,7 @@ export function ShiftClosingWizard({
                                                         <Button 
                                                             variant={checklistResponses[item.id]?.score === 0 ? 'default' : 'ghost'} 
                                                             size="sm"
-                                                            className={`h-7 px-3 text-xs ${checklistResponses[item.id]?.score === 0 ? 'bg-red-600' : 'text-slate-400'}`}
+                                                            className={`h-7 px-3 text-xs ${checklistResponses[item.id]?.score === 0 ? 'bg-red-600' : 'text-muted-foreground/70'}`}
                                                             onClick={() => handleChecklistChange(item.id, 0)}
                                                         >
                                                             Нет
@@ -1471,7 +1471,7 @@ export function ShiftClosingWizard({
                                                                         <img src={url} alt="Attach" className="h-full w-full object-cover" />
                                                                         <button 
                                                                             onClick={() => removePhoto(item.id, url)}
-                                                                            className="absolute top-1 right-1 p-1.5 bg-black/50 hover:bg-red-600 text-white rounded-full backdrop-blur-sm transition-colors"
+                                                                            className="absolute top-1 right-1 p-1.5 bg-primary/50 hover:bg-red-600 text-primary-foreground rounded-full backdrop-blur-sm transition-colors"
                                                                         >
                                                                             <Trash2 className="h-3 w-3" />
                                                                         </button>
@@ -1483,7 +1483,7 @@ export function ShiftClosingWizard({
                                                         <label className={`
                                                             flex items-center justify-center gap-2 p-3 rounded-xl border border-dashed transition-all cursor-pointer
                                                             ${item.is_photo_required && (checklistResponses[item.id]?.photo_urls?.length || 0) < (item.min_photos || 1)
-                                                                ? 'border-orange-500/50 bg-orange-500/5' : 'border-slate-800 bg-slate-900/30'}
+                                                                ? 'border-orange-500/50 bg-orange-500/5' : 'border-slate-800 bg-primary/30'}
                                                         `}>
                                                             {uploadingState[item.id] ? <Loader2 className="h-4 w-4 animate-spin text-orange-400" /> : <Camera className="h-4 w-4 text-orange-400" />}
                                                             <span className="text-xs font-medium text-orange-200">
@@ -1518,7 +1518,7 @@ export function ShiftClosingWizard({
                                         {field.field_type === 'EXPENSE' || field.field_type === 'EXPENSE_LIST' ? (
                                             <div className="space-y-3">
                                                 <div className="flex items-center justify-between">
-                                                    <Label className="text-slate-400 text-xs uppercase tracking-wider ml-1">
+                                                    <Label className="text-muted-foreground/70 text-xs uppercase tracking-wider ml-1">
                                                         {field.custom_label || field.metric_key}
                                                         {field.is_required && <span className="text-red-500 ml-1">*</span>}
                                                     </Label>
@@ -1545,7 +1545,7 @@ export function ShiftClosingWizard({
                                                                 <Input
                                                                     type="number"
                                                                     placeholder="Сумма"
-                                                                    className="bg-slate-900 border-slate-800 h-10 rounded-xl focus:ring-2 focus:ring-purple-500"
+                                                                    className="bg-primary border-slate-800 h-10 rounded-xl focus:ring-2 focus:ring-purple-500"
                                                                     value={item.amount}
                                                                     onChange={(e) => {
                                                                         const newList = [...normalizeExpenseEntries(reportData[field.metric_key])]
@@ -1555,7 +1555,7 @@ export function ShiftClosingWizard({
                                                                 />
                                                                 <Input
                                                                     placeholder="На что потрачено?"
-                                                                    className="bg-slate-900 border-slate-800 h-10 rounded-xl text-xs focus:ring-2 focus:ring-purple-500"
+                                                                    className="bg-primary border-slate-800 h-10 rounded-xl text-xs focus:ring-2 focus:ring-purple-500"
                                                                     value={item.comment}
                                                                     onChange={(e) => {
                                                                         const newList = [...normalizeExpenseEntries(reportData[field.metric_key])]
@@ -1572,7 +1572,7 @@ export function ShiftClosingWizard({
                                                                     newList.splice(itemIdx, 1)
                                                                     setReportData({ ...reportData, [field.metric_key]: newList })
                                                                 }}
-                                                                className="h-10 w-10 text-slate-500 hover:text-red-400"
+                                                                className="h-10 w-10 text-muted-foreground hover:text-red-400"
                                                             >
                                                                 <Trash2 className="h-4 w-4" />
                                                             </Button>
@@ -1580,7 +1580,7 @@ export function ShiftClosingWizard({
                                                     ))}
                                                     
                                                     {normalizeExpenseEntries(reportData[field.metric_key]).length === 0 && (
-                                                        <div className="text-center py-4 bg-slate-900/30 border border-dashed border-slate-800 rounded-xl text-slate-500 text-[10px] uppercase font-bold">
+                                                        <div className="text-center py-4 bg-primary/30 border border-dashed border-slate-800 rounded-xl text-muted-foreground text-[10px] uppercase font-bold">
                                                             Расходов не зафиксировано
                                                         </div>
                                                     )}
@@ -1588,7 +1588,7 @@ export function ShiftClosingWizard({
                                             </div>
                                         ) : (
                                             <>
-                                                <Label className="text-slate-400 text-xs uppercase tracking-wider ml-1">
+                                                <Label className="text-muted-foreground/70 text-xs uppercase tracking-wider ml-1">
                                                     {field.custom_label}
                                                     {field.is_required && <span className="text-red-500 ml-1">*</span>}
                                                 </Label>
@@ -1596,7 +1596,7 @@ export function ShiftClosingWizard({
                                                     required={field.is_required}
                                                     type={field.metric_key.includes('comment') ? 'text' : 'number'}
                                                     inputMode={field.metric_key.includes('comment') ? 'text' : 'numeric'}
-                                                    className="bg-slate-900 border-slate-800 h-12 rounded-xl focus:ring-2 focus:ring-purple-500 transition-all text-lg font-medium"
+                                                    className="bg-primary border-slate-800 h-12 rounded-xl focus:ring-2 focus:ring-purple-500 transition-all text-lg font-medium"
                                                     value={reportData[field.metric_key] || ''}
                                                     onChange={(e) => setReportData({ ...reportData, [field.metric_key]: e.target.value })}
                                                 />
@@ -1613,13 +1613,13 @@ export function ShiftClosingWizard({
                 {!isStartShiftMode && isShiftSalesMode && step === 2 && (
                     <div className="space-y-6 max-w-2xl mx-auto pb-20">
                         <div className="grid grid-cols-2 gap-4">
-                            <div className="bg-slate-900/50 p-4 rounded-2xl border border-slate-800">
-                                <span className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Выручка (отчет)</span>
+                            <div className="bg-primary/50 p-4 rounded-2xl border border-slate-800">
+                                <span className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Выручка (отчет)</span>
                                 <div className="text-xl font-bold mt-1">{reconcileSnapshot.reported.toLocaleString()} ₽</div>
-                                <div className="text-[10px] text-slate-500 mt-1">{revenueKey}</div>
+                                <div className="text-[10px] text-muted-foreground mt-1">{revenueKey}</div>
                             </div>
-                            <div className="bg-slate-900/50 p-4 rounded-2xl border border-slate-800">
-                                <span className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Продано (пробитое)</span>
+                            <div className="bg-primary/50 p-4 rounded-2xl border border-slate-800">
+                                <span className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Продано (пробитое)</span>
                                 <div className="text-xl font-bold mt-1 text-blue-400">{reconcileSnapshot.calculated.toLocaleString()} ₽</div>
                             </div>
                         </div>
@@ -1645,9 +1645,9 @@ export function ShiftClosingWizard({
                             </div>
                         </div>
 
-                        <div className="bg-slate-900/50 rounded-2xl border border-slate-800 overflow-hidden">
-                            <div className="px-4 py-3 bg-slate-900 border-b border-slate-800 flex justify-between items-center">
-                                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Детализация продаж</h4>
+                        <div className="bg-primary/50 rounded-2xl border border-slate-800 overflow-hidden">
+                            <div className="px-4 py-3 bg-primary border-b border-slate-800 flex justify-between items-center">
+                                <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground/70">Детализация продаж</h4>
                                 <Button
                                     variant="ghost"
                                     size="sm"
@@ -1662,21 +1662,21 @@ export function ShiftClosingWizard({
                             </div>
                             <div className="max-h-[320px] overflow-y-auto">
                                 {salesPreview.length === 0 ? (
-                                    <div className="p-10 text-center text-slate-500 text-sm">
+                                    <div className="p-10 text-center text-muted-foreground text-sm">
                                         Продаж не зафиксировано
                                     </div>
                                 ) : (
                                     <Table>
                                         <TableBody>
                                             {salesPreview.map((s, idx) => (
-                                                <TableRow key={`${s.id}-${idx}`} className="border-slate-800 hover:bg-slate-800/30">
+                                                <TableRow key={`${s.id}-${idx}`} className="border-slate-800 hover:bg-primary/90/30">
                                                     <TableCell className="py-3">
                                                         <div className="flex flex-col">
                                                             <div className="flex items-center gap-1.5">
                                                                 {s.isUnaccounted && <span className="bg-blue-500/20 text-blue-400 text-[8px] px-1 rounded uppercase font-bold">Ручн.</span>}
                                                                 <span className="text-sm font-medium text-slate-200">{s.name}</span>
                                                             </div>
-                                                            <span className="text-[10px] text-slate-500">{s.qty} шт × {s.price} ₽</span>
+                                                            <span className="text-[10px] text-muted-foreground">{s.qty} шт × {s.price} ₽</span>
                                                         </div>
                                                     </TableCell>
                                                     <TableCell className="text-right py-3 pr-6">
@@ -1685,7 +1685,7 @@ export function ShiftClosingWizard({
                                                             {s.isUnaccounted && (
                                                                 <button
                                                                     onClick={() => removeUnaccountedSale(s.id)}
-                                                                    className="p-1 text-slate-600 hover:text-red-400"
+                                                                    className="p-1 text-muted-foreground hover:text-red-400"
                                                                 >
                                                                     <Trash2 className="h-3 w-3" />
                                                                 </button>
@@ -1702,9 +1702,9 @@ export function ShiftClosingWizard({
 
                         {reconcileSnapshot.diff !== 0 && (
                             <div className="space-y-3">
-                                <Label className="text-slate-400 text-xs uppercase tracking-wider ml-1">Причина расхождения</Label>
+                                <Label className="text-muted-foreground/70 text-xs uppercase tracking-wider ml-1">Причина расхождения</Label>
                                 <Input
-                                    className="bg-slate-900 border-slate-800 h-14 rounded-xl focus:ring-2 focus:ring-blue-500 transition-all text-base"
+                                    className="bg-primary border-slate-800 h-14 rounded-xl focus:ring-2 focus:ring-blue-500 transition-all text-base"
                                     placeholder="Укажите причину..."
                                     value={reportData['shift_comment'] || ''}
                                     onChange={(e) => setReportData({ ...reportData, 'shift_comment': e.target.value })}
@@ -1732,7 +1732,7 @@ export function ShiftClosingWizard({
                                     <Button
                                         type="button"
                                         variant="outline"
-                                        className="border-slate-700 text-white"
+                                        className="border-slate-700 text-primary-foreground"
                                         onClick={async () => {
                                             await refreshInventoryList()
                                             await refreshProductCatalog()
@@ -1745,7 +1745,7 @@ export function ShiftClosingWizard({
                                     <Button
                                         type="button"
                                         variant="outline"
-                                        className="border-slate-700 text-white"
+                                        className="border-slate-700 text-primary-foreground"
                                         onClick={openAddDialog}
                                     >
                                         <Plus className="mr-2 h-4 w-4" />
@@ -1766,23 +1766,23 @@ export function ShiftClosingWizard({
                     <div className="space-y-6 max-w-2xl mx-auto pb-20">
                         {isStartShiftMode ? (
                             <div className="grid grid-cols-2 gap-4">
-                                <div className="bg-slate-900/50 p-4 rounded-2xl border border-slate-800">
-                                    <span className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Проверено товаров</span>
+                                <div className="bg-primary/50 p-4 rounded-2xl border border-slate-800">
+                                    <span className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Проверено товаров</span>
                                     <div className="text-xl font-bold mt-1">{inventoryItems.filter(item => item.actual_stock !== null).length}</div>
                                 </div>
-                                <div className="bg-slate-900/50 p-4 rounded-2xl border border-slate-800">
-                                    <span className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Расхождений найдено</span>
+                                <div className="bg-primary/50 p-4 rounded-2xl border border-slate-800">
+                                    <span className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Расхождений найдено</span>
                                     <div className="text-xl font-bold mt-1 text-blue-400">{inventorySummary?.discrepancyItems ?? 0}</div>
                                 </div>
                             </div>
                         ) : (
                             <div className="grid grid-cols-2 gap-4">
-                                <div className="bg-slate-900/50 p-4 rounded-2xl border border-slate-800">
-                                    <span className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">В кассе (отчет)</span>
+                                <div className="bg-primary/50 p-4 rounded-2xl border border-slate-800">
+                                    <span className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">В кассе (отчет)</span>
                                     <div className="text-xl font-bold mt-1">{calculationResult.reported.toLocaleString()} ₽</div>
                                 </div>
-                                <div className="bg-slate-900/50 p-4 rounded-2xl border border-slate-800">
-                                    <span className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Расчет (склад)</span>
+                                <div className="bg-primary/50 p-4 rounded-2xl border border-slate-800">
+                                    <span className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Расчет (склад)</span>
                                     <div className="text-xl font-bold mt-1 text-blue-400">{calculationResult.calculated.toLocaleString()} ₽</div>
                                 </div>
                             </div>
@@ -1822,17 +1822,17 @@ export function ShiftClosingWizard({
 
                         {usesShiftInventoryReconciliation && inventorySummary && (
                             <div className="grid grid-cols-2 gap-4">
-                                <div className="bg-slate-900/50 p-4 rounded-2xl border border-slate-800">
-                                    <span className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Расхождения по товарам</span>
+                                <div className="bg-primary/50 p-4 rounded-2xl border border-slate-800">
+                                    <span className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Расхождения по товарам</span>
                                     <div className="text-xl font-bold mt-1">{inventorySummary.discrepancyItems}</div>
-                                    <div className="text-[10px] text-slate-500 mt-1">
+                                    <div className="text-[10px] text-muted-foreground mt-1">
                                         {inventorySummary.discrepancyQuantity} шт. суммарно
                                     </div>
                                 </div>
-                                <div className="bg-slate-900/50 p-4 rounded-2xl border border-slate-800">
-                                    <span className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Отклонение по складу</span>
+                                <div className="bg-primary/50 p-4 rounded-2xl border border-slate-800">
+                                    <span className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Отклонение по складу</span>
                                     <div className="text-xl font-bold mt-1 text-blue-400">{inventorySummary.discrepancyValue.toLocaleString()} ₽</div>
-                                    <div className="text-[10px] text-slate-500 mt-1">
+                                    <div className="text-[10px] text-muted-foreground mt-1">
                                         Недостача: {inventorySummary.shortageItems} · Излишки: {inventorySummary.excessItems}
                                     </div>
                                 </div>
@@ -1853,7 +1853,7 @@ export function ShiftClosingWizard({
                                     </div>
                                     <div className="max-h-[240px] overflow-y-auto p-3 space-y-2">
                                         {shortageDiscrepancyItems.length === 0 ? (
-                                            <div className="rounded-xl bg-slate-950/40 px-3 py-4 text-xs text-slate-400">
+                                            <div className="rounded-xl bg-slate-950/40 px-3 py-4 text-xs text-muted-foreground/70">
                                                 Недостач нет
                                             </div>
                                         ) : (
@@ -1861,7 +1861,7 @@ export function ShiftClosingWizard({
                                                 <div key={item.id} className="flex items-start justify-between gap-3 rounded-xl bg-slate-950/40 px-3 py-2">
                                                     <div className="min-w-0">
                                                         <div className="text-sm font-medium text-slate-100">{item.product_name}</div>
-                                                        <div className="mt-1 text-[11px] text-slate-400">
+                                                        <div className="mt-1 text-[11px] text-muted-foreground/70">
                                                             {inventorySettings?.blind_inventory_enabled
                                                                 ? `Факт: ${item.actual_stock} шт.`
                                                                 : `Ожидалось: ${item.expected_stock} шт. · Факт: ${item.actual_stock} шт.`}
@@ -1895,7 +1895,7 @@ export function ShiftClosingWizard({
                                     </div>
                                     <div className="max-h-[240px] overflow-y-auto p-3 space-y-2">
                                         {excessDiscrepancyItems.length === 0 ? (
-                                            <div className="rounded-xl bg-slate-950/40 px-3 py-4 text-xs text-slate-400">
+                                            <div className="rounded-xl bg-slate-950/40 px-3 py-4 text-xs text-muted-foreground/70">
                                                 Излишков нет
                                             </div>
                                         ) : (
@@ -1903,7 +1903,7 @@ export function ShiftClosingWizard({
                                                 <div key={item.id} className="flex items-start justify-between gap-3 rounded-xl bg-slate-950/40 px-3 py-2">
                                                     <div className="min-w-0">
                                                         <div className="text-sm font-medium text-slate-100">{item.product_name}</div>
-                                                        <div className="mt-1 text-[11px] text-slate-400">
+                                                        <div className="mt-1 text-[11px] text-muted-foreground/70">
                                                             {inventorySettings?.blind_inventory_enabled
                                                                 ? `Факт: ${item.actual_stock} шт.`
                                                                 : `Ожидалось: ${item.expected_stock} шт. · Факт: ${item.actual_stock} шт.`}
@@ -1943,7 +1943,7 @@ export function ShiftClosingWizard({
                                         <div key={item.id} className="flex justify-between items-center text-[11px]">
                                             <span className="text-slate-300">{item.product_name}</span>
                                             {!inventorySettings?.blind_inventory_enabled && (
-                                                <span className="text-slate-500 italic">Ожидалось: {item.expected_stock} шт.</span>
+                                                <span className="text-muted-foreground italic">Ожидалось: {item.expected_stock} шт.</span>
                                             )}
                                         </div>
                                     ))}
@@ -1968,9 +1968,9 @@ export function ShiftClosingWizard({
                         )}
 
                         {!isStartShiftMode && (
-                            <div className="bg-slate-900/50 rounded-2xl border border-slate-800 overflow-hidden">
-                            <div className="px-4 py-3 bg-slate-900 border-b border-slate-800 flex justify-between items-center">
-                                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Детализация продаж</h4>
+                            <div className="bg-primary/50 rounded-2xl border border-slate-800 overflow-hidden">
+                            <div className="px-4 py-3 bg-primary border-b border-slate-800 flex justify-between items-center">
+                                <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground/70">Детализация продаж</h4>
                                 {usesRevisionMode && (
                                     <Button 
                                         variant="ghost" 
@@ -1987,21 +1987,21 @@ export function ShiftClosingWizard({
                             </div>
                             <div className="max-h-[300px] overflow-y-auto">
                                 {salesPreview.length === 0 ? (
-                                    <div className="p-10 text-center text-slate-500 text-sm">
+                                    <div className="p-10 text-center text-muted-foreground text-sm">
                                         Продаж не зафиксировано
                                     </div>
                                 ) : (
                                     <Table>
                                         <TableBody>
                                             {salesPreview.map((s, idx) => (
-                                                <TableRow key={`${s.id}-${idx}`} className="border-slate-800 hover:bg-slate-800/30">
+                                                <TableRow key={`${s.id}-${idx}`} className="border-slate-800 hover:bg-primary/90/30">
                                                     <TableCell className="py-3">
                                                         <div className="flex flex-col">
                                                             <div className="flex items-center gap-1.5">
                                                                 {s.isUnaccounted && <span className="bg-blue-500/20 text-blue-400 text-[8px] px-1 rounded uppercase font-bold">Неучт.</span>}
                                                                 <span className="text-sm font-medium text-slate-200">{s.name}</span>
                                                             </div>
-                                                            <span className="text-[10px] text-slate-500">{s.qty} шт × {s.price} ₽</span>
+                                                            <span className="text-[10px] text-muted-foreground">{s.qty} шт × {s.price} ₽</span>
                                                         </div>
                                                     </TableCell>
                                                     <TableCell className="text-right py-3 pr-6">
@@ -2010,7 +2010,7 @@ export function ShiftClosingWizard({
                                                             {s.isUnaccounted && (
                                                                 <button 
                                                                     onClick={() => removeUnaccountedSale(s.id)}
-                                                                    className="p-1 text-slate-600 hover:text-red-400"
+                                                                    className="p-1 text-muted-foreground hover:text-red-400"
                                                                 >
                                                                     <Trash2 className="h-3 w-3" />
                                                                 </button>
@@ -2048,9 +2048,9 @@ export function ShiftClosingWizard({
 
                         {!isStartShiftMode && calculationResult.diff !== 0 && (
                             <div className="space-y-3">
-                                <Label className="text-slate-400 text-xs uppercase tracking-wider ml-1">Причина расхождения</Label>
+                                <Label className="text-muted-foreground/70 text-xs uppercase tracking-wider ml-1">Причина расхождения</Label>
                                 <Input 
-                                    className="bg-slate-900 border-slate-800 h-14 rounded-xl focus:ring-2 focus:ring-blue-500 transition-all text-base"
+                                    className="bg-primary border-slate-800 h-14 rounded-xl focus:ring-2 focus:ring-blue-500 transition-all text-base"
                                     placeholder="Укажите причину..."
                                     value={reportData['shift_comment'] || ''}
                                     onChange={(e) => setReportData({ ...reportData, 'shift_comment': e.target.value })}
@@ -2070,11 +2070,11 @@ export function ShiftClosingWizard({
                                         <p className="text-xs text-emerald-300/80">Вы заработали эту сумму за смену (деньщина).</p>
                                     </div>
                                 </div>
-                                <div className="p-3 bg-slate-900/50 rounded-xl border border-slate-800">
+                                <div className="p-3 bg-primary/50 rounded-xl border border-slate-800">
                                     {(Number(reportData.cash_income || 0)) < payoutSuggestion.amount ? (
                                         <div className="text-center space-y-3">
                                             <p className="text-sm font-bold text-red-400">Недостаточно наличных в кассе</p>
-                                            <p className="text-xs text-slate-400">В кассе {reportData.cash_income || 0} ₽, а к выплате {payoutSuggestion.amount} ₽. Выплата будет зачислена на баланс.</p>
+                                            <p className="text-xs text-muted-foreground/70">В кассе {reportData.cash_income || 0} ₽, а к выплате {payoutSuggestion.amount} ₽. Выплата будет зачислена на баланс.</p>
                                             <Button 
                                                 disabled
                                                 variant="secondary"
@@ -2090,7 +2090,7 @@ export function ShiftClosingWizard({
                                                 <Button 
                                                     onClick={() => setReportData({ ...reportData, auto_payout_amount: payoutSuggestion.amount })}
                                                     variant={reportData.auto_payout_amount ? 'default' : 'outline'}
-                                                    className={`flex-1 h-10 ${reportData.auto_payout_amount ? 'bg-emerald-600 hover:bg-emerald-700 border-emerald-500' : 'border-slate-700 hover:bg-slate-800'}`}
+                                                    className={`flex-1 h-10 ${reportData.auto_payout_amount ? 'bg-emerald-600 hover:bg-emerald-700 border-emerald-500' : 'border-slate-700 hover:bg-primary/90'}`}
                                                 >
                                                     Да, забираю
                                                 </Button>
@@ -2111,7 +2111,7 @@ export function ShiftClosingWizard({
                 )}
             </main>
 
-            <footer className="p-4 pb-safe border-t border-slate-800 bg-slate-900/80 backdrop-blur-md sticky bottom-0 z-50">
+            <footer className="p-4 pb-safe border-t border-slate-800 bg-primary/80 backdrop-blur-md sticky bottom-0 z-50">
                 {step === 1 && !isStartShiftMode && (
                     <Button onClick={handleStep1Submit} className="w-full h-14 text-lg font-bold bg-purple-600 hover:bg-purple-700 rounded-2xl shadow-lg shadow-purple-900/20">
                         {primaryStepOneLabel}
@@ -2124,7 +2124,7 @@ export function ShiftClosingWizard({
                             variant="outline"
                             size="icon"
                             onClick={handleBack}
-                            className="h-14 w-14 border-slate-800 text-slate-400 hover:bg-slate-800 rounded-2xl shrink-0"
+                            className="h-14 w-14 border-slate-800 text-muted-foreground/70 hover:bg-primary/90 rounded-2xl shrink-0"
                         >
                             <ArrowLeft className="h-6 w-6" />
                         </Button>
@@ -2141,7 +2141,7 @@ export function ShiftClosingWizard({
                                 variant="outline"
                                 size="icon"
                                 onClick={handleBack}
-                                className="h-14 w-14 border-slate-800 text-slate-400 hover:bg-slate-800 rounded-2xl shrink-0"
+                                className="h-14 w-14 border-slate-800 text-muted-foreground/70 hover:bg-primary/90 rounded-2xl shrink-0"
                             >
                                 <ArrowLeft className="h-6 w-6" />
                             </Button>
@@ -2158,7 +2158,7 @@ export function ShiftClosingWizard({
                             variant="outline"
                             size="icon"
                             onClick={handleBack}
-                            className="h-14 w-14 border-slate-800 text-slate-400 hover:bg-slate-800 rounded-2xl shrink-0"
+                            className="h-14 w-14 border-slate-800 text-muted-foreground/70 hover:bg-primary/90 rounded-2xl shrink-0"
                         >
                             <ArrowLeft className="h-6 w-6" />
                         </Button>
@@ -2175,7 +2175,7 @@ export function ShiftClosingWizard({
                                 variant="outline"
                                 size="icon"
                                 onClick={handleBack}
-                                className="h-14 w-14 border-slate-800 text-slate-400 hover:bg-slate-800 rounded-2xl shrink-0"
+                                className="h-14 w-14 border-slate-800 text-muted-foreground/70 hover:bg-primary/90 rounded-2xl shrink-0"
                             >
                                 <ArrowLeft className="h-6 w-6" />
                             </Button>
@@ -2189,16 +2189,16 @@ export function ShiftClosingWizard({
 
             {/* Manual Add Dialog */}
             <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-                <DialogContent className="bg-slate-950 border-slate-800 text-white max-w-[90vw] rounded-2xl">
+                <DialogContent className="bg-slate-950 border-slate-800 text-primary-foreground max-w-[90vw] rounded-2xl">
                     <DialogHeader>
                         <DialogTitle>Добавить товар</DialogTitle>
                     </DialogHeader>
                     <div className="py-6 space-y-4">
                         <Select value={selectedProductToAdd} onValueChange={setSelectedProductToAdd}>
-                            <SelectTrigger className="bg-slate-900 border-slate-800 h-12 rounded-xl">
+                            <SelectTrigger className="bg-primary border-slate-800 h-12 rounded-xl">
                                 <SelectValue placeholder="Выберите товар..." />
                             </SelectTrigger>
-                            <SelectContent className="bg-slate-900 border-slate-800 text-white max-h-[300px]">
+                            <SelectContent className="bg-primary border-slate-800 text-primary-foreground max-h-[300px]">
                                 {allProducts.map(p => (
                                     <SelectItem key={p.id} value={p.id.toString()}>{p.name}</SelectItem>
                                 ))}
@@ -2214,21 +2214,21 @@ export function ShiftClosingWizard({
 
             {/* Unaccounted Product Dialog */}
             <Dialog open={isUnaccountedDialogOpen} onOpenChange={setIsUnaccountedDialogOpen}>
-                <DialogContent className="bg-slate-950 border-slate-800 text-white max-w-[90vw] rounded-2xl">
+                <DialogContent className="bg-slate-950 border-slate-800 text-primary-foreground max-w-[90vw] rounded-2xl">
                     <DialogHeader>
                         <DialogTitle>Добавить неучтенную продажу</DialogTitle>
-                        <DialogDescription className="text-slate-400">
+                        <DialogDescription className="text-muted-foreground/70">
                             Товар, который был продан, но отсутствовал в системе.
                         </DialogDescription>
                     </DialogHeader>
                     <div className="py-6 space-y-4">
                         <div className="space-y-2">
-                            <Label className="text-xs text-slate-500 uppercase tracking-wider">Товар</Label>
+                            <Label className="text-xs text-muted-foreground uppercase tracking-wider">Товар</Label>
                             <Select value={selectedUnaccountedProduct} onValueChange={setSelectedUnaccountedProduct}>
-                                <SelectTrigger className="bg-slate-900 border-slate-800 h-12 rounded-xl">
+                                <SelectTrigger className="bg-primary border-slate-800 h-12 rounded-xl">
                                     <SelectValue placeholder="Выберите товар..." />
                                 </SelectTrigger>
-                                <SelectContent className="bg-slate-900 border-slate-800 text-white max-h-[300px]">
+                                <SelectContent className="bg-primary border-slate-800 text-primary-foreground max-h-[300px]">
                                     {allProducts.map(p => (
                                         <SelectItem key={p.id} value={p.id.toString()}>{p.name}</SelectItem>
                                     ))}
@@ -2236,12 +2236,12 @@ export function ShiftClosingWizard({
                             </Select>
                         </div>
                         <div className="space-y-2">
-                            <Label className="text-xs text-slate-500 uppercase tracking-wider">Количество</Label>
+                            <Label className="text-xs text-muted-foreground uppercase tracking-wider">Количество</Label>
                             <Input 
                                 type="number" 
                                 value={unaccountedQty}
                                 onChange={e => setUnaccountedQty(e.target.value)}
-                                className="bg-slate-900 border-slate-800 h-12 rounded-xl text-lg font-bold"
+                                className="bg-primary border-slate-800 h-12 rounded-xl text-lg font-bold"
                             />
                         </div>
                     </div>

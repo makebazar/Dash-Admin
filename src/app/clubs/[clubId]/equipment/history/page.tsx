@@ -168,7 +168,7 @@ export default function MaintenanceHistory() {
                 </Link>
                 <div>
                     <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
-                        <History className="h-8 w-8 text-slate-700" />
+                        <History className="h-8 w-8 text-foreground" />
                         История оборудования
                     </h1>
                     <p className="text-muted-foreground mt-1">
@@ -184,7 +184,7 @@ export default function MaintenanceHistory() {
                 </TabsList>
 
                 <TabsContent value="maintenance" className="mt-4">
-                    <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
+                    <div className="bg-card rounded-xl border shadow-sm overflow-hidden">
                         <Table>
                             <TableHeader>
                                 <TableRow>
@@ -229,7 +229,7 @@ export default function MaintenanceHistory() {
                                             </TableCell>
                                             <TableCell>
                                                 <div className="flex items-center gap-2">
-                                                    <div className="h-8 w-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500">
+                                                    <div className="h-8 w-8 rounded-lg bg-accent flex items-center justify-center text-muted-foreground">
                                                         {task.equipment_type === 'PC' ? <Monitor className="h-4 w-4" /> : <Wrench className="h-4 w-4" />}
                                                     </div>
                                                     <div className="flex flex-col">
@@ -277,8 +277,8 @@ export default function MaintenanceHistory() {
                                             </TableCell>
                                             <TableCell>
                                                 <div className="flex items-center gap-2">
-                                                    <div className="h-6 w-6 rounded-full bg-slate-100 flex items-center justify-center">
-                                                        <User className="h-3 w-3 text-slate-500" />
+                                                    <div className="h-6 w-6 rounded-full bg-accent flex items-center justify-center">
+                                                        <User className="h-3 w-3 text-muted-foreground" />
                                                     </div>
                                                     <span className="text-sm">{task.completed_by_name || '—'}</span>
                                                 </div>
@@ -286,7 +286,7 @@ export default function MaintenanceHistory() {
                                             <TableCell>
                                                 <div className="text-sm text-muted-foreground">
                                                     {task.workstation_name ? (
-                                                        <span className="px-2 py-1 rounded-md bg-slate-100 text-slate-700 font-medium text-xs">
+                                                        <span className="px-2 py-1 rounded-md bg-accent text-foreground font-medium text-xs">
                                                             {task.workstation_zone} :: {task.workstation_name}
                                                         </span>
                                                     ) : 'Склад'}
@@ -296,7 +296,7 @@ export default function MaintenanceHistory() {
                                                 <Button 
                                                     variant="ghost" 
                                                     size="icon" 
-                                                    className="text-slate-400 hover:text-red-600 hover:bg-red-50"
+                                                    className="text-muted-foreground/70 hover:text-red-600 hover:bg-red-50"
                                                     onClick={() => handleDeleteClick(task.id)}
                                                     disabled={deletingId === task.id}
                                                 >
@@ -312,7 +312,7 @@ export default function MaintenanceHistory() {
                 </TabsContent>
 
                 <TabsContent value="movements" className="mt-4">
-                    <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
+                    <div className="bg-card rounded-xl border shadow-sm overflow-hidden">
                         <Table>
                             <TableHeader>
                                 <TableRow>
@@ -348,7 +348,7 @@ export default function MaintenanceHistory() {
                                             </TableCell>
                                             <TableCell>
                                                 <div className="flex items-center gap-2">
-                                                    <div className="h-8 w-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500">
+                                                    <div className="h-8 w-8 rounded-lg bg-accent flex items-center justify-center text-muted-foreground">
                                                         {move.equipment_type === 'PC' ? <Monitor className="h-4 w-4" /> : <Wrench className="h-4 w-4" />}
                                                     </div>
                                                     <span className="font-medium text-sm">{move.equipment_name}</span>
@@ -361,7 +361,7 @@ export default function MaintenanceHistory() {
                                                         <span className="text-xs text-muted-foreground">{move.from_zone}</span>
                                                     </div>
                                                 ) : (
-                                                    <Badge variant="outline" className="bg-slate-50">Склад</Badge>
+                                                    <Badge variant="outline" className="bg-muted">Склад</Badge>
                                                 )}
                                             </TableCell>
                                             <TableCell>
@@ -374,13 +374,13 @@ export default function MaintenanceHistory() {
                                                         <span className="text-xs text-muted-foreground">{move.to_zone}</span>
                                                     </div>
                                                 ) : (
-                                                    <Badge variant="outline" className="bg-slate-50">Склад</Badge>
+                                                    <Badge variant="outline" className="bg-muted">Склад</Badge>
                                                 )}
                                             </TableCell>
                                             <TableCell>
                                                 <div className="flex items-center gap-2">
-                                                    <div className="h-6 w-6 rounded-full bg-slate-100 flex items-center justify-center">
-                                                        <User className="h-3 w-3 text-slate-500" />
+                                                    <div className="h-6 w-6 rounded-full bg-accent flex items-center justify-center">
+                                                        <User className="h-3 w-3 text-muted-foreground" />
                                                     </div>
                                                     <span className="text-sm">{move.moved_by_name || '—'}</span>
                                                 </div>
@@ -422,11 +422,11 @@ export default function MaintenanceHistory() {
             </Dialog>
             {/* Photo Viewer Dialog */}
             <Dialog open={!!viewingPhotos} onOpenChange={(open) => !open && setViewingPhotos(null)}>
-                <DialogContent className="max-w-4xl p-0 overflow-hidden bg-black/95 border-none">
+                <DialogContent className="max-w-4xl p-0 overflow-hidden bg-primary/95 border-none">
                     <div className="relative w-full h-[80vh] flex items-center justify-center">
                         <button 
                             onClick={() => setViewingPhotos(null)}
-                            className="absolute top-4 right-4 z-50 p-2 bg-black/50 text-white rounded-full hover:bg-white/20 transition-colors"
+                            className="absolute top-4 right-4 z-50 p-2 bg-primary/50 text-primary-foreground rounded-full hover:bg-card/20 transition-colors"
                         >
                             <X className="h-6 w-6" />
                         </button>

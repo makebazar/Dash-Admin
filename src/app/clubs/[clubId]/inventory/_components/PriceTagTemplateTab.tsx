@@ -371,13 +371,13 @@ export function PriceTagTemplateTab({ products, initialSettings, onSave, isPendi
     return (
         <div className="space-y-6">
             {/* Template Selector */}
-            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+            <div className="bg-card p-4 rounded-xl border border-border shadow-sm">
                 <div className="flex flex-col md:flex-row md:items-center gap-6">
                     {/* Left: Dropdown */}
                     <div className="flex flex-col gap-1.5 shrink-0">
-                        <Label className="text-[10px] uppercase text-slate-400 font-bold tracking-wider leading-none">Выберите шаблон</Label>
+                        <Label className="text-[10px] uppercase text-muted-foreground/70 font-bold tracking-wider leading-none">Выберите шаблон</Label>
                         <Select value={activeTemplateId} onValueChange={setActiveTemplateId}>
-                            <SelectTrigger className="h-9 w-[180px] bg-slate-50/50 border-slate-200 font-semibold text-slate-700 focus:ring-blue-500/20">
+                            <SelectTrigger className="h-9 w-[180px] bg-muted/50 border-border font-semibold text-foreground focus:ring-blue-500/20">
                                 <SelectValue placeholder="Выберите шаблон" />
                             </SelectTrigger>
                             <SelectContent>
@@ -391,16 +391,16 @@ export function PriceTagTemplateTab({ products, initialSettings, onSave, isPendi
                     </div>
 
                     {/* Middle: Name & Divider */}
-                    <div className="flex items-center gap-6 flex-1 border-l border-slate-100 pl-6 h-12">
+                    <div className="flex items-center gap-6 flex-1 border-l border-border/50 pl-6 h-12">
                         <div className="flex flex-col gap-1.5 flex-1">
-                            <Label className="text-[10px] uppercase text-slate-400 font-bold tracking-wider leading-none">Название шаблона</Label>
+                            <Label className="text-[10px] uppercase text-muted-foreground/70 font-bold tracking-wider leading-none">Название шаблона</Label>
                             <div className="flex items-center gap-2 min-h-[36px]">
                                 {isEditingName ? (
                                     <div className="flex items-center gap-1 flex-1 max-w-sm">
                                         <Input 
                                             value={tempName}
                                             onChange={(e) => setTempName(e.target.value)}
-                                            className="h-8 bg-white border-blue-500 focus-visible:ring-blue-500/20"
+                                            className="h-8 bg-card border-blue-500 focus-visible:ring-blue-500/20"
                                             autoFocus
                                         />
                                         <Button size="icon" variant="ghost" onClick={saveName} className="h-8 w-8 text-green-600 hover:text-green-700 hover:bg-green-50 shrink-0">
@@ -412,7 +412,7 @@ export function PriceTagTemplateTab({ products, initialSettings, onSave, isPendi
                                     </div>
                                 ) : (
                                     <div className="flex items-center group cursor-pointer" onClick={startEditingName}>
-                                        <span className="text-sm font-black text-slate-700">{activeTemplate.name}</span>
+                                        <span className="text-sm font-black text-foreground">{activeTemplate.name}</span>
                                         <Edit2 className="h-3.5 w-3.5 ml-2 text-slate-300 group-hover:text-blue-500 transition-colors" />
                                     </div>
                                 )}
@@ -422,7 +422,7 @@ export function PriceTagTemplateTab({ products, initialSettings, onSave, isPendi
 
                     {/* Right: Actions */}
                     <div className="flex items-center gap-2 pt-2 md:pt-0">
-                        <Button variant="outline" size="sm" onClick={duplicateTemplate} className="h-9 px-4 text-xs font-bold text-slate-600 border-slate-200 hover:bg-slate-50 transition-all">
+                        <Button variant="outline" size="sm" onClick={duplicateTemplate} className="h-9 px-4 text-xs font-bold text-muted-foreground border-border hover:bg-muted transition-all">
                             <Copy className="h-3.5 w-3.5 mr-2" /> Дублировать
                         </Button>
                         <Button variant="outline" size="sm" onClick={addTemplate} className="h-9 px-4 text-xs font-bold text-blue-600 border-blue-100 bg-blue-50/30 hover:bg-blue-50 transition-all">
@@ -440,7 +440,7 @@ export function PriceTagTemplateTab({ products, initialSettings, onSave, isPendi
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 min-h-[600px]">
                 {/* Left Panel: Properties */}
                 <div className="lg:col-span-4 space-y-4 pr-2">
-                    <Card className="border-slate-200 shadow-sm">
+                    <Card className="border-border shadow-sm">
                         <CardHeader className="py-3">
                             <CardTitle className="text-xs font-bold uppercase tracking-wider flex items-center gap-2">
                                 <Move className="h-4 w-4 text-blue-500" />
@@ -450,7 +450,7 @@ export function PriceTagTemplateTab({ products, initialSettings, onSave, isPendi
                         <CardContent className="space-y-4 pb-4">
                             <div className="grid grid-cols-2 gap-3">
                                 <div className="space-y-1.5">
-                                    <Label className="text-[10px] uppercase text-slate-400 font-bold">Ширина (мм)</Label>
+                                    <Label className="text-[10px] uppercase text-muted-foreground/70 font-bold">Ширина (мм)</Label>
                                     <Input 
                                         type="number" 
                                         value={activeTemplate.width_mm} 
@@ -459,7 +459,7 @@ export function PriceTagTemplateTab({ products, initialSettings, onSave, isPendi
                                     />
                                 </div>
                                 <div className="space-y-1.5">
-                                    <Label className="text-[10px] uppercase text-slate-400 font-bold">Высота (мм)</Label>
+                                    <Label className="text-[10px] uppercase text-muted-foreground/70 font-bold">Высота (мм)</Label>
                                     <Input 
                                         type="number" 
                                         value={activeTemplate.height_mm} 
@@ -469,9 +469,9 @@ export function PriceTagTemplateTab({ products, initialSettings, onSave, isPendi
                                 </div>
                             </div>
 
-                            <div className="space-y-3 pt-2 border-t border-slate-100">
+                            <div className="space-y-3 pt-2 border-t border-border/50">
                                 <div className="flex items-center justify-between">
-                                    <Label className="text-[10px] uppercase text-slate-400 font-bold">Фон и цвет</Label>
+                                    <Label className="text-[10px] uppercase text-muted-foreground/70 font-bold">Фон и цвет</Label>
                                     <Input 
                                         type="color" 
                                         value={activeTemplate.background_color || "#ffffff"} 
@@ -493,10 +493,10 @@ export function PriceTagTemplateTab({ products, initialSettings, onSave, isPendi
                                 </div>
                             </div>
 
-                            <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                            <div className="flex items-center justify-between pt-2 border-t border-border/50">
                                 <div className="space-y-0.5">
-                                    <Label className="text-[10px] uppercase text-slate-400 font-bold">Показывать копейки</Label>
-                                    <p className="text-[9px] text-slate-400">Формат: 999.00 ₽ или 999 ₽</p>
+                                    <Label className="text-[10px] uppercase text-muted-foreground/70 font-bold">Показывать копейки</Label>
+                                    <p className="text-[9px] text-muted-foreground/70">Формат: 999.00 ₽ или 999 ₽</p>
                                 </div>
                                 <Switch 
                                     checked={activeTemplate.show_decimals || false}
@@ -506,7 +506,7 @@ export function PriceTagTemplateTab({ products, initialSettings, onSave, isPendi
                         </CardContent>
                     </Card>
 
-                    <Card className="border-slate-200 shadow-sm">
+                    <Card className="border-border shadow-sm">
                         <CardHeader className="py-3 flex flex-row items-center justify-between space-y-0">
                             <CardTitle className="text-xs font-bold uppercase tracking-wider">Элементы</CardTitle>
                             <div className="flex gap-1">
@@ -528,12 +528,12 @@ export function PriceTagTemplateTab({ products, initialSettings, onSave, isPendi
                                         key={el.id} 
                                         className={cn(
                                             "p-3 transition-colors cursor-pointer group",
-                                            selectedElementId === el.id ? "bg-blue-50/50" : "hover:bg-slate-50"
+                                            selectedElementId === el.id ? "bg-blue-50/50" : "hover:bg-muted"
                                         )}
                                         onClick={() => setSelectedElementId(el.id)}
                                     >
                                         <div className="flex items-center justify-between mb-2">
-                                            <span className="text-[10px] font-black uppercase text-slate-500">
+                                            <span className="text-[10px] font-black uppercase text-muted-foreground">
                                                 {el.type === 'text' ? 'Текст' : el.type === 'price' ? 'Цена' : 'Код'}
                                             </span>
                                             <Button variant="ghost" size="icon" className="h-5 w-5 text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => { e.stopPropagation(); removeElement(el.id); }}>
@@ -545,13 +545,13 @@ export function PriceTagTemplateTab({ products, initialSettings, onSave, isPendi
                                             <div className="space-y-3 pt-1 animate-in fade-in slide-in-from-top-1 duration-200">
                                                 <div className="grid grid-cols-2 gap-2">
                                                     <div className="space-y-1">
-                                                        <Label className="text-[9px] uppercase text-slate-400">Шрифт</Label>
+                                                        <Label className="text-[9px] uppercase text-muted-foreground/70">Шрифт</Label>
                                                         <Input type="number" className="h-7 text-[10px]" value={el.fontSize} onChange={(e) => updateElement(el.id, { fontSize: Number(e.target.value) })} />
                                                     </div>
                                                     <div className="space-y-1">
-                                                        <Label className="text-[9px] uppercase text-slate-400">Данные</Label>
+                                                        <Label className="text-[9px] uppercase text-muted-foreground/70">Данные</Label>
                                                         <Select value={el.field} onValueChange={(value) => updateElement(el.id, { field: value as any })}>
-                                                            <SelectTrigger className="h-7 text-[10px] bg-white border-slate-200">
+                                                            <SelectTrigger className="h-7 text-[10px] bg-card border-border">
                                                                 <SelectValue />
                                                             </SelectTrigger>
                                                             <SelectContent>
@@ -563,11 +563,11 @@ export function PriceTagTemplateTab({ products, initialSettings, onSave, isPendi
                                                     </div>
                                                 </div>
 
-                                                <div className="space-y-2 pt-2 border-t border-slate-100">
+                                                <div className="space-y-2 pt-2 border-t border-border/50">
                                                     <div className="space-y-1">
-                                                        <Label className="text-[9px] uppercase text-slate-400">Файл шрифта (OTF/TTF)</Label>
+                                                        <Label className="text-[9px] uppercase text-muted-foreground/70">Файл шрифта (OTF/TTF)</Label>
                                                         <div className="flex gap-1">
-                                                            <Input value={el.font_url ? "Загружен" : ""} readOnly placeholder="Не выбран" className="h-7 text-[9px] bg-slate-50" />
+                                                            <Input value={el.font_url ? "Загружен" : ""} readOnly placeholder="Не выбран" className="h-7 text-[9px] bg-muted" />
                                                             <Button variant="outline" size="icon" className="h-7 w-7 shrink-0 relative">
                                                                 <Upload className="h-3 w-3" />
                                                                 <input type="file" accept=".ttf,.otf,.woff,.woff2" className="absolute inset-0 opacity-0 cursor-pointer" onChange={(e) => handleFileUpload('element-font', e, el.id)} />
@@ -582,9 +582,9 @@ export function PriceTagTemplateTab({ products, initialSettings, onSave, isPendi
 
                                                     {el.field === 'price' && (
                                                         <div className="space-y-1">
-                                                            <Label className="text-[9px] uppercase text-slate-400 font-bold text-blue-600">Шрифт для символа ₽</Label>
+                                                            <Label className="text-[9px] uppercase text-muted-foreground/70 font-bold text-blue-600">Шрифт для символа ₽</Label>
                                                             <div className="flex gap-1">
-                                                                <Input value={el.currency_font_url ? "Загружен" : ""} readOnly placeholder="Не выбран" className="h-7 text-[9px] bg-slate-50" />
+                                                                <Input value={el.currency_font_url ? "Загружен" : ""} readOnly placeholder="Не выбран" className="h-7 text-[9px] bg-muted" />
                                                                 <Button variant="outline" size="icon" className="h-7 w-7 shrink-0 relative">
                                                                     <Upload className="h-3 w-3" />
                                                                     <input type="file" accept=".ttf,.otf,.woff,.woff2" className="absolute inset-0 opacity-0 cursor-pointer" onChange={(e) => handleFileUpload('currency-font', e, el.id)} />
@@ -599,9 +599,9 @@ export function PriceTagTemplateTab({ products, initialSettings, onSave, isPendi
                                                     )}
                                                 </div>
 
-                                                <div className="flex items-center gap-2 border-t border-slate-100 pt-2">
+                                                <div className="flex items-center gap-2 border-t border-border/50 pt-2">
                                                     <div className="flex-1 space-y-1">
-                                                        <Label className="text-[8px] uppercase text-slate-400 font-bold block">Режим текста</Label>
+                                                        <Label className="text-[8px] uppercase text-muted-foreground/70 font-bold block">Режим текста</Label>
                                                         <div className="flex gap-1">
                                                             <Button 
                                                                 variant={el.wrap_text ? "default" : "outline"} 
@@ -622,9 +622,9 @@ export function PriceTagTemplateTab({ products, initialSettings, onSave, isPendi
                                                         </div>
                                                     </div>
                                                 </div>
-                                                <div className="flex flex-col gap-2 border-t border-slate-100 pt-2">
+                                                <div className="flex flex-col gap-2 border-t border-border/50 pt-2">
                                                     <div className="flex items-center gap-1">
-                                                        <span className="text-[8px] uppercase text-slate-400 font-bold mr-1">X:</span>
+                                                        <span className="text-[8px] uppercase text-muted-foreground/70 font-bold mr-1">X:</span>
                                                         <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => alignElement(el.id, 'left')} title="По левому краю">
                                                             <AlignLeft className="h-3 w-3" />
                                                         </Button>
@@ -636,7 +636,7 @@ export function PriceTagTemplateTab({ products, initialSettings, onSave, isPendi
                                                         </Button>
                                                     </div>
                                                     <div className="flex items-center gap-1">
-                                                        <span className="text-[8px] uppercase text-slate-400 font-bold mr-1">Y:</span>
+                                                        <span className="text-[8px] uppercase text-muted-foreground/70 font-bold mr-1">Y:</span>
                                                         <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => alignElementVertical(el.id, 'top')} title="По верхнему краю">
                                                             <div className="rotate-90"><AlignRight className="h-3 w-3" /></div>
                                                         </Button>
@@ -663,10 +663,10 @@ export function PriceTagTemplateTab({ products, initialSettings, onSave, isPendi
                 </div>
 
                 {/* Right Panel: Big Interactive Preview */}
-                <div className="lg:col-span-8 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center p-4 relative overflow-auto no-scrollbar group">
+                <div className="lg:col-span-8 bg-muted rounded-2xl border-2 border-dashed border-border flex flex-col items-center justify-center p-4 relative overflow-auto no-scrollbar group">
                     <div className="absolute top-4 left-4 z-10 flex gap-2">
-                    <div className="bg-white rounded-lg shadow-sm border p-1 flex items-center gap-1.5">
-                        <Box className="h-3.5 w-3.5 text-slate-400 ml-1" />
+                    <div className="bg-card rounded-lg shadow-sm border p-1 flex items-center gap-1.5">
+                        <Box className="h-3.5 w-3.5 text-muted-foreground/70 ml-1" />
                         <Select 
                             value={previewProduct?.id?.toString() || ""} 
                             onValueChange={(val) => {
@@ -690,7 +690,7 @@ export function PriceTagTemplateTab({ products, initialSettings, onSave, isPendi
 
                     {/* Zoom Controls */}
                     <div className="absolute top-4 right-4 z-10 flex gap-2">
-                        <div className="bg-white rounded-lg shadow-sm border p-1 flex items-center gap-2">
+                        <div className="bg-card rounded-lg shadow-sm border p-1 flex items-center gap-2">
                             <Button variant="ghost" size="sm" className="h-7 px-2 text-[10px]" onClick={() => setZoom(Math.max(2, zoom - 1))}>-</Button>
                             <span className="text-[10px] font-bold w-10 text-center">{zoom * 100}%</span>
                             <Button variant="ghost" size="sm" className="h-7 px-2 text-[10px]" onClick={() => setZoom(Math.min(10, zoom + 1))}>+</Button>
@@ -700,7 +700,7 @@ export function PriceTagTemplateTab({ products, initialSettings, onSave, isPendi
                     {/* Canvas Container */}
                     <div 
                         ref={containerRef}
-                        className="relative bg-white shadow-2xl transition-all duration-200 cursor-crosshair overflow-hidden border border-slate-200"
+                        className="relative bg-card shadow-2xl transition-all duration-200 cursor-crosshair overflow-hidden border border-border"
                         style={{ 
                             width: `${activeTemplate.width_mm * zoom}px`, 
                             height: `${activeTemplate.height_mm * zoom}px`,
@@ -809,28 +809,28 @@ export function PriceTagTemplateTab({ products, initialSettings, onSave, isPendi
                                 {selectedElementId === el.id && (
                                     <>
                                         {/* Top-Left */}
-                                        <div className="absolute -top-1.5 -left-1.5 w-3 h-3 bg-white border-2 border-blue-500 rounded-full cursor-nwse-resize z-30 hover:scale-125 transition-transform"
+                                        <div className="absolute -top-1.5 -left-1.5 w-3 h-3 bg-card border-2 border-blue-500 rounded-full cursor-nwse-resize z-30 hover:scale-125 transition-transform"
                                              onMouseDown={(e) => handleResizeMouseDown(e, el.id, 'topLeft')} />
                                         {/* Top-Right */}
-                                        <div className="absolute -top-1.5 -right-1.5 w-3 h-3 bg-white border-2 border-blue-500 rounded-full cursor-nesw-resize z-30 hover:scale-125 transition-transform"
+                                        <div className="absolute -top-1.5 -right-1.5 w-3 h-3 bg-card border-2 border-blue-500 rounded-full cursor-nesw-resize z-30 hover:scale-125 transition-transform"
                                              onMouseDown={(e) => handleResizeMouseDown(e, el.id, 'topRight')} />
                                         {/* Bottom-Left */}
-                                        <div className="absolute -bottom-1.5 -left-1.5 w-3 h-3 bg-white border-2 border-blue-500 rounded-full cursor-nesw-resize z-30 hover:scale-125 transition-transform"
+                                        <div className="absolute -bottom-1.5 -left-1.5 w-3 h-3 bg-card border-2 border-blue-500 rounded-full cursor-nesw-resize z-30 hover:scale-125 transition-transform"
                                              onMouseDown={(e) => handleResizeMouseDown(e, el.id, 'bottomLeft')} />
                                         {/* Bottom-Right */}
-                                         <div className="absolute -bottom-1.5 -right-1.5 w-3 h-3 bg-white border-2 border-blue-500 rounded-full cursor-nwse-resize z-30 hover:scale-125 transition-transform"
+                                         <div className="absolute -bottom-1.5 -right-1.5 w-3 h-3 bg-card border-2 border-blue-500 rounded-full cursor-nwse-resize z-30 hover:scale-125 transition-transform"
                                               onMouseDown={(e) => handleResizeMouseDown(e, el.id, 'bottomRight')} />
                                          {/* Middle-Right */}
-                                         <div className="absolute top-1/2 -translate-y-1/2 -right-1.5 w-2 h-2 bg-white border border-blue-500 rounded-sm cursor-ew-resize z-30"
+                                         <div className="absolute top-1/2 -translate-y-1/2 -right-1.5 w-2 h-2 bg-card border border-blue-500 rounded-sm cursor-ew-resize z-30"
                                               onMouseDown={(e) => handleResizeMouseDown(e, el.id, 'right')} />
                                          {/* Middle-Left */}
-                                         <div className="absolute top-1/2 -translate-y-1/2 -left-1.5 w-2 h-2 bg-white border border-blue-500 rounded-sm cursor-ew-resize z-30"
+                                         <div className="absolute top-1/2 -translate-y-1/2 -left-1.5 w-2 h-2 bg-card border border-blue-500 rounded-sm cursor-ew-resize z-30"
                                               onMouseDown={(e) => handleResizeMouseDown(e, el.id, 'left')} />
                                          {/* Middle-Top */}
-                                         <div className="absolute left-1/2 -translate-x-1/2 -top-1.5 w-2 h-2 bg-white border border-blue-500 rounded-sm cursor-ns-resize z-30"
+                                         <div className="absolute left-1/2 -translate-x-1/2 -top-1.5 w-2 h-2 bg-card border border-blue-500 rounded-sm cursor-ns-resize z-30"
                                               onMouseDown={(e) => handleResizeMouseDown(e, el.id, 'top')} />
                                          {/* Middle-Bottom */}
-                                         <div className="absolute left-1/2 -translate-x-1/2 -bottom-1.5 w-2 h-2 bg-white border border-blue-500 rounded-sm cursor-ns-resize z-30"
+                                         <div className="absolute left-1/2 -translate-x-1/2 -bottom-1.5 w-2 h-2 bg-card border border-blue-500 rounded-sm cursor-ns-resize z-30"
                                               onMouseDown={(e) => handleResizeMouseDown(e, el.id, 'bottom')} />
                                     </>
                                  )}
@@ -841,7 +841,7 @@ export function PriceTagTemplateTab({ products, initialSettings, onSave, isPendi
                                         {/* Distance to LEFT edge */}
                                         <div className="absolute top-1/2 -translate-y-1/2 border-t border-rose-500 z-30" 
                                              style={{ right: '100%', width: `${el.x * zoom}px` }}>
-                                            <span className="absolute left-1/2 -translate-x-1/2 -top-4 bg-rose-500 text-white text-[8px] px-1 rounded font-black whitespace-nowrap">
+                                            <span className="absolute left-1/2 -translate-x-1/2 -top-4 bg-rose-500 text-primary-foreground text-[8px] px-1 rounded font-black whitespace-nowrap">
                                                 {el.x} mm
                                             </span>
                                         </div>
@@ -849,7 +849,7 @@ export function PriceTagTemplateTab({ products, initialSettings, onSave, isPendi
                                         {/* Distance to TOP edge */}
                                         <div className="absolute left-1/2 -translate-x-1/2 border-l border-rose-500 z-30" 
                                              style={{ bottom: '100%', height: `${el.y * zoom}px` }}>
-                                            <span className="absolute top-1/2 -translate-y-1/2 -left-10 bg-rose-500 text-white text-[8px] px-1 rounded font-black whitespace-nowrap">
+                                            <span className="absolute top-1/2 -translate-y-1/2 -left-10 bg-rose-500 text-primary-foreground text-[8px] px-1 rounded font-black whitespace-nowrap">
                                                 {el.y} mm
                                             </span>
                                         </div>
@@ -864,7 +864,7 @@ export function PriceTagTemplateTab({ products, initialSettings, onSave, isPendi
                     </div>
 
                     {/* Status Bar */}
-                    <div className="absolute bottom-4 left-4 bg-white/80 backdrop-blur-sm rounded-full px-4 py-1.5 border shadow-sm text-[10px] font-medium text-slate-500 flex gap-4">
+                    <div className="absolute bottom-4 left-4 bg-card/80 backdrop-blur-sm rounded-full px-4 py-1.5 border shadow-sm text-[10px] font-medium text-muted-foreground flex gap-4">
                         <span>{activeTemplate.width_mm} x {activeTemplate.height_mm} mm</span>
                         <span className="border-l pl-4">{activeTemplate.elements.length} элементов</span>
                         {selectedElementId && (

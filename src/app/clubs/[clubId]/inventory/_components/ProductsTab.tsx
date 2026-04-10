@@ -90,11 +90,11 @@ export function ProductsTab({ products, categories, warehouses, currentUserId, p
             case "INVENTORY_CORRECTION":
                 return { label: "Коррекция инв.", className: "text-orange-700 border-orange-200 bg-orange-50" }
             case "WRITE_OFF":
-                return { label: "Списание", className: "text-slate-700 border-slate-200 bg-slate-100" }
+                return { label: "Списание", className: "text-foreground border-border bg-accent" }
             case "ADJUSTMENT":
-                return { label: "Ручная корректировка", className: "text-slate-700 border-slate-200 bg-slate-100" }
+                return { label: "Ручная корректировка", className: "text-foreground border-border bg-accent" }
             default:
-                return { label: log.type || "Движение", className: "text-slate-700 border-slate-200 bg-slate-100" }
+                return { label: log.type || "Движение", className: "text-foreground border-border bg-accent" }
         }
     }
 
@@ -382,7 +382,7 @@ export function ProductsTab({ products, categories, warehouses, currentUserId, p
     return (
         <div className="space-y-4">
             {/* Toolbar */}
-            <div className="flex flex-col md:flex-row gap-4 justify-between bg-white p-3 md:p-4 rounded-lg border shadow-sm">
+            <div className="flex flex-col md:flex-row gap-4 justify-between bg-card p-3 md:p-4 rounded-lg border shadow-sm">
                 <div className="flex flex-col sm:flex-row gap-3 md:gap-4 flex-1">
                     <div className="relative flex-1 max-w-sm">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -431,7 +431,7 @@ export function ProductsTab({ products, categories, warehouses, currentUserId, p
             </div>
 
             {/* Desktop Table */}
-            <div className="hidden md:block rounded-md border bg-white">
+            <div className="hidden md:block rounded-md border bg-card">
                 <Table>
                     <TableHeader>
                         <TableRow>
@@ -526,7 +526,7 @@ export function ProductsTab({ products, categories, warehouses, currentUserId, p
                                             {(product.barcode || (product.barcodes && product.barcodes.length > 0)) && (
                                                 <div className="flex flex-wrap gap-1 mt-1">
                                                     {product.barcode && (
-                                                        <span className="text-[9px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono flex items-center gap-1">
+                                                        <span className="text-[9px] bg-accent text-muted-foreground px-1.5 py-0.5 rounded font-mono flex items-center gap-1">
                                                             <Barcode className="h-2 w-2" />
                                                             {product.barcode}
                                                         </span>
@@ -652,7 +652,7 @@ export function ProductsTab({ products, categories, warehouses, currentUserId, p
             <div className="md:hidden space-y-3">
                 {displayedProducts.map(product => {
                     return (
-                        <div key={product.id} className="bg-white rounded-xl border p-4 shadow-sm relative overflow-hidden active:bg-slate-50 transition-colors" onClick={() => {
+                        <div key={product.id} className="bg-card rounded-xl border p-4 shadow-sm relative overflow-hidden active:bg-muted transition-colors" onClick={() => {
                             setEditingProduct(product)
                             if (product.cost_price > 0 && product.selling_price > 0) {
                                 setDesiredMarkup(((product.selling_price - product.cost_price) / product.cost_price * 100).toFixed(1))
@@ -688,12 +688,12 @@ export function ProductsTab({ products, categories, warehouses, currentUserId, p
                                         </div>
                                         <div className="flex flex-wrap gap-1 mt-1.5">
                                             {product.category_name && (
-                                                <Badge variant="outline" className="text-[9px] h-4 px-1.5 leading-none uppercase tracking-wider font-bold border-slate-200 text-slate-500 bg-slate-50/50">
+                                                <Badge variant="outline" className="text-[9px] h-4 px-1.5 leading-none uppercase tracking-wider font-bold border-border text-muted-foreground bg-muted/50">
                                                     {product.category_name}
                                                 </Badge>
                                             )}
                                             {product.barcode && (
-                                                <div className="flex items-center gap-1 text-[10px] text-muted-foreground font-mono bg-slate-100 px-1.5 rounded h-4">
+                                                <div className="flex items-center gap-1 text-[10px] text-muted-foreground font-mono bg-accent px-1.5 rounded h-4">
                                                     <Barcode className="h-2.5 w-2.5" />
                                                     {product.barcode}
                                                 </div>
@@ -705,7 +705,7 @@ export function ProductsTab({ products, categories, warehouses, currentUserId, p
                                     <DropdownMenu>
                                         <DropdownMenuTrigger asChild>
                                             <Button variant="ghost" className="h-9 w-9 p-0 -mt-1 -mr-1">
-                                                <MoreVertical className="h-5 w-5 text-slate-400" />
+                                                <MoreVertical className="h-5 w-5 text-muted-foreground/70" />
                                             </Button>
                                         </DropdownMenuTrigger>
                                         <DropdownMenuContent align="end" className="w-56">
@@ -736,26 +736,26 @@ export function ProductsTab({ products, categories, warehouses, currentUserId, p
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-4 pt-3 border-t border-slate-100">
+                            <div className="grid grid-cols-2 gap-4 pt-3 border-t border-border/50">
                                 <div>
-                                    <p className="text-[10px] text-slate-400 uppercase font-black tracking-widest mb-1">Цена продажи</p>
+                                    <p className="text-[10px] text-muted-foreground/70 uppercase font-black tracking-widest mb-1">Цена продажи</p>
                                     <div className="flex items-baseline gap-1.5">
-                                        <p className="font-black text-xl text-slate-900">{product.selling_price} ₽</p>
+                                        <p className="font-black text-xl text-foreground">{product.selling_price} ₽</p>
                                         {product.cost_price > 0 && (
                                             <span className="text-[10px] font-bold text-green-600 bg-green-50 px-1 rounded">
                                                 +{Math.round(((product.selling_price - product.cost_price) / product.cost_price) * 100)}%
                                             </span>
                                         )}
                                     </div>
-                                    <p className="text-[10px] text-slate-400 mt-1 font-medium">Закупка: {product.cost_price} ₽</p>
+                                    <p className="text-[10px] text-muted-foreground/70 mt-1 font-medium">Закупка: {product.cost_price} ₽</p>
                                 </div>
                                 <div className="text-right">
-                                    <p className="text-[10px] text-slate-400 uppercase font-black tracking-widest mb-1">В наличии</p>
+                                    <p className="text-[10px] text-muted-foreground/70 uppercase font-black tracking-widest mb-1">В наличии</p>
                                     <div className="flex items-center justify-end gap-1.5">
-                                        <span className="text-xl font-black text-slate-900">
+                                        <span className="text-xl font-black text-foreground">
                                             {product.current_stock}
                                         </span>
-                                        <span className="text-xs text-slate-400 font-bold">шт</span>
+                                        <span className="text-xs text-muted-foreground/70 font-bold">шт</span>
                                     </div>
                                     <div className="flex flex-col items-end mt-1">
                                         {product.stocks && product.stocks.length > 0 && (
@@ -768,7 +768,7 @@ export function ProductsTab({ products, categories, warehouses, currentUserId, p
                                                 {product.stocks.length > 2 && <span>...</span>}
                                             </div>
                                         )}
-                                        <p className="text-[10px] text-slate-400 mt-0.5 font-medium italic">На сумму: {Math.round(product.current_stock * product.cost_price).toLocaleString('ru-RU')} ₽</p>
+                                        <p className="text-[10px] text-muted-foreground/70 mt-0.5 font-medium italic">На сумму: {Math.round(product.current_stock * product.cost_price).toLocaleString('ru-RU')} ₽</p>
                                     </div>
                                 </div>
                             </div>
@@ -776,7 +776,7 @@ export function ProductsTab({ products, categories, warehouses, currentUserId, p
                     )
                 })}
                 {displayedProducts.length === 0 && (
-                    <div className="py-20 text-center text-muted-foreground bg-slate-50 rounded-xl border border-dashed">
+                    <div className="py-20 text-center text-muted-foreground bg-muted rounded-xl border border-dashed">
                         <Box className="h-12 w-12 mx-auto opacity-10 mb-3" />
                         <p className="italic">Товары не найдены</p>
                     </div>
@@ -890,7 +890,7 @@ export function ProductsTab({ products, categories, warehouses, currentUserId, p
                         </div>
 
                         {/* Price Calculator Tools */}
-                        <div className="grid grid-cols-2 gap-4 bg-slate-50 p-4 rounded-lg border">
+                        <div className="grid grid-cols-2 gap-4 bg-muted p-4 rounded-lg border">
                              <div className="space-y-2">
                                 <Label className="text-xs text-muted-foreground">Желаемая наценка (%)</Label>
                                 <Input 
@@ -939,7 +939,7 @@ export function ProductsTab({ products, categories, warehouses, currentUserId, p
                             </div>
                         </div>
 
-                        <div className="space-y-2 bg-slate-50 p-4 rounded-lg border">
+                        <div className="space-y-2 bg-muted p-4 rounded-lg border">
                             <Label className="flex items-center gap-2 text-blue-600">
                                 <LayoutGrid className="h-4 w-4" />
                                 Формат упаковки (шт в коробке)
@@ -957,7 +957,7 @@ export function ProductsTab({ products, categories, warehouses, currentUserId, p
                         </div>
 
                         {/* Front/Back Stock Settings */}
-                        <div className="bg-slate-50 p-4 rounded-lg border space-y-4">
+                        <div className="bg-muted p-4 rounded-lg border space-y-4">
                             <h4 className="font-medium text-sm flex items-center gap-2">
                                 <Box className="h-4 w-4" /> Витрина и Склад
                             </h4>
@@ -1014,7 +1014,7 @@ export function ProductsTab({ products, categories, warehouses, currentUserId, p
                                             type="number" 
                                             value={editingProduct?.back_stock ?? ''} 
                                             disabled // Calculated automatically
-                                            className="bg-slate-100"
+                                            className="bg-accent"
                                         />
                                     </div>
                                 </div>
@@ -1086,7 +1086,7 @@ export function ProductsTab({ products, categories, warehouses, currentUserId, p
                                 </TableBody>
                             </Table>
                         ) : (
-                            <div className="text-center py-4 text-muted-foreground bg-slate-50 rounded-lg">
+                            <div className="text-center py-4 text-muted-foreground bg-muted rounded-lg">
                                 Нет активных правил пополнения
                             </div>
                         )}
@@ -1379,20 +1379,20 @@ export function ProductsTab({ products, categories, warehouses, currentUserId, p
                     </DialogHeader>
                     
                     <div className="py-4">
-                        <div className="rounded-xl border border-slate-100 overflow-hidden shadow-sm bg-white">
+                        <div className="rounded-xl border border-border/50 overflow-hidden shadow-sm bg-card">
                             <Table>
-                                <TableHeader className="bg-slate-50/50">
+                                <TableHeader className="bg-muted/50">
                                     <TableRow className="hover:bg-transparent">
-                                        <TableHead className="text-[10px] uppercase font-black text-slate-400">Дата</TableHead>
-                                        <TableHead className="text-[10px] uppercase font-black text-slate-400">Поставщик</TableHead>
-                                        <TableHead className="text-right text-[10px] uppercase font-black text-slate-400">Цена закупа</TableHead>
-                                        <TableHead className="text-right text-[10px] uppercase font-black text-slate-400">Динамика</TableHead>
+                                        <TableHead className="text-[10px] uppercase font-black text-muted-foreground/70">Дата</TableHead>
+                                        <TableHead className="text-[10px] uppercase font-black text-muted-foreground/70">Поставщик</TableHead>
+                                        <TableHead className="text-right text-[10px] uppercase font-black text-muted-foreground/70">Цена закупа</TableHead>
+                                        <TableHead className="text-right text-[10px] uppercase font-black text-muted-foreground/70">Динамика</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
                                     {!editingProduct?.price_history || editingProduct.price_history.length === 0 ? (
                                         <TableRow>
-                                            <TableCell colSpan={4} className="h-32 text-center text-slate-400 italic text-sm">
+                                            <TableCell colSpan={4} className="h-32 text-center text-muted-foreground/70 italic text-sm">
                                                 История закупок пока пуста
                                             </TableCell>
                                         </TableRow>
@@ -1403,21 +1403,21 @@ export function ProductsTab({ products, categories, warehouses, currentUserId, p
                                             const percentDiff = prevEntry ? (diff / prevEntry.cost_price * 100) : 0
                                             
                                             return (
-                                                <TableRow key={idx} className="hover:bg-slate-50/50">
-                                                    <TableCell className="text-sm font-medium text-slate-700">
+                                                <TableRow key={idx} className="hover:bg-muted/50">
+                                                    <TableCell className="text-sm font-medium text-foreground">
                                                         {new Date(entry.created_at).toLocaleDateString('ru-RU')}
                                                     </TableCell>
-                                                    <TableCell className="text-sm text-slate-600 font-semibold">
+                                                    <TableCell className="text-sm text-muted-foreground font-semibold">
                                                         {entry.supplier_name}
                                                     </TableCell>
-                                                    <TableCell className="text-right font-black text-slate-900">
+                                                    <TableCell className="text-right font-black text-foreground">
                                                         {entry.cost_price.toLocaleString('ru-RU')} ₽
                                                     </TableCell>
                                                     <TableCell className="text-right">
                                                         {idx < editingProduct.price_history!.length - 1 ? (
                                                             <div className={cn(
                                                                 "flex items-center justify-end gap-1 text-xs font-bold",
-                                                                diff > 0 ? "text-red-500" : diff < 0 ? "text-green-500" : "text-slate-400"
+                                                                diff > 0 ? "text-red-500" : diff < 0 ? "text-green-500" : "text-muted-foreground/70"
                                                             )}>
                                                                 {diff > 0 ? <TrendingUp className="h-3 w-3" /> : diff < 0 ? <TrendingDown className="h-3 w-3" /> : null}
                                                                 {diff !== 0 && `${Math.abs(percentDiff).toFixed(1)}%`}
@@ -1442,8 +1442,8 @@ export function ProductsTab({ products, categories, warehouses, currentUserId, p
                                     <p className="text-2xl font-black text-blue-600">{editingProduct?.cost_price?.toLocaleString('ru-RU')} ₽</p>
                                 </div>
                                 <div className="text-right">
-                                    <p className="text-[10px] uppercase font-black text-slate-400 tracking-wider">Средняя за 5 запок</p>
-                                    <p className="text-lg font-bold text-slate-700">
+                                    <p className="text-[10px] uppercase font-black text-muted-foreground/70 tracking-wider">Средняя за 5 запок</p>
+                                    <p className="text-lg font-bold text-foreground">
                                         {editingProduct?.price_history && editingProduct.price_history.length > 0
                                             ? (editingProduct.price_history.reduce((acc, curr) => acc + Number(curr.cost_price), 0) / editingProduct.price_history.length).toLocaleString(undefined, { maximumFractionDigits: 0 })
                                             : 0} ₽

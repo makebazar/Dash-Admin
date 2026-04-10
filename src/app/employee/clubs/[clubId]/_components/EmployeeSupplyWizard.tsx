@@ -198,14 +198,14 @@ export function EmployeeSupplyWizard({ isOpen, onClose, clubId, userId, activeSh
     return (
         <>
             <Dialog open={isOpen} onOpenChange={handleClose}>
-                <DialogContent className="max-w-none w-screen h-[100dvh] m-0 p-0 rounded-none bg-slate-950 border-none text-white overflow-hidden flex flex-col fixed inset-0 translate-x-0 translate-y-0 left-0 top-0">
+                <DialogContent className="max-w-none w-screen h-[100dvh] m-0 p-0 rounded-none bg-slate-950 border-none text-primary-foreground overflow-hidden flex flex-col fixed inset-0 translate-x-0 translate-y-0 left-0 top-0">
                     <DialogHeader className="p-4 border-b border-slate-800 flex-row items-center justify-between space-y-0 shrink-0">
                         <div className="space-y-0.5">
                             <DialogTitle className="flex items-center gap-2 text-base">
                                 <Package className="h-4 w-4 text-blue-400" />
                                 {step === 1 ? "Поставка" : "Детали"}
                             </DialogTitle>
-                            <DialogDescription className="text-slate-400 text-[10px]">
+                            <DialogDescription className="text-muted-foreground/70 text-[10px]">
                                 {step === 1 ? "Добавьте товары." : "Поставщик и примечание."}
                             </DialogDescription>
                         </div>
@@ -218,7 +218,7 @@ export function EmployeeSupplyWizard({ isOpen, onClose, clubId, userId, activeSh
                                 <div className="grid grid-cols-2 gap-2">
                                     <Button 
                                         variant="outline" 
-                                        className="h-12 border-slate-800 bg-slate-900/50 hover:bg-slate-800 text-xs"
+                                        className="h-12 border-slate-800 bg-primary/50 hover:bg-primary/90 text-xs"
                                         onClick={() => setIsScannerOpen(true)}
                                     >
                                         <Camera className="mr-2 h-4 w-4 text-blue-400" />
@@ -226,7 +226,7 @@ export function EmployeeSupplyWizard({ isOpen, onClose, clubId, userId, activeSh
                                     </Button>
                                     <Button 
                                         variant="outline" 
-                                        className="h-12 border-slate-800 bg-slate-900/50 hover:bg-slate-800 text-xs"
+                                        className="h-12 border-slate-800 bg-primary/50 hover:bg-primary/90 text-xs"
                                         onClick={() => setIsAddDialogOpen(true)}
                                     >
                                         <Search className="mr-2 h-4 w-4 text-blue-400" />
@@ -236,30 +236,30 @@ export function EmployeeSupplyWizard({ isOpen, onClose, clubId, userId, activeSh
 
                                 {/* Items List */}
                                 <div className="space-y-4">
-                                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center justify-between">
+                                    <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center justify-between">
                                         <div className="flex items-center gap-2">
                                             <ShoppingCart className="h-3 w-3" />
                                             Выбранные товары ({items.length})
                                         </div>
                                         {totalSum > 0 && (
                                             <div className="flex items-center gap-2">
-                                                <span className="text-slate-500">Итого:</span>
+                                                <span className="text-muted-foreground">Итого:</span>
                                                 <span className="text-blue-400 font-black">{totalSum.toLocaleString()} ₽</span>
                                             </div>
                                         )}
                                     </h4>
                                     
                                     {items.length === 0 ? (
-                                        <div className="border border-dashed border-slate-800 rounded-2xl p-10 text-center text-slate-500">
+                                        <div className="border border-dashed border-slate-800 rounded-2xl p-10 text-center text-muted-foreground">
                                             <Package className="h-10 w-10 mx-auto mb-3 opacity-20" />
                                             <p className="text-sm">Список пуст. Добавьте товары через поиск или сканер.</p>
                                         </div>
                                     ) : (
-                                        <div className="border border-slate-800 rounded-2xl overflow-hidden bg-slate-900/30">
+                                        <div className="border border-slate-800 rounded-2xl overflow-hidden bg-primary/30">
                                             <Table>
                                                 <TableBody>
                                                     {items.map((item) => (
-                                                        <TableRow key={item.product_id} className="border-slate-800 hover:bg-slate-800/50">
+                                                        <TableRow key={item.product_id} className="border-slate-800 hover:bg-primary/90/50">
                                                             <TableCell className="py-3 pr-0">
                                                                 <div className="flex flex-col">
                                                                     <span className="text-sm font-medium text-slate-200 truncate max-w-[140px]">{item.name}</span>
@@ -268,17 +268,17 @@ export function EmployeeSupplyWizard({ isOpen, onClose, clubId, userId, activeSh
                                                                             type="number" 
                                                                             value={item.cost_price} 
                                                                             onChange={e => updateItem(item.product_id, 'cost_price', Number(e.target.value))}
-                                                                            className="h-6 w-16 bg-slate-900 border-slate-800 text-[10px] p-1 text-center"
+                                                                            className="h-6 w-16 bg-primary border-slate-800 text-[10px] p-1 text-center"
                                                                         />
-                                                                        <span className="text-[10px] text-slate-500">₽/шт</span>
+                                                                        <span className="text-[10px] text-muted-foreground">₽/шт</span>
                                                                     </div>
                                                                 </div>
                                                             </TableCell>
                                                             <TableCell className="text-right py-3">
                                                                 <div className="flex items-center justify-end gap-3">
-                                                                    <div className="flex items-center gap-1 bg-slate-900 border border-slate-800 rounded-lg p-1">
+                                                                    <div className="flex items-center gap-1 bg-primary border border-slate-800 rounded-lg p-1">
                                                                         <button 
-                                                                            className="w-6 h-6 flex items-center justify-center text-slate-500 hover:text-white"
+                                                                            className="w-6 h-6 flex items-center justify-center text-muted-foreground hover:text-primary-foreground"
                                                                             onClick={() => updateItem(item.product_id, 'quantity', Math.max(1, item.quantity - 1))}
                                                                         >
                                                                             -
@@ -290,7 +290,7 @@ export function EmployeeSupplyWizard({ isOpen, onClose, clubId, userId, activeSh
                                                                             className="w-10 bg-transparent text-center text-sm font-bold text-blue-400 focus:outline-none"
                                                                         />
                                                                         <button 
-                                                                            className="w-6 h-6 flex items-center justify-center text-slate-500 hover:text-white"
+                                                                            className="w-6 h-6 flex items-center justify-center text-muted-foreground hover:text-primary-foreground"
                                                                             onClick={() => updateItem(item.product_id, 'quantity', item.quantity + 1)}
                                                                         >
                                                                             +
@@ -300,7 +300,7 @@ export function EmployeeSupplyWizard({ isOpen, onClose, clubId, userId, activeSh
                                                                         variant="ghost" 
                                                                         size="icon" 
                                                                         onClick={() => removeItem(item.product_id)}
-                                                                        className="h-8 w-8 text-slate-600 hover:text-red-400 hover:bg-red-400/10"
+                                                                        className="h-8 w-8 text-muted-foreground hover:text-red-400 hover:bg-red-400/10"
                                                                     >
                                                                         <Trash2 className="h-4 w-4" />
                                                                     </Button>
@@ -317,7 +317,7 @@ export function EmployeeSupplyWizard({ isOpen, onClose, clubId, userId, activeSh
                         ) : (
                             <div className="space-y-6">
                                 <div className="space-y-2">
-                                    <Label className="text-[10px] text-slate-500 uppercase tracking-wider flex items-center gap-2">
+                                    <Label className="text-[10px] text-muted-foreground uppercase tracking-wider flex items-center gap-2">
                                         <Warehouse className="h-3 w-3" />
                                         Куда поставляем?
                                     </Label>
@@ -327,7 +327,7 @@ export function EmployeeSupplyWizard({ isOpen, onClose, clubId, userId, activeSh
                                                 key={wh.id}
                                                 variant="outline"
                                                 className={cn(
-                                                    "h-10 border-slate-800 bg-slate-900/50 hover:bg-slate-800 text-[10px] justify-start px-3",
+                                                    "h-10 border-slate-800 bg-primary/50 hover:bg-primary/90 text-[10px] justify-start px-3",
                                                     selectedWarehouseId === wh.id.toString() && "border-blue-500 bg-blue-500/10 text-blue-400"
                                                 )}
                                                 onClick={() => setSelectedWarehouseId(wh.id.toString())}
@@ -341,32 +341,32 @@ export function EmployeeSupplyWizard({ isOpen, onClose, clubId, userId, activeSh
                                     </div>
                                 </div>
                                 <div className="space-y-2">
-                                    <Label className="text-xs text-slate-500 uppercase tracking-wider">Поставщик</Label>
+                                    <Label className="text-xs text-muted-foreground uppercase tracking-wider">Поставщик</Label>
                                     <Input 
                                         placeholder="Название компании или имя"
                                         value={supplierName}
                                         onChange={e => setSupplierName(e.target.value)}
-                                        className="bg-slate-900 border-slate-800 h-12 rounded-xl"
+                                        className="bg-primary border-slate-800 h-12 rounded-xl"
                                     />
                                 </div>
                                 <div className="space-y-2">
-                                    <Label className="text-xs text-slate-500 uppercase tracking-wider">Примечание</Label>
+                                    <Label className="text-xs text-muted-foreground uppercase tracking-wider">Примечание</Label>
                                     <Input 
                                         placeholder="Например: номер накладной или комментарий"
                                         value={notes}
                                         onChange={e => setNotes(e.target.value)}
-                                        className="bg-slate-900 border-slate-800 h-12 rounded-xl"
+                                        className="bg-primary border-slate-800 h-12 rounded-xl"
                                     />
                                 </div>
 
                                 {/* Summary */}
                                 <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-2xl">
                                     <div className="flex justify-between items-center text-sm">
-                                        <span className="text-slate-400">Итого товаров:</span>
-                                        <span className="font-bold text-white">{totalQty} шт</span>
+                                        <span className="text-muted-foreground/70">Итого товаров:</span>
+                                        <span className="font-bold text-primary-foreground">{totalQty} шт</span>
                                     </div>
                                     <div className="flex justify-between items-center text-sm mt-2">
-                                        <span className="text-slate-400">На сумму:</span>
+                                        <span className="text-muted-foreground/70">На сумму:</span>
                                         <span className="font-bold text-blue-400">
                                             {totalSum.toLocaleString()} ₽
                                         </span>
@@ -376,10 +376,10 @@ export function EmployeeSupplyWizard({ isOpen, onClose, clubId, userId, activeSh
                         )}
                     </div>
 
-                    <DialogFooter className="p-6 border-t border-slate-800 bg-slate-900/50">
+                    <DialogFooter className="p-6 border-t border-slate-800 bg-primary/50">
                         {step === 1 ? (
                             <Button 
-                                className="w-full h-12 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-lg shadow-blue-900/20"
+                                className="w-full h-12 bg-blue-600 hover:bg-blue-700 text-primary-foreground font-bold rounded-xl shadow-lg shadow-blue-900/20"
                                 disabled={items.length === 0}
                                 onClick={() => setStep(2)}
                             >
@@ -390,13 +390,13 @@ export function EmployeeSupplyWizard({ isOpen, onClose, clubId, userId, activeSh
                             <div className="flex gap-3 w-full">
                                 <Button 
                                     variant="outline" 
-                                    className="h-12 w-14 border-slate-800 text-slate-400 rounded-xl"
+                                    className="h-12 w-14 border-slate-800 text-muted-foreground/70 rounded-xl"
                                     onClick={() => setStep(1)}
                                 >
                                     <ArrowLeft className="h-5 w-5" />
                                 </Button>
                                 <Button 
-                                    className="flex-1 h-12 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl shadow-lg shadow-green-900/20"
+                                    className="flex-1 h-12 bg-green-600 hover:bg-green-700 text-primary-foreground font-bold rounded-xl shadow-lg shadow-green-900/20"
                                     onClick={handleFinalize}
                                     disabled={isPending}
                                 >
@@ -411,16 +411,16 @@ export function EmployeeSupplyWizard({ isOpen, onClose, clubId, userId, activeSh
 
             {/* Manual Add Dialog */}
             <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-                <DialogContent className="bg-slate-950 border-slate-800 text-white max-w-[90vw] rounded-2xl">
+                <DialogContent className="bg-slate-950 border-slate-800 text-primary-foreground max-w-[90vw] rounded-2xl">
                     <DialogHeader>
                         <DialogTitle>Поиск товара</DialogTitle>
                     </DialogHeader>
                     <div className="py-4 space-y-4">
                         <div className="relative">
-                            <Search className="absolute left-3 top-3 h-4 w-4 text-slate-500" />
+                            <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                             <Input 
                                 placeholder="Название или штрихкод..."
-                                className="bg-slate-900 border-slate-800 pl-10 h-10"
+                                className="bg-primary border-slate-800 pl-10 h-10"
                                 value={searchQuery}
                                 onChange={e => setSearchQuery(e.target.value)}
                             />
@@ -433,7 +433,7 @@ export function EmployeeSupplyWizard({ isOpen, onClose, clubId, userId, activeSh
                                         "w-full text-left p-3 rounded-xl transition-all text-sm border",
                                         selectedProductId === p.id.toString() 
                                             ? "bg-blue-600/20 border-blue-500 text-blue-400" 
-                                            : "hover:bg-slate-900 border-transparent text-slate-300"
+                                            : "hover:bg-primary border-transparent text-slate-300"
                                     )}
                                     onClick={() => {
                                         setSelectedProductId(p.id.toString())
@@ -448,21 +448,21 @@ export function EmployeeSupplyWizard({ isOpen, onClose, clubId, userId, activeSh
                         {selectedProductId && (
                             <div className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-800">
                                 <div className="space-y-2">
-                                    <Label className="text-[10px] uppercase text-slate-500 font-bold">Количество</Label>
+                                    <Label className="text-[10px] uppercase text-muted-foreground font-bold">Количество</Label>
                                     <Input 
                                         type="number" 
                                         value={itemQty} 
                                         onChange={e => setItemQty(e.target.value)}
-                                        className="bg-slate-900 border-slate-800 h-12 text-lg font-bold text-base"
+                                        className="bg-primary border-slate-800 h-12 text-lg font-bold text-base"
                                     />
                                 </div>
                                 <div className="space-y-2">
-                                    <Label className="text-[10px] uppercase text-slate-500 font-bold">Цена закупа (₽)</Label>
+                                    <Label className="text-[10px] uppercase text-muted-foreground font-bold">Цена закупа (₽)</Label>
                                     <Input 
                                         type="number" 
                                         value={itemCost} 
                                         onChange={e => setItemCost(e.target.value)}
-                                        className="bg-slate-900 border-slate-800 h-12 text-lg font-bold"
+                                        className="bg-primary border-slate-800 h-12 text-lg font-bold"
                                     />
                                 </div>
                             </div>

@@ -157,7 +157,7 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
             value: inventoryStats.total,
             hint: inventoryStats.total === 0 ? "Пока нет истории" : "Вся история по клубу",
             icon: ClipboardCheck,
-            tone: "text-slate-700 bg-slate-50 border-slate-200"
+            tone: "text-foreground bg-muted border-border"
         },
         {
             label: "Сейчас в работе",
@@ -178,7 +178,7 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
             value: inventoryStats.canceled,
             hint: inventoryStats.canceled > 0 ? "История отмен сохранена" : "Отмен пока не было",
             icon: Sparkles,
-            tone: "text-slate-700 bg-slate-50 border-slate-200"
+            tone: "text-foreground bg-muted border-border"
         },
         {
             label: "Складов доступно",
@@ -203,13 +203,13 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
             <div className="rounded-2xl border bg-gradient-to-br from-white via-slate-50 to-slate-100 p-4 md:p-6 shadow-sm">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                     <div className="space-y-2">
-                        <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
+                        <div className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
                             <Sparkles className="h-3.5 w-3.5 text-blue-500" />
                             Инвентаризация
                         </div>
                         <div>
-                            <h3 className="text-lg font-bold text-slate-900 md:text-2xl">Проведение и история подсчётов</h3>
-                            <p className="mt-1 max-w-2xl text-sm text-slate-600">
+                            <h3 className="text-lg font-bold text-foreground md:text-2xl">Проведение и история подсчётов</h3>
+                            <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
                                 Здесь удобно запускать новую инвентаризацию, быстро возвращаться к активной и смотреть результаты прошлых сверок.
                             </p>
                         </div>
@@ -232,12 +232,12 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
                     {inventoryCards.map(card => {
                         const Icon = card.icon
                         return (
-                            <Card key={card.label} className="border-slate-200/80 shadow-none">
+                            <Card key={card.label} className="border-border/80 shadow-none">
                                 <CardContent className="flex items-start justify-between p-4">
                                     <div className="space-y-1">
-                                        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">{card.label}</p>
-                                        <p className="text-2xl font-black text-slate-900">{card.value}</p>
-                                        <p className="text-xs text-slate-500">{card.hint}</p>
+                                        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted-foreground">{card.label}</p>
+                                        <p className="text-2xl font-black text-foreground">{card.value}</p>
+                                        <p className="text-xs text-muted-foreground">{card.hint}</p>
                                     </div>
                                     <div className={cn("rounded-xl border p-2.5", card.tone)}>
                                         <Icon className="h-4 w-4" />
@@ -257,17 +257,17 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
                                     Склад: {openInventory.warehouse_name || "Не указан"} · Ответственный: {openInventory.created_by_name || "Неизвестно"}
                                 </p>
                             </div>
-                            <Badge variant="outline" className="w-fit border-amber-300 bg-white text-amber-700">В процессе</Badge>
+                            <Badge variant="outline" className="w-fit border-amber-300 bg-card text-amber-700">В процессе</Badge>
                         </div>
                     </div>
                 )}
             </div>
 
             {/* Desktop Table */}
-            <div className="hidden overflow-hidden rounded-2xl border bg-white shadow-sm md:block">
+            <div className="hidden overflow-hidden rounded-2xl border bg-card shadow-sm md:block">
                 <Table>
                     <TableHeader>
-                        <TableRow className="bg-slate-50/80">
+                        <TableRow className="bg-muted/80">
                             <TableHead className="font-bold">Дата</TableHead>
                             <TableHead className="font-bold">Склад</TableHead>
                             <TableHead className="font-bold">Статус</TableHead>
@@ -291,7 +291,7 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
                             const isMine = inv.created_by === currentUserId
                             return (
                                 <TableRow key={inv.id} className={cn(
-                                    "transition-colors hover:bg-slate-50",
+                                    "transition-colors hover:bg-muted",
                                     isOpen && "bg-amber-50/40",
                                     isMine && isOpen && "ring-1 ring-inset ring-amber-100"
                                 )}>
@@ -300,7 +300,7 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
                                             <span className="font-medium">
                                                 {new Date(inv.started_at).toLocaleDateString('ru-RU')}
                                             </span>
-                                            <span className="text-[10px] text-slate-400 font-bold uppercase">
+                                            <span className="text-[10px] text-muted-foreground/70 font-bold uppercase">
                                                 {new Date(inv.started_at).toLocaleTimeString('ru-RU', {hour: '2-digit', minute:'2-digit'})}
                                             </span>
                                         </div>
@@ -315,7 +315,7 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
                                         {inv.status === 'OPEN' ? (
                                             <Badge variant="outline" className="border-amber-200 text-amber-700 bg-amber-50 text-[10px] h-5 px-1.5 font-bold">В процессе</Badge>
                                         ) : inv.status === 'CANCELED' ? (
-                                            <Badge variant="outline" className="border-slate-200 text-slate-600 bg-slate-50 text-[10px] h-5 px-1.5 font-bold">Отменено</Badge>
+                                            <Badge variant="outline" className="border-border text-muted-foreground bg-muted text-[10px] h-5 px-1.5 font-bold">Отменено</Badge>
                                         ) : (
                                             <Badge variant="outline" className="border-green-200 text-green-700 bg-green-50 text-[10px] h-5 px-1.5 font-bold">Завершено</Badge>
                                         )}
@@ -328,7 +328,7 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
                                     </TableCell>
                                     <TableCell>
                                         {inv.target_metric_key ? (
-                                            <code className="bg-slate-100 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold text-slate-600 border border-slate-200">{inv.target_metric_key}</code>
+                                            <code className="bg-accent px-1.5 py-0.5 rounded text-[10px] font-mono font-bold text-muted-foreground border border-border">{inv.target_metric_key}</code>
                                         ) : (
                                             <span className="text-xs text-muted-foreground italic">—</span>
                                         )}
@@ -336,7 +336,7 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
                                     <TableCell className="text-right font-medium">
                                         {inv.status === 'CLOSED' ? formatMoney(inv.reported_revenue) : '—'}
                                     </TableCell>
-                                    <TableCell className="text-right font-bold text-slate-900">
+                                    <TableCell className="text-right font-bold text-foreground">
                                         {inv.status === 'CLOSED' ? formatMoney(inv.calculated_revenue) : '—'}
                                     </TableCell>
                                     <TableCell className="text-right">
@@ -349,11 +349,11 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
                                     <TableCell>
                                         <div className="flex items-center justify-end gap-1">
                                             {inv.status === 'CLOSED' ? (
-                                                <Button aria-label={`Открыть результаты инвентаризации ${inv.id}`} variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-blue-600" onClick={() => setActiveInventoryId(inv.id)}>
+                                                <Button aria-label={`Открыть результаты инвентаризации ${inv.id}`} variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground/70 hover:text-blue-600" onClick={() => setActiveInventoryId(inv.id)}>
                                                     <ArrowRight className="h-4 w-4" />
                                                 </Button>
                                             ) : inv.status === 'CANCELED' ? (
-                                                <span className="text-[10px] text-slate-400 italic px-2 font-medium">Отменена</span>
+                                                <span className="text-[10px] text-muted-foreground/70 italic px-2 font-medium">Отменена</span>
                                             ) : (
                                                 inv.created_by === currentUserId ? (
                                                     <Button variant="ghost" size="sm" onClick={() => setActiveInventoryId(inv.id)} className="text-amber-600 hover:text-amber-700 hover:bg-amber-50 h-8 px-2 text-xs font-bold">
@@ -380,7 +380,7 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
             {/* Mobile List View */}
             <div className="md:hidden space-y-3">
                 {inventories.length === 0 ? (
-                    <div className="rounded-2xl border border-dashed bg-white px-4 py-12 text-center text-sm italic text-muted-foreground">
+                    <div className="rounded-2xl border border-dashed bg-card px-4 py-12 text-center text-sm italic text-muted-foreground">
                         Инвентаризаций пока не было
                     </div>
                 ) : inventories.map(inv => {
@@ -389,15 +389,15 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
                     return (
                         <div key={inv.id} className={cn(
                             "rounded-2xl border p-4 shadow-sm",
-                            isClosed ? "bg-white" : isCanceled ? "bg-slate-50/70" : "border-amber-200 bg-amber-50/40"
+                            isClosed ? "bg-card" : isCanceled ? "bg-muted/70" : "border-amber-200 bg-amber-50/40"
                         )}>
                             <div className="flex justify-between items-start mb-3">
                                 <div className="flex flex-col">
                                     <div className="flex items-center gap-2 mb-1">
-                                        <span className="font-bold text-slate-900">{new Date(inv.started_at).toLocaleDateString('ru-RU')}</span>
-                                        <span className="text-[10px] text-slate-400 font-bold uppercase">{new Date(inv.started_at).toLocaleTimeString('ru-RU', {hour: '2-digit', minute:'2-digit'})}</span>
+                                        <span className="font-bold text-foreground">{new Date(inv.started_at).toLocaleDateString('ru-RU')}</span>
+                                        <span className="text-[10px] text-muted-foreground/70 font-bold uppercase">{new Date(inv.started_at).toLocaleTimeString('ru-RU', {hour: '2-digit', minute:'2-digit'})}</span>
                                     </div>
-                                    <div className="flex items-center gap-2 text-xs text-slate-500 font-medium">
+                                    <div className="flex items-center gap-2 text-xs text-muted-foreground font-medium">
                                         <WarehouseIcon className="h-3 w-3 shrink-0" />
                                         <span>{inv.warehouse_name || "Не указан"}</span>
                                     </div>
@@ -405,35 +405,35 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
                                 {inv.status === 'OPEN' ? (
                                     <Badge variant="outline" className="border-amber-200 text-amber-700 bg-amber-50 text-[10px] h-5 px-1.5 font-bold">В процессе</Badge>
                                 ) : isCanceled ? (
-                                    <Badge variant="outline" className="border-slate-200 text-slate-600 bg-slate-50 text-[10px] h-5 px-1.5 font-bold">Отменено</Badge>
+                                    <Badge variant="outline" className="border-border text-muted-foreground bg-muted text-[10px] h-5 px-1.5 font-bold">Отменено</Badge>
                                 ) : (
                                     <Badge variant="outline" className="border-green-200 text-green-700 bg-green-50 text-[10px] h-5 px-1.5 font-bold">Завершено</Badge>
                                 )}
                             </div>
 
                             <div className="flex items-center gap-2 mb-4">
-                                <User className="h-3 w-3 text-slate-400 shrink-0" />
-                                <span className="text-xs text-slate-600 font-medium">{inv.created_by_name || "Неизвестно"}</span>
+                                <User className="h-3 w-3 text-muted-foreground/70 shrink-0" />
+                                <span className="text-xs text-muted-foreground font-medium">{inv.created_by_name || "Неизвестно"}</span>
                                 {inv.target_metric_key && (
                                     <>
                                         <span className="text-slate-200 mx-1">|</span>
-                                        <code className="text-[10px] font-bold text-slate-500">{inv.target_metric_key}</code>
+                                        <code className="text-[10px] font-bold text-muted-foreground">{inv.target_metric_key}</code>
                                     </>
                                 )}
                             </div>
 
                             {isClosed && (
-                                <div className="grid grid-cols-3 gap-2 py-3 border-y border-slate-50 mb-3 bg-slate-50/30 -mx-4 px-4">
+                                <div className="grid grid-cols-3 gap-2 py-3 border-y border-slate-50 mb-3 bg-muted/30 -mx-4 px-4">
                                     <div>
-                                        <p className="text-[9px] text-slate-400 uppercase font-bold mb-0.5">Заявлено</p>
-                                        <p className="text-xs font-bold text-slate-900">{formatMoney(inv.reported_revenue)}</p>
+                                        <p className="text-[9px] text-muted-foreground/70 uppercase font-bold mb-0.5">Заявлено</p>
+                                        <p className="text-xs font-bold text-foreground">{formatMoney(inv.reported_revenue)}</p>
                                     </div>
                                     <div className="text-center">
-                                        <p className="text-[9px] text-slate-400 uppercase font-bold mb-0.5">По факту</p>
-                                        <p className="text-xs font-bold text-slate-900">{formatMoney(inv.calculated_revenue)}</p>
+                                        <p className="text-[9px] text-muted-foreground/70 uppercase font-bold mb-0.5">По факту</p>
+                                        <p className="text-xs font-bold text-foreground">{formatMoney(inv.calculated_revenue)}</p>
                                     </div>
                                     <div className="text-right">
-                                        <p className="text-[9px] text-slate-400 uppercase font-bold mb-0.5">Разница</p>
+                                        <p className="text-[9px] text-muted-foreground/70 uppercase font-bold mb-0.5">Разница</p>
                                         <p className={cn(
                                             "text-xs font-black",
                                             inv.revenue_difference < 0 ? "text-red-600" : "text-green-600"
@@ -446,11 +446,11 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
 
                             <div className="flex gap-2">
                                 {inv.status === 'CLOSED' ? (
-                                    <Button variant="outline" className="flex-1 h-9 text-xs font-bold border-slate-200 text-slate-600" onClick={() => setActiveInventoryId(inv.id)}>
+                                    <Button variant="outline" className="flex-1 h-9 text-xs font-bold border-border text-muted-foreground" onClick={() => setActiveInventoryId(inv.id)}>
                                         Результаты
                                     </Button>
                                 ) : isCanceled ? (
-                                    <Button disabled variant="outline" className="flex-1 h-9 text-xs font-bold border-slate-200 text-slate-400">
+                                    <Button disabled variant="outline" className="flex-1 h-9 text-xs font-bold border-border text-muted-foreground/70">
                                         Отменена
                                     </Button>
                                 ) : (
@@ -507,18 +507,18 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
                     </DialogHeader>
                     
                     <div className="space-y-4 py-4">
-                        <div className="grid gap-3 rounded-2xl border bg-slate-50/70 p-4 md:grid-cols-3">
-                            <div className="space-y-1 rounded-xl bg-white p-3 border">
-                                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Склад</p>
-                                <p className="text-sm font-semibold text-slate-900">{selectedWarehouse ? availableWarehouses.find(w => w.id.toString() === selectedWarehouse)?.name || "Выберите склад" : "Выберите склад"}</p>
+                        <div className="grid gap-3 rounded-2xl border bg-muted/70 p-4 md:grid-cols-3">
+                            <div className="space-y-1 rounded-xl bg-card p-3 border">
+                                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">Склад</p>
+                                <p className="text-sm font-semibold text-foreground">{selectedWarehouse ? availableWarehouses.find(w => w.id.toString() === selectedWarehouse)?.name || "Выберите склад" : "Выберите склад"}</p>
                             </div>
-                            <div className="space-y-1 rounded-xl bg-white p-3 border">
-                                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Категория</p>
-                                <p className="text-sm font-semibold text-slate-900">{selectedCategory === "all" ? "Весь склад" : categories.find(c => c.id.toString() === selectedCategory)?.name || "Категория"}</p>
+                            <div className="space-y-1 rounded-xl bg-card p-3 border">
+                                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">Категория</p>
+                                <p className="text-sm font-semibold text-foreground">{selectedCategory === "all" ? "Весь склад" : categories.find(c => c.id.toString() === selectedCategory)?.name || "Категория"}</p>
                             </div>
-                            <div className="space-y-1 rounded-xl bg-white p-3 border">
-                                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Сверка</p>
-                                <p className="text-sm font-semibold text-slate-900">
+                            <div className="space-y-1 rounded-xl bg-card p-3 border">
+                                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">Сверка</p>
+                                <p className="text-sm font-semibold text-foreground">
                                     {isOwner ? "Без кассовой метрики" : inventorySettings?.employee_default_metric_key || metrics.find(m => m.key === selectedMetric)?.label || "Нужно выбрать"}
                                 </p>
                             </div>

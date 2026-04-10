@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
@@ -109,22 +108,24 @@ function SortableItem({ item, index, totalItems, onUpdate, onRemove, onBulkUpdat
     }, [item.weight])
 
     return (
-        <Card ref={setNodeRef} style={style} className="mb-4 overflow-hidden rounded-none border-x-0 bg-white shadow-none last:border-b-0 sm:rounded-xl sm:border sm:shadow-sm">
-            <div className="flex items-start bg-card p-4 md:p-6">
-                <div {...attributes} {...listeners} className="mt-3 mr-3 text-muted-foreground cursor-move touch-none hidden md:block">
-                    <GripVertical className="h-5 w-5" />
+        <div ref={setNodeRef} style={style} className="mb-4 overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-sm transition-all hover:border-slate-200 hover:shadow-md">
+            <div className="flex items-start p-6 md:p-8">
+                <div {...attributes} {...listeners} className="mt-1 mr-4 text-slate-300 hover:text-slate-600 transition-colors cursor-move touch-none hidden md:block">
+                    <GripVertical className="h-6 w-6" />
                 </div>
-                <div className="flex-1 space-y-3 min-w-0">
+                <div className="flex-1 space-y-6 min-w-0">
                     <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                            <Badge variant="secondary" className="text-[10px] sm:text-xs">Пункт {index + 1}</Badge>
+                        <div className="flex items-center gap-3">
+                            <Badge variant="outline" className="text-xs font-semibold bg-slate-50 border-slate-200 text-slate-600 rounded-lg px-2.5 py-0.5">
+                                Пункт {index + 1}
+                            </Badge>
                             
                             {/* Mobile Move Buttons */}
-                            <div className="flex items-center gap-1 md:hidden">
+                            <div className="flex items-center gap-1.5 md:hidden">
                                 <Button
                                     variant="outline"
                                     size="icon"
-                                    className="h-7 w-7"
+                                    className="h-8 w-8 rounded-lg border-slate-200 text-slate-600"
                                     disabled={index === 0}
                                     onClick={() => onMove(index, 'up')}
                                 >
@@ -133,7 +134,7 @@ function SortableItem({ item, index, totalItems, onUpdate, onRemove, onBulkUpdat
                                 <Button
                                     variant="outline"
                                     size="icon"
-                                    className="h-7 w-7"
+                                    className="h-8 w-8 rounded-lg border-slate-200 text-slate-600"
                                     disabled={index === totalItems - 1}
                                     onClick={() => onMove(index, 'down')}
                                 >
@@ -143,25 +144,25 @@ function SortableItem({ item, index, totalItems, onUpdate, onRemove, onBulkUpdat
                         </div>
                         <Button
                             variant="ghost"
-                            size="sm"
-                            className="h-8 w-8 shrink-0 p-0 text-muted-foreground hover:text-red-500"
+                            size="icon"
+                            className="h-10 w-10 shrink-0 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors"
                             onClick={() => onRemove(index)}
                         >
-                            <Trash2 className="h-4 w-4" />
+                            <Trash2 className="h-5 w-5" />
                         </Button>
                     </div>
-                    <div className="grid gap-2">
-                        <Label className="text-xs">Что проверить?</Label>
+                    <div className="grid gap-3">
+                        <Label className="text-sm font-medium ml-1">Что проверить?</Label>
                         <Input
                             placeholder="Напр: Чистота рабочих поверхностей"
                             value={item.content}
                             onChange={e => onUpdate(index, 'content', e.target.value)}
-                            className="text-sm"
+                            className="text-sm h-11 rounded-xl bg-slate-50/50 border-slate-200"
                         />
                     </div>
-                    <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
-                        <div className="flex-1 grid gap-2">
-                            <Label className="text-xs">Доп. описание (опционально)</Label>
+                    <div className="flex flex-col sm:flex-row gap-6">
+                        <div className="flex-1 grid gap-3">
+                            <Label className="text-sm font-medium ml-1">Доп. описание (опционально)</Label>
                             <Textarea
                                 placeholder="Пояснение для проверяющего"
                                 value={item.description}
@@ -175,12 +176,12 @@ function SortableItem({ item, index, totalItems, onUpdate, onRemove, onBulkUpdat
                                     e.currentTarget.style.height = "auto"
                                     e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`
                                 }}
-                                className="text-sm resize-none overflow-hidden min-h-[36px]"
+                                className="text-sm resize-none overflow-hidden min-h-[44px] rounded-xl bg-slate-50/50 border-slate-200 p-3 leading-relaxed"
                                 rows={1}
                             />
                         </div>
-                        <div className="w-full sm:w-24 grid gap-2">
-                            <Label className="text-xs">Вес (Баллы)</Label>
+                        <div className="w-full sm:w-32 grid gap-3">
+                            <Label className="text-sm font-medium ml-1">Вес (Баллы)</Label>
                             <Input
                                 type="number"
                                 step="0.1"
@@ -197,61 +198,63 @@ function SortableItem({ item, index, totalItems, onUpdate, onRemove, onBulkUpdat
                                         onUpdate(index, 'weight', 0)
                                     }
                                 }}
-                                className="text-sm text-center"
+                                className="text-sm text-center h-11 rounded-xl bg-slate-50/50 border-slate-200 font-semibold"
                                 disabled={item.related_entity_type === 'workstations' || (item.options && item.options.length > 0)}
                             />
                         </div>
                     </div>
-                    <div className="flex flex-col gap-3 pt-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4">
-                        <div className="flex items-center gap-2">
+                    <div className="flex flex-col gap-4 pt-4 sm:flex-row sm:flex-wrap sm:items-center">
+                        <div className="flex items-center gap-3">
                             <Switch 
                                 id={`photo-required-${index}`}
                                 checked={item.is_photo_required}
                                 onCheckedChange={checked => onUpdate(index, 'is_photo_required', checked)}
+                                className="data-[state=checked]:bg-slate-900"
                             />
-                            <Label htmlFor={`photo-required-${index}`} className="flex items-center gap-1 text-xs sm:text-sm cursor-pointer select-none">
+                            <Label htmlFor={`photo-required-${index}`} className="flex items-center gap-1 text-sm font-medium cursor-pointer select-none text-slate-700">
                                 Требовать фото
                             </Label>
                         </div>
 
                         {item.is_photo_required && (
-                            <div className="flex items-center gap-2 animate-in fade-in slide-in-from-left-2">
-                                <Label className="text-xs whitespace-nowrap">Мин. фото:</Label>
+                            <div className="flex items-center gap-3 animate-in fade-in slide-in-from-left-2 ml-2">
+                                <Label className="text-sm font-medium text-slate-500 whitespace-nowrap">Мин. фото:</Label>
                                 <Input
                                     type="number"
                                     min="1"
                                     max="10"
                                     value={item.min_photos || 1}
                                     onChange={e => onUpdate(index, 'min_photos', parseInt(e.target.value))}
-                                    className="w-14 sm:w-16 h-8 text-sm text-center"
+                                    className="w-16 h-9 rounded-lg text-sm text-center bg-slate-50/50 border-slate-200 font-medium"
                                 />
                             </div>
                         )}
                         
-                        <div className="hidden h-px bg-border sm:block sm:h-4 sm:w-auto" />
+                        <div className="hidden h-6 w-px bg-slate-200 sm:block mx-4" />
 
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-3">
                             <Switch 
                                 id={`workstation-check-${index}`}
                                 checked={item.related_entity_type === 'workstations'}
                                 onCheckedChange={(checked) => handleWorkstationToggle(checked)}
+                                className="data-[state=checked]:bg-slate-900"
                             />
-                            <Label htmlFor={`workstation-check-${index}`} className="flex items-center gap-1 text-xs sm:text-sm cursor-pointer select-none">
+                            <Label htmlFor={`workstation-check-${index}`} className="flex items-center gap-1 text-sm font-medium cursor-pointer select-none text-slate-700">
                                 Проверять рабочие места
                             </Label>
                         </div>
 
                         {item.related_entity_type === 'workstations' && (
-                            <div className="flex items-center gap-2 animate-in fade-in slide-in-from-left-2 w-full sm:w-auto">
-                                <Label className="text-xs whitespace-nowrap">Зона:</Label>
+                            <div className="flex items-center gap-3 animate-in fade-in slide-in-from-left-2 w-full sm:w-auto ml-2">
+                                <Label className="text-sm font-medium text-slate-500 whitespace-nowrap">Зона:</Label>
                                 <Select 
                                     value={item.target_zone || 'all'} 
                                     onValueChange={(val) => onUpdate(index, 'target_zone', val === 'all' ? null : val)}
                                 >
-                                    <SelectTrigger className="h-8 flex-1 sm:w-[150px] text-sm">
+                                    <SelectTrigger className="h-9 flex-1 sm:w-[160px] rounded-lg bg-slate-50/50 border-slate-200 text-sm font-medium">
                                         <SelectValue placeholder="Все зоны" />
                                     </SelectTrigger>
-                                    <SelectContent>
+                                    <SelectContent className="rounded-xl border-slate-200">
                                         <SelectItem value="all">Все зоны</SelectItem>
                                         {zones.map(zone => (
                                             <SelectItem key={zone} value={zone}>{zone}</SelectItem>
@@ -264,26 +267,26 @@ function SortableItem({ item, index, totalItems, onUpdate, onRemove, onBulkUpdat
 
                     {/* Options Section - Hide if workstation check is enabled */}
                     {!item.related_entity_type && (
-                            <div className="mt-4 border-t pt-2">
-                            <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                                <Label className="text-xs font-semibold text-muted-foreground">Варианты замечаний (Опционально)</Label>
+                            <div className="mt-6 border-t border-slate-100 pt-6">
+                            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                <Label className="text-sm font-medium text-slate-700">Варианты замечаний <span className="text-slate-400 font-normal">(Опционально)</span></Label>
                                 <Button 
-                                    variant="ghost" 
+                                    variant="secondary" 
                                     size="sm" 
-                                    className="h-8 justify-start px-0 text-xs sm:h-6 sm:justify-center sm:px-2"
+                                    className="h-9 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 font-medium px-4 w-fit"
                                     onClick={() => {
                                         const currentOptions = item.options || []
                                         onUpdate(index, 'options', [...currentOptions, { label: '', score: 0 }])
                                     }}
                                 >
-                                    <Plus className="h-3 w-3 mr-1" /> Добавить вариант
+                                    <Plus className="h-4 w-4 mr-1.5" /> Добавить вариант
                                 </Button>
                             </div>
                             
                             {item.options && item.options.length > 0 && (
-                                <div className="space-y-2">
+                                <div className="space-y-3">
                                     {item.options.map((option, optIndex) => (
-                                        <div key={optIndex} className="space-y-2">
+                                        <div key={optIndex} className="flex gap-3">
                                             <Input
                                                 placeholder="Текст замечания (напр. Грязно)"
                                                 value={option.label}
@@ -292,10 +295,10 @@ function SortableItem({ item, index, totalItems, onUpdate, onRemove, onBulkUpdat
                                                     newOptions[optIndex] = { ...newOptions[optIndex], label: e.target.value }
                                                     onUpdate(index, 'options', newOptions)
                                                 }}
-                                                className="h-8 text-sm"
+                                                className="h-11 flex-1 rounded-xl text-sm bg-slate-50/50 border-slate-200"
                                             />
                                             <div className="flex items-center gap-2">
-                                                <div className="flex-1 sm:max-w-[96px]">
+                                                <div className="w-20 sm:w-24">
                                                     <OptionScoreInput
                                                         score={option.score}
                                                         onChange={(val) => {
@@ -329,15 +332,15 @@ function SortableItem({ item, index, totalItems, onUpdate, onRemove, onBulkUpdat
                                                 </div>
                                                 <Button
                                                     variant="ghost"
-                                                    size="sm"
-                                                    className="h-8 w-8 shrink-0 p-0 text-muted-foreground hover:text-red-500"
+                                                    size="icon"
+                                                    className="h-11 w-11 shrink-0 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors"
                                                     onClick={() => {
                                                         const newOptions = [...(item.options || [])]
                                                         newOptions.splice(optIndex, 1)
                                                         onUpdate(index, 'options', newOptions)
                                                     }}
                                                 >
-                                                    <Trash2 className="h-3 w-3" />
+                                                    <Trash2 className="h-5 w-5" />
                                                 </Button>
                                             </div>
                                         </div>
@@ -345,7 +348,7 @@ function SortableItem({ item, index, totalItems, onUpdate, onRemove, onBulkUpdat
                                 </div>
                             )}
                             {(!item.options || item.options.length === 0) && (
-                                <div className="text-xs text-muted-foreground italic">
+                                <div className="text-sm text-slate-500 italic bg-slate-50/50 rounded-xl border border-slate-100 p-4 text-center">
                                     Нет вариантов. Будет использована стандартная оценка.
                                 </div>
                             )}
@@ -353,7 +356,7 @@ function SortableItem({ item, index, totalItems, onUpdate, onRemove, onBulkUpdat
                     )}
                 </div>
             </div>
-        </Card>
+        </div>
     )
 }
 
@@ -581,56 +584,67 @@ export default function ChecklistTemplatePage({ params }: { params: Promise<{ cl
     if (isLoading) return <div className="flex h-screen items-center justify-center"><Loader2 className="animate-spin" /></div>
 
     return (
-        <div className="min-h-screen bg-background pb-28 md:pb-24">
-            <div className="border-b bg-background">
-                <div className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-5 md:flex-row md:items-start md:justify-between md:px-6 md:py-6">
-                    <div className="min-w-0">
-                        <h1 className="truncate text-2xl font-bold tracking-tight md:text-3xl">
-                            {templateId === 'new' ? 'Создание чеклиста' : 'Редактирование чеклиста'}
-                        </h1>
-                        <p className="mt-1 text-sm text-muted-foreground">Настройка структуры, пунктов и правил проверки</p>
+        <div className="min-h-screen bg-slate-50/30 pb-28 md:pb-24">
+            <div className="border-b bg-white">
+                <div className="mx-auto flex max-w-4xl flex-col gap-4 px-4 py-5 md:flex-row md:items-start md:justify-between md:px-6 md:py-6">
+                    <div className="flex items-center gap-4">
+                        <Button variant="ghost" size="icon" onClick={() => router.push(`/clubs/${clubId}/settings/checklists`)} className="hidden md:flex h-11 w-11 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 shadow-sm shrink-0">
+                            <ArrowLeft className="h-5 w-5 text-slate-600" />
+                        </Button>
+                        <div className="min-w-0">
+                            <h1 className="truncate text-2xl font-bold tracking-tight md:text-3xl">
+                                {templateId === 'new' ? 'Создание чеклиста' : 'Редактирование чеклиста'}
+                            </h1>
+                            <p className="mt-1 text-sm text-muted-foreground">Настройка структуры, пунктов и правил проверки</p>
+                        </div>
                     </div>
-                    <Button onClick={handleSave} disabled={isSaving} className="hidden bg-black text-white hover:bg-black/90 md:inline-flex">
-                        {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                        Сохранить
-                    </Button>
+                    <div className="hidden md:flex gap-3">
+                        <Button onClick={() => router.push(`/clubs/${clubId}/settings/checklists`)} variant="outline" className="h-11 rounded-xl px-6 border-slate-200 bg-white font-medium shadow-sm">
+                            Отмена
+                        </Button>
+                        <Button onClick={handleSave} disabled={isSaving} className="h-11 rounded-xl px-6 bg-slate-900 text-white hover:bg-slate-800 font-medium shadow-sm">
+                            {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                            Сохранить
+                        </Button>
+                    </div>
                 </div>
             </div>
 
-            <div className="mx-auto max-w-3xl px-4 py-6 md:px-6 md:py-8">
-
-                <Card className="mb-4 rounded-none border-x-0 shadow-none md:mb-8 md:rounded-xl md:border-x md:shadow-sm">
-                    <CardHeader className="px-4 md:px-6">
-                        <CardTitle>Основная информация</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4 px-4 md:px-6">
-                        <div className="grid gap-2">
-                            <Label>Название чеклиста</Label>
+            <div className="mx-auto max-w-4xl px-4 py-6 md:px-6 md:py-8 space-y-8">
+                <div className="rounded-3xl border border-slate-100 bg-white p-6 md:p-8 shadow-sm">
+                    <div className="mb-6">
+                        <h2 className="text-xl font-semibold">Основная информация</h2>
+                    </div>
+                    <div className="space-y-6">
+                        <div className="grid gap-3">
+                            <Label className="text-sm font-medium ml-1">Название чеклиста</Label>
                             <Input
                                 placeholder="Напр: Утренняя проверка"
                                 value={currentTemplate.name}
                                 onChange={e => setCurrentTemplate({ ...currentTemplate, name: e.target.value })}
+                                className="h-11 rounded-xl bg-slate-50/50 border-slate-200"
                             />
                         </div>
-                        <div className="grid gap-2">
-                            <Label>Описание</Label>
+                        <div className="grid gap-3">
+                            <Label className="text-sm font-medium ml-1">Описание</Label>
                             <Input
                                 placeholder="Для чего этот чеклист"
                                 value={currentTemplate.description}
                                 onChange={e => setCurrentTemplate({ ...currentTemplate, description: e.target.value })}
+                                className="h-11 rounded-xl bg-slate-50/50 border-slate-200"
                             />
                         </div>
 
-                        <div className="grid gap-2">
-                            <Label>Тип чеклиста</Label>
+                        <div className="grid gap-3">
+                            <Label className="text-sm font-medium ml-1">Тип чеклиста</Label>
                             <Select 
                                 value={currentTemplate.type || 'manager_audit'} 
                                 onValueChange={(val: any) => setCurrentTemplate({...currentTemplate, type: val})}
                             >
-                                <SelectTrigger>
+                                <SelectTrigger className="h-11 rounded-xl bg-slate-50/50 border-slate-200">
                                     <SelectValue placeholder="Выберите тип" />
                                 </SelectTrigger>
-                                <SelectContent>
+                                <SelectContent className="rounded-xl border-slate-200">
                                     <SelectItem value="manager_audit">Аудит (Управляющий)</SelectItem>
                                     <SelectItem value="shift_handover">Приемка смены (Сотрудник)</SelectItem>
                                 </SelectContent>
@@ -638,17 +652,18 @@ export default function ChecklistTemplatePage({ params }: { params: Promise<{ cl
                         </div>
 
                         {currentTemplate.type === 'shift_handover' && (
-                            <div className="space-y-4 pt-2 border-t mt-4">
-                                <h3 className="font-medium text-sm text-muted-foreground">Настройки приемки</h3>
-                                <div className="flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-center sm:justify-between">
-                                    <div className="space-y-0.5">
-                                        <Label>Блокировать открытие смены</Label>
-                                        <p className="text-sm text-muted-foreground">
+                            <div className="space-y-4 pt-6 border-t border-slate-100 mt-6">
+                                <h3 className="font-medium text-sm text-muted-foreground ml-1">Настройки приемки</h3>
+                                <div className="flex flex-col gap-4 rounded-2xl bg-slate-50/50 border border-slate-100 p-5 sm:flex-row sm:items-center sm:justify-between group/switch transition-colors hover:bg-slate-50">
+                                    <div className="space-y-1">
+                                        <Label className="text-sm font-medium text-slate-700 cursor-pointer" htmlFor="block-open">Блокировать открытие смены</Label>
+                                        <p className="text-xs text-slate-500 leading-relaxed">
                                             Сотрудник не сможет начать смену без прохождения этого чеклиста
                                         </p>
                                     </div>
                                     <Switch 
-                                        className="self-end sm:self-auto"
+                                        id="block-open"
+                                        className="self-end sm:self-auto data-[state=checked]:bg-slate-900"
                                         checked={currentTemplate.settings?.block_shift_open}
                                         onCheckedChange={checked => setCurrentTemplate({
                                             ...currentTemplate, 
@@ -656,15 +671,16 @@ export default function ChecklistTemplatePage({ params }: { params: Promise<{ cl
                                         })}
                                     />
                                 </div>
-                                <div className="flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-center sm:justify-between">
-                                    <div className="space-y-0.5">
-                                        <Label>Блокировать закрытие смены</Label>
-                                        <p className="text-sm text-muted-foreground">
+                                <div className="flex flex-col gap-4 rounded-2xl bg-slate-50/50 border border-slate-100 p-5 sm:flex-row sm:items-center sm:justify-between group/switch transition-colors hover:bg-slate-50">
+                                    <div className="space-y-1">
+                                        <Label className="text-sm font-medium text-slate-700 cursor-pointer" htmlFor="block-close">Блокировать закрытие смены</Label>
+                                        <p className="text-xs text-slate-500 leading-relaxed">
                                             Сотрудник не сможет завершить смену без прохождения этого чеклиста
                                         </p>
                                     </div>
                                     <Switch 
-                                        className="self-end sm:self-auto"
+                                        id="block-close"
+                                        className="self-end sm:self-auto data-[state=checked]:bg-slate-900"
                                         checked={currentTemplate.settings?.block_shift_close}
                                         onCheckedChange={checked => setCurrentTemplate({
                                             ...currentTemplate, 
@@ -676,17 +692,18 @@ export default function ChecklistTemplatePage({ params }: { params: Promise<{ cl
                         )}
 
                         {(!currentTemplate.type || currentTemplate.type === 'manager_audit') && (
-                            <div className="space-y-4 pt-2 border-t mt-4">
-                                <h3 className="font-medium text-sm text-muted-foreground">Настройки аудита</h3>
-                                <div className="flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-center sm:justify-between">
-                                    <div className="space-y-0.5">
-                                        <Label>Влияет на KPI</Label>
-                                        <p className="text-sm text-muted-foreground">
+                            <div className="space-y-4 pt-6 border-t border-slate-100 mt-6">
+                                <h3 className="font-medium text-sm text-muted-foreground ml-1">Настройки аудита</h3>
+                                <div className="flex flex-col gap-4 rounded-2xl bg-slate-50/50 border border-slate-100 p-5 sm:flex-row sm:items-center sm:justify-between group/switch transition-colors hover:bg-slate-50">
+                                    <div className="space-y-1">
+                                        <Label className="text-sm font-medium text-slate-700 cursor-pointer" htmlFor="affects-kpi">Влияет на KPI</Label>
+                                        <p className="text-xs text-slate-500 leading-relaxed">
                                             Учитывать результаты проверки в расчете премии
                                         </p>
                                     </div>
                                     <Switch 
-                                        className="self-end sm:self-auto"
+                                        id="affects-kpi"
+                                        className="self-end sm:self-auto data-[state=checked]:bg-slate-900"
                                         checked={currentTemplate.settings?.affects_kpi}
                                         onCheckedChange={checked => setCurrentTemplate({
                                             ...currentTemplate, 
@@ -696,20 +713,27 @@ export default function ChecklistTemplatePage({ params }: { params: Promise<{ cl
                                 </div>
                             </div>
                         )}
-                    </CardContent>
-                </Card>
+                    </div>
+                </div>
 
-                <div className="space-y-4 px-4 md:px-0">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                        <h2 className="text-xl font-semibold">Пункты проверки</h2>
-                        <Button variant="outline" size="sm" className="w-full sm:w-auto" onClick={handleAddItem}>
-                            <Plus className="mr-1 h-4 w-4" /> Добавить пункт
+                <div className="space-y-6">
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between px-2">
+                        <div>
+                            <h2 className="text-xl font-semibold">Пункты проверки</h2>
+                            <p className="text-sm text-muted-foreground mt-1">Добавьте задачи, которые нужно проверить</p>
+                        </div>
+                        <Button className="h-11 rounded-xl px-6 bg-slate-900 text-white hover:bg-slate-800 font-medium w-full sm:w-auto" onClick={handleAddItem}>
+                            <Plus className="mr-2 h-4 w-4" /> Добавить пункт
                         </Button>
                     </div>
 
                     {currentTemplate.items?.length === 0 && (
-                        <div className="border-2 border-dashed rounded-lg p-8 text-center text-muted-foreground">
-                            В чеклисте пока нет пунктов. Добавьте первый.
+                        <div className="flex flex-col items-center justify-center rounded-3xl border border-dashed border-slate-200 bg-slate-50/50 py-16 text-center">
+                            <div className="h-12 w-12 rounded-2xl bg-white border border-slate-100 flex items-center justify-center mb-4 shadow-sm">
+                                <Plus className="h-5 w-5 text-slate-400" />
+                            </div>
+                            <p className="text-sm font-medium text-slate-900">В чеклисте пока нет пунктов</p>
+                            <p className="text-xs text-slate-500 mt-1">Добавьте первый пункт проверки</p>
                         </div>
                     )}
 
@@ -740,17 +764,17 @@ export default function ChecklistTemplatePage({ params }: { params: Promise<{ cl
                 </div>
             </div>
 
-            <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur supports-[backdrop-filter]:bg-background/80 md:hidden">
-                <div className="mx-auto flex max-w-3xl gap-2">
-                    <Button variant="outline" size="icon" className="h-11 w-11 shrink-0" onClick={() => router.push(`/clubs/${clubId}/settings/checklists`)}>
-                        <ArrowLeft className="h-4 w-4" />
+            <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-white/95 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] backdrop-blur supports-[backdrop-filter]:bg-white/80 md:hidden">
+                <div className="mx-auto flex max-w-4xl gap-2">
+                    <Button variant="outline" size="icon" className="h-12 w-12 shrink-0 rounded-xl border-slate-200" onClick={() => router.push(`/clubs/${clubId}/settings/checklists`)}>
+                        <ArrowLeft className="h-5 w-5 text-slate-600" />
                     </Button>
-                    <Button variant="outline" className="h-11 flex-1" onClick={handleAddItem}>
+                    <Button variant="outline" className="h-12 flex-1 rounded-xl border-slate-200 font-medium" onClick={handleAddItem}>
                         <Plus className="mr-2 h-4 w-4" />
                         Добавить пункт
                     </Button>
-                    <Button onClick={handleSave} disabled={isSaving} size="icon" className="h-11 w-11 shrink-0 bg-purple-600 hover:bg-purple-700" aria-label="Сохранить" title="Сохранить">
-                        {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                    <Button onClick={handleSave} disabled={isSaving} size="icon" className="h-12 w-12 shrink-0 bg-slate-900 text-white hover:bg-slate-800 rounded-xl" aria-label="Сохранить" title="Сохранить">
+                        {isSaving ? <Loader2 className="h-5 w-5 animate-spin" /> : <Save className="h-5 w-5" />}
                     </Button>
                 </div>
             </div>

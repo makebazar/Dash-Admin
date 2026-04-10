@@ -23,11 +23,11 @@ const CATEGORIES: Record<string, any> = {
     'HOUSEHOLD': { label: 'Хозяйственный', icon: Home, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
     'HR': { label: 'Кадровый', icon: Users, color: 'text-purple-500', bg: 'bg-purple-500/10' },
     'FINANCIAL': { label: 'Финансовый', icon: Wallet, color: 'text-amber-500', bg: 'bg-amber-500/10' },
-    'OTHER': { label: 'Другое', icon: MoreHorizontal, color: 'text-slate-500', bg: 'bg-slate-500/10' },
+    'OTHER': { label: 'Другое', icon: MoreHorizontal, color: 'text-muted-foreground', bg: 'bg-slate-500/10' },
 }
 
 const PRIORITIES: Record<string, any> = {
-    'LOW': { label: 'Низкий', color: 'text-slate-500', bg: 'bg-slate-500/10' },
+    'LOW': { label: 'Низкий', color: 'text-muted-foreground', bg: 'bg-slate-500/10' },
     'MEDIUM': { label: 'Средний', color: 'text-blue-500', bg: 'bg-blue-500/10' },
     'HIGH': { label: 'Высокий', color: 'text-orange-500', bg: 'bg-orange-500/10' },
     'URGENT': { label: 'Критичный', color: 'text-red-500', bg: 'bg-red-500/10' },
@@ -149,7 +149,7 @@ export default function RequestsPage({ params }: { params: Promise<{ clubId: str
 
     const getStatusBadge = (status: string) => {
         switch (status) {
-            case 'PENDING': return <Badge variant="outline" className="bg-slate-500/10 text-slate-500 border-slate-500/20">Ожидает</Badge>
+            case 'PENDING': return <Badge variant="outline" className="bg-slate-500/10 text-muted-foreground border-slate-500/20">Ожидает</Badge>
             case 'IN_PROGRESS': return <Badge variant="outline" className="bg-blue-500/10 text-blue-500 border-blue-500/20">В работе</Badge>
             case 'RESOLVED': return <Badge variant="outline" className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20">Решено</Badge>
             case 'REJECTED': return <Badge variant="outline" className="bg-red-500/10 text-red-500 border-red-500/20">Отклонено</Badge>
@@ -224,7 +224,7 @@ export default function RequestsPage({ params }: { params: Promise<{ clubId: str
                                 }}
                             >
                                 {!req.is_read_by_employee && (
-                                    <div className="absolute top-0 right-0 bg-purple-500 text-white text-[8px] px-2 py-0.5 font-bold rounded-bl-lg uppercase">
+                                    <div className="absolute top-0 right-0 bg-purple-500 text-primary-foreground text-[8px] px-2 py-0.5 font-bold rounded-bl-lg uppercase">
                                         Ответ сотрудника
                                     </div>
                                 )}
@@ -307,7 +307,7 @@ export default function RequestsPage({ params }: { params: Promise<{ clubId: str
                                                     {msg.photo_urls && msg.photo_urls.length > 0 && (
                                                         <div className="grid grid-cols-2 gap-2 mt-3">
                                                             {msg.photo_urls.map((url: string, i: number) => (
-                                                                <a key={i} href={url} target="_blank" rel="noreferrer" className="relative h-32 w-full rounded-lg overflow-hidden border border-black/10">
+                                                                <a key={i} href={url} target="_blank" rel="noreferrer" className="relative h-32 w-full rounded-lg overflow-hidden border border-primary/10">
                                                                     <Image src={url} alt="Attached" fill className="object-cover" />
                                                                 </a>
                                                             ))}

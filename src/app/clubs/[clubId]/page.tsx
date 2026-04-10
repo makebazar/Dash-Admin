@@ -475,15 +475,15 @@ async function getInventorySnapshot(clubId: string): Promise<InventorySnapshot> 
         ),
         query(
             `SELECT COUNT(*) FILTER (WHERE is_active = TRUE AND COALESCE(abc_category, 'C') = 'A') as total_a_count,
-            COUNT(*) FILTER (WHERE is_active = TRUE AND COALESCE(abc_category, 'C') = 'A' AND (current_stock <= 0 OR (COALESCE(min_stock_level, 0) > 0 AND current_stock < min_stock_level) OR (COALESCE(sales_velocity, 0) > 0 AND current_stock / sales_velocity < 2))) as total_a_risk_count
+            COUNT(*) FILTER (WHERE is_active = TRUE AND COALESCE(abc_category, 'C') = 'A' AND (current_stock <= 0 OR (COALESCE(min_stock_level, 0) > 0 AND current_stock < min_stock_level) OR (COALESCE(sales_velocity, 0) > 0 AND current_stock / NULLIF(sales_velocity, 0) < 2))) as total_a_risk_count
             FROM warehouse_products WHERE club_id = $1`,
             [clubId]
         ),
         query(
             `SELECT id, name, current_stock, min_stock_level, COALESCE(sales_velocity, 0) as sales_velocity
             FROM warehouse_products WHERE club_id = $1 AND is_active = TRUE AND COALESCE(abc_category, 'C') = 'A'
-            AND (current_stock <= 0 OR (COALESCE(min_stock_level, 0) > 0 AND current_stock < min_stock_level) OR (COALESCE(sales_velocity, 0) > 0 AND current_stock / sales_velocity < 2))
-            ORDER BY CASE WHEN current_stock <= 0 THEN 0 WHEN COALESCE(min_stock_level, 0) > 0 AND current_stock < min_stock_level THEN 1 WHEN COALESCE(sales_velocity, 0) > 0 AND current_stock / sales_velocity < 2 THEN 2 ELSE 3 END, current_stock ASC, sales_velocity DESC, name ASC LIMIT 6`,
+            AND (current_stock <= 0 OR (COALESCE(min_stock_level, 0) > 0 AND current_stock < min_stock_level) OR (COALESCE(sales_velocity, 0) > 0 AND current_stock / NULLIF(sales_velocity, 0) < 2))
+            ORDER BY CASE WHEN current_stock <= 0 THEN 0 WHEN COALESCE(min_stock_level, 0) > 0 AND current_stock < min_stock_level THEN 1 WHEN COALESCE(sales_velocity, 0) > 0 AND current_stock / NULLIF(sales_velocity, 0) < 2 THEN 2 ELSE 3 END, current_stock ASC, sales_velocity DESC, name ASC LIMIT 6`,
             [clubId]
         ),
     ])

@@ -17,7 +17,7 @@ import { format } from "date-fns"
 import { ru } from "date-fns/locale"
 import { ImageViewer } from "@/components/ui/image-viewer"
 import { cn, isLaundryEquipmentType } from "@/lib/utils"
-import { PageShell, PageHeader, PageToolbar, ToolbarGroup } from "@/components/layout/PageShell"
+import { PageShell } from "@/components/layout/PageShell"
 
 interface Evaluation {
     id: number
@@ -854,102 +854,109 @@ export default function ChecklistsPage({ params, searchParams }: { params: Promi
     }, [shiftMonths, filterShiftMonth, shiftsTab])
 
     return (
-        <PageShell maxWidth="6xl">
-            <PageHeader 
-                title="Центр проверок" 
-                description="Единый центр контроля качества и выполненных работ"
-            />
+        <PageShell maxWidth="5xl">
+            <div className="space-y-8 pb-28 sm:pb-12">
+            <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between mb-8">
+                    <div className="min-w-0">
+                        <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-slate-900 truncate">Центр проверок</h1>
+                        <p className="text-slate-500 text-lg mt-2">Единый центр контроля качества и выполненных работ</p>
+                    </div>
+                </div>
+            </div>
 
             <Tabs defaultValue="equipment" value={activeTab} onValueChange={handleTabChange} className="w-full">
-                <div className="border-b mb-6 overflow-x-auto">
-                    <TabsList className="bg-transparent h-auto p-0 space-x-6 min-w-max">
-                        <TabsTrigger value="equipment" variant="underline" className="pb-3 rounded-none">
-                            Оборудование
-                            {pendingTasks > 0 && <Badge variant="secondary" className="ml-2 h-5 px-1.5 bg-slate-100">{pendingTasks}</Badge>}
-                        </TabsTrigger>
-                        <TabsTrigger value="checklists" variant="underline" className="pb-3 rounded-none">
-                            Чеклист
-                            {pendingEvaluations > 0 && <Badge variant="secondary" className="ml-2 h-5 px-1.5 bg-slate-100">{pendingEvaluations}</Badge>}
-                        </TabsTrigger>
-                        <TabsTrigger value="shifts" variant="underline" className="pb-3 rounded-none">
-                            Смены
-                            {pendingShifts > 0 && <Badge variant="secondary" className="ml-2 h-5 px-1.5 bg-slate-100">{pendingShifts}</Badge>}
-                        </TabsTrigger>
-                    </TabsList>
-                </div>
+                    <div className="flex justify-start mb-8 border-b border-slate-200">
+                        <TabsList className="flex h-auto w-full justify-start gap-8 overflow-x-auto rounded-none bg-transparent p-0">
+                            <TabsTrigger value="equipment" className="relative shrink-0 rounded-none border-b-2 border-transparent px-0 pb-4 pt-2 font-medium text-slate-500 hover:text-slate-700 data-[state=active]:border-slate-900 data-[state=active]:text-slate-900 data-[state=active]:shadow-none data-[state=active]:bg-transparent transition-all gap-2">
+                                <Layers className="h-4 w-4" />
+                                Оборудование
+                                {pendingTasks > 0 && <Badge variant="secondary" className="ml-2 h-5 px-1.5 bg-slate-100 text-slate-900">{pendingTasks}</Badge>}
+                            </TabsTrigger>
+                            <TabsTrigger value="checklists" className="relative shrink-0 rounded-none border-b-2 border-transparent px-0 pb-4 pt-2 font-medium text-slate-500 hover:text-slate-700 data-[state=active]:border-slate-900 data-[state=active]:text-slate-900 data-[state=active]:shadow-none data-[state=active]:bg-transparent transition-all gap-2">
+                                <CheckCircle2 className="h-4 w-4" />
+                                Чеклисты
+                                {pendingEvaluations > 0 && <Badge variant="secondary" className="ml-2 h-5 px-1.5 bg-slate-100 text-slate-900">{pendingEvaluations}</Badge>}
+                            </TabsTrigger>
+                            <TabsTrigger value="shifts" className="relative shrink-0 rounded-none border-b-2 border-transparent px-0 pb-4 pt-2 font-medium text-slate-500 hover:text-slate-700 data-[state=active]:border-slate-900 data-[state=active]:text-slate-900 data-[state=active]:shadow-none data-[state=active]:bg-transparent transition-all gap-2">
+                                <User className="h-4 w-4" />
+                                Смены
+                                {pendingShifts > 0 && <Badge variant="secondary" className="ml-2 h-5 px-1.5 bg-slate-100 text-slate-900">{pendingShifts}</Badge>}
+                            </TabsTrigger>
+                        </TabsList>
+                    </div>
 
                     {/* EQUIPMENT TAB */}
                     <TabsContent value="equipment">
                         <div className="space-y-6">
                             <Tabs value={equipmentTab} onValueChange={(v) => setEquipmentTab(v as 'active' | 'history')} className="w-full">
-                                <TabsList className="w-full sm:w-auto grid grid-cols-2">
-                                    <TabsTrigger value="active">Входящие</TabsTrigger>
-                                    <TabsTrigger value="history">История</TabsTrigger>
-                                </TabsList>
-                            </Tabs>
+                                    <TabsList className="flex h-auto w-full justify-start gap-6 overflow-x-auto rounded-none bg-transparent p-0 mb-6">
+                                        <TabsTrigger value="active" className="relative shrink-0 rounded-none border-b-2 border-transparent px-0 pb-2 pt-1 font-medium text-slate-500 hover:text-slate-700 data-[state=active]:border-slate-900 data-[state=active]:text-slate-900 data-[state=active]:shadow-none data-[state=active]:bg-transparent transition-all">Ожидают проверки</TabsTrigger>
+                                        <TabsTrigger value="history" className="relative shrink-0 rounded-none border-b-2 border-transparent px-0 pb-2 pt-1 font-medium text-slate-500 hover:text-slate-700 data-[state=active]:border-slate-900 data-[state=active]:text-slate-900 data-[state=active]:shadow-none data-[state=active]:bg-transparent transition-all">История</TabsTrigger>
+                                    </TabsList>
+                                </Tabs>
 
                             {/* Filters */}
                             {tasks.length > 0 && (
-                                <PageToolbar>
-                                    <ToolbarGroup className="w-full sm:w-auto">
-                                        <div className="flex flex-col sm:flex-row gap-2 w-full">
-                                            <div className="flex items-center gap-2 w-full sm:w-auto">
-                                                <Select value={filterStatus} onValueChange={setFilterStatus}>
-                                                    <SelectTrigger className="w-full sm:w-[180px] h-9 text-sm bg-muted/50 border-transparent hover:bg-muted transition-colors flex-1 min-w-0">
+                                <div className="mb-6 flex flex-col gap-4 border-b border-slate-100 pb-6">
+                                    <div className="flex flex-wrap items-center justify-between gap-4">
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <Select value={filterStatus} onValueChange={setFilterStatus}>
+                                                <SelectTrigger className="h-10 w-[180px] rounded-xl border-slate-200 bg-white font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-50 focus:ring-0">
+                                                    <div className="flex items-center truncate">
+                                                        <Filter className="mr-2 h-4 w-4 text-slate-400 shrink-0" />
+                                                        <SelectValue placeholder="Статус" />
+                                                    </div>
+                                                </SelectTrigger>
+                                                <SelectContent className="rounded-xl border-slate-200 shadow-lg">
+                                                    <SelectItem value="all">Все статусы</SelectItem>
+                                                    {equipmentTab === 'active' ? (
+                                                        <>
+                                                            <SelectItem value="PENDING">Ожидает</SelectItem>
+                                                            <SelectItem value="REJECTED">На доработке</SelectItem>
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <SelectItem value="APPROVED">Одобрено</SelectItem>
+                                                        </>
+                                                    )}
+                                                </SelectContent>
+                                            </Select>
+
+                                            {equipmentTab === 'active' && (
+                                                <Select value={filterZone} onValueChange={setFilterZone}>
+                                                    <SelectTrigger className="h-10 w-[180px] rounded-xl border-slate-200 bg-white font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-50 focus:ring-0">
                                                         <div className="flex items-center truncate">
-                                                            <Filter className="mr-2 h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                                                            <SelectValue placeholder="Статус" />
+                                                            <Layers className="mr-2 h-4 w-4 text-slate-400 shrink-0" />
+                                                            <SelectValue placeholder="Зона" />
                                                         </div>
                                                     </SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="all">Все статусы</SelectItem>
-                                                        {equipmentTab === 'active' ? (
-                                                            <>
-                                                                <SelectItem value="PENDING">Ожидает</SelectItem>
-                                                                <SelectItem value="REJECTED">На доработке</SelectItem>
-                                                            </>
-                                                        ) : (
-                                                            <>
-                                                                <SelectItem value="APPROVED">Одобрено</SelectItem>
-                                                            </>
-                                                        )}
+                                                    <SelectContent className="rounded-xl border-slate-200 shadow-lg">
+                                                        <SelectItem value="all">Все зоны</SelectItem>
+                                                        {zones.map(z => <SelectItem key={z} value={z}>{z}</SelectItem>)}
                                                     </SelectContent>
                                                 </Select>
+                                            )}
 
-                                                {equipmentTab === 'active' && (
-                                                    <Select value={filterZone} onValueChange={setFilterZone}>
-                                                        <SelectTrigger className="w-full sm:w-[180px] h-9 text-sm bg-muted/50 border-transparent hover:bg-muted transition-colors flex-1 min-w-0">
-                                                            <div className="flex items-center truncate">
-                                                                <Layers className="mr-2 h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                                                                <SelectValue placeholder="Зона" />
-                                                            </div>
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                            <SelectItem value="all">Все зоны</SelectItem>
-                                                            {zones.map(z => <SelectItem key={z} value={z}>{z}</SelectItem>)}
-                                                        </SelectContent>
-                                                    </Select>
-                                                )}
-
-                                                <Select value={filterEmployee} onValueChange={setFilterEmployee}>
-                                                    <SelectTrigger className="w-full sm:w-[180px] h-9 text-sm bg-muted/50 border-transparent hover:bg-muted transition-colors flex-1 min-w-0">
-                                                        <div className="flex items-center truncate">
-                                                            <User className="mr-2 h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                                                            <SelectValue placeholder="Сотрудник" />
-                                                        </div>
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="all">Все сотрудники</SelectItem>
-                                                        {employees.map(e => <SelectItem key={e} value={e}>{e}</SelectItem>)}
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
+                                            <Select value={filterEmployee} onValueChange={setFilterEmployee}>
+                                                <SelectTrigger className="h-10 w-[180px] rounded-xl border-slate-200 bg-white font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-50 focus:ring-0">
+                                                    <div className="flex items-center truncate">
+                                                        <User className="mr-2 h-4 w-4 text-slate-400 shrink-0" />
+                                                        <SelectValue placeholder="Сотрудник" />
+                                                    </div>
+                                                </SelectTrigger>
+                                                <SelectContent className="rounded-xl border-slate-200 shadow-lg">
+                                                    <SelectItem value="all">Все сотрудники</SelectItem>
+                                                    {employees.map(e => <SelectItem key={e} value={e}>{e}</SelectItem>)}
+                                                </SelectContent>
+                                            </Select>
+                                            
                                             {equipmentTab === 'history' && (
-                                                <div className="flex items-center justify-between rounded-md bg-muted/50 px-3 h-9 border border-transparent w-full sm:w-[280px]">
+                                                <div className="flex items-center justify-between rounded-xl bg-white border border-slate-200 shadow-sm px-3 h-10 w-[240px]">
                                                     <Button
                                                         variant="ghost"
                                                         size="icon"
-                                                        className="h-7 w-7"
+                                                        className="h-8 w-8 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-900"
                                                         onClick={() => {
                                                             const nextIndex = currentMonthIndex + 1
                                                             if (nextIndex < months.length) {
@@ -961,15 +968,15 @@ export default function ChecklistsPage({ params, searchParams }: { params: Promi
                                                         <ChevronLeft className="h-4 w-4" />
                                                     </Button>
                                                     <div className="flex items-center gap-2">
-                                                        <Calendar className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                                                        <span className="text-sm font-medium truncate">
+                                                        <Calendar className="h-4 w-4 text-slate-400 shrink-0" />
+                                                        <span className="text-sm font-medium text-slate-700 truncate">
                                                             {filterMonth === 'all' ? 'Все месяцы' : format(new Date(`${filterMonth}-01`), 'MMMM yyyy', { locale: ru })}
                                                         </span>
                                                     </div>
                                                     <Button
                                                         variant="ghost"
                                                         size="icon"
-                                                        className="h-7 w-7"
+                                                        className="h-8 w-8 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-900"
                                                         onClick={() => {
                                                             const nextIndex = currentMonthIndex - 1
                                                             if (nextIndex >= 0) {
@@ -983,22 +990,23 @@ export default function ChecklistsPage({ params, searchParams }: { params: Promi
                                                 </div>
                                             )}
                                         </div>
-                                    </ToolbarGroup>
-                                    <ToolbarGroup align="end" className="gap-2">
-                                        <div className="text-sm text-muted-foreground">
-                                            Показано: <span className="font-medium text-foreground">{groupedTasks.reduce((acc, [_, tasks]) => acc + tasks.length, 0)}</span> задач
+                                        
+                                        <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end border-t sm:border-0 border-slate-100 pt-3 sm:pt-0 mt-2 sm:mt-0">
+                                            <div className="text-sm font-medium text-slate-500">
+                                                Показано: <span className="text-slate-900">{groupedTasks.reduce((acc, [_, tasks]) => acc + tasks.length, 0)}</span> задач
+                                            </div>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                onClick={() => fetchTasks(clubId, equipmentTab)}
+                                                disabled={isTasksLoading}
+                                                className="h-9 w-9 rounded-xl hover:bg-slate-100 text-slate-500 hover:text-slate-900 shrink-0"
+                                            >
+                                                <RotateCcw className={cn("h-4 w-4", isTasksLoading && "animate-spin")} />
+                                            </Button>
                                         </div>
-                                        <Button 
-                                            variant="ghost" 
-                                            size="icon" 
-                                            onClick={() => fetchTasks(clubId, equipmentTab)} 
-                                            disabled={isTasksLoading}
-                                            className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                                        >
-                                            <RotateCcw className={cn("h-4 w-4", isTasksLoading && "animate-spin")} />
-                                        </Button>
-                                    </ToolbarGroup>
-                                </PageToolbar>
+                                    </div>
+                                </div>
                             )}
 
                             {isTasksLoading ? (
@@ -1335,7 +1343,7 @@ export default function ChecklistsPage({ params, searchParams }: { params: Promi
                                                                                         На доработку
                                                                                     </Button>
                                                                                     <Button 
-                                                                                        className="w-full sm:flex-1 bg-green-600 hover:bg-green-700 text-white shadow-sm h-12 md:h-9 font-semibold" 
+                                                                                        className="w-full sm:flex-1 bg-slate-900 text-white hover:bg-slate-800 text-white shadow-sm h-12 md:h-9 font-semibold" 
                                                                                         onClick={() => handleVerifyTask(task, 'APPROVE')}
                                                                                         disabled={isSubmittingTask || Boolean(comment.trim())}
                                                                                     >
@@ -1361,68 +1369,70 @@ export default function ChecklistsPage({ params, searchParams }: { params: Promi
                     <TabsContent value="shifts">
                         <div className="space-y-6">
                             <Tabs value={shiftsTab} onValueChange={(v) => setShiftsTab(v as 'active' | 'history')} className="w-full">
-                                <TabsList className="w-full sm:w-auto grid grid-cols-2">
-                                    <TabsTrigger value="active">Входящие</TabsTrigger>
-                                    <TabsTrigger value="history">История</TabsTrigger>
-                                </TabsList>
-                            </Tabs>
+                                    <TabsList className="flex h-auto w-full justify-start gap-6 overflow-x-auto rounded-none bg-transparent p-0 mb-6">
+                                        <TabsTrigger value="active" className="relative shrink-0 rounded-none border-b-2 border-transparent px-0 pb-2 pt-1 font-medium text-slate-500 hover:text-slate-700 data-[state=active]:border-slate-900 data-[state=active]:text-slate-900 data-[state=active]:shadow-none data-[state=active]:bg-transparent transition-all">Ожидают проверки</TabsTrigger>
+                                        <TabsTrigger value="history" className="relative shrink-0 rounded-none border-b-2 border-transparent px-0 pb-2 pt-1 font-medium text-slate-500 hover:text-slate-700 data-[state=active]:border-slate-900 data-[state=active]:text-slate-900 data-[state=active]:shadow-none data-[state=active]:bg-transparent transition-all">История</TabsTrigger>
+                                    </TabsList>
+                                </Tabs>
 
-                            <PageToolbar>
-                                <ToolbarGroup className="w-full sm:w-auto">
-                                    <div className="flex w-full">
-                                        <div className="flex items-center justify-between rounded-md bg-muted/50 px-3 h-9 border border-transparent w-full sm:w-[280px]">
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                className="h-7 w-7"
-                                                onClick={() => {
-                                                    const nextIndex = currentShiftMonthIndex + 1
-                                                    if (nextIndex < shiftMonths.length) {
-                                                        setFilterShiftMonth(shiftMonths[nextIndex])
-                                                    }
-                                                }}
-                                                disabled={currentShiftMonthIndex === -1 || currentShiftMonthIndex >= shiftMonths.length - 1}
-                                            >
-                                                <ChevronLeft className="h-4 w-4" />
-                                            </Button>
-                                            <div className="flex items-center gap-2">
-                                                <Calendar className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                                                <span className="text-sm font-medium truncate">
-                                                    {format(new Date(`${filterShiftMonth}-01`), 'MMMM yyyy', { locale: ru })}
-                                                </span>
+                            <div className="mb-6 flex flex-col gap-4 border-b border-slate-100 pb-6">
+                                <div className="flex flex-wrap items-center justify-between gap-4">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        {shiftsTab === 'history' && (
+                                            <div className="flex items-center justify-between rounded-xl bg-white border border-slate-200 shadow-sm px-3 h-10 w-[240px]">
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-8 w-8 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-900"
+                                                    onClick={() => {
+                                                        const nextIndex = currentShiftMonthIndex + 1
+                                                        if (nextIndex < shiftMonths.length) {
+                                                            setFilterShiftMonth(shiftMonths[nextIndex])
+                                                        }
+                                                    }}
+                                                    disabled={currentShiftMonthIndex === -1 || currentShiftMonthIndex >= shiftMonths.length - 1}
+                                                >
+                                                    <ChevronLeft className="h-4 w-4" />
+                                                </Button>
+                                                <div className="flex items-center gap-2">
+                                                    <Calendar className="h-4 w-4 text-slate-400 shrink-0" />
+                                                    <span className="text-sm font-medium text-slate-700 truncate">
+                                                        {format(new Date(`${filterShiftMonth}-01`), 'MMMM yyyy', { locale: ru })}
+                                                    </span>
+                                                </div>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-8 w-8 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-900"
+                                                    onClick={() => {
+                                                        const nextIndex = currentShiftMonthIndex - 1
+                                                        if (nextIndex >= 0) {
+                                                            setFilterShiftMonth(shiftMonths[nextIndex])
+                                                        }
+                                                    }}
+                                                    disabled={currentShiftMonthIndex <= 0}
+                                                >
+                                                    <ChevronRight className="h-4 w-4" />
+                                                </Button>
                                             </div>
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                className="h-7 w-7"
-                                                onClick={() => {
-                                                    const nextIndex = currentShiftMonthIndex - 1
-                                                    if (nextIndex >= 0) {
-                                                        setFilterShiftMonth(shiftMonths[nextIndex])
-                                                    }
-                                                }}
-                                                disabled={currentShiftMonthIndex <= 0}
-                                            >
-                                                <ChevronRight className="h-4 w-4" />
-                                            </Button>
+                                        )}
+                                    </div>
+                                    <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end border-t sm:border-0 border-slate-100 pt-3 sm:pt-0 mt-2 sm:mt-0">
+                                        <div className="text-sm font-medium text-slate-500">
+                                            Показано: <span className="text-slate-900">{filteredShifts.length}</span> смен
                                         </div>
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            onClick={() => fetchShiftsForReview(clubId)}
+                                            disabled={isShiftsLoading}
+                                            className="h-9 w-9 rounded-xl hover:bg-slate-100 text-slate-500 hover:text-slate-900 shrink-0"
+                                        >
+                                            <RotateCcw className={cn("h-4 w-4", isShiftsLoading && "animate-spin")} />
+                                        </Button>
                                     </div>
-                                </ToolbarGroup>
-                                <ToolbarGroup align="end" className="gap-2">
-                                    <div className="text-sm text-muted-foreground">
-                                        Показано: <span className="font-medium text-foreground">{filteredShifts.length}</span> смен
-                                    </div>
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        onClick={() => fetchShiftsForReview(clubId)}
-                                        disabled={isShiftsLoading}
-                                        className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                                    >
-                                        <RotateCcw className={cn("h-4 w-4", isShiftsLoading && "animate-spin")} />
-                                    </Button>
-                                </ToolbarGroup>
-                            </PageToolbar>
+                                </div>
+                            </div>
 
                             {isShiftsLoading ? (
                                 <div className="flex justify-center py-12"><Loader2 className="animate-spin text-muted-foreground" /></div>
@@ -1598,24 +1608,22 @@ export default function ChecklistsPage({ params, searchParams }: { params: Promi
                     <TabsContent value="checklists">
                         <div className="space-y-6">
                             <Tabs value={checklistsTab} onValueChange={(v) => setChecklistsTab(v as 'active' | 'history')} className="w-full">
-                                <TabsList className="w-full sm:w-auto grid grid-cols-2">
-                                    <TabsTrigger value="active">Входящие</TabsTrigger>
-                                    <TabsTrigger value="history">История</TabsTrigger>
-                                </TabsList>
-                            </Tabs>
+                                    <TabsList className="flex h-auto w-full justify-start gap-6 overflow-x-auto rounded-none bg-transparent p-0 mb-6">
+                                        <TabsTrigger value="active" className="relative shrink-0 rounded-none border-b-2 border-transparent px-0 pb-2 pt-1 font-medium text-slate-500 hover:text-slate-700 data-[state=active]:border-slate-900 data-[state=active]:text-slate-900 data-[state=active]:shadow-none data-[state=active]:bg-transparent transition-all">Ожидают проверки</TabsTrigger>
+                                        <TabsTrigger value="history" className="relative shrink-0 rounded-none border-b-2 border-transparent px-0 pb-2 pt-1 font-medium text-slate-500 hover:text-slate-700 data-[state=active]:border-slate-900 data-[state=active]:text-slate-900 data-[state=active]:shadow-none data-[state=active]:bg-transparent transition-all">История</TabsTrigger>
+                                    </TabsList>
+                                </Tabs>
 
                             {/* Filters */}
-                            <PageToolbar>
-                                <ToolbarGroup className="w-full sm:w-auto">
-                                    <div className="flex flex-col sm:flex-row gap-2 w-full">
-                                        
-                                        {/* Month Filter for History */}
+                            <div className="mb-6 flex flex-col gap-4 border-b border-slate-100 pb-6">
+                                <div className="flex flex-wrap items-center justify-between gap-4">
+                                    <div className="flex flex-wrap items-center gap-2">
                                         {checklistsTab === 'history' && (
-                                            <div className="flex items-center justify-between rounded-md bg-muted/50 px-3 h-9 border border-transparent w-full sm:w-[280px]">
+                                            <div className="flex items-center justify-between rounded-xl bg-white border border-slate-200 shadow-sm px-3 h-10 w-[240px]">
                                                 <Button
                                                     variant="ghost"
                                                     size="icon"
-                                                    className="h-7 w-7"
+                                                    className="h-8 w-8 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-900"
                                                     onClick={() => {
                                                         const nextIndex = checklistMonthIndex + 1
                                                         if (nextIndex < checklistMonths.length) {
@@ -1627,15 +1635,15 @@ export default function ChecklistsPage({ params, searchParams }: { params: Promi
                                                     <ChevronLeft className="h-4 w-4" />
                                                 </Button>
                                                 <div className="flex items-center gap-2">
-                                                    <Calendar className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                                                    <span className="text-sm font-medium truncate">
+                                                    <Calendar className="h-4 w-4 text-slate-400 shrink-0" />
+                                                    <span className="text-sm font-medium text-slate-700 truncate">
                                                         {filterChecklistMonth === 'all' ? 'Все месяцы' : format(new Date(`${filterChecklistMonth}-01`), 'MMMM yyyy', { locale: ru })}
                                                     </span>
                                                 </div>
                                                 <Button
                                                     variant="ghost"
                                                     size="icon"
-                                                    className="h-7 w-7"
+                                                    className="h-8 w-8 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-900"
                                                     onClick={() => {
                                                         const nextIndex = checklistMonthIndex - 1
                                                         if (nextIndex >= 0) {
@@ -1649,10 +1657,8 @@ export default function ChecklistsPage({ params, searchParams }: { params: Promi
                                             </div>
                                         )}
                                     </div>
-                                </ToolbarGroup>
-                            </PageToolbar>
-
-                            {/* Month Filter for History (Removed from separate block) */}
+                                </div>
+                            </div>
 
                             {/* Mobile Cards */}
                             <div className="sm:hidden flex flex-col gap-0 -mx-4">
@@ -1803,7 +1809,7 @@ export default function ChecklistsPage({ params, searchParams }: { params: Promi
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setDeleteChecklistTarget(null)}>Отмена</Button>
                         <Button
-                            variant="destructive"
+                            variant="outline" className="border-rose-200 text-rose-600 hover:bg-rose-50"
                             onClick={confirmDeleteChecklist}
                             disabled={!!deletingChecklistId}
                         >
@@ -1902,7 +1908,7 @@ export default function ChecklistsPage({ params, searchParams }: { params: Promi
                                 {/* Action Buttons */}
                                 {!isReviewMode && (
                                     <div className="flex justify-end gap-2">
-                                        <Button onClick={() => setIsReviewMode(true)} variant="outline">
+                                        <Button onClick={() => setIsReviewMode(true)} className="rounded-xl h-11 px-6 font-medium bg-slate-900 text-white hover:bg-slate-800">
                                             <CheckCircle className="mr-2 h-4 w-4" />
                                             Начать проверку
                                         </Button>
@@ -1952,7 +1958,7 @@ export default function ChecklistsPage({ params, searchParams }: { params: Promi
                                                                 <Button 
                                                                     size="sm" 
                                                                     variant={isAccepted ? "default" : "ghost"} 
-                                                                    className={`h-7 px-2 ${isAccepted ? 'bg-green-600 hover:bg-green-700' : 'text-muted-foreground'}`}
+                                                                    className={`h-7 px-2 ${isAccepted ? 'bg-slate-900 text-white hover:bg-slate-800' : 'text-muted-foreground'}`}
                                                                     onClick={() => handleReviewItemChange(response.id, 'is_accepted', true)}
                                                                 >
                                                                     <CheckCircle className="h-3 w-3 mr-1" /> OK
@@ -2034,7 +2040,7 @@ export default function ChecklistsPage({ params, searchParams }: { params: Promi
                                                 С замечаниями
                                             </Button>
                                             <Button 
-                                                className="flex-1 bg-green-600 hover:bg-green-700" 
+                                                className="flex-1 bg-slate-900 text-white hover:bg-slate-800" 
                                                 onClick={() => submitReview('approved')}
                                                 disabled={isSubmittingReview}
                                             >
@@ -2065,6 +2071,7 @@ export default function ChecklistsPage({ params, searchParams }: { params: Promi
                         </button>
                     </div>
                 )}
+        </div>
         </PageShell>
     )
 }

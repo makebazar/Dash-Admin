@@ -29,11 +29,11 @@ const CATEGORIES = [
     { id: 'HOUSEHOLD', label: 'Хозяйственный', icon: Home, color: 'text-emerald-400', bg: 'bg-emerald-400/10' },
     { id: 'HR', label: 'Кадровый', icon: Users, color: 'text-purple-400', bg: 'bg-purple-400/10' },
     { id: 'FINANCIAL', label: 'Финансовый', icon: Wallet, color: 'text-amber-400', bg: 'bg-amber-400/10' },
-    { id: 'OTHER', label: 'Другое', icon: MoreHorizontal, color: 'text-slate-400', bg: 'bg-slate-400/10' },
+    { id: 'OTHER', label: 'Другое', icon: MoreHorizontal, color: 'text-muted-foreground/70', bg: 'bg-slate-400/10' },
 ]
 
 const PRIORITIES = [
-    { id: 'LOW', label: 'Низкий', color: 'text-slate-400' },
+    { id: 'LOW', label: 'Низкий', color: 'text-muted-foreground/70' },
     { id: 'MEDIUM', label: 'Средний', color: 'text-blue-400' },
     { id: 'HIGH', label: 'Высокий', color: 'text-orange-400' },
     { id: 'URGENT', label: 'Критичный', color: 'text-red-400' },
@@ -197,7 +197,7 @@ export function EmployeeRequestWizard({ isOpen, onClose, clubId, userId }: Emplo
 
     const getStatusBadge = (status: string) => {
         switch (status) {
-            case 'PENDING': return <Badge variant="outline" className="text-slate-400 border-slate-800">Ожидает</Badge>
+            case 'PENDING': return <Badge variant="outline" className="text-muted-foreground/70 border-slate-800">Ожидает</Badge>
             case 'IN_PROGRESS': return <Badge variant="outline" className="text-blue-400 border-blue-400/30 bg-blue-400/5">В работе</Badge>
             case 'RESOLVED': return <Badge variant="outline" className="text-emerald-400 border-emerald-400/30 bg-emerald-400/5 font-bold border-emerald-500">Решено</Badge>
             case 'REJECTED': return <Badge variant="outline" className="text-red-400 border-red-400/30 bg-red-400/5">Отклонено</Badge>
@@ -212,8 +212,8 @@ export function EmployeeRequestWizard({ isOpen, onClose, clubId, userId }: Emplo
 
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
-            <DialogContent className="max-w-none w-screen h-[100dvh] m-0 p-0 rounded-none bg-slate-950 border-none text-white overflow-hidden flex flex-col fixed inset-0 translate-x-0 translate-y-0 left-0 top-0">
-                <DialogHeader className="px-5 py-4 md:px-6 md:py-5 border-b border-slate-800/80 bg-slate-900/60 backdrop-blur flex-row items-center justify-between space-y-0 shrink-0">
+            <DialogContent className="max-w-none w-screen h-[100dvh] m-0 p-0 rounded-none bg-slate-950 border-none text-primary-foreground overflow-hidden flex flex-col fixed inset-0 translate-x-0 translate-y-0 left-0 top-0">
+                <DialogHeader className="px-5 py-4 md:px-6 md:py-5 border-b border-slate-800/80 bg-primary/60 backdrop-blur flex-row items-center justify-between space-y-0 shrink-0">
                     <div className="space-y-0.5">
                         <DialogTitle className="flex items-center gap-2 text-lg md:text-xl font-semibold">
                             {view === 'chat' && (
@@ -224,7 +224,7 @@ export function EmployeeRequestWizard({ isOpen, onClose, clubId, userId }: Emplo
                             <MessageSquare className="h-5 w-5 text-purple-400" />
                             {view === 'list' ? "Обратная связь" : view === 'chat' ? selectedRequest?.title : "Новое сообщение"}
                         </DialogTitle>
-                        <DialogDescription className="text-slate-400 text-xs md:text-sm">
+                        <DialogDescription className="text-muted-foreground/70 text-xs md:text-sm">
                             {view === 'list' ? "Ваши обращения и ответы" : view === 'chat' ? `${CATEGORIES.find(c => c.id === selectedRequest?.category)?.label} • ${new Date(selectedRequest?.created_at).toLocaleDateString('ru-RU')}` : `Шаг ${step} из 2`}
                         </DialogDescription>
                     </div>
@@ -245,7 +245,7 @@ export function EmployeeRequestWizard({ isOpen, onClose, clubId, userId }: Emplo
                         <button 
                             className={cn(
                                 "flex-1 py-2 text-[10px] uppercase font-bold tracking-widest rounded-xl transition-all border",
-                                activeTab === 'ACTIVE' ? "bg-purple-600 border-purple-500 text-white shadow-lg shadow-purple-500/20" : "bg-slate-900/50 border-slate-800 text-slate-500"
+                                activeTab === 'ACTIVE' ? "bg-purple-600 border-purple-500 text-primary-foreground shadow-lg shadow-purple-500/20" : "bg-primary/50 border-slate-800 text-muted-foreground"
                             )}
                             onClick={() => setActiveTab('ACTIVE')}
                         >
@@ -254,7 +254,7 @@ export function EmployeeRequestWizard({ isOpen, onClose, clubId, userId }: Emplo
                         <button 
                             className={cn(
                                 "flex-1 py-2 text-[10px] uppercase font-bold tracking-widest rounded-xl transition-all border",
-                                activeTab === 'HISTORY' ? "bg-slate-800 border-slate-700 text-white shadow-lg" : "bg-slate-900/50 border-slate-800 text-slate-500"
+                                activeTab === 'HISTORY' ? "bg-slate-800 border-slate-700 text-primary-foreground shadow-lg" : "bg-primary/50 border-slate-800 text-muted-foreground"
                             )}
                             onClick={() => setActiveTab('HISTORY')}
                         >
@@ -268,14 +268,14 @@ export function EmployeeRequestWizard({ isOpen, onClose, clubId, userId }: Emplo
                         <div className="space-y-3 pb-20">
                             {filteredRequests.length === 0 ? (
                                 <div className="py-20 text-center space-y-4">
-                                    <div className="h-16 w-16 bg-slate-900 rounded-full flex items-center justify-center mx-auto">
-                                        <Clock className="h-8 w-8 text-slate-700" />
+                                    <div className="h-16 w-16 bg-primary rounded-full flex items-center justify-center mx-auto">
+                                        <Clock className="h-8 w-8 text-foreground" />
                                     </div>
                                     <div className="space-y-1">
-                                        <p className="text-slate-400 font-medium">
+                                        <p className="text-muted-foreground/70 font-medium">
                                             {activeTab === 'ACTIVE' ? "Сообщений пока нет" : "История пуста"}
                                         </p>
-                                        <p className="text-slate-600 text-xs">
+                                        <p className="text-muted-foreground text-xs">
                                             {activeTab === 'ACTIVE' ? "Здесь будет история вашего общения с руководством" : "Завершенные диалоги будут здесь"}
                                         </p>
                                     </div>
@@ -288,7 +288,7 @@ export function EmployeeRequestWizard({ isOpen, onClose, clubId, userId }: Emplo
                                             key={req.id} 
                                             className={cn(
                                                 "p-4 border rounded-2xl space-y-3 relative overflow-hidden cursor-pointer active:scale-[0.98] transition-all",
-                                                req.is_read_by_employee ? "bg-slate-900/50 border-slate-800" : "bg-purple-500/10 border-purple-500/50"
+                                                req.is_read_by_employee ? "bg-primary/50 border-slate-800" : "bg-purple-500/10 border-purple-500/50"
                                             )}
                                             onClick={() => {
                                                 setSelectedRequest(req)
@@ -296,7 +296,7 @@ export function EmployeeRequestWizard({ isOpen, onClose, clubId, userId }: Emplo
                                             }}
                                         >
                                             {!req.is_read_by_employee && (
-                                                <div className="absolute top-0 right-0 px-2 py-0.5 bg-purple-500 text-[8px] font-bold text-white uppercase tracking-wider rounded-bl-lg">
+                                                <div className="absolute top-0 right-0 px-2 py-0.5 bg-purple-500 text-[8px] font-bold text-primary-foreground uppercase tracking-wider rounded-bl-lg">
                                                     Новое
                                                 </div>
                                             )}
@@ -304,16 +304,16 @@ export function EmployeeRequestWizard({ isOpen, onClose, clubId, userId }: Emplo
                                                 <div className="space-y-1 min-w-0">
                                                     <div className="flex items-center gap-2">
                                                         {cat && <cat.icon className={cn("h-3 w-3", cat.color)} />}
-                                                        <span className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">{cat?.label}</span>
+                                                        <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">{cat?.label}</span>
                                                     </div>
                                                     <h4 className="font-bold text-sm text-slate-200 truncate">{req.title}</h4>
                                                 </div>
                                                 {getStatusBadge(req.status)}
                                             </div>
-                                            <p className="text-xs text-slate-400 line-clamp-2">{req.description}</p>
+                                            <p className="text-xs text-muted-foreground/70 line-clamp-2">{req.description}</p>
                                             
                                             <div className="pt-2 flex items-center justify-between border-t border-slate-800/50">
-                                                <span className="text-[10px] text-slate-600">
+                                                <span className="text-[10px] text-muted-foreground">
                                                     {new Date(req.created_at).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
                                                 </span>
                                                 <div className="flex items-center gap-2">
@@ -323,7 +323,7 @@ export function EmployeeRequestWizard({ isOpen, onClose, clubId, userId }: Emplo
                                                             {req.workstation_name}
                                                         </div>
                                                     )}
-                                                    <ArrowRight className="h-3 w-3 text-slate-700" />
+                                                    <ArrowRight className="h-3 w-3 text-foreground" />
                                                 </div>
                                             </div>
                                         </div>
@@ -351,7 +351,7 @@ export function EmployeeRequestWizard({ isOpen, onClose, clubId, userId }: Emplo
                                         )}>
                                             <div className={cn(
                                                 "px-4 py-3.5 rounded-3xl text-base leading-relaxed shadow-lg",
-                                                isMe ? "bg-purple-600 text-white rounded-tr-md shadow-purple-900/40" : "bg-slate-900 border border-slate-800 text-slate-200 rounded-tl-md"
+                                                isMe ? "bg-purple-600 text-primary-foreground rounded-tr-md shadow-purple-900/40" : "bg-primary border border-slate-800 text-slate-200 rounded-tl-md"
                                             )}>
                                                 {!isMe && <p className="text-[10px] font-bold text-purple-400 uppercase mb-1.5">{msg.sender_name}</p>}
                                                 <p className="whitespace-pre-wrap">{msg.message}</p>
@@ -366,7 +366,7 @@ export function EmployeeRequestWizard({ isOpen, onClose, clubId, userId }: Emplo
                                                     </div>
                                                 )}
                                             </div>
-                                            <span className="text-xs text-slate-500 mt-1.5 px-2">
+                                            <span className="text-xs text-muted-foreground mt-1.5 px-2">
                                                 {new Date(msg.created_at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
                                             </span>
                                         </div>
@@ -378,7 +378,7 @@ export function EmployeeRequestWizard({ isOpen, onClose, clubId, userId }: Emplo
                         <div className="space-y-6">
                             {step === 1 ? (
                                 <div className="space-y-4">
-                                    <Label className="text-xs text-slate-500 uppercase font-bold tracking-wider">Выберите категорию</Label>
+                                    <Label className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Выберите категорию</Label>
                                     <div className="grid grid-cols-1 gap-2">
                                         {CATEGORIES.map((cat) => (
                                             <button
@@ -387,7 +387,7 @@ export function EmployeeRequestWizard({ isOpen, onClose, clubId, userId }: Emplo
                                                     "flex items-center gap-4 p-4 rounded-2xl border transition-all text-left",
                                                     formData.category === cat.id 
                                                         ? "bg-purple-600/20 border-purple-500" 
-                                                        : "bg-slate-900/50 border-slate-800 hover:bg-slate-900"
+                                                        : "bg-primary/50 border-slate-800 hover:bg-primary"
                                                 )}
                                                 onClick={() => setFormData({ ...formData, category: cat.id })}
                                             >
@@ -395,8 +395,8 @@ export function EmployeeRequestWizard({ isOpen, onClose, clubId, userId }: Emplo
                                                     <cat.icon className={cn("h-5 w-5", cat.color)} />
                                                 </div>
                                                 <div>
-                                                    <p className="font-bold text-sm text-white">{cat.label}</p>
-                                                    <p className="text-[10px] text-slate-500">Нажмите, чтобы выбрать</p>
+                                                    <p className="font-bold text-sm text-primary-foreground">{cat.label}</p>
+                                                    <p className="text-[10px] text-muted-foreground">Нажмите, чтобы выбрать</p>
                                                 </div>
                                             </button>
                                         ))}
@@ -405,7 +405,7 @@ export function EmployeeRequestWizard({ isOpen, onClose, clubId, userId }: Emplo
                             ) : (
                                 <div className="space-y-5">
                                     <div className="space-y-2">
-                                        <Label className="text-xs text-slate-500">Приоритет</Label>
+                                        <Label className="text-xs text-muted-foreground">Приоритет</Label>
                                         <div className="grid grid-cols-4 gap-2">
                                             {PRIORITIES.map((p) => (
                                                 <button
@@ -413,8 +413,8 @@ export function EmployeeRequestWizard({ isOpen, onClose, clubId, userId }: Emplo
                                                     className={cn(
                                                         "py-2 px-1 rounded-lg border text-[10px] font-bold transition-all",
                                                         formData.priority === p.id 
-                                                            ? "bg-slate-800 border-slate-600 text-white" 
-                                                            : "bg-slate-900/50 border-slate-800 text-slate-500"
+                                                            ? "bg-slate-800 border-slate-600 text-primary-foreground" 
+                                                            : "bg-primary/50 border-slate-800 text-muted-foreground"
                                                     )}
                                                     onClick={() => setFormData({ ...formData, priority: p.id })}
                                                 >
@@ -425,7 +425,7 @@ export function EmployeeRequestWizard({ isOpen, onClose, clubId, userId }: Emplo
                                     </div>
 
                                     <div className="space-y-2">
-                                        <Label className="text-xs text-slate-500">Тема (кратко)</Label>
+                                        <Label className="text-xs text-muted-foreground">Тема (кратко)</Label>
                                         <Input 
                                             placeholder={
                                                 formData.category === 'HOUSEHOLD' ? "Напр: Закончилось мыло" :
@@ -435,35 +435,35 @@ export function EmployeeRequestWizard({ isOpen, onClose, clubId, userId }: Emplo
                                             }
                                             value={formData.title}
                                             onChange={e => setFormData({ ...formData, title: e.target.value })}
-                                            className="bg-slate-900 border-slate-800 h-12 rounded-xl"
+                                            className="bg-primary border-slate-800 h-12 rounded-xl"
                                         />
                                     </div>
 
                                     <div className="space-y-2">
-                                        <Label className="text-xs text-slate-500">Суть проблемы</Label>
+                                        <Label className="text-xs text-muted-foreground">Суть проблемы</Label>
                                         <Textarea 
                                             placeholder="Опишите детали..."
                                             value={formData.description}
                                             onChange={e => setFormData({ ...formData, description: e.target.value })}
-                                            className="bg-slate-900 border-slate-800 min-h-[120px] rounded-xl resize-none"
+                                            className="bg-primary border-slate-800 min-h-[120px] rounded-xl resize-none"
                                         />
                                     </div>
 
                                     <div className="space-y-3">
-                                        <Label className="text-xs text-slate-500">Фотографии</Label>
+                                        <Label className="text-xs text-muted-foreground">Фотографии</Label>
                                         <div className="flex flex-wrap gap-2">
                                             {photoUrls.map((url, i) => (
                                                 <div key={i} className="relative h-20 w-20 rounded-xl overflow-hidden border border-slate-800 group">
                                                     <Image src={url} alt="Upload" fill className="object-cover" />
                                                     <button 
                                                         onClick={() => removePhoto(url)}
-                                                        className="absolute top-1 right-1 p-1 bg-black/50 hover:bg-red-500 text-white rounded-full transition-colors"
+                                                        className="absolute top-1 right-1 p-1 bg-primary/50 hover:bg-red-500 text-primary-foreground rounded-full transition-colors"
                                                     >
                                                         <X className="h-3 w-3" />
                                                     </button>
                                                 </div>
                                             ))}
-                                            <label className="h-20 w-20 rounded-xl border-2 border-dashed border-slate-800 bg-slate-900/50 flex flex-col items-center justify-center cursor-pointer hover:bg-slate-900 transition-all group">
+                                            <label className="h-20 w-20 rounded-xl border-2 border-dashed border-slate-800 bg-primary/50 flex flex-col items-center justify-center cursor-pointer hover:bg-primary transition-all group">
                                                 <input 
                                                     type="file" 
                                                     accept="image/*" 
@@ -476,8 +476,8 @@ export function EmployeeRequestWizard({ isOpen, onClose, clubId, userId }: Emplo
                                                     <Loader2 className="h-5 w-5 text-purple-400 animate-spin" />
                                                 ) : (
                                                     <>
-                                                        <Camera className="h-5 w-5 text-slate-600 group-hover:text-purple-400 transition-colors" />
-                                                        <span className="text-[8px] text-slate-600 mt-1 uppercase font-bold tracking-wider">Добавить</span>
+                                                        <Camera className="h-5 w-5 text-muted-foreground group-hover:text-purple-400 transition-colors" />
+                                                        <span className="text-[8px] text-muted-foreground mt-1 uppercase font-bold tracking-wider">Добавить</span>
                                                     </>
                                                 )}
                                             </label>
@@ -490,11 +490,11 @@ export function EmployeeRequestWizard({ isOpen, onClose, clubId, userId }: Emplo
                     )}
                 </div>
 
-                <DialogFooter className="p-4 border-t border-slate-800 bg-slate-900/60 backdrop-blur shrink-0">
+                <DialogFooter className="p-4 border-t border-slate-800 bg-primary/60 backdrop-blur shrink-0">
                     {view === 'list' ? (
                         <Button 
                             variant="outline" 
-                            className="w-full h-12 border-slate-800 text-slate-400 rounded-xl"
+                            className="w-full h-12 border-slate-800 text-muted-foreground/70 rounded-xl"
                             onClick={onClose}
                         >
                             Закрыть
@@ -506,22 +506,22 @@ export function EmployeeRequestWizard({ isOpen, onClose, clubId, userId }: Emplo
                                     {photoUrls.map((url, i) => (
                                         <div key={i} className="relative h-14 w-14 rounded-xl overflow-hidden border border-slate-700 shrink-0">
                                             <Image src={url} alt="Attached" fill className="object-cover" />
-                                            <button onClick={() => removePhoto(url)} className="absolute top-1 right-1 h-5 w-5 rounded-full bg-black/60 text-white flex items-center justify-center"><X className="h-2.5 w-2.5" /></button>
+                                            <button onClick={() => removePhoto(url)} className="absolute top-1 right-1 h-5 w-5 rounded-full bg-primary/60 text-primary-foreground flex items-center justify-center"><X className="h-2.5 w-2.5" /></button>
                                         </div>
                                     ))}
                                 </div>
                             )}
                             <div className="flex gap-2 w-full items-end rounded-2xl border border-slate-700/80 bg-slate-800/70 p-2 shadow-2xl shadow-black/30">
-                                <label className="h-12 w-12 flex items-center justify-center bg-slate-900 rounded-xl cursor-pointer hover:bg-slate-700 shrink-0 border border-slate-700">
+                                <label className="h-12 w-12 flex items-center justify-center bg-primary rounded-xl cursor-pointer hover:bg-slate-700 shrink-0 border border-slate-700">
                                     <input type="file" accept="image/*" multiple className="hidden" onChange={handlePhotoUpload} />
-                                    {isUploading ? <Loader2 className="h-5 w-5 animate-spin text-purple-400" /> : <Camera className="h-5 w-5 text-slate-400" />}
+                                    {isUploading ? <Loader2 className="h-5 w-5 animate-spin text-purple-400" /> : <Camera className="h-5 w-5 text-muted-foreground/70" />}
                                 </label>
                                 <div className="flex-1 relative">
                                     <Textarea 
                                         placeholder="Напишите ответ..."
                                         value={newMessage}
                                         onChange={e => setNewMessage(e.target.value)}
-                                        className="min-h-[52px] max-h-[140px] bg-slate-900 border-slate-700 rounded-xl py-3 px-4 text-base resize-none"
+                                        className="min-h-[52px] max-h-[140px] bg-primary border-slate-700 rounded-xl py-3 px-4 text-base resize-none"
                                         onKeyDown={(e) => {
                                             if (e.key === 'Enter' && !e.shiftKey) {
                                                 e.preventDefault()
@@ -543,14 +543,14 @@ export function EmployeeRequestWizard({ isOpen, onClose, clubId, userId }: Emplo
                         <div className="flex gap-3 w-full">
                             <Button 
                                 variant="outline" 
-                                className="h-12 w-14 border-slate-800 text-slate-400 rounded-xl"
+                                className="h-12 w-14 border-slate-800 text-muted-foreground/70 rounded-xl"
                                 onClick={() => step === 1 ? setView('list') : setStep(1)}
                             >
                                 <ArrowLeft className="h-5 w-5" />
                             </Button>
                             {step === 1 ? (
                                 <Button 
-                                    className="flex-1 h-12 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl"
+                                    className="flex-1 h-12 bg-purple-600 hover:bg-purple-700 text-primary-foreground font-bold rounded-xl"
                                     disabled={!formData.category}
                                     onClick={() => setStep(2)}
                                 >
@@ -559,7 +559,7 @@ export function EmployeeRequestWizard({ isOpen, onClose, clubId, userId }: Emplo
                                 </Button>
                             ) : (
                                 <Button 
-                                    className="flex-1 h-12 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl"
+                                    className="flex-1 h-12 bg-emerald-600 hover:bg-emerald-700 text-primary-foreground font-bold rounded-xl"
                                     onClick={handleCreate}
                                     disabled={isPending || !formData.title || !formData.description}
                                 >

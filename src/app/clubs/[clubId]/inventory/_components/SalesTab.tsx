@@ -227,7 +227,7 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
 
     if (sales.length === 0) {
         return (
-            <div className="flex flex-col items-center justify-center h-64 border rounded-lg bg-white text-muted-foreground shadow-sm">
+            <div className="flex flex-col items-center justify-center h-64 border rounded-lg bg-card text-muted-foreground shadow-sm">
                 <ShoppingCart className="h-12 w-12 mb-4 text-slate-200" />
                 <p className="text-lg font-medium">Продаж пока нет</p>
                 <p className="text-sm">Они появятся после закрытия инвентаризаций.</p>
@@ -237,10 +237,10 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
 
     return (
         <div className="space-y-4">
-            <div className="flex justify-between items-center bg-white p-4 rounded-xl border shadow-sm">
+            <div className="flex justify-between items-center bg-card p-4 rounded-xl border shadow-sm">
                 <div className="flex flex-col">
-                    <h3 className="font-bold text-slate-900">Управление продажами</h3>
-                    <p className="text-xs text-slate-500">Ручное добавление и корректировка истории</p>
+                    <h3 className="font-bold text-foreground">Управление продажами</h3>
+                    <p className="text-xs text-muted-foreground">Ручное добавление и корректировка истории</p>
                 </div>
                 <Button onClick={() => setIsAddDialogOpen(true)} className="bg-blue-600 hover:bg-blue-700">
                     <Plus className="h-4 w-4 mr-2" /> Добавить продажу
@@ -249,9 +249,9 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
 
             {/* Mass Actions Bar */}
             {selectedIds.length > 0 && (
-                <div className="bg-slate-900 text-white p-3 rounded-xl flex items-center justify-between shadow-lg sticky top-0 z-10">
+                <div className="bg-primary text-primary-foreground p-3 rounded-xl flex items-center justify-between shadow-lg sticky top-0 z-10">
                     <div className="flex items-center gap-4">
-                        <div className="bg-blue-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
+                        <div className="bg-blue-500 text-primary-foreground text-[10px] font-bold px-2 py-0.5 rounded-full">
                             {selectedIds.length} выбрано
                         </div>
                         <span className="text-sm font-medium">Привязать к смене:</span>
@@ -268,14 +268,14 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
                                     <Unlink className="h-4 w-4" /> 
                                     <span>Отвязать от всех смен</span>
                                 </DropdownMenuItem>
-                                <div className="h-px bg-slate-100 my-1" />
+                                <div className="h-px bg-accent my-1" />
                                 {shifts.map(s => (
                                     <DropdownMenuItem key={s.id} onClick={() => handleMassAssign(s.id)} className="flex flex-col items-start gap-1 py-2">
                                         <div className="flex justify-between w-full">
                                             <span className="font-bold text-xs">{s.employee_name}</span>
-                                            <span className="text-[10px] text-slate-400">#{s.id}</span>
+                                            <span className="text-[10px] text-muted-foreground/70">#{s.id}</span>
                                         </div>
-                                        <div className="flex items-center gap-2 text-[10px] text-slate-500">
+                                        <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
                                             <Calendar className="h-3 w-3" />
                                             <span>{new Date(s.check_in).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
                                         </div>
@@ -283,7 +283,7 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
                                 ))}
                             </DropdownMenuContent>
                         </DropdownMenu>
-                        <Button size="sm" variant="ghost" onClick={() => setSelectedIds([])} className="h-9 text-slate-400 hover:text-white">Отмена</Button>
+                        <Button size="sm" variant="ghost" onClick={() => setSelectedIds([])} className="h-9 text-muted-foreground/70 hover:text-primary-foreground">Отмена</Button>
                     </div>
                 </div>
             )}
@@ -299,14 +299,14 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
                     return (
                         <div key={groupId} className={cn(
                             "border rounded-xl overflow-hidden transition-all",
-                            isUnassigned ? "border-amber-200 bg-amber-50/20" : "border-slate-200 bg-white",
-                            isExpanded ? "shadow-md" : "hover:border-slate-300 shadow-sm"
+                            isUnassigned ? "border-amber-200 bg-amber-50/20" : "border-border bg-card",
+                            isExpanded ? "shadow-md" : "hover:border-border shadow-sm"
                         )}>
                             {/* Shift Header */}
                             <div 
                                 className={cn(
                                     "px-3 py-3 flex items-center justify-between cursor-pointer select-none gap-2",
-                                    isExpanded ? "border-b bg-slate-50/50" : ""
+                                    isExpanded ? "border-b bg-muted/50" : ""
                                 )}
                                 onClick={() => toggleShift(groupId)}
                             >
@@ -320,10 +320,10 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
                                         <ChevronRight className="h-4 w-4" />
                                     </div>
                                     <div className="flex flex-col min-w-0">
-                                        <span className="text-sm font-black text-slate-900 truncate leading-tight">
+                                        <span className="text-sm font-black text-foreground truncate leading-tight">
                                             {isUnassigned ? "Продажи" : group.shift.employee}
                                         </span>
-                                        <div className="flex items-center gap-1.5 text-[9px] text-slate-400 mt-0.5 whitespace-nowrap">
+                                        <div className="flex items-center gap-1.5 text-[9px] text-muted-foreground/70 mt-0.5 whitespace-nowrap">
                                             {!isUnassigned && (
                                                 <span>{new Date(group.shift.start).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })} {new Date(group.shift.start).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</span>
                                             )}
@@ -340,15 +340,15 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
                                     {!isUnassigned && (
                                         <div className="flex items-center gap-3 sm:gap-6">
                                             <div className="flex flex-col items-end shrink-0">
-                                                <span className="text-[7px] sm:text-[9px] text-slate-400 uppercase font-black tracking-tighter sm:tracking-widest leading-none mb-1">Склад</span>
+                                                <span className="text-[7px] sm:text-[9px] text-muted-foreground/70 uppercase font-black tracking-tighter sm:tracking-widest leading-none mb-1">Склад</span>
                                                 <span className="text-[11px] sm:text-sm font-black text-blue-600 leading-none whitespace-nowrap">{group.totalRevenue.toLocaleString('ru-RU')} ₽</span>
                                             </div>
                                             <div className="flex flex-col items-end shrink-0">
-                                                <span className="text-[7px] sm:text-[9px] text-slate-400 uppercase font-black tracking-tighter sm:tracking-widest leading-none mb-1">Касса</span>
-                                                <span className="text-[11px] sm:text-sm font-black text-slate-700 leading-none whitespace-nowrap">{group.shift.reported.toLocaleString('ru-RU')} ₽</span>
+                                                <span className="text-[7px] sm:text-[9px] text-muted-foreground/70 uppercase font-black tracking-tighter sm:tracking-widest leading-none mb-1">Касса</span>
+                                                <span className="text-[11px] sm:text-sm font-black text-foreground leading-none whitespace-nowrap">{group.shift.reported.toLocaleString('ru-RU')} ₽</span>
                                             </div>
                                             <div className="flex flex-col items-end shrink-0">
-                                                <span className="text-[7px] sm:text-[9px] text-slate-400 uppercase font-black tracking-tighter sm:tracking-widest leading-none mb-1">Разница</span>
+                                                <span className="text-[7px] sm:text-[9px] text-muted-foreground/70 uppercase font-black tracking-tighter sm:tracking-widest leading-none mb-1">Разница</span>
                                                 <span className={cn(
                                                     "text-[11px] sm:text-sm font-black leading-none whitespace-nowrap",
                                                     (group.shift.reported - group.totalRevenue) === 0 ? "text-green-500" : 
@@ -367,9 +367,9 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
                                     )}
 
                                     {/* Total Amount Badge */}
-                                    <div className="hidden xs:flex flex-col items-end shrink-0 border-l pl-3 border-slate-100">
-                                        <span className="text-[7px] sm:text-[9px] text-slate-400 uppercase font-black tracking-tighter sm:tracking-widest leading-none mb-1">Всего</span>
-                                        <span className="text-xs sm:text-base font-black text-slate-900 leading-none">{group.totalAmount}</span>
+                                    <div className="hidden xs:flex flex-col items-end shrink-0 border-l pl-3 border-border/50">
+                                        <span className="text-[7px] sm:text-[9px] text-muted-foreground/70 uppercase font-black tracking-tighter sm:tracking-widest leading-none mb-1">Всего</span>
+                                        <span className="text-xs sm:text-base font-black text-foreground leading-none">{group.totalAmount}</span>
                                     </div>
                                 </div>
                             </div>
@@ -380,15 +380,15 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
                                     {/* Desktop Table */}
                                     <div className="hidden md:block">
                                         <Table>
-                                            <TableHeader className="bg-slate-50/50">
+                                            <TableHeader className="bg-muted/50">
                                                 <TableRow className="hover:bg-transparent h-10">
                                                     <TableHead className="w-10 text-center"></TableHead>
-                                                    <TableHead className="text-[10px] uppercase font-bold text-slate-400">Товар</TableHead>
-                                                    <TableHead className="text-right text-[10px] uppercase font-bold text-slate-400">Цена</TableHead>
-                                                    <TableHead className="text-right text-[10px] uppercase font-bold text-slate-400">Кол-во</TableHead>
-                                                    <TableHead className="text-right text-[10px] uppercase font-bold text-slate-400">Итого</TableHead>
-                                                    <TableHead className="text-right text-[10px] uppercase font-bold text-slate-400">Время</TableHead>
-                                                    <TableHead className="text-right text-[10px] uppercase font-bold text-slate-400">Действия</TableHead>
+                                                    <TableHead className="text-[10px] uppercase font-bold text-muted-foreground/70">Товар</TableHead>
+                                                    <TableHead className="text-right text-[10px] uppercase font-bold text-muted-foreground/70">Цена</TableHead>
+                                                    <TableHead className="text-right text-[10px] uppercase font-bold text-muted-foreground/70">Кол-во</TableHead>
+                                                    <TableHead className="text-right text-[10px] uppercase font-bold text-muted-foreground/70">Итого</TableHead>
+                                                    <TableHead className="text-right text-[10px] uppercase font-bold text-muted-foreground/70">Время</TableHead>
+                                                    <TableHead className="text-right text-[10px] uppercase font-bold text-muted-foreground/70">Действия</TableHead>
                                                 </TableRow>
                                             </TableHeader>
                                             <TableBody>
@@ -398,7 +398,7 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
                                                         <TableRow 
                                                             key={`${sale.id}-${saleIdx}`} 
                                                             className={cn(
-                                                                "hover:bg-slate-50/50 group h-12 transition-colors",
+                                                                "hover:bg-muted/50 group h-12 transition-colors",
                                                                 isSalaryDeduction && "bg-purple-50/30 hover:bg-purple-50/50"
                                                             )}
                                                         >
@@ -413,7 +413,7 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
                                                         <TableCell className="py-2">
                                                             <div className="flex flex-col gap-0.5">
                                                                 <div className="flex items-center gap-2">
-                                                                    <span className="text-sm font-bold text-slate-700">{sale.product_name}</span>
+                                                                    <span className="text-sm font-bold text-foreground">{sale.product_name}</span>
                                                                     {sale.type === 'RETURN' && (
                                                                         <Badge className="bg-amber-100 text-amber-700 border-amber-200 text-[9px] h-4 px-1 px-1.5 uppercase font-black">
                                                                             Возврат
@@ -435,10 +435,10 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
                                                                         {sale.reason}
                                                                     </span>
                                                                 )}
-                                                                <span className="text-[10px] text-slate-400">{sale.warehouse_name}</span>
+                                                                <span className="text-[10px] text-muted-foreground/70">{sale.warehouse_name}</span>
                                                             </div>
                                                         </TableCell>
-                                                        <TableCell className="text-right text-sm font-medium text-slate-600">
+                                                        <TableCell className="text-right text-sm font-medium text-muted-foreground">
                                                             {(sale.price_at_time || sale.current_price || 0).toLocaleString('ru-RU')} ₽
                                                         </TableCell>
                                                         <TableCell className="text-right">
@@ -454,7 +454,7 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
                                                                     <Button size="icon" variant="ghost" className="h-8 w-8 text-green-600" onClick={() => handleSaveEdit(sale.id)}>
                                                                         <Check className="h-4 w-4" />
                                                                     </Button>
-                                                                    <Button size="icon" variant="ghost" className="h-8 w-8 text-slate-400" onClick={() => setEditingId(null)}>
+                                                                    <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground/70" onClick={() => setEditingId(null)}>
                                                                         <X className="h-4 w-4" />
                                                                     </Button>
                                                                 </div>
@@ -464,10 +464,10 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
                                                                 </Badge>
                                                             )}
                                                         </TableCell>
-                                                        <TableCell className="text-right font-black text-slate-900">
+                                                        <TableCell className="text-right font-black text-foreground">
                                                             {(Math.abs(sale.change_amount) * (sale.price_at_time || sale.current_price || 0)).toLocaleString('ru-RU')} ₽
                                                         </TableCell>
-                                                        <TableCell className="text-right text-[10px] text-slate-400 font-mono">
+                                                        <TableCell className="text-right text-[10px] text-muted-foreground/70 font-mono">
                                                             {new Date(sale.created_at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
                                                         </TableCell>
                                                         <TableCell className="text-right">
@@ -486,7 +486,7 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
                                                                         <Button 
                                                                             variant="ghost" 
                                                                             size="icon" 
-                                                                            className="h-7 w-7 text-slate-400 hover:text-blue-500 hover:bg-blue-50 shrink-0"
+                                                                            className="h-7 w-7 text-muted-foreground/70 hover:text-blue-500 hover:bg-blue-50 shrink-0"
                                                                         >
                                                                             <Link className="h-3.5 w-3.5" />
                                                                         </Button>
@@ -495,14 +495,14 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
                                                                         <DropdownMenuItem onClick={() => handleAssignShift(sale.id, null)} className="text-red-600 focus:text-red-700 focus:bg-red-50">
                                                                             <Unlink className="h-4 w-4 mr-2" /> Отвязать от смены
                                                                         </DropdownMenuItem>
-                                                                        <div className="h-px bg-slate-100 my-1" />
+                                                                        <div className="h-px bg-accent my-1" />
                                                                         {shifts.map(s => (
                                                                             <DropdownMenuItem key={s.id} onClick={() => handleAssignShift(sale.id, s.id)} className="flex flex-col items-start gap-1 py-2">
                                                                                 <div className="flex justify-between w-full">
                                                                                     <span className="font-bold text-xs">{s.employee_name}</span>
-                                                                                    <span className="text-[10px] text-slate-400">#{s.id}</span>
+                                                                                    <span className="text-[10px] text-muted-foreground/70">#{s.id}</span>
                                                                                 </div>
-                                                                                <div className="flex items-center gap-2 text-[10px] text-slate-500">
+                                                                                <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
                                                                                     <Calendar className="h-3 w-3" />
                                                                                     <span>{new Date(s.check_in).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })}</span>
                                                                                 </div>
@@ -529,7 +529,7 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
                                     </div>
 
                                     {/* Mobile Card List */}
-                                    <div className="md:hidden divide-y divide-slate-100 bg-slate-50/30">
+                                    <div className="md:hidden divide-y divide-slate-100 bg-muted/30">
                                         {items.map((sale, saleIdx) => {
                                             const isSalaryDeduction = sale.reason?.toLowerCase().includes('в счет зп')
                                             return (
@@ -537,7 +537,7 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
                                                     key={`${sale.id}-${saleIdx}`} 
                                                     className={cn(
                                                         "p-4 flex items-center gap-3 transition-colors group",
-                                                        isSalaryDeduction ? "bg-purple-50/40 active:bg-purple-100/50" : "active:bg-slate-100"
+                                                        isSalaryDeduction ? "bg-purple-50/40 active:bg-purple-100/50" : "active:bg-accent"
                                                     )}
                                                 >
                                                 <div className="flex-none">
@@ -550,7 +550,7 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
                                                 
                                                 <div className="flex-1 min-w-0">
                                                     <div className="flex items-center gap-2 mb-0.5">
-                                                        <h4 className="font-bold text-slate-900 text-sm leading-tight truncate">{sale.product_name}</h4>
+                                                        <h4 className="font-bold text-foreground text-sm leading-tight truncate">{sale.product_name}</h4>
                                                         {sale.reason?.toLowerCase().includes('в счет зп') && (
                                                             <Badge className="bg-purple-100 text-purple-700 border-purple-200 text-[8px] h-3.5 px-1 uppercase font-black">
                                                                 ЗП
@@ -562,7 +562,7 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
                                                             {sale.reason}
                                                         </p>
                                                     )}
-                                                    <div className="flex items-center gap-2 text-[10px] text-slate-500 mt-0.5">
+                                                    <div className="flex items-center gap-2 text-[10px] text-muted-foreground mt-0.5">
                                                          <Clock className="h-2.5 w-2.5" />
                                                          {new Date(sale.created_at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
                                                          <span className="mx-1">•</span>
@@ -571,22 +571,22 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
                                                 </div>
 
                                                 <div className="flex flex-col items-end gap-1 px-2">
-                                                    <div className="text-sm font-black text-slate-900">
+                                                    <div className="text-sm font-black text-foreground">
                                                         {(Math.abs(sale.change_amount) * (sale.price_at_time || sale.current_price || 0)).toLocaleString('ru-RU')} ₽
                                                     </div>
-                                                    <div className="text-[10px] text-slate-400">
+                                                    <div className="text-[10px] text-muted-foreground/70">
                                                         {Number(sale.price_at_time || sale.current_price || 0).toLocaleString('ru-RU')} ₽/шт
                                                     </div>
                                                 </div>
 
-                                                <div className="flex flex-none gap-1 pl-2 border-l border-slate-100">
+                                                <div className="flex flex-none gap-1 pl-2 border-l border-border/50">
                                                      <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-500 active:bg-blue-50" onClick={() => handleStartEdit(sale)}>
                                                          <Pencil className="h-4 w-4" />
                                                      </Button>
 
                                                      <DropdownMenu>
                                                          <DropdownMenuTrigger asChild>
-                                                             <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 active:bg-blue-50">
+                                                             <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground/70 active:bg-blue-50">
                                                                  <Link className="h-4 w-4" />
                                                              </Button>
                                                          </DropdownMenuTrigger>
@@ -594,14 +594,14 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
                                                              <DropdownMenuItem onClick={() => handleAssignShift(sale.id, null)} className="text-red-600 focus:text-red-700 focus:bg-red-50">
                                                                  <Unlink className="h-4 w-4 mr-2" /> Отвязать от смены
                                                              </DropdownMenuItem>
-                                                             <div className="h-px bg-slate-100 my-1" />
+                                                             <div className="h-px bg-accent my-1" />
                                                              {shifts.map(s => (
                                                                  <DropdownMenuItem key={s.id} onClick={() => handleAssignShift(sale.id, s.id)} className="flex flex-col items-start gap-1 py-2">
                                                                      <div className="flex justify-between w-full">
                                                                          <span className="font-bold text-xs">{s.employee_name}</span>
-                                                                         <span className="text-[10px] text-slate-400">#{s.id}</span>
+                                                                         <span className="text-[10px] text-muted-foreground/70">#{s.id}</span>
                                                                      </div>
-                                                                     <div className="flex items-center gap-2 text-[10px] text-slate-500">
+                                                                     <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
                                                                          <Calendar className="h-3 w-3" />
                                                                          <span>{new Date(s.check_in).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })}</span>
                                                                      </div>
@@ -718,7 +718,7 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
                     <DialogHeader>
                         <DialogTitle>Удаление продажи</DialogTitle>
                         <DialogDescription>
-                            Вы удаляете запись о продаже: <span className="font-bold text-slate-900">{deleteConfig?.productName}</span>.
+                            Вы удаляете запись о продаже: <span className="font-bold text-foreground">{deleteConfig?.productName}</span>.
                             Выберите, что сделать с товаром.
                         </DialogDescription>
                     </DialogHeader>
@@ -728,41 +728,41 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
                             <div 
                                 className={cn(
                                     "p-3 border rounded-xl cursor-pointer transition-all flex items-start gap-3",
-                                    revertMode === 'none' ? "border-blue-500 bg-blue-50 ring-1 ring-blue-500" : "hover:bg-slate-50"
+                                    revertMode === 'none' ? "border-blue-500 bg-blue-50 ring-1 ring-blue-500" : "hover:bg-muted"
                                 )}
                                 onClick={() => setRevertMode('none')}
                             >
-                                <div className={cn("mt-1 p-1 rounded-full border", revertMode === 'none' ? "bg-blue-500 border-blue-500" : "border-slate-300")}>
-                                    <div className="w-2 h-2 bg-white rounded-full" />
+                                <div className={cn("mt-1 p-1 rounded-full border", revertMode === 'none' ? "bg-blue-500 border-blue-500" : "border-border")}>
+                                    <div className="w-2 h-2 bg-card rounded-full" />
                                 </div>
                                 <div>
-                                    <p className="text-sm font-bold text-slate-900">Просто удалить запись</p>
-                                    <p className="text-xs text-slate-500">Товар НЕ вернется на склад. Полезно для исправления старых ошибок.</p>
+                                    <p className="text-sm font-bold text-foreground">Просто удалить запись</p>
+                                    <p className="text-xs text-muted-foreground">Товар НЕ вернется на склад. Полезно для исправления старых ошибок.</p>
                                 </div>
                             </div>
 
                             <div 
                                 className={cn(
                                     "p-3 border rounded-xl cursor-pointer transition-all flex flex-col gap-3",
-                                    revertMode === 'revert' ? "border-green-500 bg-green-50 ring-1 ring-green-500" : "hover:bg-slate-50"
+                                    revertMode === 'revert' ? "border-green-500 bg-green-50 ring-1 ring-green-500" : "hover:bg-muted"
                                 )}
                                 onClick={() => setRevertMode('revert')}
                             >
                                 <div className="flex items-start gap-3">
-                                    <div className={cn("mt-1 p-1 rounded-full border", revertMode === 'revert' ? "bg-green-500 border-green-500" : "border-slate-300")}>
-                                        <div className="w-2 h-2 bg-white rounded-full" />
+                                    <div className={cn("mt-1 p-1 rounded-full border", revertMode === 'revert' ? "bg-green-500 border-green-500" : "border-border")}>
+                                        <div className="w-2 h-2 bg-card rounded-full" />
                                     </div>
                                     <div>
-                                        <p className="text-sm font-bold text-slate-900">Удалить и вернуть на склад</p>
-                                        <p className="text-xs text-slate-500">Количество товара на выбранном складе увеличится.</p>
+                                        <p className="text-sm font-bold text-foreground">Удалить и вернуть на склад</p>
+                                        <p className="text-xs text-muted-foreground">Количество товара на выбранном складе увеличится.</p>
                                     </div>
                                 </div>
 
                                 {revertMode === 'revert' && (
                                     <div className="pl-8 pb-1">
-                                        <Label className="text-[10px] uppercase font-bold text-slate-400 mb-1.5 block">Выберите склад для возврата</Label>
+                                        <Label className="text-[10px] uppercase font-bold text-muted-foreground/70 mb-1.5 block">Выберите склад для возврата</Label>
                                         <Select value={selectedRevertWarehouse} onValueChange={setSelectedRevertWarehouse}>
-                                            <SelectTrigger className="h-8 text-xs bg-white">
+                                            <SelectTrigger className="h-8 text-xs bg-card">
                                                 <SelectValue placeholder="Склад" />
                                             </SelectTrigger>
                                             <SelectContent>

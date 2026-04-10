@@ -18,7 +18,6 @@ import {
     UserPlus,
 } from "lucide-react"
 import Link from "next/link"
-import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -46,6 +45,7 @@ import {
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
+import { PageShell } from "@/components/layout/PageShell"
 
 interface Issue {
     id: string
@@ -306,21 +306,22 @@ export default function IssuesBoard() {
     }
 
     return (
-        <div className="mx-auto max-w-[1600px] space-y-6 p-4 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:space-y-8 sm:p-6 sm:pb-[calc(6.5rem+env(safe-area-inset-bottom))] md:pb-8 lg:p-8">
+        <PageShell maxWidth="5xl">
+            <div className="space-y-8 pb-28 sm:pb-12">
             <div className="flex flex-col gap-4">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between mb-8">
                     <div className="min-w-0">
-                        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Инциденты</h1>
-                        <p className="mt-1 text-sm text-muted-foreground sm:text-base">Проблемы, ремонт и коммуникация по оборудованию клуба</p>
+                        <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-slate-900 truncate">Инциденты</h1>
+                        <p className="text-slate-500 text-lg mt-2">Отслеживание проблем, ремонтов и статуса оборудования</p>
                     </div>
                     <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap lg:justify-end">
-                        <Button asChild variant="outline" className="hidden w-full md:inline-flex md:w-auto">
+                        <Button asChild variant="outline" className="hidden md:inline-flex md:w-auto rounded-xl h-11 px-6 font-medium">
                             <Link href={`/clubs/${clubId}/equipment`}>
                                 <ChevronLeft className="mr-2 h-4 w-4" />
                                 Назад
                             </Link>
                         </Button>
-                        <Button onClick={() => setIsCreateOpen(true)} className="w-full bg-primary shadow-md hover:bg-primary/90 sm:w-auto">
+                        <Button onClick={() => setIsCreateOpen(true)} className="w-full bg-slate-900 text-white shadow-sm hover:bg-slate-800 sm:w-auto rounded-xl h-11 px-6 font-medium">
                             <Plus className="mr-2 h-4 w-4" />
                             Сообщить о проблеме
                         </Button>
@@ -328,81 +329,71 @@ export default function IssuesBoard() {
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
-                <Card className="border-none shadow-sm">
-                    <CardContent className="flex items-center justify-between p-4 sm:p-5">
-                        <div>
-                            <p className="text-sm font-medium text-muted-foreground">Всего инцидентов</p>
-                            <h3 className="mt-1 text-2xl font-bold">{issueStats.total}</h3>
+            <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
+                <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5 sm:p-6 flex flex-col justify-between h-[140px]">
+                    <div className="flex items-start justify-between gap-2">
+                        <p className="text-sm font-medium text-slate-500 leading-tight">Всего инцидентов</p>
+                        <div className="rounded-2xl bg-slate-100 p-2.5 text-slate-700 shrink-0">
+                            <MessageSquare className="h-5 w-5" />
                         </div>
-                        <div className="rounded-xl bg-slate-100 p-3 text-slate-700">
-                            <MessageSquare className="h-6 w-6" />
+                    </div>
+                    <h3 className="text-3xl font-bold text-slate-900">{issueStats.total}</h3>
+                </div>
+                <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5 sm:p-6 flex flex-col justify-between h-[140px]">
+                    <div className="flex items-start justify-between gap-2">
+                        <p className="text-sm font-medium text-slate-500 leading-tight">Открытые</p>
+                        <div className="rounded-2xl bg-slate-100 p-2.5 text-slate-700 shrink-0">
+                            <AlertTriangle className="h-5 w-5" />
                         </div>
-                    </CardContent>
-                </Card>
-                <Card className="border-none shadow-sm">
-                    <CardContent className="flex items-center justify-between p-4 sm:p-5">
-                        <div>
-                            <p className="text-sm font-medium text-muted-foreground">Открытые</p>
-                            <h3 className="mt-1 text-2xl font-bold text-slate-900">{issueStats.open}</h3>
+                    </div>
+                    <h3 className="text-3xl font-bold text-slate-900">{issueStats.open}</h3>
+                </div>
+                <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5 sm:p-6 flex flex-col justify-between h-[140px]">
+                    <div className="flex items-start justify-between gap-2">
+                        <p className="text-sm font-medium text-slate-500 leading-tight">В работе</p>
+                        <div className="rounded-2xl bg-blue-50 p-2.5 text-blue-600 shrink-0">
+                            <Wrench className="h-5 w-5" />
                         </div>
-                        <div className="rounded-xl bg-slate-100 p-3 text-slate-700">
-                            <AlertTriangle className="h-6 w-6" />
+                    </div>
+                    <h3 className="text-3xl font-bold text-blue-600">{issueStats.inProgress}</h3>
+                </div>
+                <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5 sm:p-6 flex flex-col justify-between h-[140px]">
+                    <div className="flex items-start justify-between gap-2">
+                        <p className="text-sm font-medium text-slate-500 leading-tight">Требуют внимания</p>
+                        <div className="rounded-2xl bg-rose-50 p-2.5 text-rose-600 shrink-0">
+                            <Clock3 className="h-5 w-5" />
                         </div>
-                    </CardContent>
-                </Card>
-                <Card className="border-none shadow-sm">
-                    <CardContent className="flex items-center justify-between p-4 sm:p-5">
-                        <div>
-                            <p className="text-sm font-medium text-muted-foreground">В работе</p>
-                            <h3 className="mt-1 text-2xl font-bold text-blue-600">{issueStats.inProgress}</h3>
+                    </div>
+                    <h3 className="text-3xl font-bold text-rose-600">{issueStats.critical}</h3>
+                </div>
+                <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5 sm:p-6 flex flex-col justify-between h-[140px]">
+                    <div className="flex items-start justify-between gap-2">
+                        <p className="text-sm font-medium text-slate-500 leading-tight">Без ответственного</p>
+                        <div className="rounded-2xl bg-amber-50 p-2.5 text-amber-600 shrink-0">
+                            <UserPlus className="h-5 w-5" />
                         </div>
-                        <div className="rounded-xl bg-blue-50 p-3 text-blue-600">
-                            <Wrench className="h-6 w-6" />
-                        </div>
-                    </CardContent>
-                </Card>
-                <Card className="border-none shadow-sm">
-                    <CardContent className="flex items-center justify-between p-4 sm:p-5">
-                        <div>
-                            <p className="text-sm font-medium text-muted-foreground">Требуют внимания</p>
-                            <h3 className="mt-1 text-2xl font-bold text-rose-600">{issueStats.critical}</h3>
-                        </div>
-                        <div className="rounded-xl bg-rose-50 p-3 text-rose-600">
-                            <Clock3 className="h-6 w-6" />
-                        </div>
-                    </CardContent>
-                </Card>
-                <Card className="border-none shadow-sm">
-                    <CardContent className="flex items-center justify-between p-4 sm:p-5">
-                        <div>
-                            <p className="text-sm font-medium text-muted-foreground">Без ответственного</p>
-                            <h3 className="mt-1 text-2xl font-bold text-amber-600">{issueStats.unassigned}</h3>
-                        </div>
-                        <div className="rounded-xl bg-amber-50 p-3 text-amber-600">
-                            <UserPlus className="h-6 w-6" />
-                        </div>
-                    </CardContent>
-                </Card>
+                    </div>
+                    <h3 className="text-3xl font-bold text-amber-600">{issueStats.unassigned}</h3>
+                </div>
             </div>
 
-            <Card className="border-none shadow-sm">
-                <CardContent className="space-y-4 p-4">
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 sm:p-8">
+                <div className="space-y-6">
                     <div className="flex flex-col gap-4">
                         <div className="relative w-full">
-                            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                            <Search className="absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
                             <Input
                                 placeholder="Поиск по проблеме, описанию или оборудованию..."
-                                className="border-slate-200 bg-slate-50 pl-9"
+                                className="h-12 border-slate-200 bg-slate-50/50 pl-10 rounded-xl font-medium text-slate-900 focus:bg-white"
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
                             />
                         </div>
-                        <div className="flex justify-center">
-                            <Tabs defaultValue="OPEN" value={activeTab} onValueChange={setActiveTab} className="w-full lg:max-w-[560px]">
-                                <TabsList className="grid h-12 w-full grid-cols-3 rounded-xl bg-slate-100 p-1">
+                        <div className="flex justify-start">
+                            <Tabs defaultValue="OPEN" value={activeTab} onValueChange={setActiveTab} className="w-full">
+                                <TabsList className="flex h-auto w-full justify-start gap-8 overflow-x-auto rounded-none border-b border-slate-200 bg-transparent p-0 mb-6">
                                     {statusTabItems.map(item => (
-                                        <TabsTrigger key={item.value} value={item.value} className="rounded-lg px-4 text-sm font-medium">
+                                        <TabsTrigger key={item.value} value={item.value} className="relative shrink-0 rounded-none border-b-2 border-transparent px-0 pb-4 pt-2 font-medium text-slate-500 hover:text-slate-700 data-[state=active]:border-slate-900 data-[state=active]:text-slate-900 data-[state=active]:shadow-none data-[state=active]:bg-transparent transition-all">
                                             {item.label}
                                         </TabsTrigger>
                                     ))}
@@ -415,18 +406,18 @@ export default function IssuesBoard() {
                         {" · "}
                         Инцидентов: <span className="font-medium text-foreground">{filteredIssues.length}</span>
                     </div>
-                </CardContent>
-            </Card>
+                </div>
+            </div>
 
-            <Card className="overflow-hidden border-none shadow-sm">
-                <div className="space-y-3 p-3">
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+                <div className="space-y-4 p-4 sm:p-6">
                     {isLoading ? (
                         <div className="flex h-40 flex-col items-center justify-center text-center">
                             <Loader2 className="h-8 w-8 animate-spin text-primary" />
                             <p className="mt-2 text-sm text-muted-foreground">Загрузка инцидентов...</p>
                         </div>
                     ) : groupedIssues.length === 0 ? (
-                        <div className="flex h-40 flex-col items-center justify-center rounded-xl border border-dashed text-center">
+                        <div className="flex h-48 flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50/50 text-center">
                             <MessageSquare className="h-8 w-8 text-slate-300" />
                             <p className="mt-2 text-sm font-medium">Ничего не найдено</p>
                             <p className="text-xs text-muted-foreground">Измени фильтры или создай новый инцидент</p>
@@ -436,11 +427,11 @@ export default function IssuesBoard() {
                             const isExpanded = expandedGroupKeys.includes(group.key)
 
                             return (
-                                <div key={group.key} className="overflow-hidden rounded-xl border bg-white">
+                                <div key={group.key} className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
                                     <button
                                         type="button"
                                         onClick={() => toggleGroup(group.key)}
-                                        className="w-full border-b bg-slate-50/70 px-4 py-3 text-left"
+                                        className="w-full border-b border-slate-100 bg-slate-50/50 px-5 py-4 text-left hover:bg-slate-50 transition-colors"
                                     >
                                         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                                             <div className="min-w-0">
@@ -467,7 +458,7 @@ export default function IssuesBoard() {
                                     </button>
 
                                     {isExpanded ? (
-                                        <CardContent className="space-y-2 p-3">
+                                        <div className="space-y-3 p-4">
                                             {group.items.map(issue => (
                                                 <button
                                                     type="button"
@@ -509,17 +500,17 @@ export default function IssuesBoard() {
                                                     </div>
                                                 </button>
                                             ))}
-                                        </CardContent>
+                                        </div>
                                     ) : null}
                                 </div>
                             )
                         })
                     )}
                 </div>
-            </Card>
+            </div>
 
             <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-                <DialogContent className="sm:max-w-[500px]">
+                <DialogContent className="sm:max-w-[500px] rounded-3xl p-6 sm:p-8">
                     <DialogHeader>
                         <DialogTitle>Сообщить о неисправности</DialogTitle>
                         <DialogDescription>Опишите проблему, и технический персонал возьмет её в работу.</DialogDescription>
@@ -575,6 +566,7 @@ export default function IssuesBoard() {
                         <div className="space-y-2">
                             <Label>Что случилось? <span className="text-rose-500">*</span></Label>
                             <Input
+                                className="h-12 bg-slate-50/50 border-slate-200 rounded-xl font-medium text-slate-900 focus:bg-white"
                                 placeholder="Краткое название проблемы"
                                 value={newIssue.title}
                                 onChange={(e) => setNewIssue(prev => ({ ...prev, title: e.target.value }))}
@@ -584,7 +576,7 @@ export default function IssuesBoard() {
                         <div className="space-y-2">
                             <Label>Подробности</Label>
                             <textarea
-                                className="w-full min-h-[100px] rounded-lg border bg-white p-3 text-sm outline-none transition-all focus:ring-2 focus:ring-primary/20"
+                                className="w-full min-h-[100px] resize-y bg-slate-50/50 border-slate-200 border rounded-xl font-medium text-slate-900 focus:bg-white p-4"
                                 placeholder="Опишите симптомы, когда проявилось и что уже пробовали сделать..."
                                 value={newIssue.description}
                                 onChange={(e) => setNewIssue(prev => ({ ...prev, description: e.target.value }))}
@@ -599,17 +591,17 @@ export default function IssuesBoard() {
                                         type="button"
                                         variant={newIssue.severity === level ? "default" : "outline"}
                                         size="sm"
-                                        className="text-[10px]"
+                                        className={cn("text-[10px] rounded-xl font-bold h-9", newIssue.severity === level ? "bg-slate-900 text-white" : "")}
                                         onClick={() => setNewIssue(prev => ({ ...prev, severity: level as "LOW" | "MEDIUM" | "HIGH" | "CRITICAL" }))}
                                     >
-                                        {level === "LOW" ? "Низкий" : level === "MEDIUM" ? "Средний" : level === "HIGH" ? "Высокий" : "Критико"}
+                                        {level === "LOW" ? "Низкий" : level === "MEDIUM" ? "Средний" : level === "HIGH" ? "Высокий" : "Критич."}
                                     </Button>
                                 ))}
                             </div>
                         </div>
                         <DialogFooter className="pt-4">
-                            <Button type="button" variant="ghost" onClick={() => setIsCreateOpen(false)}>Отмена</Button>
-                            <Button type="submit" disabled={isSaving || !newIssue.equipment_id} className="bg-rose-600 hover:bg-rose-700">
+                            <Button type="button" variant="ghost" className="rounded-xl font-bold" onClick={() => setIsCreateOpen(false)}>Отмена</Button>
+                            <Button type="submit" disabled={isSaving || !newIssue.equipment_id} className="rounded-xl font-bold bg-rose-600 hover:bg-rose-700 text-white">
                                 {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                                 Отправить отчет
                             </Button>
@@ -618,20 +610,18 @@ export default function IssuesBoard() {
                 </DialogContent>
             </Dialog>
 
-            <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur supports-[backdrop-filter]:bg-background/80 md:hidden">
-                <div className="mx-auto flex max-w-7xl gap-2">
-                    <Button asChild variant="outline" className="h-11 flex-1">
+            {/* Mobile Bottom Back Button */}
+            <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/80 p-4 backdrop-blur-xl md:hidden pb-[calc(1rem+env(safe-area-inset-bottom))]">
+                <div className="mx-auto flex max-w-[1600px] gap-2">
+                    <Button asChild variant="outline" className="flex-1 h-12 rounded-xl border-slate-200 text-slate-700 bg-white font-medium">
                         <Link href={`/clubs/${clubId}/equipment`}>
                             <ChevronLeft className="mr-2 h-4 w-4" />
                             Назад
                         </Link>
                     </Button>
-                    <Button className="h-11 flex-1" onClick={() => setIsCreateOpen(true)}>
-                        <Plus className="mr-2 h-4 w-4" />
-                        Сообщить
-                    </Button>
                 </div>
             </div>
-        </div>
+            </div>
+        </PageShell>
     )
 }

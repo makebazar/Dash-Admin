@@ -87,8 +87,8 @@ export default function EmployeeKnowledgeBasePage() {
                 <div key={cat.id} className="flex flex-col">
                     <div
                         className={cn(
-                            "flex items-center justify-between py-2 px-3 rounded-lg cursor-pointer transition-colors",
-                            selectedCategoryId === cat.id && selectedArticleId === null ? "bg-indigo-50 text-indigo-700" : "hover:bg-slate-50"
+                            "flex items-center justify-between py-2 px-3 rounded-lg cursor-pointer",
+                            selectedCategoryId === cat.id && selectedArticleId === null ? "bg-primary/10 text-foreground" : "hover:bg-accent/30 text-foreground"
                         )}
                         style={{ paddingLeft: `${depth * 16 + 12}px` }}
                         onClick={() => {
@@ -99,7 +99,7 @@ export default function EmployeeKnowledgeBasePage() {
                     >
                         <div className="flex items-center gap-2 overflow-hidden">
                             {hasChildren ? <ChevronDown className="h-4 w-4 shrink-0" /> : <div className="w-4" />}
-                            <BookOpen className={cn("h-4 w-4 shrink-0", selectedCategoryId === cat.id && selectedArticleId === null ? "text-indigo-600" : "text-slate-400")} />
+                            <BookOpen className={cn("h-4 w-4 shrink-0", selectedCategoryId === cat.id && selectedArticleId === null ? "text-primary" : "text-muted-foreground/70")} />
                             <span className="truncate text-sm font-medium">{cat.name}</span>
                         </div>
                     </div>
@@ -110,8 +110,8 @@ export default function EmployeeKnowledgeBasePage() {
                             <div
                                 key={art.id}
                                 className={cn(
-                                    "flex items-center justify-between py-1.5 px-3 ml-6 rounded-md cursor-pointer text-sm transition-colors",
-                                    selectedArticleId === art.id ? "bg-indigo-50 text-indigo-700 font-medium" : "hover:bg-slate-50 text-slate-600"
+                                    "flex items-center justify-between py-1.5 px-3 ml-6 rounded-md cursor-pointer text-sm",
+                                    selectedArticleId === art.id ? "bg-primary/10 text-foreground font-medium" : "hover:bg-accent/30 text-muted-foreground"
                                 )}
                                 style={{ paddingLeft: `${(depth + 1) * 16 + 12}px` }}
                                 onClick={() => {
@@ -121,7 +121,7 @@ export default function EmployeeKnowledgeBasePage() {
                                 }}
                             >
                                 <div className="flex items-center gap-2 overflow-hidden">
-                                    <div className="w-4 h-[1px] bg-slate-200" />
+                                    <div className="w-4 h-[1px] bg-border" />
                                     <span className="truncate">{art.title}</span>
                                 </div>
                             </div>
@@ -137,8 +137,8 @@ export default function EmployeeKnowledgeBasePage() {
 
     if (isLoading) {
         return (
-            <div className="flex h-screen items-center justify-center bg-slate-50/30">
-                <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
+            <div className="flex h-screen items-center justify-center bg-background">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
             </div>
         )
     }
@@ -155,14 +155,14 @@ export default function EmployeeKnowledgeBasePage() {
         <div className="flex flex-col h-full w-full min-w-0">
             <div className="p-4 space-y-4">
                 <h2 className="text-lg font-bold flex items-center gap-2">
-                    <BookOpen className="h-5 w-5 text-indigo-600" />
+                    <BookOpen className="h-5 w-5 text-primary" />
                     База знаний
                 </h2>
                 <div className="relative w-full min-w-0">
-                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
+                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground/70" />
                     <Input
                         placeholder="Поиск..."
-                        className="pl-9 bg-slate-50 border-none shadow-none w-full max-w-full"
+                        className="pl-9 bg-background border-border w-full max-w-full"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                     />
@@ -176,62 +176,62 @@ export default function EmployeeKnowledgeBasePage() {
 
     return (
         <Sheet open={isNavOpen} onOpenChange={setIsNavOpen}>
-            <div className="flex h-[calc(100vh-64px)] overflow-hidden bg-slate-50/30">
-                <div className="hidden md:flex w-80 border-r bg-white shrink-0 overflow-x-hidden">
+            <div className="flex h-[calc(100vh-64px)] overflow-hidden bg-background">
+                <div className="hidden md:flex w-80 border-r border-border bg-card shrink-0 overflow-x-hidden">
                     {sidebarContent}
                 </div>
 
-                <SheetContent side="left" className="md:hidden p-0 w-[85vw] max-w-[420px] overflow-x-hidden">
+                <SheetContent side="left" className="md:hidden p-0 w-[85vw] max-w-[420px] overflow-x-hidden bg-card border-border">
                     <SheetTitle className="sr-only">База знаний</SheetTitle>
-                    <div className="h-full bg-white">
+                    <div className="h-full bg-card">
                         {sidebarContent}
                     </div>
                 </SheetContent>
 
-                <div className="flex-1 flex flex-col overflow-hidden bg-white">
+                <div className="flex-1 flex flex-col overflow-hidden bg-background">
                     {selectedArticle ? (
                         <div className="flex-1 flex flex-col overflow-hidden">
-                            <div className="border-b px-4 md:px-8 py-4 bg-white shrink-0">
+                            <div className="border-b border-border px-4 md:px-8 py-4 bg-card shrink-0">
                                 <div className="flex items-start gap-3">
                                     {mobileMenuButton}
                                     <div className="min-w-0">
-                                        <h1 className="text-xl md:text-2xl font-bold text-slate-900 break-words">{selectedArticle.title}</h1>
-                                        <p className="text-sm text-slate-500 mt-1">
+                                        <h1 className="text-xl md:text-2xl font-bold text-foreground break-words">{selectedArticle.title}</h1>
+                                        <p className="text-sm text-muted-foreground mt-1">
                                             {new Date(selectedArticle.updated_at).toLocaleString("ru-RU")}
                                         </p>
                                     </div>
                                 </div>
                             </div>
                             <div className="flex-1 overflow-y-auto">
-                                <div className="px-4 md:px-8 py-6 md:py-8 max-w-4xl mx-auto prose prose-slate max-w-none">
+                                <div className="px-4 md:px-8 py-6 md:py-8 max-w-4xl mx-auto prose prose-invert max-w-none">
                                     <div className="kb-content" dangerouslySetInnerHTML={{ __html: selectedArticle.content }} />
                                 </div>
                             </div>
                         </div>
                     ) : selectedCategory ? (
                         <div className="flex-1 flex flex-col overflow-hidden">
-                            <div className="md:hidden border-b px-4 py-3 flex items-center gap-3 bg-white shrink-0">
+                            <div className="md:hidden border-b border-border px-4 py-3 flex items-center gap-3 bg-card shrink-0">
                                 {mobileMenuButton}
                                 <span className="font-semibold">База знаний</span>
                             </div>
                             <div className="flex-1 overflow-y-auto p-4 md:p-8">
-                                <h1 className="text-xl md:text-2xl font-bold text-slate-900 break-words">{selectedCategory.name}</h1>
+                                <h1 className="text-xl md:text-2xl font-bold text-foreground break-words">{selectedCategory.name}</h1>
                                 {selectedCategory.description && (
-                                    <p className="text-sm text-slate-500 mt-1 break-words">{selectedCategory.description}</p>
+                                    <p className="text-sm text-muted-foreground mt-1 break-words">{selectedCategory.description}</p>
                                 )}
                             </div>
                         </div>
                     ) : (
                         <div className="flex-1 flex flex-col overflow-hidden">
-                            <div className="md:hidden border-b px-4 py-3 flex items-center gap-3 bg-white shrink-0">
+                            <div className="md:hidden border-b border-border px-4 py-3 flex items-center gap-3 bg-card shrink-0">
                                 {mobileMenuButton}
                                 <span className="font-semibold">База знаний</span>
                             </div>
-                            <div className="flex-1 flex flex-col items-center justify-center text-slate-400 p-6 md:p-8 text-center">
-                                <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mb-4">
-                                    <BookOpen className="h-10 w-10" />
+                            <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground/70 p-6 md:p-8 text-center">
+                                <div className="w-20 h-20 bg-accent/30 border border-border rounded-2xl flex items-center justify-center mb-4">
+                                    <BookOpen className="h-10 w-10 text-muted-foreground/70" />
                                 </div>
-                                <h3 className="text-lg font-medium text-slate-900 mb-1">База знаний</h3>
+                                <h3 className="text-lg font-medium text-foreground mb-1">База знаний</h3>
                                 <p className="max-w-xs">Выберите категорию или статью в левом меню</p>
                             </div>
                         </div>

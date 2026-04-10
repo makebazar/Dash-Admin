@@ -178,7 +178,7 @@ export function ZonesSettingsTab({ clubId }: ZonesSettingsTabProps) {
 
             <CardContent className="space-y-4">
                 {isCreating && (
-                    <div className="rounded-xl border bg-slate-50 p-4">
+                    <div className="rounded-xl border bg-muted p-4">
                         <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_220px_auto]">
                             <Input
                                 value={newZoneName}
@@ -241,7 +241,7 @@ export function ZonesSettingsTab({ clubId }: ZonesSettingsTabProps) {
                                             <Input value={editName} onChange={(e) => setEditName(e.target.value)} />
                                         ) : (
                                             <div className="flex items-center gap-2">
-                                                <MapPin className="h-4 w-4 text-slate-400" />
+                                                <MapPin className="h-4 w-4 text-muted-foreground/70" />
                                                 <span className="font-medium">{zone.name}</span>
                                             </div>
                                         )}
@@ -280,13 +280,13 @@ export function ZonesSettingsTab({ clubId }: ZonesSettingsTabProps) {
                                                         <Save className="h-4 w-4 text-green-600" />
                                                     </Button>
                                                     <Button size="icon" variant="ghost" onClick={() => setEditingZoneId(null)}>
-                                                        <X className="h-4 w-4 text-slate-400" />
+                                                        <X className="h-4 w-4 text-muted-foreground/70" />
                                                     </Button>
                                                 </>
                                             ) : (
                                                 <>
                                                     <Button size="icon" variant="ghost" onClick={() => startEditing(zone)}>
-                                                        <Pencil className="h-4 w-4 text-slate-400 hover:text-blue-600" />
+                                                        <Pencil className="h-4 w-4 text-muted-foreground/70 hover:text-blue-600" />
                                                     </Button>
                                                     <Button
                                                         size="icon"
@@ -295,7 +295,7 @@ export function ZonesSettingsTab({ clubId }: ZonesSettingsTabProps) {
                                                         disabled={zone.workstation_count > 0}
                                                         title={zone.workstation_count > 0 ? "Сначала уберите места из зоны" : "Удалить зону"}
                                                     >
-                                                        <Trash2 className={`h-4 w-4 ${zone.workstation_count > 0 ? "text-slate-200" : "text-slate-400 hover:text-red-600"}`} />
+                                                        <Trash2 className={`h-4 w-4 ${zone.workstation_count > 0 ? "text-slate-200" : "text-muted-foreground/70 hover:text-red-600"}`} />
                                                     </Button>
                                                 </>
                                             )}

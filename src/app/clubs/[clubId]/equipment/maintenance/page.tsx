@@ -12,7 +12,6 @@ import {
     Shirt,
     Search
 } from "lucide-react"
-import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
@@ -24,6 +23,7 @@ import {
     SelectValue,
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
+import { PageShell } from "@/components/layout/PageShell"
 import Link from "next/link"
 
 interface MaintenanceTask {
@@ -907,21 +907,22 @@ export default function MaintenanceSchedule() {
     }
 
     return (
-        <div className="mx-auto max-w-[1600px] space-y-6 p-4 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:space-y-8 sm:p-6 sm:pb-[calc(6.5rem+env(safe-area-inset-bottom))] md:pb-8 lg:p-8">
+        <PageShell maxWidth="5xl">
+            <div className="space-y-8 pb-28 sm:pb-12">
             <div className="flex flex-col gap-4">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between mb-8">
                     <div className="min-w-0">
-                        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Обслуживание</h1>
-                        <p className="mt-1 text-sm text-muted-foreground sm:text-base">График чистки, исполнители и контроль просроченных задач по оборудованию</p>
+                        <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-slate-900 truncate">Обслуживание</h1>
+                        <p className="text-slate-500 text-lg mt-2">График чистки, исполнители и контроль просроченных задач по оборудованию</p>
                     </div>
                     <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap lg:justify-end">
-                        <Button asChild variant="outline" className="hidden w-full md:inline-flex md:w-auto">
+                        <Button asChild variant="outline" className="hidden w-full md:inline-flex md:w-auto rounded-xl h-11 px-6 font-medium">
                             <Link href={`/clubs/${clubId}/equipment`}>
                                 <ChevronLeft className="mr-2 h-4 w-4" />
                                 Назад
                             </Link>
                         </Button>
-                        <Button asChild variant="outline" className="w-full sm:w-auto">
+                        <Button asChild variant="outline" className="w-full sm:w-auto rounded-xl h-11 px-6 font-medium">
                             <Link href={`/clubs/${clubId}/laundry`}>
                                 <Shirt className="mr-2 h-4 w-4" />
                                 Стирка
@@ -930,7 +931,7 @@ export default function MaintenanceSchedule() {
                         <Button
                             onClick={handleGenerateTasks}
                             disabled={isGenerating}
-                            className="w-full bg-primary text-primary-foreground shadow-md hover:bg-primary/90 sm:w-auto"
+                            className="w-full bg-slate-900 text-white shadow-sm hover:bg-slate-800 sm:w-auto rounded-xl h-11 px-6 font-medium"
                         >
                             {isGenerating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
                             Пересчитать
@@ -939,24 +940,24 @@ export default function MaintenanceSchedule() {
                 </div>
             </div>
 
-            <Card className="border-none shadow-sm">
-                <CardContent className="space-y-4 p-4">
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 sm:p-8">
+                <div className="space-y-6">
                     <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-center">
                         <div className="relative w-full">
-                            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                            <Search className="absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
                             <Input
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                                 placeholder="Поиск по месту, зоне, устройству"
-                                className="border-slate-200 bg-slate-50 pl-9"
+                                className="h-12 border-slate-200 bg-slate-50/50 pl-10 rounded-xl font-medium text-slate-900 focus:bg-white"
                             />
                         </div>
 
-                        <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-2 py-0.5 shadow-sm">
+                        <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
                             <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-7 w-7 text-slate-500"
+                                className="h-10 w-10 text-slate-500 hover:bg-slate-50 rounded-xl border border-slate-100"
                                 onClick={() => {
                                     if (selectedMonth === 1) {
                                         setSelectedMonth(12)
@@ -974,7 +975,7 @@ export default function MaintenanceSchedule() {
                             <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-7 w-7 text-slate-500"
+                                className="h-10 w-10 text-slate-500 hover:bg-slate-50 rounded-xl border border-slate-100"
                                 onClick={() => {
                                     if (selectedMonth === 12) {
                                         setSelectedMonth(1)
@@ -991,17 +992,17 @@ export default function MaintenanceSchedule() {
 
                     <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
                         {summaryItems.map(item => (
-                            <div key={item.label} className={cn("rounded-xl border px-3 py-2", item.tone)}>
+                            <div key={item.label} className={cn("rounded-2xl border p-4 shadow-sm", item.tone)}>
                                 <div className="text-[10px] uppercase tracking-widest font-bold opacity-70">{item.label}</div>
                                 <div className="mt-1 text-xl font-bold leading-none">{item.value}</div>
                             </div>
                         ))}
                     </div>
-                </CardContent>
-            </Card>
+                </div>
+            </div>
 
-            <Card className="border-none shadow-sm">
-                <CardContent className="p-4">
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 sm:p-8">
+                <div className="space-y-6">
                     <div className="flex items-start justify-between gap-4">
                         <div>
                             <div className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground">Сотрудники</div>
@@ -1060,33 +1061,33 @@ export default function MaintenanceSchedule() {
                             </div>
                         </div>
                     </div>
-                </CardContent>
-            </Card>
+                </div>
+            </div>
 
             {isLoading ? (
-                <Card className="shadow-none">
-                    <CardContent className="h-64 flex items-center justify-center text-muted-foreground">
+                <div className="border-2 border-dashed border-slate-200 rounded-3xl bg-slate-50/50">
+                    <div className="h-64 flex items-center justify-center text-muted-foreground">
                         <Loader2 className="h-6 w-6 animate-spin" />
-                    </CardContent>
-                </Card>
+                    </div>
+                </div>
             ) : zones.length === 0 ? (
-                <Card className="shadow-none">
-                    <CardContent className="h-64 flex flex-col items-center justify-center gap-3 text-muted-foreground">
+                <div className="border-2 border-dashed border-slate-200 rounded-3xl bg-slate-50/50">
+                    <div className="h-64 flex flex-col items-center justify-center gap-3 text-muted-foreground">
                         <Calendar className="h-8 w-8 opacity-40" />
                         <div>Ничего не найдено</div>
-                    </CardContent>
-                </Card>
+                    </div>
+                </div>
             ) : (
                 <div className="space-y-3">
                     {zones.map(zone => {
                         const isZoneOpen = expandedZones.has(zone.key)
 
                         return (
-                            <Card key={zone.key} className="shadow-none overflow-hidden">
+                            <div key={zone.key} className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
                                 <button
                                     type="button"
                                     onClick={() => toggleZone(zone.key)}
-                                    className="w-full px-4 py-3 border-b bg-slate-50/70 text-left"
+                                    className="w-full px-6 py-5 border-b border-slate-100 bg-slate-50/50 text-left hover:bg-slate-50 transition-colors"
                                 >
                                     <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
                                         <div className="flex flex-col gap-2 min-w-0">
@@ -1131,7 +1132,7 @@ export default function MaintenanceSchedule() {
                                 </button>
 
                                 {isZoneOpen && (
-                                    <CardContent className="p-3 space-y-2">
+                                    <div className="p-4 sm:p-6 space-y-4">
                                         {zone.places.map(place => {
                                             const isPlaceOpen = expandedPlaces.has(place.key)
                                             const hasVisibleDevices = place.devices.length > 0
@@ -1321,17 +1322,17 @@ export default function MaintenanceSchedule() {
                                                 </div>
                                             )
                                         })}
-                                    </CardContent>
+                                    </div>
                                 )}
-                            </Card>
+                            </div>
                         )
                     })}
                 </div>
             )}
 
-            <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur supports-[backdrop-filter]:bg-background/80 md:hidden">
-                <div className="mx-auto flex max-w-7xl gap-2">
-                    <Button asChild variant="outline" className="h-11 flex-1">
+            <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/80 p-4 backdrop-blur-xl md:hidden pb-[calc(1rem+env(safe-area-inset-bottom))]">
+                <div className="mx-auto flex max-w-[1600px] gap-2">
+                    <Button asChild variant="outline" className="flex-1 h-12 rounded-xl border-slate-200 text-slate-700 bg-white font-medium">
                         <Link href={`/clubs/${clubId}/equipment`}>
                             <ChevronLeft className="mr-2 h-4 w-4" />
                             Назад
@@ -1339,6 +1340,7 @@ export default function MaintenanceSchedule() {
                     </Button>
                 </div>
             </div>
-        </div>
+            </div>
+        </PageShell>
     )
 }

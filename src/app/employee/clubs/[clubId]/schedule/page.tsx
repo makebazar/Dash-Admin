@@ -40,23 +40,20 @@ export default function EmployeeSchedulePage({ params }: { params: Promise<{ clu
     if (!clubId) return null
 
     return (
-        <div className="min-h-screen bg-slate-50 dark:bg-slate-900 p-4 md:p-6 space-y-4 md:space-y-6">
-            <h1 className="text-xl md:text-2xl font-bold">График смен</h1>
+        <div className="w-full max-w-7xl mx-auto px-4 py-8 md:px-8 md:py-12 space-y-8 relative z-0">
+            <div className="flex flex-col gap-2">
+                <h1 className="text-2xl font-bold tracking-tight text-foreground">График смен</h1>
+                <p className="text-sm text-muted-foreground">График работы администраторов на текущий месяц</p>
+            </div>
 
-            <Card className="border-0 shadow-lg bg-white dark:bg-slate-900 overflow-hidden">
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                        <Calendar className="h-5 w-5 text-purple-600" />
-                        График работы администраторов
-                    </CardTitle>
-                </CardHeader>
-                <CardContent className="p-0">
-                    {loading ? (
-                        <div className="flex h-64 items-center justify-center text-muted-foreground">
-                            <Loader2 className="h-6 w-6 animate-spin mr-2" />
-                            Загрузка графика...
-                        </div>
-                    ) : (
+            <div className="rounded-xl border border-border bg-card overflow-hidden shadow-sm">
+                {loading ? (
+                    <div className="flex h-64 flex-col items-center justify-center text-muted-foreground gap-3">
+                        <Loader2 className="h-6 w-6 animate-spin" />
+                        <span className="text-sm">Загрузка графика...</span>
+                    </div>
+                ) : (
+                    <div className="overflow-x-auto">
                         <WorkScheduleGrid
                             clubId={clubId}
                             month={new Date().getMonth() + 1}
@@ -65,9 +62,9 @@ export default function EmployeeSchedulePage({ params }: { params: Promise<{ clu
                             refreshData={() => fetchSchedule(clubId)}
                             readOnly={true}
                         />
-                    )}
-                </CardContent>
-            </Card>
+                    </div>
+                )}
+            </div>
         </div>
     )
 }

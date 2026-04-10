@@ -148,6 +148,7 @@ export async function GET(
         const completed_shifts_count = closedShifts.length;
         // Total count logic: closed + (1 if there is an active shift)
         // We ignore "zombie" active shifts if any (extra ones)
+        // Also ensure total shifts is at least 1 so UI logic doesn't fail on 0
         const total_shifts_count = completed_shifts_count + (activeShift ? 1 : 0);
         
         console.log(`[KPI API] Shifts found: ${total_shifts_count} (Closed: ${completed_shifts_count}, Active: ${activeShift ? 1 : 0})`);
@@ -434,6 +435,7 @@ export async function GET(
                     monthly_threshold: monthly_target,
                     planned_month_threshold: endOfMonthThreshold,
                     scaled_threshold: scaled_threshold,
+                    display_shifts_count: completed_shifts_count,
                     percent: bonus.reward_type === 'PERCENT' ? bonus.reward_value : 0,
                     amount: bonus.reward_type === 'FIXED' ? bonus.reward_value : 0,
                     is_met: is_met,

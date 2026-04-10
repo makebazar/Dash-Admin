@@ -1,12 +1,12 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Loader2, Save, Globe, Building, MapPin, Sun, Moon } from "lucide-react"
-import { PageShell, PageHeader } from "@/components/layout/PageShell"
+import { PageShell } from "@/components/layout/PageShell"
 
 // Common Russian timezones
 const TIMEZONES = [
@@ -116,27 +116,33 @@ export default function GeneralSettingsPage({ params }: { params: Promise<{ club
     }
 
     return (
-        <PageShell maxWidth="2xl">
-            <PageHeader
-                title="Общие настройки"
-                description="Основная информация о клубе"
-            />
+        <PageShell maxWidth="5xl">
+            <div className="space-y-8 pb-28 sm:pb-12 max-w-2xl">
+            <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between mb-8">
+                    <div className="min-w-0">
+                        <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-slate-900 truncate">Общие настройки</h1>
+                        <p className="text-slate-500 text-lg mt-2">Основная информация о клубе</p>
+                    </div>
+                </div>
+            </div>
 
             <div className="grid gap-6">
                 {/* Club Info Card */}
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <Building className="h-5 w-5" />
+                <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 sm:p-8">
+                    <div className="mb-6">
+                        <h3 className="flex items-center gap-2 text-xl font-bold text-slate-900">
+                            <Building className="h-5 w-5 text-slate-500" />
                             Информация о клубе
-                        </CardTitle>
-                        <CardDescription>Название и адрес вашего заведения</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
+                        </h3>
+                        <p className="text-sm text-slate-500 mt-1">Название и адрес вашего заведения</p>
+                    </div>
+                    <div className="space-y-4">
                         <div className="space-y-2">
                             <Label htmlFor="name">Название клуба</Label>
                             <Input
                                 id="name"
+                                className="h-11 rounded-xl"
                                 value={name}
                                 onChange={e => setName(e.target.value)}
                                 placeholder="Например: Игровой клуб Центр"
@@ -148,42 +154,41 @@ export default function GeneralSettingsPage({ params }: { params: Promise<{ club
                                 <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                                 <Input
                                     id="address"
+                                    className="h-11 rounded-xl pl-10"
                                     value={address}
                                     onChange={e => setAddress(e.target.value)}
                                     placeholder="ул. Пушкина, д. 10"
-                                    className="pl-10"
                                 />
                             </div>
                         </div>
-                    </CardContent>
-                </Card>
+                    </div>
+                </div>
 
                 {/* Timezone Card */}
-                <Card className="border-purple-500/20">
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
+                <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 sm:p-8 relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/5 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none" />
+                    <div className="mb-6 relative z-10">
+                        <h3 className="flex items-center gap-2 text-xl font-bold text-slate-900">
                             <Globe className="h-5 w-5 text-purple-500" />
                             Часовой пояс
-                        </CardTitle>
-                        <CardDescription>
-                            Все время в отчетах будет отображаться в выбранном часовом поясе
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
+                        </h3>
+                        <p className="text-sm text-slate-500 mt-1">Все время в отчетах будет отображаться в выбранном часовом поясе</p>
+                    </div>
+                    <div className="relative z-10">
                         <div className="space-y-2">
                             <Label htmlFor="timezone">Часовой пояс клуба</Label>
-                            <select
-                                id="timezone"
-                                value={timezone}
-                                onChange={e => setTimezone(e.target.value)}
-                                className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-                            >
-                                {TIMEZONES.map(tz => (
-                                    <option key={tz.value} value={tz.value}>
-                                        {tz.label}
-                                    </option>
-                                ))}
-                            </select>
+                            <Select value={timezone} onValueChange={setTimezone}>
+                                <SelectTrigger id="timezone" className="h-11 w-full rounded-xl border-slate-200 bg-white text-sm text-slate-900 shadow-sm hover:bg-slate-50 focus:ring-slate-900">
+                                    <SelectValue placeholder="Выберите часовой пояс" />
+                                </SelectTrigger>
+                                <SelectContent className="max-h-[300px] rounded-xl border-slate-200 shadow-lg">
+                                    {TIMEZONES.map(tz => (
+                                        <SelectItem key={tz.value} value={tz.value} className="rounded-lg">
+                                            {tz.label}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
                             <p className="text-xs text-muted-foreground mt-2">
                                 Текущее время в этом часовом поясе:{' '}
                                 <span className="font-mono font-medium">
@@ -191,63 +196,63 @@ export default function GeneralSettingsPage({ params }: { params: Promise<{ club
                                 </span>
                             </p>
                         </div>
-                    </CardContent>
-                </Card>
+                    </div>
+                </div>
 
                 {/* Shift Hours Card */}
-                <Card className="border-orange-500/20">
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
+                <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 sm:p-8 relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-orange-500/5 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none" />
+                    <div className="mb-6 relative z-10">
+                        <h3 className="flex items-center gap-2 text-xl font-bold text-slate-900">
                             <Sun className="h-5 w-5 text-orange-500" />
-                            <Moon className="h-4 w-4 text-blue-500" />
                             Дневные и ночные смены
-                        </CardTitle>
-                        <CardDescription>
-                            Настройте границы для автоматического определения типа смены
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        <div className="grid grid-cols-2 gap-4">
+                        </h3>
+                        <p className="text-sm text-slate-500 mt-1">Настройте границы для автоматического определения типа смены</p>
+                    </div>
+                    <div className="space-y-6 relative z-10">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                             <div className="space-y-2">
-                                <Label className="flex items-center gap-2">
+                                <Label className="flex items-center gap-2 text-slate-700">
                                     <Sun className="h-4 w-4 text-orange-500" />
                                     Начало дневной смены
                                 </Label>
-                                <select
-                                    value={dayStartHour}
-                                    onChange={e => setDayStartHour(parseInt(e.target.value))}
-                                    className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-                                >
-                                    {HOURS.map(h => (
-                                        <option key={h} value={h}>
-                                            {formatHour(h)}
-                                        </option>
-                                    ))}
-                                </select>
+                                <Select value={dayStartHour.toString()} onValueChange={(val) => setDayStartHour(parseInt(val))}>
+                                    <SelectTrigger className="h-11 w-full rounded-xl border-slate-200 bg-white text-sm text-slate-900 shadow-sm hover:bg-slate-50 focus:ring-slate-900">
+                                        <SelectValue placeholder="Время" />
+                                    </SelectTrigger>
+                                    <SelectContent className="max-h-[300px] rounded-xl border-slate-200 shadow-lg">
+                                        {HOURS.map(h => (
+                                            <SelectItem key={h} value={h.toString()} className="rounded-lg">
+                                                {formatHour(h)}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
                             </div>
                             <div className="space-y-2">
-                                <Label className="flex items-center gap-2">
+                                <Label className="flex items-center gap-2 text-slate-700">
                                     <Moon className="h-4 w-4 text-blue-500" />
                                     Начало ночной смены
                                 </Label>
-                                <select
-                                    value={nightStartHour}
-                                    onChange={e => setNightStartHour(parseInt(e.target.value))}
-                                    className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-                                >
-                                    {HOURS.map(h => (
-                                        <option key={h} value={h}>
-                                            {formatHour(h)}
-                                        </option>
-                                    ))}
-                                </select>
+                                <Select value={nightStartHour.toString()} onValueChange={(val) => setNightStartHour(parseInt(val))}>
+                                    <SelectTrigger className="h-11 w-full rounded-xl border-slate-200 bg-white text-sm text-slate-900 shadow-sm hover:bg-slate-50 focus:ring-slate-900">
+                                        <SelectValue placeholder="Время" />
+                                    </SelectTrigger>
+                                    <SelectContent className="max-h-[300px] rounded-xl border-slate-200 shadow-lg">
+                                        {HOURS.map(h => (
+                                            <SelectItem key={h} value={h.toString()} className="rounded-lg">
+                                                {formatHour(h)}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
                             </div>
                         </div>
-                        <div className="bg-muted/50 rounded-lg p-4 text-sm">
-                            <p className="text-muted-foreground">
-                                <span className="font-medium text-foreground">Пример:</span> При настройках выше
+                        <div className="bg-slate-50 rounded-2xl p-5 text-sm border border-slate-100">
+                            <p className="text-slate-600">
+                                <span className="font-bold text-slate-900">Пример:</span> При настройках выше
                             </p>
-                            <ul className="mt-2 space-y-1 text-muted-foreground">
+                            <ul className="mt-3 space-y-2 text-slate-600">
                                 <li className="flex items-center gap-2">
                                     <Sun className="h-3 w-3 text-orange-500" />
                                     Дневная смена: с {formatHour(dayStartHour)} до {formatHour(nightStartHour)}
@@ -258,18 +263,21 @@ export default function GeneralSettingsPage({ params }: { params: Promise<{ club
                                 </li>
                             </ul>
                         </div>
-                    </CardContent>
-                </Card>
+                    </div>
+                </div>
 
                 {/* Save Button */}
-                <Button onClick={handleSave} disabled={isSaving} className="w-full" size="lg">
-                    {isSaving ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : (
-                        <Save className="mr-2 h-4 w-4" />
-                    )}
-                    Сохранить настройки
-                </Button>
+                <div className="pt-4">
+                    <Button onClick={handleSave} disabled={isSaving} className="w-full rounded-xl h-12 text-base font-medium bg-slate-900 text-white hover:bg-slate-800 shadow-sm">
+                        {isSaving ? (
+                            <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                        ) : (
+                            <Save className="mr-2 h-5 w-5" />
+                        )}
+                        Сохранить настройки
+                    </Button>
+                </div>
+            </div>
             </div>
         </PageShell>
     )

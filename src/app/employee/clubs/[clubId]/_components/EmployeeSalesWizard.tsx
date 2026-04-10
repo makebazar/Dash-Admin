@@ -621,20 +621,20 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
 
     return (
         <>
-            <div className="min-h-screen bg-slate-950 text-white flex flex-col">
+            <div className="min-h-screen bg-slate-950 text-primary-foreground flex flex-col">
                 <div className="p-4 border-b border-slate-800 flex items-start justify-between gap-3 sticky top-0 bg-slate-950 z-50">
                     <div className="space-y-0.5">
                         <div className="flex items-center gap-2 text-xl font-black">
                             <ShoppingCart className="h-4 w-4 text-emerald-400" />
                             Касса (Смена)
                         </div>
-                        <div className="text-slate-400 text-sm leading-tight">
+                        <div className="text-muted-foreground/70 text-sm leading-tight">
                             Собирайте чек, выбирайте оплату, пробивайте. Остатки спишутся при завершении смены.
                         </div>
                     </div>
                     <Button
                         variant="outline"
-                        className="h-12 border-slate-800 bg-slate-900/50 hover:bg-slate-800 rounded-xl shrink-0 text-base"
+                        className="h-12 border-slate-800 bg-primary/50 hover:bg-primary/90 rounded-xl shrink-0 text-base"
                         onClick={handleExit}
                     >
                         <ArrowLeft className="h-4 w-4 mr-2" />
@@ -644,13 +644,13 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
 
                 <div className="flex-1 overflow-y-auto p-6 w-full max-w-7xl mx-auto space-y-6">
                     {!activeShiftId ? (
-                        <div className="text-base text-slate-400">Нет активной смены</div>
+                        <div className="text-base text-muted-foreground/70">Нет активной смены</div>
                     ) : (
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                                 <div className="space-y-4">
-                                    <div className="bg-slate-900/30 border border-slate-800 rounded-xl p-4 space-y-3">
+                                    <div className="bg-primary/30 border border-slate-800 rounded-xl p-4 space-y-3">
                                         <div className="flex items-center justify-between">
-                                            <div className="text-xs text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                                            <div className="text-xs text-muted-foreground/70 uppercase tracking-wider flex items-center gap-2">
                                                 <Search className="h-3 w-3" />
                                                 Поиск / Сканер
                                                 <span className={cn(
@@ -698,8 +698,8 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
                                                         key={p.id}
                                                         type="button"
                                                         className={cn(
-                                                            "w-full text-left px-3 py-2 text-[11px] hover:bg-slate-900 flex items-center justify-between",
-                                                            idx === selectedSuggestionIdx ? "bg-slate-900" : ""
+                                                            "w-full text-left px-3 py-2 text-[11px] hover:bg-primary flex items-center justify-between",
+                                                            idx === selectedSuggestionIdx ? "bg-primary" : ""
                                                         )}
                                                         onMouseEnter={() => setSelectedSuggestionIdx(idx)}
                                                         onClick={() => {
@@ -709,12 +709,12 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
                                                         }}
                                                     >
                                                         <span className="truncate pr-3">{p.name}</span>
-                                                        <span className="text-slate-500 shrink-0">{Number(p.selling_price || 0)} ₽</span>
+                                                        <span className="text-muted-foreground shrink-0">{Number(p.selling_price || 0)} ₽</span>
                                                     </button>
                                                 ))}
                                             </div>
                                         )}
-                                        <div className="flex items-center justify-between text-xs text-slate-500 px-0.5">
+                                        <div className="flex items-center justify-between text-xs text-muted-foreground px-0.5">
                                             <div className="flex items-center gap-2">
                                                 <Keyboard className="h-3 w-3" />
                                                 F2: оплата · Ctrl+Enter: пробить · Del: удалить · +/-: кол-во
@@ -722,9 +722,9 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
                                         </div>
                                     </div>
 
-                                    <div className="bg-slate-900/30 border border-slate-800 rounded-xl overflow-hidden">
+                                    <div className="bg-primary/30 border border-slate-800 rounded-xl overflow-hidden">
                                         <div className="p-4 border-b border-slate-800 flex items-center justify-between">
-                                            <div className="text-base font-black text-white/90 flex items-center gap-2">
+                                            <div className="text-base font-black text-primary-foreground/90 flex items-center gap-2">
                                                 <ShoppingCart className="h-5 w-5 text-emerald-400" />
                                                 Текущий чек
                                             </div>
@@ -734,7 +734,7 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
                                         </div>
                                         <div className="p-2">
                                             {cart.length === 0 ? (
-                                                    <div className="p-6 text-base text-slate-400">Пусто</div>
+                                                    <div className="p-6 text-base text-muted-foreground/70">Пусто</div>
                                             ) : (
                                                 <Table>
                                                     <TableBody>
@@ -742,8 +742,8 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
                                                             <TableRow
                                                                 key={i.product_id}
                                                                 className={cn(
-                                                                    "border-slate-800 hover:bg-slate-900/50 cursor-pointer",
-                                                                    i.product_id === selectedCartProductId ? "bg-slate-900/70" : ""
+                                                                    "border-slate-800 hover:bg-primary/50 cursor-pointer",
+                                                                    i.product_id === selectedCartProductId ? "bg-primary/70" : ""
                                                                 )}
                                                                 onClick={() => setSelectedCartProductId(i.product_id)}
                                                             >
@@ -751,7 +751,7 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
                                                                     <div className="flex items-center justify-between gap-3">
                                                                         <div className="min-w-0">
                                                                             <div className="text-base font-bold truncate">{i.name}</div>
-                                                                            <div className="text-xs text-slate-500 truncate">{i.quantity} × {i.price} ₽</div>
+                                                                            <div className="text-xs text-muted-foreground truncate">{i.quantity} × {i.price} ₽</div>
                                                                         </div>
                                                                         <div className="flex items-center gap-2">
                                                                             <Input
@@ -765,7 +765,7 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
                                                                             <Button
                                                                                 variant="ghost"
                                                                                 size="icon"
-                                                                                className="h-9 w-9 text-red-300 hover:text-white hover:bg-red-500/20"
+                                                                                className="h-9 w-9 text-red-300 hover:text-primary-foreground hover:bg-red-500/20"
                                                                                 onClick={() => removeCartItem(i.product_id)}
                                                                                 disabled={isPending}
                                                                             >
@@ -781,11 +781,11 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
                                             )}
                                         </div>
                                         {cart.length > 0 && (
-                                            <div className="px-4 py-2 border-t border-slate-800 flex items-center justify-between text-[10px] text-slate-500">
+                                            <div className="px-4 py-2 border-t border-slate-800 flex items-center justify-between text-[10px] text-muted-foreground">
                                                 <span>Выбрано: {selectedCartIndex === -1 ? "—" : `${selectedCartIndex + 1}/${cart.length}`}</span>
                                                 <Button
                                                     variant="ghost"
-                                                                className="h-10 text-xs text-slate-300 hover:bg-slate-800"
+                                                                className="h-10 text-xs text-slate-300 hover:bg-primary/90"
                                                     onClick={() => {
                                                         startTransition(async () => {
                                                             const ok = await confirmAction({
@@ -812,8 +812,8 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
                                         )}
                                     </div>
 
-                                    <div ref={paymentRef} className="bg-slate-900/30 border border-slate-800 rounded-xl p-4 space-y-3">
-                                        <div className="text-xs text-slate-400 uppercase tracking-wider">Оплата</div>
+                                    <div ref={paymentRef} className="bg-primary/30 border border-slate-800 rounded-xl p-4 space-y-3">
+                                        <div className="text-xs text-muted-foreground/70 uppercase tracking-wider">Оплата</div>
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                             <div className="space-y-2">
                                                 <Label className="text-sm text-slate-300">Тип оплаты</Label>
@@ -897,7 +897,7 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
                                                 <div className="space-y-2">
                                                     <Label className="text-sm text-slate-300">Сдача</Label>
                                                     <div className="h-12 rounded-xl border border-slate-800 bg-slate-950 flex items-center justify-between px-3">
-                                                        <span className="text-sm text-slate-500">к выдаче</span>
+                                                        <span className="text-sm text-muted-foreground">к выдаче</span>
                                                         <span className="text-lg font-black text-emerald-300">{changeDue.toLocaleString()} ₽</span>
                                                     </div>
                                                 </div>
@@ -906,7 +906,7 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
                                         {paymentType === 'mixed' && (
                                             <div className="grid grid-cols-2 gap-3">
                                                 <div className="space-y-2">
-                                                    <Label className="text-xs text-slate-400">Нал</Label>
+                                                    <Label className="text-xs text-muted-foreground/70">Нал</Label>
                                                     <Input
                                                         value={cashAmount}
                                                         onChange={e => setCashAmount(e.target.value)}
@@ -916,7 +916,7 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
                                                     />
                                                 </div>
                                                 <div className="space-y-2">
-                                                    <Label className="text-xs text-slate-400">Карта</Label>
+                                                    <Label className="text-xs text-muted-foreground/70">Карта</Label>
                                                     <Input
                                                         value={cardAmount}
                                                         onChange={e => setCardAmount(e.target.value)}
@@ -939,9 +939,9 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
                                 </div>
 
                                 <div className="space-y-4">
-                                    <div className="bg-slate-900/30 border border-slate-800 rounded-xl p-4">
+                                    <div className="bg-primary/30 border border-slate-800 rounded-xl p-4">
                                         <div className="flex items-center justify-between">
-                                            <div className="text-base font-black text-white/90 flex items-center gap-2">
+                                            <div className="text-base font-black text-primary-foreground/90 flex items-center gap-2">
                                                 <History className="h-5 w-5 text-blue-400" />
                                                 История за смену
                                             </div>
@@ -951,12 +951,12 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
                                         </div>
                                     </div>
 
-                                    <div className="bg-slate-900/30 border border-slate-800 rounded-xl overflow-hidden">
+                                    <div className="bg-primary/30 border border-slate-800 rounded-xl overflow-hidden">
                                         <div className="p-4 border-b border-slate-800 flex items-center justify-between">
-                                            <div className="text-[11px] font-bold text-white/80">Чеки</div>
+                                            <div className="text-[11px] font-bold text-primary-foreground/80">Чеки</div>
                                             <Button
                                                 variant="ghost"
-                                                className="h-8 text-[10px] text-slate-300 hover:bg-slate-800"
+                                                className="h-8 text-[10px] text-slate-300 hover:bg-primary/90"
                                                 onClick={() => refresh()}
                                                 disabled={isPending}
                                             >
@@ -965,7 +965,7 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
                                         </div>
                                         <div className="p-2 max-h-[70vh] overflow-y-auto">
                                             {receipts.length === 0 ? (
-                                                <div className="p-4 text-[11px] text-slate-400">Пока нет чеков</div>
+                                                <div className="p-4 text-[11px] text-muted-foreground/70">Пока нет чеков</div>
                                             ) : (
                                                 <div className="space-y-2">
                                                     {receipts.filter(r => !r.voided_at).map(r => (
@@ -973,7 +973,7 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
                                                             <div className="p-3 flex items-center justify-between gap-3">
                                                                 <div className="min-w-0">
                                                                     <div className="text-[11px] font-bold truncate">Чек #{r.id}</div>
-                                                                    <div className="text-[9px] text-slate-500 truncate">
+                                                                    <div className="text-[9px] text-muted-foreground truncate">
                                                                         {new Date(r.created_at).toLocaleTimeString()} · {r.payment_type === 'salary' ? 'В СЧЕТ ЗП' : r.payment_type.toUpperCase()} · {r.total_amount} ₽
                                                                         {(r.total_refund_amount || 0) > 0 && (
                                                                              <span className="text-amber-400 ml-1">
@@ -989,7 +989,7 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
                                                                         <Button
                                                                             variant="ghost"
                                                                             size="icon"
-                                                                            className="h-9 w-9 text-red-300 hover:text-white hover:bg-red-500/20"
+                                                                            className="h-9 w-9 text-red-300 hover:text-primary-foreground hover:bg-red-500/20"
                                                                             onClick={() => cancelReceipt(r.id)}
                                                                             disabled={isPending}
                                                                             title="Отменить"
@@ -1006,14 +1006,14 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
                                                                         const returnedQty = it.returned_qty || 0
                                                                         
                                                                         return (
-                                                                            <div key={it.id} className="flex justify-between items-center text-[10px] text-slate-400">
+                                                                            <div key={it.id} className="flex justify-between items-center text-[10px] text-muted-foreground/70">
                                                                                 <span className="truncate pr-2">{it.product_name}</span>
                                                                                 <div className="flex items-center gap-2 shrink-0">
-                                                                                    <span className={isFullyReturned ? "line-through text-slate-600" : ""}>
+                                                                                    <span className={isFullyReturned ? "line-through text-muted-foreground" : ""}>
                                                                                         {it.quantity} × {it.selling_price_snapshot} ₽
                                                                                     </span>
                                                                                     {returnedQty > 0 && (
-                                                                                        <span className="text-[9px] text-slate-500">
+                                                                                        <span className="text-[9px] text-muted-foreground">
                                                                                             (возвращено: {returnedQty})
                                                                                         </span>
                                                                                     )}
@@ -1052,17 +1052,17 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
 
             {/* Return Dialog */}
             <Dialog open={isReturnDialogOpen} onOpenChange={setIsReturnDialogOpen}>
-                <DialogContent className="bg-slate-950 border-slate-800 text-white max-w-md">
+                <DialogContent className="bg-slate-950 border-slate-800 text-primary-foreground max-w-md">
                     <DialogHeader>
                         <DialogTitle>Возврат товара</DialogTitle>
-                        <DialogDescription className="text-slate-400">
+                        <DialogDescription className="text-muted-foreground/70">
                             {selectedReceipt?.items?.find(i => i.id === returnItemId)?.product_name}
                         </DialogDescription>
                     </DialogHeader>
                     <div className="py-4 space-y-4">
-                        <div className="p-3 bg-slate-900 rounded-xl border border-slate-800">
-                            <div className="text-xs text-slate-400 mb-1">Доступно для возврата:</div>
-                            <div className="text-lg font-bold text-white">
+                        <div className="p-3 bg-primary rounded-xl border border-slate-800">
+                            <div className="text-xs text-muted-foreground/70 mb-1">Доступно для возврата:</div>
+                            <div className="text-lg font-bold text-primary-foreground">
                                 {selectedReceipt?.items?.find(i => i.id === returnItemId)?.available_qty || 0} из {selectedReceipt?.items?.find(i => i.id === returnItemId)?.quantity} шт.
                             </div>
                         </div>
@@ -1074,7 +1074,7 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
                                 max={selectedReceipt?.items?.find(i => i.id === returnItemId)?.available_qty}
                                 value={returnQuantity}
                                 onChange={e => setReturnQuantity(e.target.value)}
-                                className="bg-slate-900 border-slate-800 h-12 rounded-xl text-base"
+                                className="bg-primary border-slate-800 h-12 rounded-xl text-base"
                             />
                         </div>
                         <div className="space-y-2">
@@ -1083,11 +1083,11 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
                                 value={returnReason}
                                 onChange={e => setReturnReason(e.target.value)}
                                 placeholder="Например: товар не подошел"
-                                className="bg-slate-900 border-slate-800 h-12 rounded-xl text-base"
+                                className="bg-primary border-slate-800 h-12 rounded-xl text-base"
                             />
                         </div>
-                        <div className="p-3 bg-slate-900 rounded-xl border border-slate-800">
-                            <div className="text-xs text-slate-400 mb-1">Сумма возврата:</div>
+                        <div className="p-3 bg-primary rounded-xl border border-slate-800">
+                            <div className="text-xs text-muted-foreground/70 mb-1">Сумма возврата:</div>
                             <div className="text-2xl font-black text-emerald-400">
                                 {(Number(returnQuantity) * (selectedReceipt?.items?.find(i => i.id === returnItemId)?.selling_price_snapshot || 0)).toLocaleString('ru-RU')} ₽
                             </div>

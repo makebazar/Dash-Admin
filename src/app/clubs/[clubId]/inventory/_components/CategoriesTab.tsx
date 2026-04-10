@@ -84,7 +84,7 @@ export function CategoriesTab({ categories, currentUserId }: CategoriesTabProps)
 
     return (
         <div className="space-y-4">
-            <div className="flex justify-between items-center bg-white p-4 rounded-lg border shadow-sm">
+            <div className="flex justify-between items-center bg-card p-4 rounded-lg border shadow-sm">
                 <h3 className="font-medium flex items-center gap-2">
                     <FolderTree className="h-4 w-4" />
                     Категории товаров
@@ -96,7 +96,7 @@ export function CategoriesTab({ categories, currentUserId }: CategoriesTabProps)
             </div>
 
             {/* Desktop Table */}
-            <div className="hidden md:block rounded-md border bg-white">
+            <div className="hidden md:block rounded-md border bg-card">
                 <Table>
                     <TableHeader>
                         <TableRow>
@@ -116,7 +116,7 @@ export function CategoriesTab({ categories, currentUserId }: CategoriesTabProps)
                                 </TableCell>
                                 <TableCell>
                                     {cat.parent_name ? (
-                                        <span className="bg-slate-100 px-2 py-1 rounded text-xs text-slate-600">
+                                        <span className="bg-accent px-2 py-1 rounded text-xs text-muted-foreground">
                                             {cat.parent_name}
                                         </span>
                                     ) : "—"}
@@ -148,18 +148,18 @@ export function CategoriesTab({ categories, currentUserId }: CategoriesTabProps)
             {/* Mobile View */}
             <div className="md:hidden space-y-3">
                 {categories.length === 0 ? (
-                    <div className="py-12 text-center text-muted-foreground italic bg-white rounded-xl border border-dashed">Категорий нет</div>
+                    <div className="py-12 text-center text-muted-foreground italic bg-card rounded-xl border border-dashed">Категорий нет</div>
                 ) : categories.map(cat => (
-                    <div key={cat.id} className="bg-white rounded-xl border p-4 shadow-sm relative">
+                    <div key={cat.id} className="bg-card rounded-xl border p-4 shadow-sm relative">
                         <div className="flex justify-between items-start mb-2">
                             <div className="flex flex-col">
-                                <h4 className="font-bold text-slate-900 text-base">{cat.name}</h4>
+                                <h4 className="font-bold text-foreground text-base">{cat.name}</h4>
                                 {cat.parent_name && (
-                                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Родитель: {cat.parent_name}</p>
+                                    <p className="text-[10px] text-muted-foreground/70 font-bold uppercase tracking-wider">Родитель: {cat.parent_name}</p>
                                 )}
                             </div>
                             <div className="flex items-center gap-1">
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400" onClick={() => openEdit(cat)}>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground/70" onClick={() => openEdit(cat)}>
                                     <Pencil className="h-4 w-4" />
                                 </Button>
                                 <Button variant="ghost" size="icon" className="h-8 w-8 text-red-400" onClick={() => handleDelete(cat.id)}>
@@ -168,10 +168,10 @@ export function CategoriesTab({ categories, currentUserId }: CategoriesTabProps)
                             </div>
                         </div>
                         {cat.description && (
-                            <p className="text-sm text-slate-500 line-clamp-2 mb-3 italic">"{cat.description}"</p>
+                            <p className="text-sm text-muted-foreground line-clamp-2 mb-3 italic">"{cat.description}"</p>
                         )}
                         <div className="pt-3 border-t border-slate-50 flex justify-between items-center">
-                            <span className="text-xs text-slate-400 font-medium">Товаров в категории</span>
+                            <span className="text-xs text-muted-foreground/70 font-medium">Товаров в категории</span>
                             <Badge variant="secondary" className="bg-blue-50 text-blue-600 border-none font-bold">
                                 {cat.products_count} шт.
                             </Badge>

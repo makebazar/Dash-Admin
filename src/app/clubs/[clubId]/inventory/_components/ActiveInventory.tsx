@@ -238,7 +238,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
             value: `${inventorySummary.counted}/${totalCount}`,
             hint: isReadOnly ? "Позиции инвентаризации" : `${inventorySummary.progress}% заполнено`,
             icon: Package,
-            tone: "text-slate-700 bg-slate-50 border-slate-200"
+            tone: "text-foreground bg-muted border-border"
         },
         {
             label: "Осталось проверить",
@@ -252,14 +252,14 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
             value: `${inventorySummary.shortageItems}`,
             hint: inventorySummary.shortageValue > 0 ? `${inventorySummary.shortageValue.toLocaleString("ru-RU")} ₽ по продаже` : "Пока не обнаружены",
             icon: ReceiptText,
-            tone: inventorySummary.shortageItems > 0 ? "text-red-700 bg-red-50 border-red-200" : "text-slate-700 bg-slate-50 border-slate-200"
+            tone: inventorySummary.shortageItems > 0 ? "text-red-700 bg-red-50 border-red-200" : "text-foreground bg-muted border-border"
         },
         {
             label: "Излишки",
             value: `${inventorySummary.excessItems}`,
             hint: inventorySummary.excessItems > 0 ? "Есть найденные позиции сверх ожидания" : "Пока не обнаружены",
             icon: Boxes,
-            tone: inventorySummary.excessItems > 0 ? "text-green-700 bg-green-50 border-green-200" : "text-slate-700 bg-slate-50 border-slate-200"
+            tone: inventorySummary.excessItems > 0 ? "text-green-700 bg-green-50 border-green-200" : "text-foreground bg-muted border-border"
         }
     ]
 
@@ -620,34 +620,34 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                             </Button>
                             <div className="space-y-2">
                                 <div className="flex flex-wrap items-center gap-2">
-                                    <h2 className="text-xl font-black text-slate-900 md:text-2xl">Инвентаризация #{inventory.id}</h2>
+                                    <h2 className="text-xl font-black text-foreground md:text-2xl">Инвентаризация #{inventory.id}</h2>
                                     {isClosed ? (
                                         <Badge className="bg-green-600">Завершено</Badge>
                                     ) : isCanceled ? (
-                                        <Badge variant="outline" className="border-slate-300 bg-slate-100 text-slate-700">Отменено</Badge>
+                                        <Badge variant="outline" className="border-border bg-accent text-foreground">Отменено</Badge>
                                     ) : (
                                         <Badge className="bg-amber-500">В процессе</Badge>
                                     )}
                                 </div>
-                                <div className="flex flex-wrap items-center gap-3 text-sm text-slate-600">
+                                <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
                                     <span>Начата: {new Date(inventory.started_at).toLocaleString('ru-RU')}</span>
                                     <span className="inline-flex items-center gap-1">
-                                        <WarehouseIcon className="h-3.5 w-3.5 text-slate-400" />
+                                        <WarehouseIcon className="h-3.5 w-3.5 text-muted-foreground/70" />
                                         {inventory.warehouse_name || "Склад не указан"}
                                     </span>
                                     {inventory.target_metric_key && (
-                                        <span className="inline-flex items-center gap-1 rounded-full border bg-white px-2 py-1 text-xs font-semibold text-slate-700">
+                                        <span className="inline-flex items-center gap-1 rounded-full border bg-card px-2 py-1 text-xs font-semibold text-foreground">
                                             Метрика: {inventory.target_metric_key}
                                         </span>
                                     )}
                                 </div>
                                 {!isReadOnly && (
-                                    <div className="rounded-2xl border bg-white/80 p-3">
-                                        <div className="flex items-center justify-between gap-3 text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
+                                    <div className="rounded-2xl border bg-card/80 p-3">
+                                        <div className="flex items-center justify-between gap-3 text-xs font-bold uppercase tracking-[0.16em] text-muted-foreground">
                                             <span>Готовность подсчёта</span>
                                             <span>{inventorySummary.progress}%</span>
                                         </div>
-                                        <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100">
+                                        <div className="mt-2 h-2 overflow-hidden rounded-full bg-accent">
                                             <div
                                                 className={cn(
                                                     "h-full transition-all",
@@ -656,7 +656,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                                                 style={{ width: `${inventorySummary.progress}%` }}
                                             />
                                         </div>
-                                        <p className="mt-2 text-xs text-slate-500">
+                                        <p className="mt-2 text-xs text-muted-foreground">
                                             {uncountedCount === 0 ? "Можно завершать подсчёт — все позиции заполнены." : `Осталось проверить ${uncountedCount} поз.`}
                                         </p>
                                     </div>
@@ -668,12 +668,12 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                             {summaryCards.map(card => {
                                 const Icon = card.icon
                                 return (
-                                    <Card key={card.label} className="border-slate-200/80 shadow-none">
+                                    <Card key={card.label} className="border-border/80 shadow-none">
                                         <CardContent className="flex items-start justify-between p-4">
                                             <div className="space-y-1">
-                                                <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">{card.label}</p>
-                                                <p className="text-2xl font-black text-slate-900">{card.value}</p>
-                                                <p className="text-xs text-slate-500">{card.hint}</p>
+                                                <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted-foreground">{card.label}</p>
+                                                <p className="text-2xl font-black text-foreground">{card.value}</p>
+                                                <p className="text-xs text-muted-foreground">{card.hint}</p>
                                             </div>
                                             <div className={cn("rounded-xl border p-2.5", card.tone)}>
                                                 <Icon className="h-4 w-4" />
@@ -692,7 +692,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                             placeholder="Поиск по товару или категории..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            className="h-11 rounded-xl border-slate-200 bg-white pl-8 text-base"
+                            className="h-11 rounded-xl border-border bg-card pl-8 text-base"
                         />
                         <button 
                             aria-label="Синхронизировать список товаров"
@@ -759,9 +759,9 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                                 ? "Введите фактическое количество. Ожидаемый остаток показан для сверки."
                                 : "Введите фактическое количество товара на полках. Система скрывает ожидаемый остаток для чистоты проверки."}
                     </CardDescription>
-                    <div className="flex flex-wrap items-center gap-2 pt-2 text-xs text-slate-500">
-                        <Badge variant="outline" className="bg-white">Групп по категориям: {groupedItems.length}</Badge>
-                        <Badge variant="outline" className="bg-white">Товаров: {items.length}</Badge>
+                    <div className="flex flex-wrap items-center gap-2 pt-2 text-xs text-muted-foreground">
+                        <Badge variant="outline" className="bg-card">Групп по категориям: {groupedItems.length}</Badge>
+                        <Badge variant="outline" className="bg-card">Товаров: {items.length}</Badge>
                         {searchQuery && <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">Поиск: {searchQuery}</Badge>}
                         {quickFilter !== "all" && (
                             <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">
@@ -779,13 +779,13 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                                 className={cn(
                                     "h-8 rounded-full px-3 text-xs font-semibold",
                                     quickFilter === option.key
-                                        ? "bg-slate-900 text-white hover:bg-slate-800"
-                                        : "bg-white"
+                                        ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                                        : "bg-card"
                                 )}
                                 onClick={() => setQuickFilter(option.key)}
                             >
                                 {option.label}
-                                <span className="ml-2 rounded-full bg-black/10 px-1.5 py-0.5 text-[10px] leading-none">
+                                <span className="ml-2 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] leading-none">
                                     {option.count}
                                 </span>
                             </Button>
@@ -844,13 +844,13 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                                                             {(item.barcode || (item.barcodes && item.barcodes.length > 0)) && (
                                                                 <div className="flex flex-wrap gap-1 mt-1">
                                                                     {item.barcode && (
-                                                                        <span className="text-[10px] text-muted-foreground font-mono flex items-center gap-1 bg-slate-100 px-1.5 py-0.5 rounded">
+                                                                        <span className="text-[10px] text-muted-foreground font-mono flex items-center gap-1 bg-accent px-1.5 py-0.5 rounded">
                                                                             <Barcode className="h-2.5 w-2.5" />
                                                                             {item.barcode}
                                                                         </span>
                                                                     )}
                                                                     {item.barcodes?.map((bc: string) => (
-                                                                        <span key={bc} className="text-[10px] text-muted-foreground font-mono flex items-center gap-1 bg-slate-100 px-1.5 py-0.5 rounded">
+                                                                        <span key={bc} className="text-[10px] text-muted-foreground font-mono flex items-center gap-1 bg-accent px-1.5 py-0.5 rounded">
                                                                             <Barcode className="h-2.5 w-2.5" />
                                                                             {bc}
                                                                         </span>
@@ -891,7 +891,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                                                                         aria-label={`Отменить корректировку ${item.product_name}`}
                                                                         size="icon" 
                                                                         variant="ghost" 
-                                                                        className="h-7 w-7 text-slate-400"
+                                                                        className="h-7 w-7 text-muted-foreground/70"
                                                                         onClick={() => setEditingItemId(null)}
                                                                     >
                                                                         <X className="h-3 w-3" />
@@ -905,7 +905,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                                                                             aria-label={`Редактировать позицию ${item.product_name}`}
                                                                             variant="ghost" 
                                                                             size="icon" 
-                                                                            className="h-6 w-6 text-slate-400 hover:text-blue-500 hover:bg-blue-50"
+                                                                            className="h-6 w-6 text-muted-foreground/70 hover:text-blue-500 hover:bg-blue-50"
                                                                             onClick={() => handleStartCorrection(item)}
                                                                         >
                                                                             <Pencil className="h-3 w-3" />
@@ -940,7 +940,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                                                             {showInventoryRevenueColumn && (
                                                                 <TableCell className={cn(
                                                                     "text-right font-bold",
-                                                                    inventoryValue > 0 ? "text-green-600" : inventoryValue < 0 ? "text-red-600" : "text-slate-500"
+                                                                    inventoryValue > 0 ? "text-green-600" : inventoryValue < 0 ? "text-red-600" : "text-muted-foreground"
                                                                 )}>
                                                                     {inventoryValue > 0 ? `+${inventoryValue.toLocaleString('ru-RU')} ₽` : inventoryValue < 0 ? `${inventoryValue.toLocaleString('ru-RU')} ₽` : '0 ₽'}
                                                                 </TableCell>
@@ -967,7 +967,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                     <div className="md:hidden divide-y">
                         {groupedItems.map(([category, categoryItems]) => (
                             <div key={`mob-cat-${category}`} className="flex flex-col">
-                                <div className="bg-slate-50 px-4 py-2 text-xs font-black text-slate-500 uppercase tracking-widest sticky top-0 z-10 border-y">
+                                <div className="bg-muted px-4 py-2 text-xs font-black text-muted-foreground uppercase tracking-widest sticky top-0 z-10 border-y">
                                     {category} ({categoryItems.length})
                                 </div>
                                 {categoryItems.map(item => {
@@ -978,17 +978,17 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
 
                                     return (
                                         <div key={`mob-item-${item.id}`} className={cn(
-                                            "p-4 flex flex-col gap-3 active:bg-slate-50 transition-colors",
+                                            "p-4 flex flex-col gap-3 active:bg-muted transition-colors",
                                             isClosed && difference < 0 ? "bg-red-50/50" :
                                             isClosed && difference > 0 ? "bg-green-50/50" :
                                             scannedItem?.id === item.id ? "bg-blue-50 ring-2 ring-blue-500 ring-inset" : ""
                                         )}>
                                             <div className="flex justify-between items-start gap-4">
                                                 <div className="flex-1 min-w-0">
-                                                    <h4 className="font-bold text-slate-900 text-sm leading-tight mb-1">{item.product_name}</h4>
+                                                    <h4 className="font-bold text-foreground text-sm leading-tight mb-1">{item.product_name}</h4>
                                                     <div className="flex flex-wrap gap-1">
                                                         {item.barcode && (
-                                                            <span className="text-[9px] text-slate-400 font-mono bg-slate-100 px-1 rounded flex items-center gap-0.5">
+                                                            <span className="text-[9px] text-muted-foreground/70 font-mono bg-accent px-1 rounded flex items-center gap-0.5">
                                                                 <Barcode className="h-2 w-2" />
                                                                 {item.barcode}
                                                             </span>
@@ -998,7 +998,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                                                                 POS · {posSoldMap.get(Number(item.product_id)) || 0} шт
                                                             </span>
                                                         )}
-                                                        <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">{item.selling_price_snapshot} ₽</span>
+                                                        <span className="text-[9px] text-muted-foreground/70 font-bold uppercase tracking-wider">{item.selling_price_snapshot} ₽</span>
                                                     </div>
                                                 </div>
                                                 
@@ -1006,13 +1006,13 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                                                     {isReadOnly ? (
                                                         <div className="flex flex-col items-end">
                                                             <div className="flex items-center gap-2">
-                                                                <span className="text-xs text-slate-400">Было: {item.expected_stock}</span>
-                                                                <span className="text-sm font-black text-slate-900">Стало: {item.actual_stock}</span>
+                                                                <span className="text-xs text-muted-foreground/70">Было: {item.expected_stock}</span>
+                                                                <span className="text-sm font-black text-foreground">Стало: {item.actual_stock}</span>
                                                             </div>
                                                             <div className="flex items-center gap-2 mt-1">
                                                                 <span className={cn(
                                                                     "text-xs font-black px-1.5 py-0.5 rounded",
-                                                                    difference === 0 ? "bg-slate-100 text-slate-500" :
+                                                                    difference === 0 ? "bg-accent text-muted-foreground" :
                                                                     difference > 0 ? "bg-green-100 text-green-600" : "bg-red-100 text-red-600"
                                                                 )}>
                                                                     {difference === 0 ? "OK" : difference > 0 ? `+${difference}` : `${difference}`}
@@ -1020,7 +1020,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                                                                 {showInventoryRevenueColumn && (
                                                                     <span className={cn(
                                                                         "text-xs font-bold",
-                                                                        inventoryValue > 0 ? "text-green-600" : inventoryValue < 0 ? "text-red-600" : "text-slate-500"
+                                                                        inventoryValue > 0 ? "text-green-600" : inventoryValue < 0 ? "text-red-600" : "text-muted-foreground"
                                                                     )}>
                                                                         {inventoryValue > 0 ? `+${inventoryValue.toLocaleString('ru-RU')} ₽` : inventoryValue < 0 ? `${inventoryValue.toLocaleString('ru-RU')} ₽` : '0 ₽'}
                                                                     </span>
@@ -1031,8 +1031,8 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                                                         <div className="flex items-center gap-3">
                                                             {(isReadOnly || isOwner) && (
                                                                 <div className="flex flex-col items-end">
-                                                                    <span className="text-[9px] text-slate-400 uppercase font-bold tracking-widest">Ожидалось</span>
-                                                                    <span className="text-sm font-bold text-slate-400">{item.expected_stock}</span>
+                                                                    <span className="text-[9px] text-muted-foreground/70 uppercase font-bold tracking-widest">Ожидалось</span>
+                                                                    <span className="text-sm font-bold text-muted-foreground/70">{item.expected_stock}</span>
                                                                 </div>
                                                             )}
                                                             <div className="relative">
@@ -1041,7 +1041,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                                                                     id={`mob-input-${item.id}`}
                                                                     className={cn(
                                                                         "text-center w-20 h-10 font-black text-lg p-0",
-                                                                        isModified ? "bg-blue-50 border-blue-200 text-blue-700" : "bg-white"
+                                                                        isModified ? "bg-blue-50 border-blue-200 text-blue-700" : "bg-card"
                                                                     )}
                                                                     value={item.actual_stock === null ? "" : item.actual_stock}
                                                                     onChange={(e) => handleStockChange(item.id, e.target.value)}
@@ -1049,7 +1049,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                                                                     placeholder="0"
                                                                 />
                                                                 {isModified && (
-                                                                    <div className="absolute -top-1 -right-1 bg-blue-500 text-white rounded-full p-0.5 shadow-sm">
+                                                                    <div className="absolute -top-1 -right-1 bg-blue-500 text-primary-foreground rounded-full p-0.5 shadow-sm">
                                                                         <CheckCircle2 className="h-2.5 w-2.5" />
                                                                     </div>
                                                                 )}
@@ -1071,7 +1071,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                 <Card>
                     <CardHeader>
                         <div className="flex items-center gap-2">
-                            <History className="h-4 w-4 text-slate-500" />
+                            <History className="h-4 w-4 text-muted-foreground" />
                             <CardTitle>История пост-коррекций</CardTitle>
                         </div>
                         <CardDescription>
@@ -1080,17 +1080,17 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                     </CardHeader>
                     <CardContent>
                         {corrections.length === 0 ? (
-                            <div className="rounded-xl border border-dashed p-6 text-sm text-slate-500">
+                            <div className="rounded-xl border border-dashed p-6 text-sm text-muted-foreground">
                                 После закрытия этой инвентаризации корректировок не было.
                             </div>
                         ) : (
                             <div className="space-y-3">
                                 {corrections.map(correction => (
-                                    <div key={correction.id} className="rounded-2xl border bg-white p-4">
+                                    <div key={correction.id} className="rounded-2xl border bg-card p-4">
                                         <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
                                             <div className="space-y-1">
                                                 <div className="flex items-center gap-2">
-                                                    <span className="font-bold text-slate-900">{correction.product_name}</span>
+                                                    <span className="font-bold text-foreground">{correction.product_name}</span>
                                                     <Badge variant="outline" className={cn(
                                                         "text-[10px] font-bold",
                                                         correction.stock_delta > 0 ? "border-green-200 bg-green-50 text-green-700" : "border-red-200 bg-red-50 text-red-700"
@@ -1098,16 +1098,16 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                                                         {correction.stock_delta > 0 ? `+${correction.stock_delta}` : correction.stock_delta} шт
                                                     </Badge>
                                                 </div>
-                                                <p className="text-xs text-slate-500">
+                                                <p className="text-xs text-muted-foreground">
                                                     Было: {correction.old_actual_stock} · Стало: {correction.new_actual_stock} · Разница до: {correction.difference_before ?? "—"} · После: {correction.difference_after}
                                                 </p>
-                                                <p className="text-xs text-slate-500">
+                                                <p className="text-xs text-muted-foreground">
                                                     Причина: {correction.reason || "Не указана"}
                                                 </p>
                                             </div>
-                                            <div className="text-xs text-slate-500 md:text-right">
+                                            <div className="text-xs text-muted-foreground md:text-right">
                                                 <div>{new Date(correction.created_at).toLocaleString('ru-RU')}</div>
-                                                <div className="font-semibold text-slate-700">{correction.created_by_name || correction.created_by}</div>
+                                                <div className="font-semibold text-foreground">{correction.created_by_name || correction.created_by}</div>
                                             </div>
                                         </div>
                                     </div>
@@ -1171,17 +1171,17 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                     {inventory.target_metric_key && (
                         <div className="space-y-4 py-2">
                             <div className="grid gap-3 md:grid-cols-3">
-                                <div className="rounded-2xl border bg-slate-50 p-3">
-                                    <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Недостачи</p>
-                                    <p className="mt-1 text-lg font-black text-slate-900">{inventorySummary.shortageItems}</p>
+                                <div className="rounded-2xl border bg-muted p-3">
+                                    <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">Недостачи</p>
+                                    <p className="mt-1 text-lg font-black text-foreground">{inventorySummary.shortageItems}</p>
                                 </div>
-                                <div className="rounded-2xl border bg-slate-50 p-3">
-                                    <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Излишки</p>
-                                    <p className="mt-1 text-lg font-black text-slate-900">{inventorySummary.excessItems}</p>
+                                <div className="rounded-2xl border bg-muted p-3">
+                                    <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">Излишки</p>
+                                    <p className="mt-1 text-lg font-black text-foreground">{inventorySummary.excessItems}</p>
                                 </div>
-                                <div className="rounded-2xl border bg-slate-50 p-3">
-                                    <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Не посчитано</p>
-                                    <p className="mt-1 text-lg font-black text-slate-900">{uncountedCount}</p>
+                                <div className="rounded-2xl border bg-muted p-3">
+                                    <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">Не посчитано</p>
+                                    <p className="mt-1 text-lg font-black text-foreground">{uncountedCount}</p>
                                 </div>
                             </div>
 
@@ -1228,7 +1228,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                                                 placeholder="0.00"
                                                 value={reportedRevenue}
                                                 onChange={e => setReportedRevenue(e.target.value)}
-                                                className="w-24 h-8 text-right font-bold text-base bg-white"
+                                                className="w-24 h-8 text-right font-bold text-base bg-card"
                                             />
                                             <span className="text-sm font-bold text-blue-700">₽</span>
                                         </div>
@@ -1257,7 +1257,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                                     {unaccountedSales.length > 0 && (
                                         <div className="flex flex-wrap gap-2">
                                             {unaccountedSales.map(sale => (
-                                                <div key={sale.product_id} className="flex items-center gap-1 bg-slate-100 px-2 py-1 rounded-full text-[10px] border border-slate-200">
+                                                <div key={sale.product_id} className="flex items-center gap-1 bg-accent px-2 py-1 rounded-full text-[10px] border border-border">
                                                     <span>{sale.name} ({sale.quantity} шт)</span>
                                                     <button
                                                         aria-label={`Удалить неучтенную продажу ${sale.name}`}
@@ -1280,7 +1280,7 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                                         ? 'bg-amber-50 border-amber-200 text-amber-800' 
                                         : 'bg-red-50 border-red-200 text-red-800'
                                 }`}>
-                                    <div className="bg-white/50 p-1 rounded">
+                                    <div className="bg-card/50 p-1 rounded">
                                         <AlertTriangle className="h-4 w-4" />
                                     </div>
                                     <div className="flex flex-col">
@@ -1307,17 +1307,17 @@ export function ActiveInventory({ inventoryId, onClose, isOwner, currentUserId }
                     {!inventory.target_metric_key && (
                         <div className="space-y-3 py-4">
                             <div className="grid gap-3 md:grid-cols-3">
-                                <div className="rounded-2xl border bg-slate-50 p-3">
-                                    <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Посчитано</p>
-                                    <p className="mt-1 text-lg font-black text-slate-900">{inventorySummary.counted}</p>
+                                <div className="rounded-2xl border bg-muted p-3">
+                                    <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">Посчитано</p>
+                                    <p className="mt-1 text-lg font-black text-foreground">{inventorySummary.counted}</p>
                                 </div>
-                                <div className="rounded-2xl border bg-slate-50 p-3">
-                                    <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Недостачи</p>
-                                    <p className="mt-1 text-lg font-black text-slate-900">{inventorySummary.shortageItems}</p>
+                                <div className="rounded-2xl border bg-muted p-3">
+                                    <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">Недостачи</p>
+                                    <p className="mt-1 text-lg font-black text-foreground">{inventorySummary.shortageItems}</p>
                                 </div>
-                                <div className="rounded-2xl border bg-slate-50 p-3">
-                                    <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Излишки</p>
-                                    <p className="mt-1 text-lg font-black text-slate-900">{inventorySummary.excessItems}</p>
+                                <div className="rounded-2xl border bg-muted p-3">
+                                    <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">Излишки</p>
+                                    <p className="mt-1 text-lg font-black text-foreground">{inventorySummary.excessItems}</p>
                                 </div>
                             </div>
                             <p className="text-sm text-muted-foreground">

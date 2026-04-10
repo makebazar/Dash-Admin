@@ -8,13 +8,6 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { RichTextEditor } from "@/components/ui/rich-text-editor"
@@ -141,33 +134,28 @@ export function InstructionsTab() {
     }
 
     return (
+        <>
         <div className="space-y-4 md:space-y-6">
-            <Card className="overflow-hidden border-none shadow-sm">
-                <CardHeader className="gap-5 border-b px-4 py-4 md:px-6 md:py-5">
-                    <div className="flex items-start justify-between gap-4">
-                        <div className="min-w-0">
-                            <CardTitle className="text-xl tracking-tight text-slate-950 md:text-2xl">
-                                Настройки обслуживания
-                            </CardTitle>
-                            <CardDescription className="mt-1 text-sm">
-                                Интервал и инструкция для выбранного типа оборудования.
-                            </CardDescription>
-                        </div>
-
-                        <Button
-                            onClick={handleSave}
-                            disabled={isSaving || !hasUnsavedChanges}
-                            className={cn(
-                                "hidden md:inline-flex h-10 shrink-0 rounded-xl px-4",
-                                hasUnsavedChanges && "bg-green-600 hover:bg-green-700"
-                            )}
-                        >
-                            {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                            {hasUnsavedChanges ? "Сохранить изменения" : "Сохранено"}
-                        </Button>
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 sm:p-8">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between mb-8 border-b border-slate-100 pb-6">
+                    <div>
+                        <h2 className="text-xl font-bold text-slate-900">Настройки обслуживания</h2>
+                        <p className="text-sm text-slate-500 mt-1">Интервал и инструкция для выбранного типа оборудования.</p>
                     </div>
+                    <Button
+                        onClick={handleSave}
+                        disabled={isSaving || !hasUnsavedChanges}
+                        className={cn(
+                            "hidden md:inline-flex rounded-xl h-11 px-6 font-medium",
+                            hasUnsavedChanges ? "bg-green-600 hover:bg-green-700 text-white" : "bg-slate-900 text-white hover:bg-slate-800"
+                        )}
+                    >
+                        {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                        {hasUnsavedChanges ? "Сохранить изменения" : "Сохранено"}
+                    </Button>
+                </div>
 
-                    <div className="grid gap-4 lg:grid-cols-[minmax(320px,1fr)_180px] lg:items-end">
+                    <div className="grid gap-6 lg:grid-cols-[minmax(320px,1fr)_180px] lg:items-end mb-8">
                         <div className="space-y-2">
                             <Label htmlFor="equipment-type" className="text-sm font-medium">Тип оборудования</Label>
                             <Select value={selectedType} onValueChange={handleSelectType}>
@@ -202,9 +190,9 @@ export function InstructionsTab() {
                             </div>
                         </div>
                     </div>
-                </CardHeader>
+                </div>
 
-                <CardContent className="grid gap-4 p-4 md:p-6 xl:grid-cols-[minmax(0,1fr)]">
+                <div>
                     <div className="space-y-3">
                         <div>
                             <div className="text-lg font-semibold text-slate-950">Инструкция для персонала</div>
@@ -225,8 +213,8 @@ export function InstructionsTab() {
                             {hasUnsavedChanges && <span className="font-medium text-amber-600">Есть несохранённые изменения</span>}
                         </div>
                     </div>
-                </CardContent>
-            </Card>
+                </div>
+            </div>
 
             <div className="sticky bottom-4 z-20 md:hidden">
                 <div className="rounded-2xl border bg-white/95 p-3 shadow-lg backdrop-blur">
@@ -254,6 +242,6 @@ export function InstructionsTab() {
                     </Button>
                 </div>
             </div>
-        </div>
+        </>
     )
 }

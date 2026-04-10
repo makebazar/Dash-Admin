@@ -131,29 +131,29 @@ export function SettingsTab({ products, categories, warehouses, employees, curre
                 }}
                 className="w-full"
             >
-                <div className="bg-slate-100/50 p-1 rounded-lg w-fit mb-4 md:mb-6">
+                <div className="bg-accent/50 p-1 rounded-lg w-fit mb-4 md:mb-6">
                     <TabsList className="bg-transparent border-none h-9 md:h-10 p-0 flex gap-1">
                         <TabsTrigger 
                             value="general"
-                            className="rounded-md px-4 md:px-8 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm transition-all text-slate-500 font-bold text-xs md:text-sm h-full"
+                            className="rounded-md px-4 md:px-8 data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-sm transition-all text-muted-foreground font-bold text-xs md:text-sm h-full"
                         >
                             Основные
                         </TabsTrigger>
                         <TabsTrigger 
                             value="categories"
-                            className="rounded-md px-4 md:px-8 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm transition-all text-slate-500 font-bold text-xs md:text-sm h-full"
+                            className="rounded-md px-4 md:px-8 data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-sm transition-all text-muted-foreground font-bold text-xs md:text-sm h-full"
                         >
                             Категории
                         </TabsTrigger>
                         <TabsTrigger 
                             value="warehouses"
-                            className="rounded-md px-4 md:px-8 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm transition-all text-slate-500 font-bold text-xs md:text-sm h-full"
+                            className="rounded-md px-4 md:px-8 data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-sm transition-all text-muted-foreground font-bold text-xs md:text-sm h-full"
                         >
                             Склады
                         </TabsTrigger>
                         <TabsTrigger 
                             value="pricetags"
-                            className="rounded-md px-4 md:px-8 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm transition-all text-slate-500 font-bold text-xs md:text-sm h-full"
+                            className="rounded-md px-4 md:px-8 data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-sm transition-all text-muted-foreground font-bold text-xs md:text-sm h-full"
                         >
                             Ценники
                         </TabsTrigger>
@@ -162,23 +162,23 @@ export function SettingsTab({ products, categories, warehouses, employees, curre
 
                 <TabsContent value="general" className="mt-0">
                     <div className="space-y-4 md:space-y-6">
-                        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                            <div className="p-4 border-b border-slate-100 bg-slate-50/50">
-                                <h4 className="font-bold text-slate-900 flex items-center gap-2">
+                        <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
+                            <div className="p-4 border-b border-border/50 bg-muted/50">
+                                <h4 className="font-bold text-foreground flex items-center gap-2">
                                     <ShieldCheck className="h-4 w-4 text-blue-600" />
                                     Политики продаж
                                 </h4>
-                                <p className="text-[11px] text-slate-500 mt-0.5">Настройка прав сотрудников при продаже товаров</p>
+                                <p className="text-[11px] text-muted-foreground mt-0.5">Настройка прав сотрудников при продаже товаров</p>
                             </div>
                             
                             <div className="divide-y divide-slate-100">
-                                <div className="p-6 flex items-center justify-between hover:bg-slate-50/30 transition-colors">
+                                <div className="p-6 flex items-center justify-between hover:bg-muted/30 transition-colors">
                                     <div className="space-y-1">
-                                        <Label className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                                            <Wallet className="h-3.5 w-3.5 text-slate-400" />
+                                        <Label className="text-sm font-bold text-foreground flex items-center gap-2">
+                                            <Wallet className="h-3.5 w-3.5 text-muted-foreground/70" />
                                             Продажа в счет зарплаты
                                         </Label>
-                                        <p className="text-xs text-slate-500 leading-relaxed max-w-[400px]">
+                                        <p className="text-xs text-muted-foreground leading-relaxed max-w-[400px]">
                                             Разрешить сотрудникам покупать товары с автоматическим вычетом суммы из их будущей выплаты
                                         </p>
                                     </div>
@@ -190,13 +190,13 @@ export function SettingsTab({ products, categories, warehouses, employees, curre
                                     />
                                 </div>
                                 
-                                <div className="p-6 flex items-center justify-between hover:bg-slate-50/30 transition-colors">
+                                <div className="p-6 flex items-center justify-between hover:bg-muted/30 transition-colors">
                                     <div className="space-y-1">
-                                        <Label className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                                            <Percent className="h-3.5 w-3.5 text-slate-400" />
+                                        <Label className="text-sm font-bold text-foreground flex items-center gap-2">
+                                            <Percent className="h-3.5 w-3.5 text-muted-foreground/70" />
                                             Скидка для сотрудников
                                         </Label>
-                                        <p className="text-xs text-slate-500 leading-relaxed max-w-[400px]">
+                                        <p className="text-xs text-muted-foreground leading-relaxed max-w-[400px]">
                                             Фиксированный процент скидки, который будет применен к цене товара при покупке в счет зарплаты
                                         </p>
                                     </div>
@@ -204,7 +204,7 @@ export function SettingsTab({ products, categories, warehouses, employees, curre
                                         <div className="relative">
                                             <Input 
                                                 type="number"
-                                                className="w-24 text-right pr-8 font-black text-slate-900 h-10 rounded-lg border-slate-200 focus:ring-blue-500/10 focus:border-blue-500/50"
+                                                className="w-24 text-right pr-8 font-black text-foreground h-10 rounded-lg border-border focus:ring-blue-500/10 focus:border-blue-500/50"
                                                 value={discountValue}
                                                 onChange={(e) => setDiscountValue(e.target.value)}
                                                 onBlur={handleDiscountBlur}
@@ -212,18 +212,18 @@ export function SettingsTab({ products, categories, warehouses, employees, curre
                                                 min="0"
                                                 max="100"
                                             />
-                                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xs">%</span>
+                                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/70 font-bold text-xs">%</span>
                                         </div>
                                     </div>
                                 </div>
 
-                                <div className="p-6 flex items-center justify-between hover:bg-slate-50/30 transition-colors">
+                                <div className="p-6 flex items-center justify-between hover:bg-muted/30 transition-colors">
                                     <div className="space-y-1">
-                                        <Label className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                                            <Tag className="h-3.5 w-3.5 text-slate-400" />
+                                        <Label className="text-sm font-bold text-foreground flex items-center gap-2">
+                                            <Tag className="h-3.5 w-3.5 text-muted-foreground/70" />
                                             Продажа по себестоимости
                                         </Label>
-                                        <p className="text-xs text-slate-500 leading-relaxed max-w-[400px]">
+                                        <p className="text-xs text-muted-foreground leading-relaxed max-w-[400px]">
                                             Добавить кнопку в интерфейс сотрудника для быстрой продажи товара по его закупочной цене
                                         </p>
                                     </div>
@@ -244,31 +244,31 @@ export function SettingsTab({ products, categories, warehouses, employees, curre
                             )}
                         </div>
 
-                        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                            <div className="p-4 border-b border-slate-100 bg-slate-50/50">
-                                <h4 className="font-bold text-slate-900 flex items-center gap-2">
+                        <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
+                            <div className="p-4 border-b border-border/50 bg-muted/50">
+                                <h4 className="font-bold text-foreground flex items-center gap-2">
                                     <Package className="h-4 w-4 text-blue-600" />
                                     Инвентаризация
                                 </h4>
-                                <p className="text-[11px] text-slate-500 mt-0.5">Настройки проведения инвентаризаций при закрытии смены</p>
+                                <p className="text-[11px] text-muted-foreground mt-0.5">Настройки проведения инвентаризаций при закрытии смены</p>
                             </div>
 
                             <div className="divide-y divide-slate-100">
-                                <div className="p-6 hover:bg-slate-50/30 transition-colors">
+                                <div className="p-6 hover:bg-muted/30 transition-colors">
                                     <div className="space-y-4">
                                         <div className="space-y-1">
-                                            <Label className="text-sm font-bold text-slate-700">
+                                            <Label className="text-sm font-bold text-foreground">
                                                 Система сменной ответственности
                                             </Label>
-                                            <p className="text-xs text-slate-500 leading-relaxed max-w-[520px]">
+                                            <p className="text-xs text-muted-foreground leading-relaxed max-w-[520px]">
                                                 Явно включает новую модель приемки и сдачи холодильника/витрины вместо старой shift-инвентаризации.
                                             </p>
                                         </div>
 
-                                        <div className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 p-4">
+                                        <div className="flex items-center justify-between gap-4 rounded-xl border border-border p-4">
                                             <div className="space-y-1">
-                                                <div className="font-semibold text-slate-800">Активировать систему</div>
-                                                <div className="text-xs text-slate-500">
+                                                <div className="font-semibold text-foreground">Активировать систему</div>
+                                                <div className="text-xs text-muted-foreground">
                                                     Когда включено, сотрудники проходят приемку/сдачу зон, а старая shift-инвентаризация отключается.
                                                 </div>
                                             </div>
@@ -283,7 +283,7 @@ export function SettingsTab({ products, categories, warehouses, employees, curre
                                         <div className={cn(
                                             "rounded-xl border p-4 space-y-3",
                                             !isShiftAccountabilityEnabled
-                                                ? "border-slate-200 bg-slate-50"
+                                                ? "border-border bg-muted"
                                                 : accountabilityStatus?.ready
                                                     ? "border-green-200 bg-green-50"
                                                     : "border-amber-200 bg-amber-50"
@@ -291,13 +291,13 @@ export function SettingsTab({ products, categories, warehouses, employees, curre
                                             <div className="flex items-center justify-between gap-3">
                                                 <div className="flex items-center gap-2">
                                                     {!isShiftAccountabilityEnabled ? (
-                                                        <Package className="h-4 w-4 text-slate-500" />
+                                                        <Package className="h-4 w-4 text-muted-foreground" />
                                                     ) : accountabilityStatus?.ready ? (
                                                         <CheckCircle2 className="h-4 w-4 text-green-600" />
                                                     ) : (
                                                         <AlertTriangle className="h-4 w-4 text-amber-600" />
                                                     )}
-                                                    <span className="font-semibold text-slate-900">
+                                                    <span className="font-semibold text-foreground">
                                                         {!isShiftAccountabilityEnabled
                                                             ? "Система отключена"
                                                             : accountabilityStatus?.ready
@@ -313,7 +313,7 @@ export function SettingsTab({ products, categories, warehouses, employees, curre
                                             {accountabilityStatus?.configured_warehouses?.length ? (
                                                 <div className="flex flex-wrap gap-2">
                                                     {accountabilityStatus.configured_warehouses.map((warehouse) => (
-                                                        <Badge key={warehouse.id} variant="secondary" className="bg-white text-slate-700 border border-slate-200">
+                                                        <Badge key={warehouse.id} variant="secondary" className="bg-card text-foreground border border-border">
                                                             {warehouse.name} · {warehouse.shift_zone_label}
                                                         </Badge>
                                                     ))}
@@ -329,7 +329,7 @@ export function SettingsTab({ products, categories, warehouses, employees, curre
                                                     ))}
                                                 </div>
                                             ) : (
-                                                <p className="text-xs text-slate-600">
+                                                <p className="text-xs text-muted-foreground">
                                                     {!isShiftAccountabilityEnabled
                                                         ? "Новая система не влияет на смены, пока не включена."
                                                         : "Сотрудники будут работать через приемку/сдачу барной зоны. Можно подключить один или несколько складов к бару."}
@@ -339,13 +339,13 @@ export function SettingsTab({ products, categories, warehouses, employees, curre
                                     </div>
                                 </div>
 
-                                <div className="p-6 hover:bg-slate-50/30 transition-colors">
+                                <div className="p-6 hover:bg-muted/30 transition-colors">
                                     <div className="space-y-3">
                                         <div className="space-y-1">
-                                            <Label className="text-sm font-bold text-slate-700">
+                                            <Label className="text-sm font-bold text-foreground">
                                                 Режим учета продаж по складу
                                             </Label>
-                                            <p className="text-xs text-slate-500 leading-relaxed max-w-[520px]">
+                                            <p className="text-xs text-muted-foreground leading-relaxed max-w-[520px]">
                                                 Либо продажи фиксируются по результатам инвентаризации, либо сотрудник пробивает товар в течение смены.
                                             </p>
                                         </div>
@@ -365,12 +365,12 @@ export function SettingsTab({ products, categories, warehouses, employees, curre
                                     </div>
                                 </div>
 
-                                <div className="p-6 flex items-center justify-between hover:bg-slate-50/30 transition-colors">
+                                <div className="p-6 flex items-center justify-between hover:bg-muted/30 transition-colors">
                                     <div className="space-y-1">
-                                        <Label className="text-sm font-bold text-slate-700">
+                                        <Label className="text-sm font-bold text-foreground">
                                             Обязательная инвентаризация
                                         </Label>
-                                        <p className="text-xs text-slate-500 leading-relaxed max-w-[520px]">
+                                        <p className="text-xs text-muted-foreground leading-relaxed max-w-[520px]">
                                             Если включено, администратор не сможет закрыть смену без проведения инвентаризации
                                         </p>
                                     </div>
@@ -382,13 +382,13 @@ export function SettingsTab({ products, categories, warehouses, employees, curre
                                     />
                                 </div>
 
-                                <div className="p-6 hover:bg-slate-50/30 transition-colors">
+                                <div className="p-6 hover:bg-muted/30 transition-colors">
                                     <div className="space-y-3">
                                         <div className="space-y-1">
-                                            <Label className="text-sm font-bold text-slate-700">
+                                            <Label className="text-sm font-bold text-foreground">
                                                 Когда проводить обязательную инвентаризацию
                                             </Label>
-                                            <p className="text-xs text-slate-500 leading-relaxed max-w-[520px]">
+                                            <p className="text-xs text-muted-foreground leading-relaxed max-w-[520px]">
                                                 Выбери, в какой момент сотрудник должен пройти обязательную инвентаризацию: перед завершением смены или сразу после её начала.
                                             </p>
                                         </div>
@@ -417,25 +417,25 @@ export function SettingsTab({ products, categories, warehouses, employees, curre
                                     </div>
                                 </div>
 
-                                <div className="p-6 hover:bg-slate-50/30 transition-colors">
+                                <div className="p-6 hover:bg-muted/30 transition-colors">
                                     <div className="space-y-4">
                                         <div className="space-y-1">
-                                            <Label className="text-sm font-bold text-slate-700">
+                                            <Label className="text-sm font-bold text-foreground">
                                                 Правила для сотрудников
                                             </Label>
-                                            <p className="text-xs text-slate-500 leading-relaxed max-w-[520px]">
+                                            <p className="text-xs text-muted-foreground leading-relaxed max-w-[520px]">
                                                 Ограничения для сотрудников при старте инвентаризации
                                             </p>
                                         </div>
 
                                         <div className="space-y-2">
-                                            <Label className="text-xs font-bold text-slate-600">Доступные склады для инвентаризации</Label>
+                                            <Label className="text-xs font-bold text-muted-foreground">Доступные склады для инвентаризации</Label>
                                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                                 {warehouses.map(w => (
-                                                    <div key={w.id} className="flex items-center justify-between gap-3 border border-slate-200 p-3 rounded-lg bg-white">
+                                                    <div key={w.id} className="flex items-center justify-between gap-3 border border-border p-3 rounded-lg bg-card">
                                                         <div className="flex items-center gap-2 min-w-0">
-                                                            <WarehouseIcon className="h-4 w-4 text-slate-400 shrink-0" />
-                                                            <span className="text-sm font-bold text-slate-800 truncate">{w.name}</span>
+                                                            <WarehouseIcon className="h-4 w-4 text-muted-foreground/70 shrink-0" />
+                                                            <span className="text-sm font-bold text-foreground truncate">{w.name}</span>
                                                         </div>
                                                         <Switch
                                                             checked={(inventorySettings?.employee_allowed_warehouse_ids || []).includes(w.id)}
@@ -446,13 +446,13 @@ export function SettingsTab({ products, categories, warehouses, employees, curre
                                                     </div>
                                                 ))}
                                                 {warehouses.length === 0 && (
-                                                    <div className="text-xs text-slate-500 italic">Склады не созданы</div>
+                                                    <div className="text-xs text-muted-foreground italic">Склады не созданы</div>
                                                 )}
                                             </div>
                                         </div>
 
                                         <div className="space-y-2">
-                                            <Label className="text-xs font-bold text-slate-600">Метрика выручки по умолчанию</Label>
+                                            <Label className="text-xs font-bold text-muted-foreground">Метрика выручки по умолчанию</Label>
                                             <Select
                                                 value={inventorySettings?.employee_default_metric_key || "none"}
                                                 onValueChange={(val) => handleUpdateSetting('employee_default_metric_key', val === "none" ? undefined : val)}
@@ -468,17 +468,17 @@ export function SettingsTab({ products, categories, warehouses, employees, curre
                                                     ))}
                                                 </SelectContent>
                                             </Select>
-                                            <p className="text-xs text-slate-500 leading-relaxed max-w-[520px]">
+                                            <p className="text-xs text-muted-foreground leading-relaxed max-w-[520px]">
                                                 Эта метрика будет автоматически выбрана для сотрудников при старте инвентаризации
                                             </p>
                                         </div>
 
                                         <div className="flex items-center justify-between gap-4">
                                             <div className="space-y-1">
-                                                <Label className="text-sm font-bold text-slate-700">
+                                                <Label className="text-sm font-bold text-foreground">
                                                     Слепая инвентаризация
                                                 </Label>
-                                                <p className="text-xs text-slate-500 leading-relaxed max-w-[520px]">
+                                                <p className="text-xs text-muted-foreground leading-relaxed max-w-[520px]">
                                                     Если включено, сотрудники не будут видеть ожидаемые остатки при пересчете
                                                 </p>
                                             </div>

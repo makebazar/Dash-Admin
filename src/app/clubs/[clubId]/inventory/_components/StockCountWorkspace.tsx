@@ -156,11 +156,11 @@ export function StockCountWorkspace({
                 onScan={handleScan}
             />
 
-            <div className="space-y-4 rounded-2xl border border-slate-800 bg-slate-900/70 p-3 sm:p-4">
+            <div className="space-y-4 rounded-2xl border border-slate-800 bg-primary/70 p-3 sm:p-4">
                 <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
                     <div>
-                        <div className="text-lg font-bold text-white">{title}</div>
-                        {description && <div className="text-sm text-slate-400">{description}</div>}
+                        <div className="text-lg font-bold text-primary-foreground">{title}</div>
+                        {description && <div className="text-sm text-muted-foreground/70">{description}</div>}
                     </div>
                     <div className="flex flex-wrap gap-2">
                         <Badge variant="outline" className="border-slate-700 text-slate-300">
@@ -179,15 +179,15 @@ export function StockCountWorkspace({
 
                 <div className="grid gap-3 md:grid-cols-[1fr_auto]">
                     <div className="relative">
-                        <Search className="absolute left-3 top-3.5 h-4 w-4 text-slate-500" />
+                        <Search className="absolute left-3 top-3.5 h-4 w-4 text-muted-foreground" />
                         <Input
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                             placeholder="Поиск по названию или штрихкоду"
-                            className="pl-10 bg-slate-950 border-slate-700 text-white"
+                            className="pl-10 bg-slate-950 border-slate-700 text-primary-foreground"
                         />
                     </div>
-                    <Button type="button" variant="outline" className="h-11 justify-center border-slate-200 bg-white text-slate-900 hover:bg-slate-100 hover:text-slate-900 md:h-10" onClick={() => setIsScannerOpen(true)}>
+                    <Button type="button" variant="outline" className="h-11 justify-center border-border bg-card text-foreground hover:bg-accent hover:text-foreground md:h-10" onClick={() => setIsScannerOpen(true)}>
                         <ScanLine className="mr-2 h-4 w-4" />
                         Сканер
                     </Button>
@@ -202,16 +202,16 @@ export function StockCountWorkspace({
 
             <div className="space-y-4 overflow-auto pr-0 sm:pr-1">
                 {groupedItems.length === 0 ? (
-                    <div className="rounded-2xl border border-dashed border-slate-700 p-8 text-center text-slate-400">
+                    <div className="rounded-2xl border border-dashed border-slate-700 p-8 text-center text-muted-foreground/70">
                         {emptyStateMessage}
                     </div>
                 ) : (
                     groupedItems.map(([groupId, group]) => (
-                        <div key={groupId} className="rounded-2xl border border-slate-800 bg-slate-900/80 overflow-hidden">
+                        <div key={groupId} className="rounded-2xl border border-slate-800 bg-primary/80 overflow-hidden">
                             <div className="flex items-center justify-between gap-3 border-b border-slate-800 px-4 py-3">
                                 <div className="flex items-center gap-2">
-                                    <Package2 className="h-4 w-4 text-slate-400" />
-                                    <div className="font-semibold text-white">{group.label}</div>
+                                    <Package2 className="h-4 w-4 text-muted-foreground/70" />
+                                    <div className="font-semibold text-primary-foreground">{group.label}</div>
                                 </div>
                                 <Badge variant="outline" className="border-slate-700 text-slate-300">
                                     {group.items.length} поз.
@@ -239,15 +239,15 @@ export function StockCountWorkspace({
                                                             type="button"
                                                             variant="ghost"
                                                             size="icon"
-                                                            className="h-8 w-8 shrink-0 text-slate-500 hover:text-red-400 hover:bg-red-400/10"
+                                                            className="h-8 w-8 shrink-0 text-muted-foreground hover:text-red-400 hover:bg-red-400/10"
                                                             onClick={() => onRemoveItem(item)}
                                                         >
                                                             <Trash2 className="h-4 w-4" />
                                                         </Button>
                                                     )}
-                                                    <div className="truncate font-medium text-white">{item.productName}</div>
+                                                    <div className="truncate font-medium text-primary-foreground">{item.productName}</div>
                                                 </div>
-                                                <div className="mt-1 flex flex-wrap gap-2 text-xs text-slate-500">
+                                                <div className="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground">
                                                     {item.barcode && <span>ШК: {item.barcode}</span>}
                                                     {typeof item.sellingPrice === "number" && <span>{item.sellingPrice.toLocaleString("ru-RU")} ₽</span>}
                                                 </div>
@@ -257,15 +257,15 @@ export function StockCountWorkspace({
                                                 )}>
                                                     {!blindMode && (
                                                         <div className="rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-2">
-                                                            <div className="text-[10px] uppercase tracking-wider text-slate-500">Система</div>
+                                                            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Система</div>
                                                             <div className="font-semibold text-slate-300 tabular-nums">{item.systemQuantity}</div>
                                                         </div>
                                                     )}
                                                     {!blindMode && (
                                                         <div className="rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-2">
-                                                            <div className="text-[10px] uppercase tracking-wider text-slate-500">Разница</div>
+                                                            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Разница</div>
                                                             {difference === null ? (
-                                                                <div className="font-semibold tabular-nums text-slate-500">—</div>
+                                                                <div className="font-semibold tabular-nums text-muted-foreground">—</div>
                                                             ) : (
                                                                 <div className={cn(
                                                                     "font-semibold tabular-nums",
@@ -280,15 +280,15 @@ export function StockCountWorkspace({
                                             </div>
                                             {!blindMode && (
                                                 <div className="hidden text-right sm:block">
-                                                    <div className="text-[10px] uppercase tracking-wider text-slate-500">Система</div>
+                                                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Система</div>
                                                     <div className="font-semibold text-slate-300 tabular-nums">{item.systemQuantity}</div>
                                                 </div>
                                             )}
                                             {!blindMode && (
                                                 <div className="hidden text-right sm:block">
-                                                    <div className="text-[10px] uppercase tracking-wider text-slate-500">Разница</div>
+                                                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Разница</div>
                                                     {difference === null ? (
-                                                        <div className="font-semibold tabular-nums text-slate-500">—</div>
+                                                        <div className="font-semibold tabular-nums text-muted-foreground">—</div>
                                                     ) : (
                                                         <div className={cn(
                                                             "font-semibold tabular-nums",
@@ -307,7 +307,7 @@ export function StockCountWorkspace({
                                                     value={item.countedQuantity ?? ""}
                                                     onChange={(e) => updateQuantity(item.id, e.target.value === "" ? null : Number(e.target.value))}
                                                     className={cn(
-                                                        "h-11 bg-slate-950 border-slate-700 text-right text-white sm:h-10",
+                                                        "h-11 bg-slate-950 border-slate-700 text-right text-primary-foreground sm:h-10",
                                                         difference !== null && difference !== 0 && "border-amber-600/50"
                                                     )}
                                                 />

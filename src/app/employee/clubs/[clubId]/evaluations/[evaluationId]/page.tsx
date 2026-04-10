@@ -1,11 +1,11 @@
 "use client"
 
-import { useEffect, useState, useMemo } from "react"
+import { useEffect, useState } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Loader2, ArrowLeft, Calendar, User, Clock, Camera, CheckCircle2, XCircle } from "lucide-react"
+import { Loader2, ArrowLeft, Calendar, User, Clock, CheckCircle2, XCircle } from "lucide-react"
 import { format } from "date-fns"
 import { ru } from "date-fns/locale"
 import { cn } from "@/lib/utils"
@@ -122,7 +122,7 @@ export default function EmployeeEvaluationDetailPage() {
 
     if (isLoading) {
         return (
-            <div className="flex min-h-screen items-center justify-center bg-slate-50 dark:bg-slate-900/50">
+            <div className="flex min-h-screen items-center justify-center bg-background">
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
             </div>
         )
@@ -130,9 +130,9 @@ export default function EmployeeEvaluationDetailPage() {
 
     if (!evaluation) {
         return (
-            <div className="min-h-screen bg-slate-50 dark:bg-slate-900/50 p-4 md:p-6">
+            <div className="min-h-screen bg-background p-4 md:p-6">
                 <div className="mx-auto max-w-2xl text-center py-12">
-                    <h2 className="text-xl font-semibold mb-4">Проверка не найдена</h2>
+                    <h2 className="text-xl font-semibold mb-4 text-foreground">Проверка не найдена</h2>
                     <Button onClick={() => router.push(`/employee/clubs/${clubId}/evaluations`)}>
                         Назад к списку
                     </Button>
@@ -154,18 +154,18 @@ export default function EmployeeEvaluationDetailPage() {
     const getStatusBadge = (status?: string) => {
         switch (status) {
             case 'approved':
-                return <Badge className="bg-green-100 text-green-700 hover:bg-green-100 border-green-200"><CheckCircle2 className="w-3 h-3 mr-1" /> Принято</Badge>
+                return <Badge variant="outline" className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 font-bold uppercase tracking-wider text-[10px]"><CheckCircle2 className="w-3 h-3 mr-1" /> Принято</Badge>
             case 'rejected':
-                return <Badge className="bg-red-100 text-red-700 hover:bg-red-100 border-red-200"><XCircle className="w-3 h-3 mr-1" /> Замечания</Badge>
+                return <Badge variant="outline" className="bg-rose-500/10 text-rose-500 border-rose-500/20 font-bold uppercase tracking-wider text-[10px]"><XCircle className="w-3 h-3 mr-1" /> Замечания</Badge>
             default:
-                return <Badge variant="outline" className="text-amber-600 border-amber-200 bg-amber-50">На проверке</Badge>
+                return <Badge variant="outline" className="bg-amber-500/10 text-amber-500 border-amber-500/20 font-bold uppercase tracking-wider text-[10px]">На проверке</Badge>
         }
     }
 
     return (
-        <div className="min-h-screen bg-slate-50 dark:bg-slate-900/50 pb-24">
+        <div className="min-h-screen bg-background pb-24">
             {/* Mobile Sticky Header */}
-            <div className="sticky top-0 left-0 right-0 z-40 bg-white border-b px-4 py-3 flex items-center gap-3 md:hidden shadow-sm">
+            <div className="sticky top-0 left-0 right-0 z-40 bg-card border-b border-border px-4 py-3 flex items-center gap-3 md:hidden">
                 <Button
                     variant="ghost"
                     size="icon"
@@ -180,18 +180,18 @@ export default function EmployeeEvaluationDetailPage() {
                         {getStatusBadge(evaluation.status)}
                     </div>
                 </div>
-                <div className="shrink-0 flex flex-col items-end bg-slate-50 px-2 py-1 rounded border border-slate-100">
-                    <div className="text-sm font-bold leading-none text-slate-900">
+                <div className="shrink-0 flex flex-col items-end bg-accent/30 px-2 py-1 rounded border border-border/50">
+                    <div className="text-sm font-bold leading-none text-foreground">
                         {formatScore(totalScoreValue)}
-                        <span className="text-slate-400 text-[10px] font-normal ml-0.5">/ {formatScore(maxScoreValue)}</span>
+                        <span className="text-muted-foreground/70 text-[10px] font-normal ml-0.5">/ {formatScore(maxScoreValue)}</span>
                     </div>
-                    <div className={cn("text-[9px] font-bold mt-0.5", scorePercentage >= 80 ? "text-green-600" : scorePercentage >= 50 ? "text-amber-600" : "text-red-600")}>
+                    <div className={cn("text-[9px] font-bold mt-0.5", scorePercentage >= 80 ? "text-emerald-500" : scorePercentage >= 50 ? "text-amber-500" : "text-rose-500")}>
                         {scorePercentage}%
                     </div>
                 </div>
             </div>
 
-            <div className="mx-auto max-w-2xl p-4 md:p-6 pt-4 md:pt-8">
+            <div className="mx-auto max-w-5xl px-4 py-6 md:px-8 md:py-10">
                 {/* Desktop Header */}
                 <div className="mb-6 space-y-4">
                     <div className="hidden md:flex items-start gap-3">
@@ -205,16 +205,16 @@ export default function EmployeeEvaluationDetailPage() {
                         </Button>
                         <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-3 mb-1">
-                                <h1 className="text-xl font-bold leading-tight">{evaluation.template_name}</h1>
+                                <h1 className="text-xl font-bold leading-tight text-foreground">{evaluation.template_name}</h1>
                                 {getStatusBadge(evaluation.status)}
                             </div>
                         </div>
-                        <div className="flex flex-col items-end shrink-0 bg-slate-50 px-2.5 py-1.5 rounded-lg border border-slate-100">
-                            <div className="text-xl font-bold leading-none text-slate-900">
+                        <div className="flex flex-col items-end shrink-0 bg-accent/30 px-2.5 py-1.5 rounded-lg border border-border/50">
+                            <div className="text-xl font-bold leading-none text-foreground">
                                 {formatScore(totalScoreValue)}
-                                <span className="text-slate-400 text-xs font-normal ml-0.5">/ {formatScore(maxScoreValue)}</span>
+                                <span className="text-muted-foreground/70 text-xs font-normal ml-0.5">/ {formatScore(maxScoreValue)}</span>
                             </div>
-                            <div className={cn("text-[10px] font-bold mt-0.5", scorePercentage >= 80 ? "text-green-600" : scorePercentage >= 50 ? "text-amber-600" : "text-red-600")}>
+                            <div className={cn("text-[10px] font-bold mt-0.5", scorePercentage >= 80 ? "text-emerald-500" : scorePercentage >= 50 ? "text-amber-500" : "text-rose-500")}>
                                 {scorePercentage}%
                             </div>
                         </div>
@@ -223,7 +223,7 @@ export default function EmployeeEvaluationDetailPage() {
                     <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-muted-foreground px-1 md:px-0 md:pl-11">
                         <div className="flex items-center gap-2">
                             <User className="h-4 w-4" />
-                            <span className="font-medium text-slate-900">
+                            <span className="font-medium text-foreground">
                                 {evaluation.reviewer_name || evaluation.evaluator_name || evaluation.employee_name}
                             </span>
                         </div>
@@ -231,7 +231,7 @@ export default function EmployeeEvaluationDetailPage() {
                         <div className="flex items-center gap-2">
                             <Calendar className="h-4 w-4" />
                             <span>{format(new Date(evaluation.evaluation_date), 'd MMM yyyy', { locale: ru })}</span>
-                            <span className="text-slate-300">|</span>
+                            <span className="text-muted-foreground/30">|</span>
                             <Clock className="h-4 w-4" />
                             <span>{format(new Date(evaluation.created_at), 'HH:mm')}</span>
                         </div>
@@ -239,14 +239,18 @@ export default function EmployeeEvaluationDetailPage() {
                 </div>
 
                 {/* Score Summary */}
-                <Card className="mb-6 border-0 shadow-sm bg-gradient-to-br from-slate-50 to-white">
-                    <CardContent className="p-6">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <div className="text-xs uppercase text-muted-foreground mb-1">Итоговый результат</div>
-                                <div className={cn("text-3xl font-black", scorePercentage >= 80 ? "text-green-600" : scorePercentage >= 50 ? "text-amber-600" : "text-red-600")}>
-                                    {scorePercentage}%
-                                </div>
+                <Card className="mb-6 border border-border bg-card shadow-sm">
+                    <CardContent className="p-6 flex items-center justify-between">
+                        <div>
+                            <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">Итоговый результат</div>
+                            <div className={cn("text-3xl font-black", scorePercentage >= 80 ? "text-emerald-500" : scorePercentage >= 50 ? "text-amber-500" : "text-rose-500")}>
+                                {scorePercentage}%
+                            </div>
+                        </div>
+                        <div className="text-right">
+                            <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">Баллы</div>
+                            <div className="text-xl font-bold text-foreground">
+                                {formatScore(totalScoreValue)} <span className="text-muted-foreground/70 text-sm font-medium">/ {formatScore(maxScoreValue)}</span>
                             </div>
                         </div>
                     </CardContent>
@@ -254,27 +258,27 @@ export default function EmployeeEvaluationDetailPage() {
 
                 {/* Reviewer Note */}
                 {evaluation.reviewer_note && (
-                    <Card className="mb-6 border-amber-200 bg-amber-50">
+                    <Card className="mb-6 border border-amber-500/20 bg-amber-500/5 shadow-sm">
                         <CardContent className="p-4">
-                            <div className="text-xs uppercase text-amber-700 mb-1 font-semibold">Комментарий проверяющего</div>
-                            <div className="text-sm text-amber-900">{evaluation.reviewer_note}</div>
+                            <div className="text-[10px] font-bold uppercase tracking-wider text-amber-500 mb-1">Комментарий проверяющего</div>
+                            <div className="text-sm text-foreground">{evaluation.reviewer_note}</div>
                         </CardContent>
                     </Card>
                 )}
 
                 {/* Comments */}
                 {evaluation.comments && (
-                    <Card className="mb-6 border-slate-200 bg-slate-50">
+                    <Card className="mb-6 border border-border bg-accent/10 shadow-sm">
                         <CardContent className="p-4">
-                            <div className="text-xs uppercase text-slate-500 mb-1 font-semibold">Комментарий</div>
-                            <div className="text-sm text-slate-700">{evaluation.comments}</div>
+                            <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">Комментарий</div>
+                            <div className="text-sm text-foreground">{evaluation.comments}</div>
                         </CardContent>
                     </Card>
                 )}
 
                 {/* Responses */}
                 <div className="space-y-4">
-                    <div className="text-xs uppercase text-muted-foreground font-semibold">Детализация по пунктам</div>
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Детализация по пунктам</div>
                     {evaluation.responses.map((response, index) => {
                         const maxScore = Number(response.max_score ?? 1)
                         const scoreValue = Number(response.score)
@@ -282,14 +286,14 @@ export default function EmployeeEvaluationDetailPage() {
                         const workstationIssues = getWorkstationIssues(response)
 
                         return (
-                            <Card key={response.id} className="border-slate-200 shadow-sm overflow-hidden">
+                            <Card key={response.id} className="border border-border bg-card shadow-sm overflow-hidden">
                                 <CardContent className="p-4 space-y-4">
                                     {/* Header */}
                                     <div className="flex items-center justify-between text-xs font-medium text-muted-foreground uppercase tracking-wider">
                                         <span>Пункт {index + 1}</span>
                                         <div className="flex items-center gap-1">
-                                            <span className="text-slate-900 font-bold">{scoreValue.toFixed(1).replace(/\.0$/, '')}</span>
-                                            <span className="text-slate-300">/</span>
+                                            <span className="text-foreground font-bold">{scoreValue.toFixed(1).replace(/\.0$/, '')}</span>
+                                            <span className="text-muted-foreground/30">/</span>
                                             <span>{maxScore}</span>
                                         </div>
                                     </div>
@@ -298,7 +302,7 @@ export default function EmployeeEvaluationDetailPage() {
                                     <div className="space-y-2">
                                         <div className="text-sm font-semibold">{response.item_content}</div>
                                         {response.description && (
-                                            <div className="text-xs text-slate-500">{response.description}</div>
+                                            <div className="text-xs text-muted-foreground">{response.description}</div>
                                         )}
                                     </div>
 
@@ -311,10 +315,10 @@ export default function EmployeeEvaluationDetailPage() {
                                                     <div
                                                         key={i}
                                                         className={cn(
-                                                            "w-full px-4 py-3 rounded-xl text-sm font-medium border transition-all flex items-center justify-between",
+                                                            "w-full px-4 py-3 rounded-xl text-sm font-medium border flex items-center justify-between",
                                                             isSelected
-                                                                ? "bg-slate-900 text-white border-slate-900 shadow-md"
-                                                                : "bg-white text-slate-600 border-slate-200"
+                                                                ? "bg-primary/10 text-primary border-primary/30"
+                                                                : "bg-accent/10 text-muted-foreground border-border"
                                                         )}
                                                     >
                                                         <span>{opt.label}</span>
@@ -339,9 +343,9 @@ export default function EmployeeEvaluationDetailPage() {
                                                         url,
                                                         (response.photo_urls && response.photo_urls.length > 0 ? response.photo_urls : [response.photo_url]).filter((img): img is string => Boolean(img))
                                                     )}
-                                                    className="shrink-0 w-32 h-32 sm:w-auto sm:h-auto sm:aspect-video relative rounded-xl overflow-hidden border bg-slate-100 cursor-zoom-in group shadow-sm"
+                                                    className="shrink-0 w-32 h-32 sm:w-auto sm:h-auto sm:aspect-video relative rounded-xl overflow-hidden border border-border bg-accent/30 cursor-zoom-in"
                                                 >
-                                                    <img src={url} alt={`Фото ${i + 1}`} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
+                                                    <img src={url} alt={`Фото ${i + 1}`} className="w-full h-full object-cover" />
                                                 </div>
                                             ))}
                                         </div>
@@ -349,13 +353,13 @@ export default function EmployeeEvaluationDetailPage() {
 
                                     {/* Issues / Comment */}
                                     {(response.comment || workstationIssues.length > 0) && (
-                                        <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 space-y-2">
+                                        <div className="bg-accent/30 p-3 rounded-xl border border-border/50 space-y-2">
                                             {workstationIssues.length > 0 && (
                                                 <div className="space-y-2">
-                                                    <p className="text-xs font-semibold uppercase text-slate-500">Проблемные места:</p>
+                                                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Проблемные места</p>
                                                     <div className="flex flex-wrap gap-2">
                                                         {workstationIssues.map((ws, idx) => (
-                                                            <Badge key={idx} variant="destructive" className="bg-red-100 text-red-700 hover:bg-red-200 border-red-200">
+                                                            <Badge key={idx} variant="outline" className="bg-rose-500/10 text-rose-500 border-rose-500/20 font-bold text-[10px] uppercase tracking-wider">
                                                                 {ws}
                                                             </Badge>
                                                         ))}
@@ -363,14 +367,14 @@ export default function EmployeeEvaluationDetailPage() {
                                                 </div>
                                             )}
                                             {response.comment && workstationIssues.length === 0 && (
-                                                <p className="text-sm italic text-slate-600">"{response.comment}"</p>
+                                                <p className="text-sm italic text-muted-foreground">"{response.comment}"</p>
                                             )}
                                         </div>
                                     )}
 
                                     {/* Admin Comment */}
                                     {response.admin_comment && (
-                                        <div className="text-xs text-amber-900 bg-amber-50 border border-amber-100 rounded-md p-2">
+                                        <div className="text-xs text-amber-500 bg-amber-500/5 border border-amber-500/20 rounded-md p-2">
                                             {response.admin_comment}
                                         </div>
                                     )}

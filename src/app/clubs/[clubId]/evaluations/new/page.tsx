@@ -256,7 +256,7 @@ function EvaluationForm({ params }: { params: { clubId: string } }) {
     if (!template) return <div className="p-8 text-center">Шаблон не найден</div>
 
     return (
-        <div className="min-h-screen bg-slate-50 p-4 md:p-8 pb-32">
+        <div className="min-h-screen bg-muted p-4 md:p-8 pb-32">
             <div className="mx-auto max-w-2xl">
                 <div className="mb-6">
                     <Link href={`/clubs/${clubId}/settings/checklists`} className="mb-2 flex items-center text-sm text-muted-foreground hover:text-foreground">
@@ -334,7 +334,7 @@ function EvaluationForm({ params }: { params: { clubId: string } }) {
                                 <div className="mb-4">
                                     <div className="flex items-center gap-2 mb-1">
                                         <Badge variant="outline" className="text-[10px] h-5">№{idx + 1}</Badge>
-                                        <h3 className="font-semibold text-slate-800">{item.content}</h3>
+                                        <h3 className="font-semibold text-foreground">{item.content}</h3>
                                     </div>
                                     {item.description && (
                                         <p className="text-xs text-muted-foreground ml-7">{item.description}</p>
@@ -346,7 +346,7 @@ function EvaluationForm({ params }: { params: { clubId: string } }) {
                                         onClick={() => handleScoreChange(item.id, 1)}
                                         className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl border-2 transition-all ${responses[item.id]?.score === 1
                                             ? 'bg-green-50 border-green-500 text-green-700 shadow-sm'
-                                            : 'bg-white border-slate-100 text-slate-400 grayscale opacity-60'
+                                            : 'bg-card border-border/50 text-muted-foreground/70 grayscale opacity-60'
                                             }`}
                                     >
                                         <CheckCircle2 className="h-5 w-5" />
@@ -356,7 +356,7 @@ function EvaluationForm({ params }: { params: { clubId: string } }) {
                                         onClick={() => handleScoreChange(item.id, 0)}
                                         className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl border-2 transition-all ${responses[item.id]?.score === 0
                                             ? 'bg-red-50 border-red-500 text-red-700 shadow-sm'
-                                            : 'bg-white border-slate-100 text-slate-400 grayscale opacity-60'
+                                            : 'bg-card border-border/50 text-muted-foreground/70 grayscale opacity-60'
                                             }`}
                                     >
                                         <XCircle className="h-5 w-5" />
@@ -366,7 +366,7 @@ function EvaluationForm({ params }: { params: { clubId: string } }) {
                                     {(item.is_photo_required || responses[item.id]?.photo_url) && (
                                         <div className="mt-4 pt-3 border-t">
                                             {responses[item.id]?.photo_url ? (
-                                                <div className="flex items-center gap-3 p-2 bg-slate-50 rounded-lg border">
+                                                <div className="flex items-center gap-3 p-2 bg-muted rounded-lg border">
                                                     <div className="h-10 w-10 bg-slate-200 rounded overflow-hidden relative">
                                                         <img 
                                                             src={responses[item.id].photo_url} 
@@ -387,7 +387,7 @@ function EvaluationForm({ params }: { params: { clubId: string } }) {
                                                     </div>
                                                     <button 
                                                         onClick={() => removePhoto(item.id)}
-                                                        className="p-2 hover:bg-red-50 text-slate-400 hover:text-red-500 rounded-full transition-colors"
+                                                        className="p-2 hover:bg-red-50 text-muted-foreground/70 hover:text-red-500 rounded-full transition-colors"
                                                     >
                                                         <Trash2 className="h-4 w-4" />
                                                     </button>
@@ -395,21 +395,21 @@ function EvaluationForm({ params }: { params: { clubId: string } }) {
                                             ) : (
                                                 <div>
                                                     <div className="flex items-center justify-between mb-2">
-                                                        <Label className="text-xs font-medium flex items-center gap-1 text-slate-600">
+                                                        <Label className="text-xs font-medium flex items-center gap-1 text-muted-foreground">
                                                             <Camera className="h-3 w-3" />
                                                             {item.is_photo_required ? 'Фото обязательно' : 'Прикрепить фото'}
                                                         </Label>
                                                     </div>
                                                     <label className={`
                                                         flex items-center justify-center gap-2 p-3 rounded-lg border-2 border-dashed cursor-pointer transition-colors
-                                                        ${item.is_photo_required ? 'border-purple-200 bg-purple-50 hover:bg-purple-100' : 'border-slate-200 hover:bg-slate-50'}
+                                                        ${item.is_photo_required ? 'border-purple-200 bg-purple-50 hover:bg-purple-100' : 'border-border hover:bg-muted'}
                                                     `}>
                                                         {uploadingState[item.id] ? (
                                                             <Loader2 className="h-4 w-4 animate-spin text-purple-600" />
                                                         ) : (
-                                                            <Upload className={`h-4 w-4 ${item.is_photo_required ? 'text-purple-600' : 'text-slate-400'}`} />
+                                                            <Upload className={`h-4 w-4 ${item.is_photo_required ? 'text-purple-600' : 'text-muted-foreground/70'}`} />
                                                         )}
-                                                        <span className={`text-xs font-medium ${item.is_photo_required ? 'text-purple-700' : 'text-slate-500'}`}>
+                                                        <span className={`text-xs font-medium ${item.is_photo_required ? 'text-purple-700' : 'text-muted-foreground'}`}>
                                                             {uploadingState[item.id] ? 'Загрузка...' : 'Загрузить фото'}
                                                         </span>
                                                         <input 
@@ -433,7 +433,7 @@ function EvaluationForm({ params }: { params: { clubId: string } }) {
                                                     // Trigger hidden file input
                                                     document.getElementById(`optional-photo-${item.id}`)?.click()
                                                 }}
-                                                className="text-xs text-slate-400 hover:text-purple-600 flex items-center justify-center gap-1 mx-auto py-1"
+                                                className="text-xs text-muted-foreground/70 hover:text-purple-600 flex items-center justify-center gap-1 mx-auto py-1"
                                             >
                                                 <Camera className="h-3 w-3" />
                                                 Добавить фото
@@ -466,12 +466,12 @@ function EvaluationForm({ params }: { params: { clubId: string } }) {
                             placeholder="Ваши замечания или похвала..."
                             value={generalComment}
                             onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setGeneralComment(e.target.value)}
-                            className="bg-slate-50 border-none focus-visible:ring-purple-500"
+                            className="bg-muted border-none focus-visible:ring-purple-500"
                         />
                     </CardContent>
                 </Card>
 
-                <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-md border-t md:static md:bg-transparent md:border-none md:p-0 md:mt-8">
+                <div className="fixed bottom-0 left-0 right-0 p-4 bg-card/80 backdrop-blur-md border-t md:static md:bg-transparent md:border-none md:p-0 md:mt-8">
                     <Button
                         onClick={handleSubmit}
                         disabled={isSubmitting || !selectedEmployee}

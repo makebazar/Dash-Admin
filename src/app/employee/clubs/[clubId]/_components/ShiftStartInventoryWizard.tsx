@@ -405,8 +405,8 @@ export function ShiftStartInventoryWizard({
 
     return createPortal(
         <>
-            <div className="fixed inset-0 h-[100dvh] bg-slate-950 text-white flex flex-col z-[9999] overflow-hidden overscroll-none">
-                <header className="px-4 py-4 border-b border-slate-800 bg-slate-900/50 backdrop-blur-md sticky top-0 z-50">
+            <div className="fixed inset-0 h-[100dvh] bg-slate-950 text-primary-foreground flex flex-col z-[9999] overflow-hidden overscroll-none">
+                <header className="px-4 py-4 border-b border-slate-800 bg-primary/50 backdrop-blur-md sticky top-0 z-50">
                     <div className="space-y-4">
                         <div className="flex items-center justify-between gap-4">
                             <h2 className="text-lg font-bold truncate">
@@ -440,7 +440,7 @@ export function ShiftStartInventoryWizard({
                                         <Button
                                             type="button"
                                             variant="outline"
-                                            className="border-slate-700 text-white"
+                                            className="border-slate-700 text-primary-foreground"
                                             onClick={refreshInventoryList}
                                             disabled={isPending || isRefreshingCatalog}
                                         >
@@ -450,7 +450,7 @@ export function ShiftStartInventoryWizard({
                                         <Button
                                             type="button"
                                             variant="outline"
-                                            className="border-slate-700 text-white"
+                                            className="border-slate-700 text-primary-foreground"
                                             onClick={openAddDialog}
                                         >
                                             <Plus className="mr-2 h-4 w-4" />
@@ -467,12 +467,12 @@ export function ShiftStartInventoryWizard({
                     {step === 2 && inventorySummary && (
                         <div className="space-y-6 max-w-2xl mx-auto pb-20">
                             <div className="grid grid-cols-2 gap-4">
-                                <div className="bg-slate-900/50 p-4 rounded-2xl border border-slate-800">
-                                    <span className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Проверено товаров</span>
+                                <div className="bg-primary/50 p-4 rounded-2xl border border-slate-800">
+                                    <span className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Проверено товаров</span>
                                     <div className="text-xl font-bold mt-1">{inventorySummary.countedItems}</div>
                                 </div>
-                                <div className="bg-slate-900/50 p-4 rounded-2xl border border-slate-800">
-                                    <span className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Расхождений</span>
+                                <div className="bg-primary/50 p-4 rounded-2xl border border-slate-800">
+                                    <span className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Расхождений</span>
                                     <div className="text-xl font-bold mt-1">{inventorySummary.discrepancyItems}</div>
                                 </div>
                             </div>
@@ -511,7 +511,7 @@ export function ShiftStartInventoryWizard({
                                         {forgottenItems.map((item) => (
                                             <div key={item.id} className="flex justify-between items-center text-[11px]">
                                                 <span className="text-slate-300">{item.product_name}</span>
-                                                <span className="text-slate-500 italic">Ожидалось: {item.expected_stock} шт.</span>
+                                                <span className="text-muted-foreground italic">Ожидалось: {item.expected_stock} шт.</span>
                                             </div>
                                         ))}
                                     </div>
@@ -529,7 +529,7 @@ export function ShiftStartInventoryWizard({
                     )}
                 </main>
 
-                <footer className="p-4 pb-safe border-t border-slate-800 bg-slate-900/80 backdrop-blur-md sticky bottom-0 z-50">
+                <footer className="p-4 pb-safe border-t border-slate-800 bg-primary/80 backdrop-blur-md sticky bottom-0 z-50">
                     {step === 1 ? (
                         <Button onClick={handleInventorySubmit} disabled={isPending} className="w-full h-14 text-lg font-bold bg-blue-600 hover:bg-blue-700 rounded-2xl shadow-lg shadow-blue-900/20">
                             Далее: Подтверждение
@@ -541,7 +541,7 @@ export function ShiftStartInventoryWizard({
                                 variant="outline"
                                 size="icon"
                                 onClick={() => setStep(1)}
-                                className="h-14 w-14 border-slate-800 text-slate-400 hover:bg-slate-800 rounded-2xl shrink-0"
+                                className="h-14 w-14 border-slate-800 text-muted-foreground/70 hover:bg-primary/90 rounded-2xl shrink-0"
                             >
                                 <ArrowLeft className="h-6 w-6" />
                             </Button>
@@ -554,16 +554,16 @@ export function ShiftStartInventoryWizard({
                 </footer>
 
                 <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-                    <DialogContent className="bg-slate-950 border-slate-800 text-white max-w-[90vw] rounded-2xl">
+                    <DialogContent className="bg-slate-950 border-slate-800 text-primary-foreground max-w-[90vw] rounded-2xl">
                         <DialogHeader>
                             <DialogTitle>Добавить товар</DialogTitle>
                         </DialogHeader>
                         <div className="py-6 space-y-4">
                             <Select value={selectedProductToAdd} onValueChange={setSelectedProductToAdd}>
-                                <SelectTrigger className="bg-slate-900 border-slate-800 h-12 rounded-xl">
+                                <SelectTrigger className="bg-primary border-slate-800 h-12 rounded-xl">
                                     <SelectValue placeholder="Выберите товар..." />
                                 </SelectTrigger>
-                                <SelectContent className="bg-slate-900 border-slate-800">
+                                <SelectContent className="bg-primary border-slate-800">
                                     {allProducts.map((product) => (
                                         <SelectItem key={product.id} value={String(product.id)}>{product.name}</SelectItem>
                                     ))}

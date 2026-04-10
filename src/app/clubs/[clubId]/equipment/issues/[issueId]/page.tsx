@@ -148,13 +148,13 @@ export default function IssueDetailsPage() {
     const getStatusBadge = (status: Issue["status"]) => {
         switch (status) {
             case "OPEN":
-                return <Badge variant="secondary" className="bg-slate-200 text-slate-700 hover:bg-slate-200">Открыто</Badge>
+                return <Badge variant="secondary" className="bg-slate-200 text-foreground hover:bg-accent">Открыто</Badge>
             case "IN_PROGRESS":
                 return <Badge className="bg-blue-500 hover:bg-blue-500">В работе</Badge>
             case "RESOLVED":
                 return <Badge className="bg-green-500 hover:bg-green-500">Решено</Badge>
             case "CLOSED":
-                return <Badge variant="outline" className="border-slate-300 text-slate-500">Закрыто</Badge>
+                return <Badge variant="outline" className="border-border text-muted-foreground">Закрыто</Badge>
         }
     }
 
@@ -347,7 +347,7 @@ export default function IssueDetailsPage() {
 
     if (isLoading) {
         return (
-            <div className="flex min-h-screen items-center justify-center bg-slate-50">
+            <div className="flex min-h-screen items-center justify-center bg-muted">
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
             </div>
         )
@@ -381,7 +381,7 @@ export default function IssueDetailsPage() {
                     </div>
                     <div className="w-full lg:w-auto">
                         <Select value={issue.severity} onValueChange={(value) => handleChangeSeverity(value as Issue["severity"])}>
-                            <SelectTrigger className="w-full bg-white sm:w-[180px]">
+                            <SelectTrigger className="w-full bg-card sm:w-[180px]">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -399,22 +399,22 @@ export default function IssueDetailsPage() {
                 <div className="space-y-4">
                     <Card className="border-none shadow-sm">
                         <CardContent className="space-y-4 p-5">
-                            <div className="rounded-xl border bg-slate-50/70 p-4">
+                            <div className="rounded-xl border bg-muted/70 p-4">
                                 <div className="flex items-start gap-3">
-                                    <div className="rounded-xl border bg-white p-2.5 text-slate-500">
+                                    <div className="rounded-xl border bg-card p-2.5 text-muted-foreground">
                                         <Monitor className="h-5 w-5" />
                                     </div>
                                     <div className="min-w-0 flex-1">
                                         <div className="flex flex-wrap items-center gap-2">
-                                            <div className="truncate text-lg font-semibold text-slate-900">{issue.equipment_name}</div>
-                                            <Badge variant="outline" className="text-[10px] font-normal text-slate-500">
+                                            <div className="truncate text-lg font-semibold text-foreground">{issue.equipment_name}</div>
+                                            <Badge variant="outline" className="text-[10px] font-normal text-muted-foreground">
                                                 {issue.equipment_type_name}
                                             </Badge>
                                         </div>
                                         {issue.equipment_identifier ? (
-                                            <div className="mt-1 font-mono text-xs text-slate-500">ID: {issue.equipment_identifier}</div>
+                                            <div className="mt-1 font-mono text-xs text-muted-foreground">ID: {issue.equipment_identifier}</div>
                                         ) : null}
-                                        <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
+                                        <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
                                             <MapPin className="h-3.5 w-3.5" />
                                             <span>{issue.workstation_zone || "Зона не указана"}</span>
                                             <span>•</span>
@@ -426,26 +426,26 @@ export default function IssueDetailsPage() {
 
                             <section className="space-y-2">
                                 <div className="flex flex-wrap items-center justify-between gap-2">
-                                    <h2 className="text-xs font-black uppercase tracking-widest text-slate-400">Описание</h2>
-                                    <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                                    <h2 className="text-xs font-black uppercase tracking-widest text-muted-foreground/70">Описание</h2>
+                                    <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                                         <User className="h-3 w-3" />
-                                        <span className="font-medium text-slate-700">{issue.reported_by_name}</span>
+                                        <span className="font-medium text-foreground">{issue.reported_by_name}</span>
                                         <span className="text-slate-300">•</span>
                                         <span>{new Date(issue.created_at).toLocaleString("ru-RU")}</span>
                                     </div>
                                 </div>
-                                <div className="rounded-xl border bg-white p-4 text-sm leading-relaxed shadow-sm">
+                                <div className="rounded-xl border bg-card p-4 text-sm leading-relaxed shadow-sm">
                                     {issue.description || "Нет описания"}
                                 </div>
                             </section>
 
                             <section className="space-y-2">
-                                <h2 className="text-xs font-black uppercase tracking-widest text-slate-400">Ответственный</h2>
+                                <h2 className="text-xs font-black uppercase tracking-widest text-muted-foreground/70">Ответственный</h2>
                                 <Select
                                     value={issue.assigned_to || "unassigned"}
                                     onValueChange={(value) => handleAssign(value === "unassigned" ? null : value)}
                                 >
-                                    <SelectTrigger className="bg-white">
+                                    <SelectTrigger className="bg-card">
                                         <SelectValue placeholder="Назначить сотрудника" />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -462,7 +462,7 @@ export default function IssueDetailsPage() {
                             <Separator />
 
                             <section className="space-y-4">
-                                <h2 className="text-xs font-black uppercase tracking-widest text-slate-400">Управление статусом</h2>
+                                <h2 className="text-xs font-black uppercase tracking-widest text-muted-foreground/70">Управление статусом</h2>
 
                                 {issue.status === "OPEN" ? (
                                     <Button className="h-12 w-full text-base shadow-sm" onClick={() => handleUpdateStatus("IN_PROGRESS")}>
@@ -476,7 +476,7 @@ export default function IssueDetailsPage() {
                                         <div className="space-y-3 rounded-xl border border-green-100 bg-green-50/50 p-4">
                                             <Label className="font-medium text-green-800">Решение проблемы</Label>
                                             <textarea
-                                                className="h-24 w-full rounded-lg border bg-white p-3 text-sm outline-none transition-all focus:ring-2 focus:ring-green-500/20"
+                                                className="h-24 w-full rounded-lg border bg-card p-3 text-sm outline-none transition-all focus:ring-2 focus:ring-green-500/20"
                                                 placeholder="Опишите выполненные работы..."
                                                 value={resolutionNotes}
                                                 onChange={(e) => setResolutionNotes(e.target.value)}
@@ -492,7 +492,7 @@ export default function IssueDetailsPage() {
                                                 Завершить ремонт
                                             </Button>
                                         </div>
-                                        <Button variant="outline" className="w-full text-slate-500" onClick={() => handleUpdateStatus("OPEN")}>
+                                        <Button variant="outline" className="w-full text-muted-foreground" onClick={() => handleUpdateStatus("OPEN")}>
                                             Вернуть статус "Открыто"
                                         </Button>
                                     </div>
@@ -504,19 +504,19 @@ export default function IssueDetailsPage() {
                                             <CheckCircle2 className="h-5 w-5" />
                                             Проблема решена
                                         </div>
-                                        <Button variant="outline" className="w-full bg-white" onClick={() => handleUpdateStatus("CLOSED")}>
+                                        <Button variant="outline" className="w-full bg-card" onClick={() => handleUpdateStatus("CLOSED")}>
                                             <ShieldCheck className="mr-2 h-4 w-4" />
                                             Закрыть тикет
                                         </Button>
-                                        <Button variant="ghost" size="sm" className="text-slate-500 hover:text-slate-700" onClick={() => handleUpdateStatus("IN_PROGRESS")}>
+                                        <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground" onClick={() => handleUpdateStatus("IN_PROGRESS")}>
                                             Вернуть в работу
                                         </Button>
                                     </div>
                                 ) : null}
 
                                 {issue.status === "CLOSED" ? (
-                                    <div className="rounded-xl border bg-slate-50 p-4 text-center">
-                                        <div className="mb-3 flex items-center justify-center gap-2 font-medium text-slate-500">
+                                    <div className="rounded-xl border bg-muted p-4 text-center">
+                                        <div className="mb-3 flex items-center justify-center gap-2 font-medium text-muted-foreground">
                                             <ShieldCheck className="h-5 w-5" />
                                             Тикет закрыт
                                         </div>
@@ -539,11 +539,11 @@ export default function IssueDetailsPage() {
                             {issue.source_photos && issue.source_photos.length > 0 ? (
                                 <section className="space-y-3">
                                     <div className="flex items-center gap-2">
-                                        <ImageIcon className="h-4 w-4 text-slate-500" />
-                                        <h2 className="text-xs font-black uppercase tracking-widest text-slate-400">
+                                        <ImageIcon className="h-4 w-4 text-muted-foreground" />
+                                        <h2 className="text-xs font-black uppercase tracking-widest text-muted-foreground/70">
                                             Фото при создании
                                         </h2>
-                                        <Badge variant="outline" className="text-[10px] font-normal text-slate-500">
+                                        <Badge variant="outline" className="text-[10px] font-normal text-muted-foreground">
                                             {issue.source_photos.length}
                                         </Badge>
                                     </div>
@@ -554,9 +554,9 @@ export default function IssueDetailsPage() {
                                                 href={photoUrl}
                                                 target="_blank"
                                                 rel="noreferrer"
-                                                className="group overflow-hidden rounded-xl border bg-white shadow-sm transition hover:shadow-md"
+                                                className="group overflow-hidden rounded-xl border bg-card shadow-sm transition hover:shadow-md"
                                             >
-                                                <div className="aspect-square bg-slate-100">
+                                                <div className="aspect-square bg-accent">
                                                     <img
                                                         src={photoUrl}
                                                         alt={`Фото при создании инцидента ${index + 1}`}
@@ -573,11 +573,11 @@ export default function IssueDetailsPage() {
                             {issue.resolution_photos && issue.resolution_photos.length > 0 ? (
                                 <section className="space-y-3">
                                     <div className="flex items-center gap-2">
-                                        <ImageIcon className="h-4 w-4 text-slate-500" />
-                                        <h2 className="text-xs font-black uppercase tracking-widest text-slate-400">
+                                        <ImageIcon className="h-4 w-4 text-muted-foreground" />
+                                        <h2 className="text-xs font-black uppercase tracking-widest text-muted-foreground/70">
                                             Фото решения
                                         </h2>
-                                        <Badge variant="outline" className="text-[10px] font-normal text-slate-500">
+                                        <Badge variant="outline" className="text-[10px] font-normal text-muted-foreground">
                                             {issue.resolution_photos.length}
                                         </Badge>
                                     </div>
@@ -588,9 +588,9 @@ export default function IssueDetailsPage() {
                                                 href={photoUrl}
                                                 target="_blank"
                                                 rel="noreferrer"
-                                                className="group overflow-hidden rounded-xl border bg-white shadow-sm transition hover:shadow-md"
+                                                className="group overflow-hidden rounded-xl border bg-card shadow-sm transition hover:shadow-md"
                                             >
-                                                <div className="aspect-square bg-slate-100">
+                                                <div className="aspect-square bg-accent">
                                                     <img
                                                         src={photoUrl}
                                                         alt={`Фото инцидента ${index + 1}`}
@@ -609,7 +609,7 @@ export default function IssueDetailsPage() {
 
                 <Card className="border-none shadow-sm">
                     <CardContent className="flex h-full min-h-[540px] flex-col p-0">
-                        <div className="flex items-center justify-between border-b bg-white p-4">
+                        <div className="flex items-center justify-between border-b bg-card p-4">
                             <h2 className="font-semibold">
                                 <span className="inline-flex items-center gap-2">
                                     <MessageSquare className="h-4 w-4" />
@@ -629,16 +629,16 @@ export default function IssueDetailsPage() {
                                     {comments.map(comment => (
                                         <div key={comment.id} className={cn("flex flex-col gap-1", comment.is_system_message ? "items-center my-4" : "items-start")}>
                                             {comment.is_system_message ? (
-                                                <Badge variant="outline" className="border-slate-200 bg-slate-100 text-xs font-normal text-slate-500">
+                                                <Badge variant="outline" className="border-border bg-accent text-xs font-normal text-muted-foreground">
                                                     {comment.content} • {new Date(comment.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                                                 </Badge>
                                             ) : (
-                                                <div className="max-w-[90%] rounded-lg border bg-white p-3 shadow-sm">
+                                                <div className="max-w-[90%] rounded-lg border bg-card p-3 shadow-sm">
                                                     <div className="mb-1 flex items-center gap-2">
                                                         <span className="text-xs font-bold">{comment.author_name}</span>
                                                         <span className="text-[10px] text-muted-foreground">{new Date(comment.created_at).toLocaleString()}</span>
                                                     </div>
-                                                    <p className="whitespace-pre-wrap text-sm text-slate-700">{comment.content}</p>
+                                                    <p className="whitespace-pre-wrap text-sm text-foreground">{comment.content}</p>
                                                 </div>
                                             )}
                                         </div>
@@ -647,7 +647,7 @@ export default function IssueDetailsPage() {
                             )}
                         </div>
 
-                        <div className="border-t bg-white p-4">
+                        <div className="border-t bg-card p-4">
                             <form onSubmit={handleAddComment} className="flex gap-2">
                                 <Input
                                     placeholder="Написать комментарий..."
@@ -679,7 +679,7 @@ export default function IssueDetailsPage() {
 }
 
 function Separator() {
-    return <div className="h-px w-full bg-slate-100" />
+    return <div className="h-px w-full bg-accent" />
 }
 
 function ShieldCheck({ className, ...props }: React.SVGProps<SVGSVGElement>) {

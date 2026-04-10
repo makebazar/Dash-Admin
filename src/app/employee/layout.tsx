@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import Link from "next/link"
-import { Building2, LogOut, User, LayoutDashboard, Calendar, Brush, Clock, Menu, X, Crown, ClipboardCheck, Monitor, BookOpen, Headphones } from "lucide-react"
+import { Zap, LogOut, User, LayoutDashboard, Calendar, Brush, Clock, Menu, X, Crown, ClipboardCheck, Monitor, BookOpen, Headphones } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 
@@ -28,6 +28,20 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
     const hideMobileHeader = pathname?.includes('/employee/clubs/') && pathname?.includes('/evaluations/')
     const showMobileHeader = !hideMobileHeader
     const isPosRoute = pathname?.includes('/employee/clubs/') && pathname?.includes('/pos')
+    const themeVars = {
+        ['--background' as any]: 'oklch(0.13 0 0)',
+        ['--card' as any]: 'oklch(0.16 0 0)',
+        ['--popover' as any]: 'oklch(0.16 0 0)',
+        ['--border' as any]: 'oklch(0.22 0 0)',
+        ['--input' as any]: 'oklch(0.22 0 0)',
+        ['--muted' as any]: 'oklch(0.20 0 0)',
+        ['--accent' as any]: 'oklch(0.20 0 0)',
+        ['--sidebar' as any]: 'oklch(0.14 0 0)',
+        ['--sidebar-border' as any]: 'oklch(0.22 0 0)',
+        ['--sidebar-accent' as any]: 'oklch(0.20 0 0)',
+        ['--sidebar-primary' as any]: 'oklch(0.85 0 0)',
+        ['--sidebar-primary-foreground' as any]: 'oklch(0.14 0 0)',
+    }
 
     useEffect(() => {
         fetchUserData()
@@ -84,192 +98,143 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
 
     if (isPosRoute) {
         return (
-            <div className="min-h-[100dvh] bg-slate-950">
+            <div className="dark min-h-[100dvh] bg-background text-foreground" style={themeVars}>
                 {children}
             </div>
         )
     }
 
     return (
-        <div className="flex min-h-[100dvh] bg-[#fafafa] relative flex-col">
-            {/* Desktop & Mobile Header - фиксированный */}
-            <header className="fixed top-0 left-0 right-0 z-50 h-16 border-b border-black/5 bg-white/95 backdrop-blur-sm shadow-sm pointer-events-auto">
-                <div className="container mx-auto flex h-16 items-center justify-between px-4 sm:px-8">
-                    <div className="flex items-center gap-2">
-                        <Link href="/employee/dashboard" className="flex items-center gap-2">
-                            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-purple-600">
-                                <Building2 className="h-5 w-5 text-white" />
-                            </div>
-                            <span className="text-lg font-bold tracking-tight">DashAdmin</span>
-                            <span className="ml-2 rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-bold uppercase text-purple-600">
-                                Сотрудник
-                            </span>
+        <div className="dark flex min-h-[100dvh] bg-background text-foreground relative flex-col selection:bg-white/10" style={themeVars}>
+            {/* Minimalist Dark Header */}
+            <header className="fixed top-0 left-0 right-0 z-50 h-14 border-b border-border bg-background/80 backdrop-blur-md">
+                <div className={cn(
+                    "flex h-full items-center justify-between px-4 sm:px-6 w-full mx-auto",
+                    pathname === '/employee/dashboard' && "max-w-4xl px-4 sm:px-8"
+                )}>
+                    <div className="flex items-center gap-3">
+                        <Link href="/employee/dashboard" className="flex items-center gap-2 transition-opacity hover:opacity-80">
+                            <Zap className="h-5 w-5 text-white fill-current" />
+                            <span className="text-lg font-bold tracking-tight text-white">DashAdmin</span>
                         </Link>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5">
                         {(hasOwnedClubs || hasManagerClubs) && (
                             <Link href="/dashboard">
-                                <Button variant="ghost" className="text-amber-600 hover:text-amber-700 hover:bg-amber-50 flex items-center gap-2">
-                                    <Crown className="h-4 w-4" />
+                                <Button variant="ghost" size="sm" className="h-8 text-xs text-amber-400 hover:text-amber-300 hover:bg-amber-400/10 flex items-center gap-2">
+                                    <Crown className="h-3.5 w-3.5" />
                                     <span className="hidden sm:inline">{hasOwnedClubs ? "Кабинет владельца" : "Управ кабинет"}</span>
                                 </Button>
                             </Link>
                         )}
                         <Link href="/support">
-                            <Button variant="ghost" className="text-slate-500 hover:text-blue-600 hover:bg-blue-50 flex items-center gap-2">
+                            <Button variant="ghost" size="sm" className="h-8 w-8 px-0 text-muted-foreground hover:text-foreground hover:bg-white/5">
                                 <Headphones className="h-4 w-4" />
-                                <span className="hidden sm:inline">Поддержка</span>
                             </Button>
                         </Link>
                         <Button 
                             variant="ghost" 
+                            size="sm"
                             onClick={handleLogout}
-                            className="text-slate-500 hover:text-red-600 hover:bg-red-50 flex items-center gap-2"
+                            className="h-8 w-8 px-0 text-muted-foreground hover:text-rose-400 hover:bg-rose-400/10"
                         >
                             <LogOut className="h-4 w-4" />
-                            <span className="hidden sm:inline">Выйти</span>
                         </Button>
-                        <div className="md:hidden ml-2">
-                            <Button variant="ghost" size="icon" onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}>
-                                {isMobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+                        <div className="md:hidden ml-1">
+                            <Button variant="ghost" size="sm" className="h-8 w-8 px-0" onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}>
+                                {isMobileMenuOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
                             </Button>
                         </div>
                     </div>
                 </div>
             </header>
-            {hasExpiredSubscription ? (
-                <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
-                    Подписка закончилась{expiredClubNames.length ? `: ${expiredClubNames.join(', ')}` : ''}. Отправка отчетов и рабочие действия сотрудников доступны.
+            
+            {hasExpiredSubscription && (
+                <div className="fixed top-14 left-0 right-0 z-40 border-b border-amber-500/20 bg-amber-500/10 px-4 py-2 text-xs font-medium text-amber-200 backdrop-blur-md flex items-center justify-center">
+                    Подписка закончилась{expiredClubNames.length ? `: ${expiredClubNames.join(', ')}` : ''}. Отправка отчетов и рабочие действия доступны.
                 </div>
-            ) : null}
+            )}
 
-            <div className="flex flex-1 relative">
+            <div className={cn("flex flex-1 relative pt-14", hasExpiredSubscription && "mt-8")}>
                 {/* Mobile Overlay */}
                 {isMobileMenuOpen && (
                     <div 
-                        className="fixed inset-0 bg-black/50 z-40 md:hidden"
+                        className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 md:hidden"
                         onClick={() => setIsMobileMenuOpen(false)}
                     />
                 )}
 
-                {/* Sidebar - only show if we are inside a club */}
+                {/* Sidebar - Sleek & Dark */}
                 {pathname.includes('/employee/clubs/') && (
                     <aside className={cn(
-                        "fixed left-0 top-16 h-[calc(100dvh-64px)] w-64 border-r border-border bg-card z-40 transition-transform duration-300 ease-in-out",
-                        isMobileMenuOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
+                        "fixed left-0 top-14 bottom-0 w-64 border-r border-border bg-background/95 backdrop-blur-xl z-40 transition-transform duration-300 ease-in-out",
+                        isMobileMenuOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0",
+                        hasExpiredSubscription && "top-[88px]"
                     )}>
                         <div className="flex h-full flex-col">
-                            {/* User Info (Optional, can be simplified) */}
-                            <div className="border-b border-border px-6 py-4 bg-slate-50/50">
-                                <p className="text-sm font-semibold truncate">{userName || 'Сотрудник'}</p>
-                                <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold">Рабочая область</p>
+                            {/* User Info */}
+                            <div className="px-5 py-5">
+                                <div className="min-w-0">
+                                    <p className="text-sm font-medium text-foreground truncate">{userName || 'Сотрудник'}</p>
+                                    <p className="text-xs text-muted-foreground truncate">Онлайн</p>
+                                </div>
                             </div>
 
-                            {/* Navigation - Clubs */}
-                            <div className="flex-1 overflow-auto p-4">
-                                <nav className="space-y-1">
+                            {/* Navigation */}
+                            <div className="flex-1 overflow-auto px-3 pb-4">
+                                <nav className="space-y-6">
                                     {clubs.map((club) => {
                                         const isClubActive = pathname.startsWith(`/employee/clubs/${club.id}`)
-                                        if (!isClubActive) return null; // Only show menu for the active club in sidebar
+                                        if (!isClubActive) return null;
                                         
+                                        const navItems = [
+                                            { href: `/employee/clubs/${club.id}`, icon: LayoutDashboard, label: "Дашборд" },
+                                            { href: `/employee/clubs/${club.id}/schedule`, icon: Calendar, label: "График смен" },
+                                            { href: `/employee/clubs/${club.id}/equipment`, icon: Monitor, label: "Оборудование" },
+                                            { href: `/employee/clubs/${club.id}/tasks`, icon: Brush, label: "Обслуживание" },
+                                            { href: `/employee/clubs/${club.id}/history`, icon: Clock, label: "История смен" },
+                                            { href: `/employee/clubs/${club.id}/evaluations`, icon: ClipboardCheck, label: "Проверки" },
+                                            { href: `/employee/clubs/${club.id}/kb`, icon: BookOpen, label: "База знаний" },
+                                        ]
+
                                         return (
-                                            <div key={club.id} className="space-y-1 mt-2">
-                                                {/* Switch to Owner Cabinet Link for Managers */}
+                                            <div key={club.id} className="space-y-1">
+                                                <div className="px-2 mb-2">
+                                                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{club.name}</p>
+                                                </div>
+
                                                 {(club.role === 'Управляющий' || club.role === 'Manager') && (
                                                     <Link
                                                         href={`/clubs/${club.id}`}
-                                                        className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-amber-600 hover:bg-amber-50 transition-colors"
+                                                        className="group flex items-center gap-3 rounded-md px-2 py-1.5 text-sm text-amber-400/80 hover:text-amber-400 hover:bg-amber-400/10 transition-colors"
                                                     >
-                                                        <Crown className="h-4 w-4" />
-                                                        <span className="flex-1 font-medium">Управ кабинет</span>
+                                                        <Crown className="h-4 w-4 opacity-70 group-hover:opacity-100" />
+                                                        <span className="font-medium">Управ кабинет</span>
                                                     </Link>
                                                 )}
-                                                <Link
-                                                    href={`/employee/clubs/${club.id}`}
-                                                    className={cn(
-                                                        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
-                                                        pathname === `/employee/clubs/${club.id}`
-                                                            ? "bg-purple-100 text-purple-600 font-bold"
-                                                            : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                                                    )}
-                                                >
-                                                    <LayoutDashboard className="h-4 w-4" />
-                                                    <span className="flex-1">Дашборд</span>
-                                                </Link>
-                                                {/* ... other links remain the same ... */}
-                                                <Link
-                                                    href={`/employee/clubs/${club.id}/schedule`}
-                                                    className={cn(
-                                                        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
-                                                        pathname.includes('/schedule')
-                                                            ? "bg-purple-100 text-purple-600 font-bold"
-                                                            : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                                                    )}
-                                                >
-                                                    <Calendar className="h-4 w-4" />
-                                                    <span className="flex-1">График смен</span>
-                                                </Link>
-                                                <Link
-                                                    href={`/employee/clubs/${club.id}/equipment`}
-                                                    className={cn(
-                                                        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
-                                                        pathname.includes('/equipment')
-                                                            ? "bg-purple-100 text-purple-600 font-bold"
-                                                            : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                                                    )}
-                                                >
-                                                    <Monitor className="h-4 w-4" />
-                                                    <span className="flex-1">Оборудование</span>
-                                                </Link>
-                                                <Link
-                                                    href={`/employee/clubs/${club.id}/tasks`}
-                                                    className={cn(
-                                                        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
-                                                        pathname.includes('/tasks')
-                                                            ? "bg-purple-100 text-purple-600 font-bold"
-                                                            : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                                                    )}
-                                                >
-                                                    <Brush className="h-4 w-4" />
-                                                    <span className="flex-1">Обслуживание</span>
-                                                </Link>
-                                                <Link
-                                                    href={`/employee/clubs/${club.id}/history`}
-                                                    className={cn(
-                                                        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
-                                                        pathname.includes('/history')
-                                                            ? "bg-purple-100 text-purple-600 font-bold"
-                                                            : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                                                    )}
-                                                >
-                                                    <Clock className="h-4 w-4" />
-                                                    <span className="flex-1">История смен</span>
-                                                </Link>
-                                                <Link
-                                                    href={`/employee/clubs/${club.id}/evaluations`}
-                                                    className={cn(
-                                                        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
-                                                        pathname.includes('/evaluations')
-                                                            ? "bg-purple-100 text-purple-600 font-bold"
-                                                            : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                                                    )}
-                                                >
-                                                    <ClipboardCheck className="h-4 w-4" />
-                                                    <span className="flex-1">Проверки</span>
-                                                </Link>
-                                                <Link
-                                                    href={`/employee/clubs/${club.id}/kb`}
-                                                    className={cn(
-                                                        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
-                                                        pathname.includes('/kb')
-                                                            ? "bg-purple-100 text-purple-600 font-bold"
-                                                            : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                                                    )}
-                                                >
-                                                    <BookOpen className="h-4 w-4" />
-                                                    <span className="flex-1">База знаний</span>
-                                                </Link>
+                                                
+                                                {navItems.map((item) => {
+                                                    const isActive = item.label === "Дашборд" 
+                                                        ? pathname === item.href 
+                                                        : pathname.includes(item.href.split('/').pop() || '')
+                                                    
+                                                    return (
+                                                        <Link
+                                                            key={item.href}
+                                                            href={item.href}
+                                                            className={cn(
+                                                                "group flex items-center gap-3 rounded-md px-2 py-1.5 text-sm transition-colors",
+                                                                isActive
+                                                                    ? "bg-white/10 text-white font-medium"
+                                                                    : "text-muted-foreground hover:bg-white/5 hover:text-foreground"
+                                                            )}
+                                                        >
+                                                            <item.icon className={cn("h-4 w-4 transition-colors", isActive ? "text-white" : "text-muted-foreground group-hover:text-foreground")} />
+                                                            <span>{item.label}</span>
+                                                        </Link>
+                                                    )
+                                                })}
                                             </div>
                                         )
                                     })}
@@ -281,7 +246,7 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
 
                 {/* Main Content */}
                 <main className={cn(
-                    "w-full min-w-0 flex-1 pt-16 pointer-events-auto",
+                    "w-full min-w-0 flex-1 pointer-events-auto",
                     pathname.includes('/employee/clubs/') ? "md:ml-64" : "ml-0"
                 )}>
                     {children}

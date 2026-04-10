@@ -353,7 +353,7 @@ export default function EquipmentDetailsPage() {
         return (
             <PageShell maxWidth="7xl">
                 <div className="flex min-h-[50vh] items-center justify-center">
-                    <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground/70" />
                 </div>
             </PageShell>
         )
@@ -406,7 +406,7 @@ export default function EquipmentDetailsPage() {
 
                 <Card className="overflow-hidden border-none shadow-sm">
                     <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as EquipmentTab)} className="flex flex-col">
-                        <div className="border-b bg-slate-50 px-4 sm:px-6">
+                        <div className="border-b bg-muted px-4 sm:px-6">
                             <TabsList className="h-auto w-full justify-start gap-4 overflow-x-auto bg-transparent p-0">
                                 <TabsTrigger value="details" className="shrink-0 rounded-none border-b-2 border-transparent bg-transparent px-0 py-3 data-[state=active]:border-primary data-[state=active]:shadow-none">
                                     <span className="sm:hidden">Основное</span>
@@ -422,7 +422,7 @@ export default function EquipmentDetailsPage() {
                             </TabsList>
                         </div>
 
-                        <div className="bg-white">
+                        <div className="bg-card">
                             <form id="equipment-page-form" onSubmit={handleSave} className="p-4 sm:p-6">
                                 <TabsContent value="details" className="mt-0 space-y-6">
                                     <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
@@ -502,7 +502,7 @@ export default function EquipmentDetailsPage() {
                                                     is_active: val !== "WRITTEN_OFF",
                                                 } : prev)}
                                             >
-                                                <SelectTrigger className="bg-slate-50">
+                                                <SelectTrigger className="bg-muted">
                                                     <SelectValue />
                                                 </SelectTrigger>
                                                 <SelectContent>
@@ -584,7 +584,7 @@ export default function EquipmentDetailsPage() {
                                         </div>
 
                                         {equipment.maintenance_enabled && (
-                                            <div className="space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                                            <div className="space-y-4 rounded-xl border border-border bg-muted p-4">
                                                 <div className="space-y-2">
                                                     <Label>Ответственный за обслуживание</Label>
                                                     <Select
@@ -606,7 +606,7 @@ export default function EquipmentDetailsPage() {
                                                             } : prev)
                                                         }}
                                                     >
-                                                        <SelectTrigger className="bg-white">
+                                                        <SelectTrigger className="bg-card">
                                                             <SelectValue placeholder="Не назначено" />
                                                         </SelectTrigger>
                                                         <SelectContent>
@@ -622,12 +622,12 @@ export default function EquipmentDetailsPage() {
                                                     </p>
                                                 </div>
 
-                                                <div className="space-y-2 border-t border-slate-200/50 pt-2">
+                                                <div className="space-y-2 border-t border-border/50 pt-2">
                                                     <Label>Интервал обслуживания</Label>
-                                                    <div className="rounded-xl border bg-white px-4 py-3">
+                                                    <div className="rounded-xl border bg-card px-4 py-3">
                                                         <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                                                             <div>
-                                                                <p className="text-sm font-medium text-slate-900">
+                                                                <p className="text-sm font-medium text-foreground">
                                                                     {`${equipment.cleaning_interval_days ?? 30} дн.`}
                                                                 </p>
                                                                 <p className="text-[10px] text-muted-foreground">
@@ -647,7 +647,7 @@ export default function EquipmentDetailsPage() {
                                         )}
 
                                         {equipment.last_cleaned_at && (
-                                            <div className="flex items-center justify-between rounded-xl border bg-slate-50 p-4">
+                                            <div className="flex items-center justify-between rounded-xl border bg-muted p-4">
                                                 <div className="flex items-center gap-2">
                                                     <CheckCircle2 className="h-4 w-4 text-green-500" />
                                                     <span className="text-sm font-medium">Последнее обслуживание</span>
@@ -684,7 +684,7 @@ export default function EquipmentDetailsPage() {
                                                         size="sm"
                                                         className={cn(
                                                             "h-8 rounded-full px-3 text-xs",
-                                                            historyFilter === filterOption.value && "bg-slate-900 hover:bg-slate-800"
+                                                            historyFilter === filterOption.value && "bg-primary hover:bg-primary/90"
                                                         )}
                                                         onClick={() => setHistoryFilter(filterOption.value as HistoryFilter)}
                                                     >
@@ -699,18 +699,18 @@ export default function EquipmentDetailsPage() {
                                                 <Loader2 className="h-6 w-6 animate-spin text-slate-300" />
                                             </div>
                                         ) : history.length === 0 ? (
-                                            <div className="rounded-2xl border border-dashed bg-slate-50 px-4 py-10 text-center text-sm italic text-muted-foreground">
+                                            <div className="rounded-2xl border border-dashed bg-muted px-4 py-10 text-center text-sm italic text-muted-foreground">
                                                 История изменений пуста
                                             </div>
                                         ) : filteredHistory.length === 0 ? (
-                                            <div className="rounded-2xl border border-dashed bg-slate-50 px-4 py-10 text-center text-sm italic text-muted-foreground">
+                                            <div className="rounded-2xl border border-dashed bg-muted px-4 py-10 text-center text-sm italic text-muted-foreground">
                                                 Для выбранного фильтра событий пока нет
                                             </div>
                                         ) : (
                                             groupedHistory.map((group) => (
                                                 <div key={group.label} className="space-y-3">
                                                     <div className="px-1 py-1">
-                                                        <div className="inline-flex items-center rounded-full border bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
+                                                        <div className="inline-flex items-center rounded-full border bg-muted px-3 py-1 text-xs font-semibold text-muted-foreground">
                                                             {group.label}
                                                         </div>
                                                     </div>
@@ -723,20 +723,20 @@ export default function EquipmentDetailsPage() {
                                                                 <div key={`${group.label}-${log.id}`} className="relative pl-12">
                                                                     <div className="absolute top-0 bottom-0 left-[18px] w-px bg-slate-200" />
                                                                     <div className={cn(
-                                                                        "absolute left-0 top-5 flex h-9 w-9 items-center justify-center rounded-xl border bg-white",
+                                                                        "absolute left-0 top-5 flex h-9 w-9 items-center justify-center rounded-xl border bg-card",
                                                                         presentation.badgeClassName
                                                                     )}>
                                                                         {presentation.icon}
                                                                     </div>
 
-                                                                    <div className="rounded-2xl border bg-white p-4">
+                                                                    <div className="rounded-2xl border bg-card p-4">
                                                                         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                                                             <div className="min-w-0 space-y-2">
                                                                                 <div className="flex flex-wrap items-center gap-2">
                                                                                     <Badge variant="outline" className={cn("rounded-full border text-[10px] font-semibold", presentation.badgeClassName)}>
                                                                                         {presentation.badgeLabel}
                                                                                     </Badge>
-                                                                                    <span className="text-xs text-slate-400">
+                                                                                    <span className="text-xs text-muted-foreground/70">
                                                                                         {formatHistoryTime(log.date)}
                                                                                     </span>
                                                                                 </div>
@@ -748,10 +748,10 @@ export default function EquipmentDetailsPage() {
                                                                                 {Array.isArray(log.photos) && log.photos.length > 0 && (
                                                                                     <div className="space-y-2 pt-1">
                                                                                         <div className="flex items-center justify-between gap-3">
-                                                                                            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                                                                                            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
                                                                                                 Прикреплённые фото
                                                                                             </p>
-                                                                                            <span className="text-[11px] text-slate-400">
+                                                                                            <span className="text-[11px] text-muted-foreground/70">
                                                                                                 {log.photos.length} шт.
                                                                                             </span>
                                                                                         </div>
@@ -762,14 +762,14 @@ export default function EquipmentDetailsPage() {
                                                                                                     key={`${log.id}-photo-${photoIndex}`}
                                                                                                     type="button"
                                                                                                     onClick={() => openHistoryPhotoViewer(log.photos || [], photoIndex)}
-                                                                                                    className="relative aspect-[4/3] overflow-hidden rounded-xl border bg-slate-100"
+                                                                                                    className="relative aspect-[4/3] overflow-hidden rounded-xl border bg-accent"
                                                                                                 >
                                                                                                     <img
                                                                                                         src={photo}
                                                                                                         alt={`Фото события ${presentation.title} ${photoIndex + 1}`}
                                                                                                         className="h-full w-full object-cover"
                                                                                                     />
-                                                                                                    <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/55 to-transparent px-2 py-1 text-left text-[10px] font-medium text-white">
+                                                                                                    <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/55 to-transparent px-2 py-1 text-left text-[10px] font-medium text-primary-foreground">
                                                                                                         Открыть
                                                                                                     </div>
                                                                                                 </button>
@@ -779,11 +779,11 @@ export default function EquipmentDetailsPage() {
                                                                                 )}
                                                                             </div>
 
-                                                                            <div className="shrink-0 rounded-xl bg-slate-50 px-3 py-2 text-right">
-                                                                                <p className="text-[11px] font-semibold text-slate-700">
+                                                                            <div className="shrink-0 rounded-xl bg-muted px-3 py-2 text-right">
+                                                                                <p className="text-[11px] font-semibold text-foreground">
                                                                                     {log.user_name || "Система"}
                                                                                 </p>
-                                                                                <p className="mt-0.5 text-[10px] text-slate-400">
+                                                                                <p className="mt-0.5 text-[10px] text-muted-foreground/70">
                                                                                     {new Date(log.date).toLocaleDateString("ru-RU")}
                                                                                 </p>
                                                                             </div>
@@ -805,7 +805,7 @@ export default function EquipmentDetailsPage() {
             </div>
 
             <Dialog open={Boolean(historyPhotoViewer)} onOpenChange={(open) => { if (!open) closeHistoryPhotoViewer() }}>
-                <DialogContent className="left-0 top-0 h-screen w-screen max-w-none translate-x-0 translate-y-0 rounded-none border-0 bg-black p-0 text-white shadow-none [&>button]:hidden">
+                <DialogContent className="left-0 top-0 h-screen w-screen max-w-none translate-x-0 translate-y-0 rounded-none border-0 bg-primary p-0 text-primary-foreground shadow-none [&>button]:hidden">
                     <DialogHeader className="sr-only">
                         <DialogTitle>Просмотр фото из истории оборудования</DialogTitle>
                         <DialogDescription>
@@ -815,18 +815,18 @@ export default function EquipmentDetailsPage() {
                     {historyPhotoViewer && (
                         <div className="relative flex h-screen flex-col">
                             <div className="pointer-events-none absolute inset-x-0 top-4 z-20 flex justify-center px-4">
-                                <div className="pointer-events-auto flex max-w-[90vw] items-center gap-2 overflow-x-auto rounded-full border border-white/10 bg-black/80 p-2">
+                                <div className="pointer-events-auto flex max-w-[90vw] items-center gap-2 overflow-x-auto rounded-full border border-white/10 bg-primary/80 p-2">
                                     <Button
                                         type="button"
                                         variant="ghost"
                                         size="icon"
                                         onClick={showPrevHistoryPhoto}
                                         disabled={historyPhotoViewer.index === 0}
-                                        className="h-8 w-8 shrink-0 text-white hover:bg-white/20 disabled:opacity-30"
+                                        className="h-8 w-8 shrink-0 text-primary-foreground hover:bg-card/20 disabled:opacity-30"
                                     >
                                         <ChevronLeft className="h-4 w-4" />
                                     </Button>
-                                    <span className="w-24 shrink-0 text-center text-xs text-white/70">
+                                    <span className="w-24 shrink-0 text-center text-xs text-primary-foreground/70">
                                         {historyPhotoViewer.index + 1} / {historyPhotoViewer.images.length}
                                     </span>
                                     <Button
@@ -835,17 +835,17 @@ export default function EquipmentDetailsPage() {
                                         size="icon"
                                         onClick={showNextHistoryPhoto}
                                         disabled={historyPhotoViewer.index >= historyPhotoViewer.images.length - 1}
-                                        className="h-8 w-8 shrink-0 text-white hover:bg-white/20 disabled:opacity-30"
+                                        className="h-8 w-8 shrink-0 text-primary-foreground hover:bg-card/20 disabled:opacity-30"
                                     >
                                         <ChevronRight className="h-4 w-4" />
                                     </Button>
-                                    <div className="mx-1 h-4 w-px shrink-0 bg-white/20" />
+                                    <div className="mx-1 h-4 w-px shrink-0 bg-card/20" />
                                     <Button
                                         type="button"
                                         variant="ghost"
                                         size="icon"
                                         onClick={closeHistoryPhotoViewer}
-                                        className="h-8 w-8 shrink-0 text-white hover:bg-white/20"
+                                        className="h-8 w-8 shrink-0 text-primary-foreground hover:bg-card/20"
                                     >
                                         <X className="h-4 w-4" />
                                     </Button>
@@ -860,7 +860,7 @@ export default function EquipmentDetailsPage() {
                                         size="icon"
                                         onClick={showPrevHistoryPhoto}
                                         disabled={historyPhotoViewer.index === 0}
-                                        className="absolute bottom-8 left-6 z-20 h-12 w-12 rounded-full border border-white/10 bg-black/80 text-white hover:bg-white/20 disabled:opacity-30 md:top-1/2 md:bottom-auto md:-translate-y-1/2"
+                                        className="absolute bottom-8 left-6 z-20 h-12 w-12 rounded-full border border-white/10 bg-primary/80 text-primary-foreground hover:bg-card/20 disabled:opacity-30 md:top-1/2 md:bottom-auto md:-translate-y-1/2"
                                     >
                                         <ChevronLeft className="h-6 w-6" />
                                     </Button>
@@ -870,7 +870,7 @@ export default function EquipmentDetailsPage() {
                                         size="icon"
                                         onClick={showNextHistoryPhoto}
                                         disabled={historyPhotoViewer.index >= historyPhotoViewer.images.length - 1}
-                                        className="absolute bottom-8 right-6 z-20 h-12 w-12 rounded-full border border-white/10 bg-black/80 text-white hover:bg-white/20 disabled:opacity-30 md:top-1/2 md:bottom-auto md:-translate-y-1/2"
+                                        className="absolute bottom-8 right-6 z-20 h-12 w-12 rounded-full border border-white/10 bg-primary/80 text-primary-foreground hover:bg-card/20 disabled:opacity-30 md:top-1/2 md:bottom-auto md:-translate-y-1/2"
                                     >
                                         <ChevronRight className="h-6 w-6" />
                                     </Button>

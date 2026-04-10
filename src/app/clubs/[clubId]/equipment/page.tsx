@@ -105,8 +105,8 @@ export default function EquipmentDashboard() {
             description: "Инструкции и параметры модуля оборудования",
             href: `/clubs/${clubId}/equipment/settings`,
             icon: <Settings className="h-6 w-6" />,
-            color: "text-slate-500",
-            bg: "bg-slate-50"
+            color: "text-muted-foreground",
+            bg: "bg-muted"
         }
     ]
 
@@ -133,7 +133,7 @@ export default function EquipmentDashboard() {
                             </div>
                             <div className="mt-4">
                                 <p className="text-3xl font-bold">{stats.active_issues}</p>
-                                <p className="mt-1 text-sm font-medium text-slate-900">Открытые инциденты</p>
+                                <p className="mt-1 text-sm font-medium text-foreground">Открытые инциденты</p>
                                 <p className="mt-1 text-xs text-muted-foreground">Переход в раздел поломок, ремонтов и назначений</p>
                             </div>
                         </CardContent>
@@ -154,7 +154,7 @@ export default function EquipmentDashboard() {
                             </div>
                             <div className="mt-4">
                                 <p className="text-3xl font-bold">{stats.overdue_tasks}</p>
-                                <p className="mt-1 text-sm font-medium text-slate-900">Просроченное обслуживание</p>
+                                <p className="mt-1 text-sm font-medium text-foreground">Просроченное обслуживание</p>
                                 <p className="mt-1 text-xs text-muted-foreground">Переход к задачам чистки и контролю просрочки</p>
                             </div>
                         </CardContent>

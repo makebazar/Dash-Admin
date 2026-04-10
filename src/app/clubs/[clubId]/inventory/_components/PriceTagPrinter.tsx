@@ -169,12 +169,12 @@ export function PriceTagPrinter({ isOpen, onClose, products, template }: PriceTa
 
                 <div className="flex-1 overflow-auto bg-slate-500/10 p-8 flex justify-center">
                     {/* Visual A4 Sheet */}
-                    <div className="bg-white shadow-2xl w-[210mm] min-h-[297mm] p-0 box-content overflow-hidden">
+                    <div className="bg-card shadow-2xl w-[210mm] min-h-[297mm] p-0 box-content overflow-hidden">
                         <div ref={printRef} className="flex flex-wrap gap-[1mm] w-full">
                             {products.map((product) => (
                                 <div 
                                     key={product.id} 
-                                    className="price-tag bg-white shadow-sm"
+                                    className="price-tag bg-card shadow-sm"
                                     style={{ 
                                         width: `${activeTemplate.width_mm}mm`, 
                                         height: `${activeTemplate.height_mm}mm`,
@@ -266,9 +266,9 @@ export function PriceTagPrinter({ isOpen, onClose, products, template }: PriceTa
                     </div>
                 </div>
 
-                <div className="p-6 bg-white border-t flex justify-end gap-3">
+                <div className="p-6 bg-card border-t flex justify-end gap-3">
                     <Button variant="outline" onClick={onClose}>Отмена</Button>
-                    <Button onClick={handlePrint} className="gap-2 font-bold bg-blue-600 hover:bg-blue-700 text-white">
+                    <Button onClick={handlePrint} className="gap-2 font-bold bg-blue-600 hover:bg-blue-700 text-primary-foreground">
                         <Printer className="h-4 w-4" />
                         Распечатать
                     </Button>
