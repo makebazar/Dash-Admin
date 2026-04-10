@@ -23,9 +23,12 @@ export default function EmployeePosPage() {
                 const uid = me?.user?.id
                 if (uid) setUserId(uid)
 
-                 const currentClub = Array.isArray(me?.employee_clubs)
-                    ? me.employee_clubs.find((club: any) => String(club.id) === String(clubId))
-                    : null
+                const employeeClubs = Array.isArray(me?.employeeClubs)
+                    ? me.employeeClubs
+                    : Array.isArray(me?.employee_clubs)
+                        ? me.employee_clubs
+                        : []
+                const currentClub = employeeClubs.find((club: any) => String(club.id) === String(clubId))
                 const inventorySettings = normalizeInventorySettings(currentClub?.inventory_settings)
                 setIsCashboxEnabled(Boolean(inventorySettings.stock_enabled && inventorySettings.cashbox_enabled && inventorySettings.cashbox_warehouse_id))
 
