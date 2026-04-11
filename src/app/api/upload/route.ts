@@ -129,6 +129,14 @@ async function prepareUpload(file: File): Promise<PreparedUpload> {
   }
 }
 
+async function prepareOriginalUpload(file: File): Promise<PreparedUpload> {
+  return {
+    buffer: Buffer.from(await file.arrayBuffer()),
+    fileName: sanitizeFileName(file.name),
+    mimeType: file.type || 'application/octet-stream',
+  };
+}
+
 export async function POST(request: NextRequest) {
   try {
     const userId = (await cookies()).get('session_user_id')?.value;
@@ -138,12 +146,15 @@ export async function POST(request: NextRequest) {
 
     const formData = await request.formData();
     const file = formData.get('file') as File | null;
+    const preserveOriginal = String(formData.get('preserveOriginal') || '').trim() === '1';
 
     if (!file) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 });
     }
 
-    const { buffer, fileName, mimeType } = await prepareUpload(file);
+    const { buffer, fileName, mimeType } = preserveOriginal
+      ? await prepareOriginalUpload(file)
+      : await prepareUpload(file);
 
     const url = await uploadFileToS3(buffer, fileName, mimeType);
 
