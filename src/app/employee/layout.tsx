@@ -191,7 +191,7 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
                                         const navItems = [
                                             { href: `/employee/clubs/${club.id}`, icon: LayoutDashboard, label: "Дашборд" },
                                             { href: `/employee/clubs/${club.id}/schedule`, icon: Calendar, label: "График смен" },
-                                            { href: `/employee/clubs/${club.id}/equipment`, icon: Monitor, label: "Оборудование" },
+                                            { href: `/employee/clubs/${club.id}/equipment`, icon: Monitor, label: "Рабочие места" },
                                             { href: `/employee/clubs/${club.id}/tasks`, icon: Brush, label: "Обслуживание" },
                                             { href: `/employee/clubs/${club.id}/history`, icon: Clock, label: "История смен" },
                                             { href: `/employee/clubs/${club.id}/evaluations`, icon: ClipboardCheck, label: "Проверки" },

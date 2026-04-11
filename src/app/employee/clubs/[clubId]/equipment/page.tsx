@@ -11,7 +11,9 @@ import {
     Warehouse,
     AlertCircle,
     AlertTriangle,
-    ArrowRight
+    ArrowRight,
+    CheckCircle2,
+    User
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -56,15 +58,57 @@ interface Equipment {
     type: string
     type_name: string
     type_icon?: string | null
+    identifier?: string | null
     brand: string | null
     model: string | null
     workstation_id: string | null
     is_active: boolean
+    status?: string
+    maintenance_enabled?: boolean
+    cleaning_interval_days?: number | null
+    cleaning_interval_override_days?: number | null
+    last_cleaned_at?: string | null
+    open_issues_count?: number
 }
 
 interface Zone {
     id: string
     name: string
+    assigned_user_id?: string | null
+    assigned_user_name?: string | null
+}
+
+const getMaintenanceStatus = (item: Equipment): "overdue" | "serviced" | "disabled" | "unknown" => {
+    if (item.maintenance_enabled === false) return "disabled"
+
+    const intervalDays = Math.max(1, Number(item.cleaning_interval_override_days ?? item.cleaning_interval_days) || 30)
+    if (!item.last_cleaned_at) return "overdue"
+
+    const lastCleaned = new Date(item.last_cleaned_at)
+    if (Number.isNaN(lastCleaned.getTime())) return "unknown"
+
+    const dueDate = new Date(lastCleaned)
+    dueDate.setDate(dueDate.getDate() + intervalDays)
+
+    return dueDate.getTime() < Date.now() ? "overdue" : "serviced"
+}
+
+const getMaintenanceOverdueDays = (item: Equipment): number => {
+    if (item.maintenance_enabled === false) return 0
+
+    const intervalDays = Math.max(1, Number(item.cleaning_interval_override_days ?? item.cleaning_interval_days) || 30)
+    if (!item.last_cleaned_at) return intervalDays
+
+    const lastCleaned = new Date(item.last_cleaned_at)
+    if (Number.isNaN(lastCleaned.getTime())) return 0
+
+    const dueDate = new Date(lastCleaned)
+    dueDate.setDate(dueDate.getDate() + intervalDays)
+
+    const overdueMs = Date.now() - dueDate.getTime()
+    if (overdueMs <= 0) return 0
+
+    return Math.max(1, Math.floor(overdueMs / (1000 * 60 * 60 * 24)))
 }
 
 export default function EmployeeEquipmentPage() {
@@ -273,6 +317,51 @@ export default function EmployeeEquipmentPage() {
         return equipment.filter(item => item.workstation_id === detailsWorkstationId)
     }, [equipment, detailsWorkstationId])
 
+    const equipmentByWorkstationId = useMemo(() => {
+        const map = new Map<string, Equipment[]>()
+        for (const item of equipment) {
+            if (!item.workstation_id) continue
+            const current = map.get(item.workstation_id)
+            if (current) current.push(item)
+            else map.set(item.workstation_id, [item])
+        }
+        return map
+    }, [equipment])
+
+    const zoneMetaByName = useMemo(() => {
+        return new Map(zoneList.map(zone => [zone.name, zone]))
+    }, [zoneList])
+
+    const maintenanceStatusByEquipmentId = useMemo(() => {
+        const map = new Map<string, "overdue" | "serviced" | "disabled" | "unknown">()
+        for (const item of equipment) {
+            map.set(item.id, getMaintenanceStatus(item))
+        }
+        return map
+    }, [equipment])
+
+    const overdueDaysByEquipmentId = useMemo(() => {
+        const map = new Map<string, number>()
+        for (const item of equipment) {
+            const overdueDays = getMaintenanceOverdueDays(item)
+            if (overdueDays > 0) {
+                map.set(item.id, overdueDays)
+            }
+        }
+        return map
+    }, [equipment])
+
+    const activeIssueCountByEquipmentId = useMemo(() => {
+        const map = new Map<string, number>()
+        for (const item of equipment) {
+            const count = Number(item.open_issues_count ?? 0)
+            if (count > 0) {
+                map.set(item.id, count)
+            }
+        }
+        return map
+    }, [equipment])
+
     const availableTargets = useMemo(() => {
         if (!selectedEquipment) return []
         // Filter out current workstation
@@ -285,8 +374,8 @@ export default function EmployeeEquipmentPage() {
             <div className="flex flex-col gap-4">
                 <div className="flex items-center justify-between">
                     <div>
-                        <h1 className="text-3xl font-bold tracking-tight">Перемещение оборудования</h1>
-                        <p className="text-muted-foreground mt-1">Выберите рабочее место для управления устройствами</p>
+                        <h1 className="text-3xl font-bold tracking-tight">Рабочие места</h1>
+                        <p className="text-muted-foreground mt-1">Здесь можно посмотреть зоны и места, увидеть кто за них отвечает, проверить статус обслуживания оборудования, сообщить о проблеме и переместить устройство.</p>
                     </div>
                 </div>
             </div>
@@ -305,17 +394,55 @@ export default function EmployeeEquipmentPage() {
                 ) : (
                     zones.map(zone => (
                         <section key={zone} className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                            {(() => {
+                                const zoneMeta = zoneMetaByName.get(zone)
+                                const zoneWorkstations = workstations.filter(w => w.zone === zone)
+                                const zoneEquipment = zoneWorkstations.flatMap(ws => equipmentByWorkstationId.get(ws.id) ?? [])
+                                const zoneOverdueCount = zoneEquipment.filter(item => maintenanceStatusByEquipmentId.get(item.id) === "overdue").length
+                                const zoneServicedCount = zoneEquipment.filter(item => maintenanceStatusByEquipmentId.get(item.id) === "serviced").length
+                                const zoneMaxOverdueDays = zoneEquipment.reduce((max, item) => Math.max(max, overdueDaysByEquipmentId.get(item.id) ?? 0), 0)
+
+                                return (
                             <div className="group flex items-center px-2 sticky top-0 z-10 bg-background/95 backdrop-blur py-2 border-b">
-                                <h2 className="text-lg font-black uppercase tracking-widest text-muted-foreground flex items-center gap-3">
-                                    <Layers className="h-5 w-5 text-primary" />
-                                    {zone}
-                                    <Badge variant="secondary" className="bg-accent text-muted-foreground border-none px-2">{workstations.filter(w => w.zone === zone).length}</Badge>
-                                </h2>
+                                <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+                                    <h2 className="text-lg font-black uppercase tracking-widest text-muted-foreground flex items-center gap-3">
+                                        <Layers className="h-5 w-5 text-primary" />
+                                        {zone}
+                                        <Badge variant="secondary" className="bg-accent text-muted-foreground border-none px-2">{zoneWorkstations.length}</Badge>
+                                    </h2>
+                                    <div className="flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-wider">
+                                        {zoneMeta?.assigned_user_name ? (
+                                            <Badge variant="outline" className="border-border bg-card text-muted-foreground">
+                                                Ответственный: {zoneMeta.assigned_user_name}
+                                            </Badge>
+                                        ) : (
+                                            <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700">
+                                                Без ответственного
+                                            </Badge>
+                                        )}
+                                        {zoneOverdueCount > 0 ? (
+                                            <Badge variant="outline" className="border-rose-200 bg-rose-50 text-rose-700">
+                                                Просрочено {zoneOverdueCount}{zoneMaxOverdueDays > 0 ? ` · до ${zoneMaxOverdueDays} дн.` : ""}
+                                            </Badge>
+                                        ) : null}
+                                        {zoneOverdueCount === 0 && zoneServicedCount > 0 ? (
+                                            <Badge variant="outline" className="flex items-center gap-1 border-emerald-200 bg-emerald-50 text-emerald-700">
+                                                <CheckCircle2 className="h-3 w-3" />
+                                                Обслужено {zoneServicedCount}
+                                            </Badge>
+                                        ) : null}
+                                    </div>
+                                </div>
                             </div>
+                                )
+                            })()}
 
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                                 {workstations.filter(w => w.zone === zone).map(ws => {
-                                    const wsEquipment = equipment.filter(e => e.workstation_id === ws.id)
+                                    const wsEquipment = equipmentByWorkstationId.get(ws.id) ?? []
+                                    const wsOverdueCount = wsEquipment.filter(item => maintenanceStatusByEquipmentId.get(item.id) === "overdue").length
+                                    const wsServicedCount = wsEquipment.filter(item => maintenanceStatusByEquipmentId.get(item.id) === "serviced").length
+                                    const wsMaxOverdueDays = wsEquipment.reduce((max, item) => Math.max(max, overdueDaysByEquipmentId.get(item.id) ?? 0), 0)
                                     
                                     return (
                                         <Card key={ws.id} className="group hover:border-primary/50 transition-all border-border shadow-sm overflow-hidden flex flex-col h-full cursor-pointer bg-card" onClick={() => handleOpenDetails(ws.id)}>
@@ -328,6 +455,24 @@ export default function EmployeeEquipmentPage() {
                                                         <h4 className="font-bold text-foreground leading-tight">{ws.name}</h4>
                                                         <div className="flex flex-col gap-0.5 mt-0.5">
                                                             <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">{wsEquipment.length} устройств</p>
+                                                            <div className="flex items-center gap-1.5" title={ws.assigned_user_name || "Не назначено"}>
+                                                                <User className={cn("h-3 w-3", ws.assigned_user_name ? "text-primary" : "text-muted-foreground/70")} />
+                                                                <span className={cn("max-w-[120px] truncate text-[10px] font-medium", ws.assigned_user_name ? "text-primary" : "text-muted-foreground/70")}>
+                                                                    {ws.assigned_user_name || "Не назначено"}
+                                                                </span>
+                                                            </div>
+                                                            <div className="flex flex-wrap items-center gap-1.5">
+                                                                {wsOverdueCount > 0 ? (
+                                                                    <span className="text-[10px] font-medium text-rose-700">
+                                                                        Просрочено: {wsOverdueCount}{wsMaxOverdueDays > 0 ? ` · ${wsMaxOverdueDays} дн.` : ""}
+                                                                    </span>
+                                                                ) : null}
+                                                                {wsOverdueCount === 0 && wsServicedCount > 0 ? (
+                                                                    <span className="text-[10px] font-medium text-emerald-700">
+                                                                        Обслужено: {wsServicedCount}
+                                                                    </span>
+                                                                ) : null}
+                                                            </div>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -341,21 +486,31 @@ export default function EmployeeEquipmentPage() {
                                                     </div>
                                                 ) : (
                                                     <div className="space-y-2">
-                                                        {wsEquipment.slice(0, 3).map(item => (
+                                                        {wsEquipment.map(item => (
                                                             <div key={item.id} className="flex items-center gap-3 p-2 rounded-lg bg-accent/30 border border-border/50">
                                                                 <div className="h-6 w-6 rounded bg-background border flex items-center justify-center text-muted-foreground shrink-0">
                                                                     {getEquipmentIcon(item.type, item.type_icon)}
                                                                 </div>
                                                                 <div className="min-w-0">
                                                                     <p className="text-xs font-semibold truncate text-foreground">{item.name}</p>
+                                                                    <div className="flex flex-wrap items-center gap-1.5">
+                                                                        {maintenanceStatusByEquipmentId.get(item.id) === "overdue" ? (
+                                                                            <span className="text-[10px] font-medium text-rose-700">
+                                                                                Просрочено{(overdueDaysByEquipmentId.get(item.id) ?? 0) > 0 ? ` на ${overdueDaysByEquipmentId.get(item.id)} дн.` : ""}
+                                                                            </span>
+                                                                        ) : maintenanceStatusByEquipmentId.get(item.id) === "serviced" ? (
+                                                                            <span className="text-[10px] font-medium text-emerald-700">
+                                                                                Обслужено
+                                                                            </span>
+                                                                        ) : item.maintenance_enabled === false ? (
+                                                                            <span className="text-[10px] font-medium text-muted-foreground">
+                                                                                Без ТО
+                                                                            </span>
+                                                                        ) : null}
+                                                                    </div>
                                                                 </div>
                                                             </div>
                                                         ))}
-                                                        {wsEquipment.length > 3 && (
-                                                            <div className="text-center text-xs text-muted-foreground pt-1">
-                                                                + еще {wsEquipment.length - 3}
-                                                            </div>
-                                                        )}
                                                     </div>
                                                 )}
                                             </CardContent>
@@ -405,6 +560,26 @@ export default function EmployeeEquipmentPage() {
                                             <div className="flex items-center gap-2 mt-1">
                                                 <Badge variant="secondary" className="text-[10px] h-5 px-1.5 font-normal bg-accent text-muted-foreground border-none">{item.type_name || item.type}</Badge>
                                                 <span className="text-xs text-muted-foreground truncate">{item.brand} {item.model}</span>
+                                            </div>
+                                            <div className="flex flex-wrap items-center gap-2 mt-1">
+                                                {maintenanceStatusByEquipmentId.get(item.id) === "overdue" ? (
+                                                    <Badge variant="outline" className="border-rose-200 bg-rose-50 text-rose-700">
+                                                        Просрочено{(overdueDaysByEquipmentId.get(item.id) ?? 0) > 0 ? ` на ${overdueDaysByEquipmentId.get(item.id)} дн.` : ""}
+                                                    </Badge>
+                                                ) : maintenanceStatusByEquipmentId.get(item.id) === "serviced" ? (
+                                                    <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">
+                                                        Обслужено
+                                                    </Badge>
+                                                ) : item.maintenance_enabled === false ? (
+                                                    <Badge variant="outline" className="border-border bg-accent text-muted-foreground">
+                                                        Без ТО
+                                                    </Badge>
+                                                ) : null}
+                                                {(activeIssueCountByEquipmentId.get(item.id) ?? 0) > 0 ? (
+                                                    <Badge variant="outline" className="border-orange-200 bg-orange-50 text-orange-700">
+                                                        Проблем: {activeIssueCountByEquipmentId.get(item.id)}
+                                                    </Badge>
+                                                ) : null}
                                             </div>
                                         </div>
                                     </div>
