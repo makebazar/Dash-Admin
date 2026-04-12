@@ -57,6 +57,7 @@ export async function PATCH(
 }
 
 export async function DELETE(
+  _request: Request,
   { params }: { params: Promise<{ clubId: string; deviceId: string }> }
 ) {
   try {
