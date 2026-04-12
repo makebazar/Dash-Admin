@@ -435,7 +435,7 @@ export default function PlayerPage() {
             )}
           >
             <SignageStage
-              key={`${bootstrap.serverUpdatedAt || "initial"}:${bootstrap.orientation}`}
+              key={bootstrap.orientation}
               layout={bootstrap.layoutJson || createDefaultSignageLayout(bootstrap.orientation)}
               orientation={bootstrap.orientation}
               className="h-full w-full"

@@ -109,6 +109,10 @@ export async function POST(
 
     const body = await request.json().catch(() => ({}))
     const action = body?.action as ControlAction
+    const requestedCurrentSlideId =
+      typeof body?.currentSlideId === "string" && body.currentSlideId.trim()
+        ? body.currentSlideId.trim()
+        : null
     if (action !== "next" && action !== "prev" && action !== "stop") {
       return NextResponse.json({ error: "Некорректное действие" }, { status: 400 })
     }
@@ -161,12 +165,17 @@ export async function POST(
     }
 
     const activePause = isActivePauseControl(device)
+    const requestedCurrentIndex = requestedCurrentSlideId
+      ? slides.findIndex((slide) => slide.id === requestedCurrentSlideId)
+      : -1
     const fallbackSlideId = activePause
       ? device.control_slide_id || null
-      : device.current_slide_id || null
+      : requestedCurrentSlideId || device.current_slide_id || null
     const currentIndex = Math.max(
       0,
-      slides.findIndex((slide) => slide.id === fallbackSlideId)
+      requestedCurrentIndex >= 0
+        ? requestedCurrentIndex
+        : slides.findIndex((slide) => slide.id === fallbackSlideId)
     )
 
     const targetIndex =
@@ -181,6 +190,7 @@ export async function POST(
       `
       UPDATE club_signage_devices
       SET
+        current_slide_id = $4,
         control_action = $3::varchar,
         control_slide_id = $4,
         control_until = CASE

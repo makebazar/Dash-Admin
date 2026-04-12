@@ -156,7 +156,7 @@ export async function POST(request: Request) {
         layoutJson: normalizeSignageLayout(device.layout_json, device.orientation),
         currentSlideId: device.current_slide_id || null,
         controlAction: normalizeSignageControlAction(device.control_action),
-        controlSlideId: activePause ? device.control_slide_id || null : null,
+        controlSlideId: device.control_slide_id || null,
         controlUntil: activePause ? device.control_until || null : null,
         controlUpdatedAt: device.control_updated_at || null,
         serverUpdatedAt: device.updated_at || null,

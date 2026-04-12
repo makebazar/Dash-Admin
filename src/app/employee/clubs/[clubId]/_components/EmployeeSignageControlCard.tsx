@@ -190,14 +190,20 @@ export function EmployeeSignageControlCard({
 
     const intervalId = window.setInterval(() => {
       setNow(Date.now())
-      void loadDevices(selectedDeviceId)
-      if (selectedDeviceId) {
-        void loadDeviceDetails(selectedDeviceId)
-      }
-    }, 5000)
+    }, 1000)
 
     return () => window.clearInterval(intervalId)
-  }, [clubId, enabled, loadDeviceDetails, loadDevices, selectedDeviceId])
+  }, [clubId, enabled])
+
+  useEffect(() => {
+    if (!enabled || !clubId) return
+
+    const intervalId = window.setInterval(() => {
+      void loadDevices(selectedDeviceId)
+    }, 30000)
+
+    return () => window.clearInterval(intervalId)
+  }, [clubId, enabled, loadDevices, selectedDeviceId])
 
   const currentSlideIndex = useMemo(
     () => slides.findIndex((slide) => slide.id === device?.currentSlideId),
@@ -216,7 +222,10 @@ export function EmployeeSignageControlCard({
         const res = await fetch(`/api/employee/clubs/${clubId}/signage/devices/${selectedDeviceId}/control`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action }),
+          body: JSON.stringify({
+            action,
+            currentSlideId: currentSlide?.id || device?.currentSlideId || null,
+          }),
         })
         const data = await res.json().catch(() => ({}))
         if (!res.ok) {
@@ -239,7 +248,7 @@ export function EmployeeSignageControlCard({
         setIsActionLoading(null)
       }
     },
-    [clubId, selectedDeviceId]
+    [clubId, currentSlide?.id, device?.currentSlideId, selectedDeviceId]
   )
 
   if (!enabled) return null

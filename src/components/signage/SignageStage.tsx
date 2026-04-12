@@ -31,6 +31,7 @@ export function SignageStage({
   const [controlNow, setControlNow] = useState(() => Date.now())
   const [visibleSlide, setVisibleSlide] = useState<SignageSlide | null>(null)
   const [pendingSlide, setPendingSlide] = useState<SignageSlide | null>(null)
+  const [pendingReady, setPendingReady] = useState(false)
   const activeSlides = useMemo(
     () => (preview ? layout.slides.slice().sort((a, b) => a.order - b.order) : getActiveSlides(layout)),
     [layout, preview]
@@ -96,6 +97,7 @@ export function SignageStage({
     if (!targetSlide) {
       setVisibleSlide(null)
       setPendingSlide(null)
+      setPendingReady(false)
       return
     }
 
@@ -110,6 +112,10 @@ export function SignageStage({
       return visibleSlide?.id !== targetSlide.id ? targetSlide : null
     })
   }, [targetSlide, visibleSlide?.id])
+
+  useEffect(() => {
+    setPendingReady(false)
+  }, [pendingSlide?.id])
 
   useEffect(() => {
     onCurrentSlideChange?.(visibleSlide)
@@ -136,14 +142,22 @@ export function SignageStage({
     setHasMediaError(true)
   }, [advanceSlide, hasMultipleSlides, isForced])
 
-  const commitPendingSlide = useCallback(() => {
-    setPendingSlide((currentPending) => {
-      if (!currentPending) return currentPending
-      setVisibleSlide(currentPending)
-      setTransitionTick((current) => current + 1)
-      return null
-    })
+  const handlePendingReady = useCallback(() => {
+    setPendingReady(true)
   }, [])
+
+  useEffect(() => {
+    if (!pendingSlide || !pendingReady) return
+
+    const timeoutId = window.setTimeout(() => {
+      setVisibleSlide(pendingSlide)
+      setPendingSlide(null)
+      setPendingReady(false)
+      setTransitionTick((current) => current + 1)
+    }, 220)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [pendingReady, pendingSlide])
 
   useEffect(() => {
     if (!jumpRequestKey || !jumpSlideId || isForced) return
@@ -177,11 +191,15 @@ export function SignageStage({
             onError={handleMediaError}
           />
           {pendingSlide && pendingSlide.id !== visibleSlide.id ? (
-            <SlidePreloader
-              key={`preload:${pendingSlide.id}`}
+            <SlideFrame
+              key={`pending:${pendingSlide.id}:${pendingReady ? "ready" : "loading"}`}
               slide={pendingSlide}
-              onReady={commitPendingSlide}
+              loop={isForced || !hasMultipleSlides}
+              onEnded={advanceSlide}
               onError={handleMediaError}
+              onReady={handlePendingReady}
+              overlay
+              revealed={pendingReady}
             />
           ) : null}
         </>
@@ -208,57 +226,36 @@ export function SignageStage({
   )
 }
 
-function SlidePreloader({
-  slide,
-  onReady,
-  onError,
-}: {
-  slide: SignageSlide
-  onReady: () => void
-  onError: () => void
-}) {
-  if (slide.mediaType === "video") {
-    return (
-      <video
-        className="pointer-events-none absolute inset-0 h-0 w-0 opacity-0"
-        src={slide.imageUrl}
-        muted
-        playsInline
-        preload="auto"
-        onLoadedData={onReady}
-        onError={onError}
-      />
-    )
-  }
-
-  return (
-    <img
-      className="pointer-events-none absolute inset-0 h-0 w-0 opacity-0"
-      src={slide.imageUrl}
-      alt=""
-      onLoad={onReady}
-      onError={onError}
-    />
-  )
-}
-
 function SlideFrame({
   slide,
   loop,
   onEnded,
   onError,
+  onReady,
+  overlay = false,
+  revealed = true,
 }: {
   slide: SignageSlide
   loop: boolean
   onEnded: () => void
   onError: () => void
+  onReady?: () => void
+  overlay?: boolean
+  revealed?: boolean
 }) {
   const animation = getTransitionAnimation(slide.transition)
+  const layerClassName = cn(
+    "absolute inset-0 size-full object-cover",
+    overlay
+      ? "pointer-events-none z-10 transition-opacity duration-200 ease-linear"
+      : "",
+    revealed ? "opacity-100" : "opacity-0"
+  )
 
   if (slide.mediaType === "video") {
     return (
       <video
-        className="absolute inset-0 size-full bg-black object-cover"
+        className={cn(layerClassName, "bg-black")}
         src={slide.imageUrl}
         autoPlay
         muted
@@ -267,6 +264,8 @@ function SlideFrame({
         loop={loop}
         onEnded={onEnded}
         onError={onError}
+        onLoadedData={onReady}
+        onCanPlay={onReady}
         style={{ animation }}
       />
     )
@@ -274,10 +273,11 @@ function SlideFrame({
 
   return (
     <img
-      className="absolute inset-0 size-full bg-black object-cover"
+      className={cn(layerClassName, "bg-black")}
       src={slide.imageUrl}
       alt={slide.title || ""}
       onError={onError}
+      onLoad={onReady}
       style={{ animation }}
     />
   )
