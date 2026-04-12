@@ -2141,45 +2141,60 @@ export async function completeTask(taskId: number, userId: string, clubId: strin
 
         if (task.type === 'RESTOCK' && task.related_entity_type === 'PRODUCT') {
             const productId = task.related_entity_id
-            
-            // Try to find matching rule to execute transfer
-            // We parse target warehouse name from description or find active rule for this product
-            // Simplest: Find ANY active rule for this product where condition is met
-            
+
+            const targetWarehouseNameMatch = String(task.description || "").match(/→ В: (.+?)\./)
+            const sourceWarehouseNameMatch = String(task.description || "").match(/Из: (.+?) →/)
+            const targetWarehouseName = targetWarehouseNameMatch?.[1]?.trim() || null
+            const sourceWarehouseName = sourceWarehouseNameMatch?.[1]?.trim() || null
+
             const rules = await client.query(`
-                SELECT r.*, ws_target.quantity as current
+                SELECT
+                    r.*,
+                    tw.name as target_warehouse_name,
+                    sw.name as source_warehouse_name,
+                    COALESCE(ws_target.quantity, 0) as current_target_stock,
+                    COALESCE(ws_source.quantity, 0) as current_source_stock
                 FROM warehouse_replenishment_rules r
                 LEFT JOIN warehouse_stock ws_target ON r.target_warehouse_id = ws_target.warehouse_id AND r.product_id = ws_target.product_id
+                LEFT JOIN warehouse_stock ws_source ON r.source_warehouse_id = ws_source.warehouse_id AND r.product_id = ws_source.product_id
                 JOIN warehouses tw ON r.target_warehouse_id = tw.id
                 JOIN warehouses sw ON r.source_warehouse_id = sw.id
                 WHERE r.product_id = $1 AND r.is_active = true
                   AND tw.club_id = $2 AND sw.club_id = $2
             `, [productId, clubId])
-            
-            for (const rule of rules.rows) {
-                const current = rule.current || 0
-                if (current <= rule.min_stock_level) {
-                    const amountNeeded = rule.max_stock_level - current
-                    
-                    // Check source stock
+
+            const matchedRule = rules.rows.find((rule) => {
+                const targetMatches = targetWarehouseName
+                    ? String(rule.target_warehouse_name || "").trim() === targetWarehouseName
+                    : true
+                const sourceMatches = sourceWarehouseName
+                    ? String(rule.source_warehouse_name || "").trim() === sourceWarehouseName
+                    : true
+                return targetMatches && sourceMatches
+            }) || rules.rows[0]
+
+            if (matchedRule) {
+                const current = Number(matchedRule.current_target_stock || 0)
+                if (current <= Number(matchedRule.min_stock_level || 0)) {
+                    const amountNeeded = Math.max(0, Number(matchedRule.max_stock_level || 0) - current)
+
                     const sourceRes = await client.query(
                         'SELECT quantity FROM warehouse_stock WHERE warehouse_id = $1 AND product_id = $2 FOR UPDATE',
-                        [rule.source_warehouse_id, productId]
+                        [matchedRule.source_warehouse_id, productId]
                     )
                     const sourceStock = Number(sourceRes.rows[0]?.quantity || 0)
-                    
                     const transferAmount = Math.min(amountNeeded, sourceStock)
-                    
+
                     if (transferAmount > 0) {
                         const { previousStock: sourcePrev, newStock: sourceNew } = await applyWarehouseStockDelta(
                             client,
-                            rule.source_warehouse_id,
+                            matchedRule.source_warehouse_id,
                             productId,
                             -transferAmount
                         )
                         const { previousStock: targetPrev, newStock: targetNew } = await applyWarehouseStockDelta(
                             client,
-                            rule.target_warehouse_id,
+                            matchedRule.target_warehouse_id,
                             productId,
                             transferAmount
                         )
@@ -2193,11 +2208,11 @@ export async function completeTask(taskId: number, userId: string, clubId: strin
                             sourcePrev,
                             sourceNew,
                             'INTERNAL_MOVE',
-                            `To ${rule.target_warehouse_id}`,
+                            `To ${matchedRule.target_warehouse_id}`,
                             'WAREHOUSE',
-                            rule.source_warehouse_id,
+                            matchedRule.source_warehouse_id,
                             null,
-                            rule.source_warehouse_id
+                            matchedRule.source_warehouse_id
                         )
                         await logStockMovement(
                             client,
@@ -2208,11 +2223,11 @@ export async function completeTask(taskId: number, userId: string, clubId: strin
                             targetPrev,
                             targetNew,
                             'INTERNAL_MOVE',
-                            `From ${rule.source_warehouse_id}`,
+                            `From ${matchedRule.source_warehouse_id}`,
                             'WAREHOUSE',
-                            rule.target_warehouse_id,
+                            matchedRule.target_warehouse_id,
                             null,
-                            rule.target_warehouse_id
+                            matchedRule.target_warehouse_id
                         )
                     }
                 }
@@ -2883,13 +2898,25 @@ export async function getClubTasks(clubId: string) {
     const res = await query(`
         SELECT t.*, u.full_name as assignee_name, p.name as product_name,
                sw.name as source_warehouse_name,
-               tw.name as target_warehouse_name
+               tw.name as target_warehouse_name,
+               r.source_warehouse_id,
+               r.target_warehouse_id,
+               r.min_stock_level,
+               r.max_stock_level,
+               COALESCE(ws_source.quantity, 0) as current_source_stock,
+               COALESCE(ws_target.quantity, 0) as current_target_stock,
+               LEAST(
+                   GREATEST(COALESCE(r.max_stock_level, 0) - COALESCE(ws_target.quantity, 0), 0),
+                   COALESCE(ws_source.quantity, 0)
+               ) as suggested_restock_quantity
         FROM club_tasks t
         LEFT JOIN users u ON t.assigned_to = u.id
         LEFT JOIN warehouse_products p ON t.related_entity_type = 'PRODUCT' AND t.related_entity_id = p.id
         LEFT JOIN warehouse_replenishment_rules r ON t.type = 'RESTOCK' AND t.related_entity_id = r.product_id AND r.is_active = true
         LEFT JOIN warehouses sw ON r.source_warehouse_id = sw.id
         LEFT JOIN warehouses tw ON r.target_warehouse_id = tw.id
+        LEFT JOIN warehouse_stock ws_source ON r.source_warehouse_id = ws_source.warehouse_id AND r.product_id = ws_source.product_id
+        LEFT JOIN warehouse_stock ws_target ON r.target_warehouse_id = ws_target.warehouse_id AND r.product_id = ws_target.product_id
         WHERE t.club_id = $1 AND t.status != 'COMPLETED'
         ORDER BY t.priority DESC, t.created_at ASC
     `, [clubId])

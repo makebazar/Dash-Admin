@@ -8,6 +8,7 @@ import {
 } from "@/lib/signage"
 import { normalizeSignageLayout } from "@/lib/signage-layout"
 import { getSignageRemoteBaseUrl, proxyJsonRequest } from "@/lib/signage-server-url"
+import { isActivePauseControl, normalizeSignageControlAction } from "@/lib/signage-runtime"
 
 type DisplaySnapshot = {
   id?: string
@@ -136,6 +137,7 @@ export async function POST(request: Request) {
       : { rows: [] as Array<{ id: number; name: string }> }
 
     const club = clubResult.rows[0] || null
+    const activePause = isActivePauseControl(device)
 
     return NextResponse.json({
       device: {
@@ -152,6 +154,11 @@ export async function POST(request: Request) {
         clubId: device.club_id || null,
         clubName: club?.name || null,
         layoutJson: normalizeSignageLayout(device.layout_json, device.orientation),
+        currentSlideId: device.current_slide_id || null,
+        controlAction: normalizeSignageControlAction(device.control_action),
+        controlSlideId: activePause ? device.control_slide_id || null : null,
+        controlUntil: activePause ? device.control_until || null : null,
+        controlUpdatedAt: device.control_updated_at || null,
         serverUpdatedAt: device.updated_at || null,
       },
     })

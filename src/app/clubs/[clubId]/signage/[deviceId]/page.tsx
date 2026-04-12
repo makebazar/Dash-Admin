@@ -32,6 +32,15 @@ import { Switch } from "@/components/ui/switch"
 const IMAGE_FILE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "webp", "avif", "gif", "heic", "heif"])
 const VIDEO_FILE_EXTENSIONS = new Set(["mp4", "webm", "mov", "m4v", "ogv", "ogg"])
 const SLIDE_TRANSITION_OPTIONS: SignageTransition[] = ["none", "fade", "slide", "zoom"]
+const WEEKDAY_OPTIONS = [
+  { value: 1, label: "Пн" },
+  { value: 2, label: "Вт" },
+  { value: 3, label: "Ср" },
+  { value: 4, label: "Чт" },
+  { value: 5, label: "Пт" },
+  { value: 6, label: "Сб" },
+  { value: 0, label: "Вс" },
+]
 
 function getSlideTransitionLabel(transition: SignageTransition) {
   switch (transition) {
@@ -296,6 +305,23 @@ export default function ClubSignageDeviceEditorPage({
           : slide
       ),
     }))
+  }
+
+  function toggleSlideWeekday(slideId: string, weekday: number) {
+    const targetSlide = layoutDraft?.slides.find((slide) => slide.id === slideId)
+    if (!targetSlide) return
+
+    const currentWeekdays = Array.isArray(targetSlide.weekdays) && targetSlide.weekdays.length > 0
+      ? targetSlide.weekdays
+      : [0, 1, 2, 3, 4, 5, 6]
+
+    const hasWeekday = currentWeekdays.includes(weekday)
+    const nextWeekdays = hasWeekday
+      ? currentWeekdays.filter((day) => day !== weekday)
+      : [...currentWeekdays, weekday].sort((a, b) => a - b)
+
+    if (nextWeekdays.length === 0) return
+    updateSlide(slideId, { weekdays: nextWeekdays })
   }
 
   function moveSlide(slideId: string, direction: -1 | 1) {
@@ -624,6 +650,29 @@ export default function ClubSignageDeviceEditorPage({
                                         {getSlideTransitionLabel(transition)}
                                       </button>
                                     ))}
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2 px-1">
+                                  <span className="text-[11px] font-medium text-slate-500">Дни:</span>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {WEEKDAY_OPTIONS.map((weekday) => {
+                                      const isActive = slide.weekdays.includes(weekday.value)
+                                      return (
+                                        <button
+                                          key={weekday.value}
+                                          type="button"
+                                          onClick={() => toggleSlideWeekday(slide.id, weekday.value)}
+                                          className={cn(
+                                            "rounded-md border px-2 py-1 text-[10px] font-semibold transition-colors",
+                                            isActive
+                                              ? "border-slate-900 bg-slate-900 text-white"
+                                              : "border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-900"
+                                          )}
+                                        >
+                                          {weekday.label}
+                                        </button>
+                                      )
+                                    })}
                                   </div>
                                 </div>
                               </div>

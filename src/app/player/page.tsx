@@ -1,10 +1,14 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { SignageStage } from "@/components/signage/SignageStage"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { createDefaultSignageLayout, type SignageLayout } from "@/lib/signage-layout"
+import {
+  createDefaultSignageLayout,
+  type SignageLayout,
+  type SignageSlide,
+} from "@/lib/signage-layout"
 import { cn } from "@/lib/utils"
 import { Check, Monitor, RectangleHorizontal, RectangleVertical, RefreshCw, Tv } from "lucide-react"
 
@@ -36,6 +40,11 @@ type BootstrapPayload = {
   pairedClubId: number | null
   pairedClubName: string | null
   layoutJson: SignageLayout | null
+  currentSlideId: string | null
+  controlAction: "jump" | "pause" | null
+  controlSlideId: string | null
+  controlUntil: string | null
+  controlUpdatedAt: string | null
   serverUpdatedAt: string | null
   fullscreen: boolean
   orientation: "landscape" | "portrait"
@@ -72,6 +81,11 @@ const browserBootstrap = (): BootstrapPayload => ({
   pairedClubId: null,
   pairedClubName: null,
   layoutJson: null,
+  currentSlideId: null,
+  controlAction: null,
+  controlSlideId: null,
+  controlUntil: null,
+  controlUpdatedAt: null,
   serverUpdatedAt: null,
   fullscreen: false,
   orientation: "landscape",
@@ -115,6 +129,7 @@ export default function PlayerPage() {
   const [bootstrap, setBootstrap] = useState<BootstrapPayload | null>(null)
   const [pendingDisplayId, setPendingDisplayId] = useState<string | null>(null)
   const [isReloading, setIsReloading] = useState(false)
+  const lastReportedSlideIdRef = useRef<string | null>(null)
 
   const electronApi = useMemo(() => getElectronApi(), [])
   const selectedDisplay = bootstrap?.displays.find(
@@ -128,6 +143,11 @@ export default function PlayerPage() {
       clubId: number | null
       clubName: string | null
       layoutJson: SignageLayout | null
+      currentSlideId: string | null
+      controlAction: "jump" | "pause" | null
+      controlSlideId: string | null
+      controlUntil: string | null
+      controlUpdatedAt: string | null
       serverUpdatedAt: string | null
       orientation: "landscape" | "portrait"
     }) => {
@@ -139,6 +159,11 @@ export default function PlayerPage() {
               pairedClubId: serverDevice.clubId,
               pairedClubName: serverDevice.clubName,
               layoutJson: serverDevice.layoutJson,
+              currentSlideId: serverDevice.currentSlideId,
+              controlAction: serverDevice.controlAction,
+              controlSlideId: serverDevice.controlSlideId,
+              controlUntil: serverDevice.controlUntil,
+              controlUpdatedAt: serverDevice.controlUpdatedAt,
               serverUpdatedAt: serverDevice.serverUpdatedAt,
               orientation: serverDevice.orientation,
             }
@@ -184,6 +209,11 @@ export default function PlayerPage() {
         clubId: data?.device?.clubId ?? null,
         clubName: data?.device?.clubName || null,
         layoutJson: data?.device?.layoutJson || null,
+        currentSlideId: data?.device?.currentSlideId || null,
+        controlAction: data?.device?.controlAction === "pause" ? "pause" : data?.device?.controlAction === "jump" ? "jump" : null,
+        controlSlideId: data?.device?.controlSlideId || null,
+        controlUntil: data?.device?.controlUntil || null,
+        controlUpdatedAt: data?.device?.controlUpdatedAt || null,
         serverUpdatedAt: data?.device?.serverUpdatedAt || null,
         orientation: data?.device?.orientation === "portrait" ? "portrait" : "landscape",
       })
@@ -319,6 +349,31 @@ export default function PlayerPage() {
     }
   }, [electronApi, bootstrap?.deviceId, bootstrap?.deviceToken])
 
+  const handleCurrentSlideChange = useCallback(
+    async (slide: SignageSlide | null) => {
+      if (!bootstrap?.deviceId || !bootstrap.deviceToken) return
+
+      const nextSlideId = slide?.id || null
+      if (lastReportedSlideIdRef.current === nextSlideId) return
+      lastReportedSlideIdRef.current = nextSlideId
+
+      try {
+        await fetch("/api/signage/device/current-slide", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            deviceId: bootstrap.deviceId,
+            deviceToken: bootstrap.deviceToken,
+            currentSlideId: nextSlideId,
+          }),
+        })
+      } catch (error) {
+        console.error("Signage current slide sync error:", error)
+      }
+    },
+    [bootstrap?.deviceId, bootstrap?.deviceToken]
+  )
+
   async function handleDisplaySelect(displayId: string) {
     if (!electronApi) return
 
@@ -384,6 +439,11 @@ export default function PlayerPage() {
               layout={bootstrap.layoutJson || createDefaultSignageLayout(bootstrap.orientation)}
               orientation={bootstrap.orientation}
               className="h-full w-full"
+              forcedSlideId={bootstrap.controlAction === "pause" ? bootstrap.controlSlideId : null}
+              forcedUntil={bootstrap.controlAction === "pause" ? bootstrap.controlUntil : null}
+              jumpSlideId={bootstrap.controlAction === "jump" ? bootstrap.controlSlideId : null}
+              jumpRequestKey={bootstrap.controlAction === "jump" ? bootstrap.controlUpdatedAt : null}
+              onCurrentSlideChange={handleCurrentSlideChange}
             />
           </div>
         </div>

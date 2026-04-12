@@ -9,22 +9,47 @@ export function SignageStage({
   orientation,
   className,
   preview = false,
+  forcedSlideId = null,
+  forcedUntil = null,
+  jumpSlideId = null,
+  jumpRequestKey = null,
+  onCurrentSlideChange,
 }: {
   layout: SignageLayout
   orientation: "landscape" | "portrait"
   className?: string
   preview?: boolean
+  forcedSlideId?: string | null
+  forcedUntil?: string | null
+  jumpSlideId?: string | null
+  jumpRequestKey?: string | null
+  onCurrentSlideChange?: (slide: SignageSlide | null) => void
 }) {
   const [activeIndex, setActiveIndex] = useState(0)
   const [transitionTick, setTransitionTick] = useState(0)
   const [hasMediaError, setHasMediaError] = useState(false)
+  const [controlNow, setControlNow] = useState(() => Date.now())
+  const [visibleSlide, setVisibleSlide] = useState<SignageSlide | null>(null)
+  const [pendingSlide, setPendingSlide] = useState<SignageSlide | null>(null)
   const activeSlides = useMemo(
     () => (preview ? layout.slides.slice().sort((a, b) => a.order - b.order) : getActiveSlides(layout)),
     [layout, preview]
   )
   const hasAnySlides = layout.slides.length > 0
-  const currentSlide = activeSlides[activeIndex] ?? null
-  const currentDuration = Math.max(3, currentSlide?.durationSec ?? 8)
+  const forcedUntilTimestamp = useMemo(() => {
+    if (!forcedUntil) return null
+    const parsed = new Date(forcedUntil).getTime()
+    return Number.isNaN(parsed) ? null : parsed
+  }, [forcedUntil])
+  const forcedSlide = useMemo(
+    () => (forcedSlideId ? activeSlides.find((slide) => slide.id === forcedSlideId) ?? null : null),
+    [activeSlides, forcedSlideId]
+  )
+  const isForced =
+    Boolean(forcedSlide) &&
+    (forcedUntilTimestamp === null || forcedUntilTimestamp > controlNow)
+  const targetSlide = (isForced ? forcedSlide : null) ?? activeSlides[activeIndex] ?? null
+  const currentDuration = Math.max(3, visibleSlide?.durationSec ?? 8)
   const hasMultipleSlides = activeSlides.length > 1
 
   const stageClassName = useMemo(
@@ -42,45 +67,124 @@ export function SignageStage({
   }, [layout, preview])
 
   useEffect(() => {
+    if (!forcedUntilTimestamp || forcedUntilTimestamp <= Date.now()) {
+      setControlNow(Date.now())
+      return
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setControlNow(Date.now())
+    }, Math.max(0, forcedUntilTimestamp - Date.now()) + 25)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [forcedUntilTimestamp])
+
+  useEffect(() => {
+    if (!forcedSlide) return
+
+    const forcedIndex = activeSlides.findIndex((slide) => slide.id === forcedSlide.id)
+    if (forcedIndex === -1) return
+
+    setActiveIndex(forcedIndex)
+  }, [activeSlides, forcedSlide])
+
+  useEffect(() => {
     setHasMediaError(false)
-  }, [currentSlide?.id, transitionTick])
+  }, [targetSlide?.id, transitionTick])
+
+  useEffect(() => {
+    if (!targetSlide) {
+      setVisibleSlide(null)
+      setPendingSlide(null)
+      return
+    }
+
+    setVisibleSlide((current) => {
+      if (!current) return targetSlide
+      return current.id === targetSlide.id ? targetSlide : current
+    })
+
+    setPendingSlide((current) => {
+      if (visibleSlide?.id === targetSlide.id) return null
+      if (current?.id === targetSlide.id) return current
+      return visibleSlide?.id !== targetSlide.id ? targetSlide : null
+    })
+  }, [targetSlide, visibleSlide?.id])
+
+  useEffect(() => {
+    onCurrentSlideChange?.(visibleSlide)
+  }, [visibleSlide, onCurrentSlideChange])
 
   const advanceSlide = useCallback(() => {
-    if (!hasMultipleSlides) return
+    if (isForced || !hasMultipleSlides) return
 
     setActiveIndex((current) => (current + 1) % activeSlides.length)
     setTransitionTick((current) => current + 1)
-  }, [activeSlides.length, hasMultipleSlides])
+  }, [activeSlides.length, hasMultipleSlides, isForced])
 
   const handleMediaError = useCallback(() => {
+    if (isForced) {
+      setHasMediaError(true)
+      return
+    }
+
     if (hasMultipleSlides) {
       advanceSlide()
       return
     }
 
     setHasMediaError(true)
-  }, [advanceSlide, hasMultipleSlides])
+  }, [advanceSlide, hasMultipleSlides, isForced])
+
+  const commitPendingSlide = useCallback(() => {
+    setPendingSlide((currentPending) => {
+      if (!currentPending) return currentPending
+      setVisibleSlide(currentPending)
+      setTransitionTick((current) => current + 1)
+      return null
+    })
+  }, [])
 
   useEffect(() => {
-    if (!currentSlide || currentSlide.mediaType === "video" || !hasMultipleSlides) return
+    if (!jumpRequestKey || !jumpSlideId || isForced) return
+
+    const nextIndex = activeSlides.findIndex((slide) => slide.id === jumpSlideId)
+    if (nextIndex === -1) return
+
+    setActiveIndex(nextIndex)
+    setTransitionTick((current) => current + 1)
+  }, [activeSlides, isForced, jumpRequestKey, jumpSlideId])
+
+  useEffect(() => {
+    if (isForced || pendingSlide || !visibleSlide || visibleSlide.mediaType === "video" || !hasMultipleSlides) return
 
     const timeoutId = window.setTimeout(() => {
       advanceSlide()
     }, currentDuration * 1000)
 
     return () => window.clearTimeout(timeoutId)
-  }, [advanceSlide, currentDuration, currentSlide, hasMultipleSlides])
+  }, [advanceSlide, currentDuration, hasMultipleSlides, isForced, pendingSlide, visibleSlide])
 
   return (
     <div className={stageClassName} style={{ background: layout.background }}>
-      {currentSlide && !hasMediaError ? (
-        <SlideFrame
-          key={`${currentSlide.id}:${transitionTick}`}
-          slide={currentSlide}
-          loop={!hasMultipleSlides}
-          onEnded={advanceSlide}
-          onError={handleMediaError}
-        />
+      {visibleSlide && !hasMediaError ? (
+        <>
+          <SlideFrame
+            key={`${visibleSlide.id}:${transitionTick}`}
+            slide={visibleSlide}
+            loop={isForced || !hasMultipleSlides}
+            onEnded={advanceSlide}
+            onError={handleMediaError}
+          />
+          {pendingSlide && pendingSlide.id !== visibleSlide.id ? (
+            <SlidePreloader
+              key={`preload:${pendingSlide.id}`}
+              slide={pendingSlide}
+              onReady={commitPendingSlide}
+              onError={handleMediaError}
+            />
+          ) : null}
+        </>
       ) : (
         <EmptyStage
           message={
@@ -101,6 +205,40 @@ export function SignageStage({
         />
       )}
     </div>
+  )
+}
+
+function SlidePreloader({
+  slide,
+  onReady,
+  onError,
+}: {
+  slide: SignageSlide
+  onReady: () => void
+  onError: () => void
+}) {
+  if (slide.mediaType === "video") {
+    return (
+      <video
+        className="pointer-events-none absolute inset-0 h-0 w-0 opacity-0"
+        src={slide.imageUrl}
+        muted
+        playsInline
+        preload="auto"
+        onLoadedData={onReady}
+        onError={onError}
+      />
+    )
+  }
+
+  return (
+    <img
+      className="pointer-events-none absolute inset-0 h-0 w-0 opacity-0"
+      src={slide.imageUrl}
+      alt=""
+      onLoad={onReady}
+      onError={onError}
+    />
   )
 }
 

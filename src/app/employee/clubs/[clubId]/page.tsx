@@ -25,6 +25,7 @@ import { EmployeeWriteOffWizard } from "./_components/EmployeeWriteOffWizard"
 import { EmployeeTransferWizard } from "./_components/EmployeeTransferWizard"
 import { EmployeeRequestWizard } from "./_components/EmployeeRequestWizard"
 import { ShiftZoneSnapshotWizard } from "./_components/ShiftZoneSnapshotWizard"
+import { EmployeeSignageControlCard } from "./_components/EmployeeSignageControlCard"
 
 type ShiftAccountabilityStatusResponse = {
     mode: 'DISABLED' | 'WAREHOUSE'
@@ -1002,37 +1003,49 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                         )}
                     </section>
 
+                    {activeShift && (
+                        <EmployeeSignageControlCard clubId={clubId} enabled={Boolean(activeShift)} />
+                    )}
+
                     {/* Warehouse Tasks */}
                     {clubTasks.length > 0 && (
                         <section className="space-y-4">
                             <h2 className="text-lg font-semibold tracking-tight text-foreground">Пополнение склада</h2>
                             <div className="grid gap-3">
                                 {clubTasks.map((task: any) => (
-                                    <div key={task.id} className="group flex items-start justify-between gap-4 p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors">
+                                    <div key={task.id} className="group flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-white p-4 text-slate-900 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md">
                                         <div className="space-y-1.5 min-w-0">
-                                            <h3 className="text-sm font-medium text-foreground truncate">
+                                            <h3 className="truncate text-sm font-semibold text-slate-900">
                                                 {task.title.replace('Пополнить: ', '')}
                                             </h3>
-                                            <div className="flex flex-wrap gap-2">
+                                            <div className="space-y-1 text-xs text-slate-600">
+                                                {task.target_warehouse_name ? (
+                                                    <div>
+                                                        Текущий остаток в {task.target_warehouse_name}: <span className="font-semibold text-slate-900">{Number(task.current_target_stock || 0)} шт</span>
+                                                    </div>
+                                                ) : null}
+                                                {task.suggested_restock_quantity !== undefined && task.suggested_restock_quantity !== null ? (
+                                                    <div>
+                                                        Доставить до <span className="font-semibold text-slate-900">{Number(task.current_target_stock || 0) + Number(task.suggested_restock_quantity || 0)} шт</span>
+                                                    </div>
+                                                ) : null}
                                                 {task.source_warehouse_name ? (
-                                                    <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
-                                                        {task.source_warehouse_name} → {task.target_warehouse_name}
-                                                    </span>
-                                                ) : task.description.includes('Из:') ? (
-                                                    <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
-                                                        {task.description.split('Из: ')[1]?.split(' →')[0]} → {task.description.split('→ В: ')[1]?.split('. ')[0]}
-                                                    </span>
-                                                ) : (
-                                                    <span className="text-xs text-muted-foreground">
-                                                        {task.description}
-                                                    </span>
-                                                )}
+                                                    <div>
+                                                        Взять из: <span className="font-semibold text-slate-900">{task.source_warehouse_name}</span>
+                                                        {task.current_source_stock !== undefined && task.current_source_stock !== null ? (
+                                                            <span className="text-slate-500">, доступно {Number(task.current_source_stock || 0)} шт</span>
+                                                        ) : null}
+                                                    </div>
+                                                ) : null}
+                                                {!task.source_warehouse_name && !task.target_warehouse_name ? (
+                                                    <div>{task.description}</div>
+                                                ) : null}
                                             </div>
                                         </div>
                                         <Button
                                             size="sm"
                                             variant="secondary"
-                                            className="h-8 text-xs shadow-none shrink-0"
+                                            className="h-8 shrink-0 bg-slate-900 text-xs text-white shadow-none hover:bg-slate-800"
                                             onClick={() => handleCompleteClubTask(task.id)}
                                             disabled={isUpdatingTask === task.id}
                                         >
