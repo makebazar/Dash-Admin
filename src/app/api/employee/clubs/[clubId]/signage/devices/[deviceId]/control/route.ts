@@ -181,10 +181,10 @@ export async function POST(
       `
       UPDATE club_signage_devices
       SET
-        control_action = $3,
+        control_action = $3::varchar,
         control_slide_id = $4,
         control_until = CASE
-          WHEN $3 = 'pause' THEN NOW() + INTERVAL '2 minutes'
+          WHEN $3::varchar = 'pause' THEN NOW() + INTERVAL '2 minutes'
           ELSE NULL
         END,
         control_updated_at = NOW(),
