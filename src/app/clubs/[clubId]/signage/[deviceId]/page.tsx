@@ -1,20 +1,17 @@
 "use client"
 
 import Link from "next/link"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { SignageStage } from "@/components/signage/SignageStage"
-import { PageHeader, PageShell } from "@/components/layout/PageShell"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
   createSignageSlide,
   normalizeSignageLayout,
-  normalizeSignageTransition,
   type SignageLayout,
   type SignageSlide,
+  type SignageTransition,
 } from "@/lib/signage-layout"
 import { cn } from "@/lib/utils"
 import {
@@ -28,7 +25,40 @@ import {
   RefreshCw,
   Save,
   Trash2,
+  PlaySquare,
 } from "lucide-react"
+import { Switch } from "@/components/ui/switch"
+
+const IMAGE_FILE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "webp", "avif", "gif", "heic", "heif"])
+const VIDEO_FILE_EXTENSIONS = new Set(["mp4", "webm", "mov", "m4v", "ogv", "ogg"])
+const SLIDE_TRANSITION_OPTIONS: SignageTransition[] = ["none", "fade", "slide", "zoom"]
+
+function getSlideTransitionLabel(transition: SignageTransition) {
+  switch (transition) {
+    case "none":
+      return "Без"
+    case "slide":
+      return "Slide"
+    case "zoom":
+      return "Zoom"
+    default:
+      return "Fade"
+  }
+}
+
+function getFileExtension(fileName: string) {
+  const match = fileName.toLowerCase().match(/\.([a-z0-9]+)(?:\?.*)?$/)
+  return match?.[1] || ""
+}
+
+function getMediaTypeFromFile(file: File): SignageSlide["mediaType"] | null {
+  if (file.type.startsWith("image/")) return "image"
+  if (file.type.startsWith("video/")) return "video"
+  const extension = getFileExtension(file.name)
+  if (IMAGE_FILE_EXTENSIONS.has(extension)) return "image"
+  if (VIDEO_FILE_EXTENSIONS.has(extension)) return "video"
+  return null
+}
 
 type SignageDevice = {
   id: number
@@ -52,6 +82,21 @@ export default function ClubSignageDeviceEditorPage({
   const [isSaving, setIsSaving] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [isUpdatingOrientation, setIsUpdatingOrientation] = useState(false)
+  const [previewOrientation, setPreviewOrientation] = useState<"landscape" | "portrait">("landscape")
+  const [notice, setNotice] = useState<{ type: "success" | "error"; message: string } | null>(null)
+  const noticeTimeoutRef = useRef<number | null>(null)
+
+  function showNotice(type: "success" | "error", message: string) {
+    if (noticeTimeoutRef.current) {
+      window.clearTimeout(noticeTimeoutRef.current)
+      noticeTimeoutRef.current = null
+    }
+    setNotice({ type, message })
+    noticeTimeoutRef.current = window.setTimeout(() => {
+      setNotice(null)
+      noticeTimeoutRef.current = null
+    }, 2600)
+  }
 
   useEffect(() => {
     params.then(({ clubId: nextClubId, deviceId: nextDeviceId }) => {
@@ -60,6 +105,14 @@ export default function ClubSignageDeviceEditorPage({
       void fetchEditorData(nextClubId, nextDeviceId)
     })
   }, [params])
+
+  useEffect(() => {
+    return () => {
+      if (noticeTimeoutRef.current) {
+        window.clearTimeout(noticeTimeoutRef.current)
+      }
+    }
+  }, [])
 
   async function fetchEditorData(targetClubId = clubId, targetDeviceId = deviceId) {
     if (!targetClubId || !targetDeviceId) return
@@ -90,9 +143,12 @@ export default function ClubSignageDeviceEditorPage({
 
       setDevice(matchedDevice || null)
       setLayoutDraft(normalizeSignageLayout(layoutData.layout, layoutData.orientation))
+      if (matchedDevice) {
+        setPreviewOrientation(matchedDevice.orientation)
+      }
     } catch (error: any) {
       console.error(error)
-      alert(error?.message || "Не удалось загрузить редактор экрана")
+      showNotice("error", error?.message || "Не удалось загрузить редактор экрана")
       setDevice(null)
       setLayoutDraft(null)
     } finally {
@@ -120,10 +176,10 @@ export default function ClubSignageDeviceEditorPage({
       }
 
       setLayoutDraft(normalizeSignageLayout(data.layout, data.orientation))
-      alert("Layout сохранен")
+      showNotice("success", "Изменения сохранены")
     } catch (error: any) {
       console.error(error)
-      alert(error?.message || "Не удалось сохранить layout")
+      showNotice("error", error?.message || "Не удалось сохранить изменения")
     } finally {
       setIsSaving(false)
     }
@@ -160,13 +216,13 @@ export default function ClubSignageDeviceEditorPage({
       )
     } catch (error: any) {
       console.error(error)
-      alert(error?.message || "Не удалось обновить ориентацию")
+      showNotice("error", error?.message || "Не удалось обновить ориентацию")
     } finally {
       setIsUpdatingOrientation(false)
     }
   }
 
-  async function handlePhotoUpload(event: React.ChangeEvent<HTMLInputElement>) {
+  async function handleMediaUpload(event: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files || [])
     if (!files.length) return
 
@@ -175,9 +231,15 @@ export default function ClubSignageDeviceEditorPage({
       const uploadedSlides: SignageSlide[] = []
 
       for (const file of files) {
+        const mediaType = getMediaTypeFromFile(file)
+        if (!mediaType) {
+          throw new Error(`Файл "${file.name}" не является изображением или видео`)
+        }
+
         const formData = new FormData()
         formData.append("file", file)
         formData.append("preserveOriginal", "1")
+        formData.append("transcodeVideo", mediaType === "video" ? "1" : "0")
 
         const res = await fetch("/api/upload", {
           method: "POST",
@@ -186,13 +248,15 @@ export default function ClubSignageDeviceEditorPage({
 
         const data = await res.json()
         if (!res.ok) {
-          throw new Error(data.error || "Не удалось загрузить фото")
+          throw new Error(data.error || "Не удалось загрузить медиафайл")
         }
 
         uploadedSlides.push(
           createSignageSlide({
             imageUrl: data.url,
+            mediaType,
             title: file.name.replace(/\.[^/.]+$/, ""),
+            transition: layoutDraft?.transition ?? "fade",
             order: layoutDraft?.slides.length ? layoutDraft.slides.length + uploadedSlides.length : uploadedSlides.length,
             durationSec: 8,
             startHour: 0,
@@ -212,7 +276,7 @@ export default function ClubSignageDeviceEditorPage({
       event.target.value = ""
     } catch (error: any) {
       console.error(error)
-      alert(error?.message || "Не удалось загрузить фото")
+      showNotice("error", error?.message || "Не удалось загрузить медиафайл")
     } finally {
       setIsUploading(false)
     }
@@ -227,6 +291,7 @@ export default function ClubSignageDeviceEditorPage({
               ...slide,
               ...patch,
               imageUrl: patch.imageUrl || slide.imageUrl,
+              mediaType: patch.mediaType || slide.mediaType,
             })
           : slide
       ),
@@ -260,378 +325,386 @@ export default function ClubSignageDeviceEditorPage({
   }
 
   return (
-    <PageShell maxWidth="7xl">
-      <PageHeader
-        title={device?.name || device?.screen_label || "Редактор экрана"}
-        description="Редактирование контента выбранного signage-экрана."
-      >
-        <Button asChild variant="outline" className="gap-2">
-          <Link href={`/clubs/${clubId}/signage`}>
-            <ArrowLeft className="h-4 w-4" />
-            Назад к экранам
-          </Link>
-        </Button>
-        <Button
-          variant="outline"
-          className="gap-2"
-          onClick={() => void fetchEditorData()}
-          disabled={isLoading}
-        >
-          <RefreshCw className={cn("h-4 w-4", isLoading && "animate-spin")} />
-          Обновить
-        </Button>
-      </PageHeader>
-
-      {device ? (
-        <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3">
-          <Badge variant="outline">
-            {device.orientation === "portrait" ? "Вертикально" : "Горизонтально"}
-          </Badge>
-          <Badge
-            variant="outline"
+    <div className="flex h-[100dvh] w-full flex-col bg-white overflow-hidden text-slate-900 font-sans">
+      {notice && (
+        <div className="fixed left-1/2 top-4 z-50 w-[90vw] max-w-sm -translate-x-1/2">
+          <div
             className={cn(
-              "border-transparent",
-              device.is_online ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"
+              "rounded-lg border px-3 py-2 text-xs font-medium shadow-md backdrop-blur bg-white/90 text-center",
+              notice.type === "success"
+                ? "border-emerald-200 text-emerald-900"
+                : "border-rose-200 text-rose-900"
             )}
           >
-            {device.is_online ? "Онлайн" : "Оффлайн"}
-          </Badge>
-          <div className="text-sm text-slate-600">
-            Монитор: {device.screen_label || device.selected_display_id || "Не выбран"}
-          </div>
-          <div className="ml-auto flex gap-2">
-            <Button
-              type="button"
-              variant={device.orientation === "landscape" ? "default" : "outline"}
-              size="sm"
-              className="gap-2"
-              onClick={() => void handleOrientationChange("landscape")}
-              disabled={isUpdatingOrientation}
-            >
-              {isUpdatingOrientation && device.orientation !== "landscape" ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <RectangleHorizontal className="h-4 w-4" />
-              )}
-              Горизонтально
-            </Button>
-            <Button
-              type="button"
-              variant={device.orientation === "portrait" ? "default" : "outline"}
-              size="sm"
-              className="gap-2"
-              onClick={() => void handleOrientationChange("portrait")}
-              disabled={isUpdatingOrientation}
-            >
-              {isUpdatingOrientation && device.orientation !== "portrait" ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <RectangleVertical className="h-4 w-4" />
-              )}
-              Вертикально
-            </Button>
+            {notice.message}
           </div>
         </div>
-      ) : null}
+      )}
 
-      <div className="grid gap-6 xl:grid-cols-[460px_1fr]">
-        <Card className="rounded-3xl border-slate-200 shadow-sm">
-          <CardHeader className="space-y-3">
-            <CardTitle className="text-2xl text-slate-900">Плейлист экрана</CardTitle>
-            <CardDescription>
-              Загрузка фото, порядок показа, длительность, часы активности и анимация перехода.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-5">
-            {isLoading || !layoutDraft || !device ? (
-              <div className="flex h-64 items-center justify-center">
-                <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
-              </div>
+      {/* Header */}
+      <header className="flex h-14 shrink-0 items-center justify-between border-b border-slate-200 px-4">
+        <div className="flex items-center gap-3">
+          <Button asChild variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-slate-900">
+            <Link href={`/clubs/${clubId}/signage`}>
+              <ArrowLeft className="h-4 w-4" />
+            </Link>
+          </Button>
+          <div className="h-4 w-px bg-slate-200" />
+          <div>
+            <h1 className="text-sm font-semibold leading-none text-slate-900">
+              {device?.name || device?.screen_label || "Настройка экрана"}
+            </h1>
+            <div className="mt-1 flex items-center gap-2 text-[10px] text-slate-500">
+              {device && (
+                <>
+                  <span className="flex items-center gap-1">
+                    <span className={cn("h-1.5 w-1.5 rounded-full", device.is_online ? "bg-emerald-500" : "bg-slate-300")} />
+                    {device.is_online ? "Online" : "Offline"}
+                  </span>
+                  <span>•</span>
+                  <span>{device.screen_label || device.selected_display_id || "Монитор не выбран"}</span>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs font-medium"
+            onClick={() => void fetchEditorData()}
+            disabled={isLoading}
+          >
+            <RefreshCw className={cn("mr-1.5 h-3.5 w-3.5", isLoading && "animate-spin")} />
+            Синхронизировать
+          </Button>
+          <Button
+            size="sm"
+            className="h-8 bg-slate-900 px-4 text-xs font-medium text-white hover:bg-slate-800"
+            onClick={handleSaveLayout}
+            disabled={isSaving || !layoutDraft}
+          >
+            {isSaving ? (
+              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
             ) : (
-              <>
-                <div className="space-y-2">
-                  <Label htmlFor="transition">Анимация перехода</Label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {(["fade", "slide", "zoom"] as const).map((transition) => (
-                      <button
-                        key={transition}
-                        type="button"
-                        onClick={() =>
-                          updateLayout((layout) => ({
-                            ...layout,
-                            transition: normalizeSignageTransition(transition),
-                          }))
-                        }
-                        className={cn(
-                          "rounded-xl border px-3 py-3 text-sm transition",
-                          layoutDraft.transition === transition
-                            ? "border-slate-900 bg-slate-900 text-white"
-                            : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
-                        )}
-                      >
-                        {transition === "fade"
-                          ? "Плавно"
-                          : transition === "slide"
-                            ? "Сдвиг"
-                            : "Зум"}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="background">Цвет фона</Label>
-                  <div className="flex gap-3">
-                    <Input
-                      id="background"
-                      type="color"
-                      value={layoutDraft.background}
-                      onChange={(event) =>
-                        updateLayout((layout) => ({ ...layout, background: event.target.value }))
-                      }
-                      className="h-11 w-16 rounded-xl p-1"
-                    />
-                    <Input
-                      value={layoutDraft.background}
-                      onChange={(event) =>
-                        updateLayout((layout) => ({ ...layout, background: event.target.value }))
-                      }
-                      className="h-11 rounded-xl"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  <Label>Загрузить фото</Label>
-                  <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4">
-                    <label className="flex cursor-pointer flex-col items-center justify-center gap-3 text-center">
-                      <div className="rounded-full bg-white p-3 shadow-sm">
-                        {isUploading ? (
-                          <Loader2 className="h-5 w-5 animate-spin text-slate-500" />
-                        ) : (
-                          <ImagePlus className="h-5 w-5 text-slate-500" />
-                        )}
-                      </div>
-                      <div>
-                        <div className="font-medium text-slate-900">Добавить изображения</div>
-                        <div className="text-sm text-slate-500">
-                          Можно выбрать сразу несколько фото.
-                        </div>
-                      </div>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        multiple
-                        className="hidden"
-                        onChange={handlePhotoUpload}
-                        disabled={isUploading}
-                      />
-                    </label>
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <Label>Фото в показе</Label>
-                    <div className="text-sm text-slate-500">{layoutDraft.slides.length} шт.</div>
-                  </div>
-
-                  {layoutDraft.slides.length === 0 ? (
-                    <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-sm text-slate-500">
-                      Пока фото не загружены. После сохранения player покажет экран "Контента нет".
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      {layoutDraft.slides
-                        .slice()
-                        .sort((a, b) => a.order - b.order)
-                        .map((slide, index) => (
-                          <div key={slide.id} className="rounded-2xl border border-slate-200 p-4">
-                            <div className="mb-4 flex items-start gap-4">
-                              <div className="flex h-20 w-28 shrink-0 items-center justify-center rounded-xl bg-slate-100 p-2">
-                                {/* In the editor show the original photo proportions without crop/squeeze. */}
-                                <img
-                                  src={slide.imageUrl}
-                                  alt={slide.title || "Фото"}
-                                  className="h-full w-full rounded-lg object-contain"
-                                  loading="lazy"
-                                />
-                              </div>
-                              <div className="min-w-0 flex-1 space-y-1">
-                                <Input
-                                  value={slide.title}
-                                  onChange={(event) =>
-                                    updateSlide(slide.id, { title: event.target.value })
-                                  }
-                                  placeholder="Название фото"
-                                  className="h-10 rounded-xl"
-                                />
-                                <div className="text-xs text-slate-500 break-all">{slide.imageUrl}</div>
-                              </div>
-                              <div className="flex gap-2">
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="icon"
-                                  onClick={() => moveSlide(slide.id, -1)}
-                                  disabled={index === 0}
-                                >
-                                  <ArrowUp className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="icon"
-                                  onClick={() => moveSlide(slide.id, 1)}
-                                  disabled={index === layoutDraft.slides.length - 1}
-                                >
-                                  <ArrowDown className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="icon"
-                                  className="text-red-600 hover:text-red-700"
-                                  onClick={() => removeSlide(slide.id)}
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            </div>
-
-                            <div className="grid gap-3 md:grid-cols-3">
-                              <div className="space-y-2">
-                                <Label>Порядок</Label>
-                                <Input value={String(index + 1)} readOnly className="h-10 rounded-xl" />
-                              </div>
-                              <div className="space-y-2">
-                                <Label>Показ, сек</Label>
-                                <Input
-                                  type="number"
-                                  min={3}
-                                  max={3600}
-                                  value={slide.durationSec}
-                                  onChange={(event) =>
-                                    updateSlide(slide.id, {
-                                      durationSec: Number(event.target.value || 8),
-                                    })
-                                  }
-                                  className="h-10 rounded-xl"
-                                />
-                              </div>
-                              <div className="space-y-2">
-                                <Label>Статус</Label>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  className={cn(
-                                    "h-10 w-full rounded-xl",
-                                    slide.enabled
-                                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                                      : "border-slate-200 bg-slate-50 text-slate-600"
-                                  )}
-                                  onClick={() => updateSlide(slide.id, { enabled: !slide.enabled })}
-                                >
-                                  {slide.enabled ? "Активно" : "Выключено"}
-                                </Button>
-                              </div>
-                            </div>
-
-                            <div className="mt-3 grid gap-3 md:grid-cols-2">
-                              <div className="space-y-2">
-                                <Label>С какого часа</Label>
-                                <Input
-                                  type="number"
-                                  min={0}
-                                  max={23}
-                                  value={slide.startHour}
-                                  onChange={(event) =>
-                                    updateSlide(slide.id, {
-                                      startHour: Number(event.target.value || 0),
-                                    })
-                                  }
-                                  className="h-10 rounded-xl"
-                                />
-                              </div>
-                              <div className="space-y-2">
-                                <Label>До какого часа</Label>
-                                <Input
-                                  type="number"
-                                  min={0}
-                                  max={23}
-                                  value={slide.endHour}
-                                  onChange={(event) =>
-                                    updateSlide(slide.id, {
-                                      endHour: Number(event.target.value || 0),
-                                    })
-                                  }
-                                  className="h-10 rounded-xl"
-                                />
-                              </div>
-                            </div>
-
-                            <div className="mt-2 text-xs text-slate-500">
-                              Если часы одинаковые, фото считается активным весь день.
-                            </div>
-                          </div>
-                        ))}
-                    </div>
-                  )}
-                </div>
-
-                <Button
-                  className="h-11 w-full gap-2 rounded-xl"
-                  onClick={handleSaveLayout}
-                  disabled={isSaving}
-                >
-                  {isSaving ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Save className="h-4 w-4" />
-                  )}
-                  Сохранить layout
-                </Button>
-              </>
+              <Save className="mr-1.5 h-3.5 w-3.5" />
             )}
-          </CardContent>
-        </Card>
+            Сохранить
+          </Button>
+        </div>
+      </header>
 
-        <Card className="rounded-3xl border-slate-200 shadow-sm">
-          <CardHeader className="space-y-3">
-            <CardTitle className="text-2xl text-slate-900">Превью экрана</CardTitle>
-            <CardDescription>
-              Превью текущего слайдшоу с учетом порядка и настроенной анимации перехода.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {layoutDraft && device ? (
-              <div className="rounded-[28px] bg-[#0b0f14] p-5">
-                <div className="mx-auto max-w-[560px]">
-                  <div
-                    className={cn(
-                      "mx-auto overflow-hidden",
-                      device.orientation === "portrait" ? "w-[220px]" : "w-full"
-                    )}
-                  >
-                    <div
+      {/* Main Workspace */}
+      <main className="flex flex-1 overflow-hidden">
+        {/* Left Column: Editor */}
+        <aside className="flex w-[460px] shrink-0 flex-col border-r border-slate-200 bg-slate-50/50">
+          {isLoading || !layoutDraft || !device ? (
+            <div className="flex flex-1 items-center justify-center">
+              <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
+            </div>
+          ) : (
+            <>
+              {/* Settings Group */}
+              <div className="grid grid-cols-2 gap-4 border-b border-slate-200 p-4">
+                {/* Orientation */}
+                <div className="space-y-1.5">
+                  <Label className="text-[11px] font-medium uppercase tracking-wider text-slate-500">Ориентация</Label>
+                  <div className="flex rounded-lg border border-slate-200 bg-white p-0.5 shadow-sm">
+                    <button
+                      type="button"
+                      onClick={() => void handleOrientationChange("landscape")}
+                      disabled={isUpdatingOrientation}
                       className={cn(
-                        "mx-auto",
-                        device.orientation === "portrait" ? "aspect-[9/16]" : "aspect-[16/9]"
+                        "flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-colors",
+                        device.orientation === "landscape" ? "bg-slate-100 text-slate-900" : "text-slate-500 hover:text-slate-900"
                       )}
                     >
-                      <SignageStage layout={layoutDraft} orientation={device.orientation} preview />
+                      <RectangleHorizontal className="h-3.5 w-3.5" />
+                      Гор.
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleOrientationChange("portrait")}
+                      disabled={isUpdatingOrientation}
+                      className={cn(
+                        "flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-colors",
+                        device.orientation === "portrait" ? "bg-slate-100 text-slate-900" : "text-slate-500 hover:text-slate-900"
+                      )}
+                    >
+                      <RectangleVertical className="h-3.5 w-3.5" />
+                      Верт.
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-[11px] font-medium uppercase tracking-wider text-slate-500">Переходы</Label>
+                  <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs leading-5 text-slate-500 shadow-sm">
+                    Переход теперь настраивается отдельно у каждого слайда.
+                  </div>
+                </div>
+
+                {/* Background Color */}
+                <div className="col-span-2 flex items-center justify-between rounded-lg border border-slate-200 bg-white p-2 shadow-sm">
+                  <Label className="text-[11px] font-medium uppercase tracking-wider text-slate-500 pl-1">Фон экрана</Label>
+                  <div className="flex items-center gap-2">
+                    <div className="relative h-6 w-10 overflow-hidden rounded border border-slate-200">
+                      <input
+                        type="color"
+                        value={layoutDraft.background}
+                        onChange={(e) => updateLayout((layout) => ({ ...layout, background: e.target.value }))}
+                        className="absolute -inset-2 h-10 w-14 cursor-pointer border-0 p-0"
+                      />
                     </div>
+                    <Input
+                      value={layoutDraft.background}
+                      onChange={(e) => updateLayout((layout) => ({ ...layout, background: e.target.value }))}
+                      className="h-7 w-20 border-none bg-transparent px-1 font-mono text-xs uppercase focus-visible:ring-0"
+                    />
                   </div>
                 </div>
               </div>
-            ) : (
-              <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-sm text-slate-500">
-                Не удалось загрузить превью экрана.
+
+              {/* Upload & Playlist Header */}
+              <div className="flex flex-col gap-3 border-b border-slate-200 p-4">
+                <label className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-slate-300 bg-white px-4 py-2.5 text-xs font-medium text-slate-600 transition hover:border-slate-400 hover:bg-slate-50">
+                  {isUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
+                  Загрузить медиа
+                  <input
+                    type="file"
+                    accept="image/*,video/*,.mp4,.webm,.mov,.m4v,.ogv,.ogg"
+                    multiple
+                    className="hidden"
+                    onChange={handleMediaUpload}
+                    disabled={isUploading}
+                  />
+                </label>
+                
+                <div className="flex items-center justify-between pt-1">
+                  <div className="text-[11px] font-medium uppercase tracking-wider text-slate-500">Плейлист</div>
+                  <div className="flex items-center gap-2 text-xs text-slate-500">
+                    <span>{layoutDraft.slides.length} файлов</span>
+                    <span>•</span>
+                    <span>Видео до конца, фото по таймеру</span>
+                  </div>
+                </div>
               </div>
+
+              {/* Playlist Items */}
+              <div className="flex-1 overflow-y-auto p-2">
+                {layoutDraft.slides.length === 0 ? (
+                  <div className="flex h-32 items-center justify-center text-xs text-slate-400">
+                    Нет добавленных медиафайлов
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                        {layoutDraft.slides
+                          .slice()
+                          .sort((a, b) => a.order - b.order)
+                          .map((slide, index) => (
+                            <div
+                              key={slide.id}
+                              className={cn(
+                                "group relative flex items-center gap-3 rounded-xl border p-2 pr-3 transition-colors",
+                                !slide.enabled 
+                                  ? "border-slate-100 bg-slate-50/80" 
+                                  : "border-slate-200 bg-white hover:border-slate-300 shadow-sm"
+                              )}
+                            >
+                              {/* Arrows */}
+                              <div className="flex flex-col gap-1 opacity-0 transition-opacity group-hover:opacity-100 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => moveSlide(slide.id, -1)}
+                                  disabled={index === 0}
+                                  className="text-slate-300 hover:text-slate-600 disabled:opacity-30"
+                                >
+                                  <ArrowUp className="h-3.5 w-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => moveSlide(slide.id, 1)}
+                                  disabled={index === layoutDraft.slides.length - 1}
+                                  className="text-slate-300 hover:text-slate-600 disabled:opacity-30"
+                                >
+                                  <ArrowDown className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+
+                              {/* Preview */}
+                              <div className={cn(
+                                "relative h-12 w-16 shrink-0 overflow-hidden rounded-lg bg-slate-100 ring-1 ring-black/5",
+                                !slide.enabled && "opacity-50 grayscale"
+                              )}>
+                                {slide.mediaType === "video" ? (
+                                  <video
+                                    src={slide.imageUrl}
+                                    className="h-full w-full object-cover"
+                                    muted
+                                    playsInline
+                                    preload="metadata"
+                                  />
+                                ) : (
+                                  <img src={slide.imageUrl} alt={slide.title || ""} className="h-full w-full object-cover" />
+                                )}
+                                <div className="absolute inset-0 bg-black/10" />
+                                <div className="absolute bottom-1 left-1.5 text-[9px] font-bold text-white leading-none">
+                                  {index + 1}
+                                </div>
+                                <div className="absolute right-1 top-1 rounded bg-black/55 px-1 py-0.5 text-[8px] font-semibold uppercase tracking-wide text-white">
+                                  {slide.mediaType === "video" ? "Video" : "Image"}
+                                </div>
+                              </div>
+
+                              {/* Details */}
+                              <div className="flex flex-1 flex-col gap-1.5 min-w-0 py-0.5">
+                                <Input
+                                  value={slide.title || ""}
+                                  onChange={(e) => updateSlide(slide.id, { title: e.target.value })}
+                                  placeholder="Название"
+                                  className={cn(
+                                    "h-7 border-transparent bg-transparent px-1 py-0 text-sm font-semibold focus-visible:border-slate-300 focus-visible:bg-white focus-visible:ring-0",
+                                    !slide.enabled ? "text-slate-500" : "text-slate-900"
+                                  )}
+                                />
+                                <div className="flex items-center gap-4 px-1">
+                                  {slide.mediaType === "video" ? (
+                                    <div className="text-[11px] font-medium text-slate-500">
+                                      Видео проигрывается до конца файла
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-[11px] font-medium text-slate-500">Показ:</span>
+                                      <Input
+                                        type="number"
+                                        min={3}
+                                        value={slide.durationSec || ""}
+                                        onChange={(e) => updateSlide(slide.id, { durationSec: e.target.value ? Number(e.target.value) : 0 })}
+                                        className="h-6 w-11 border-slate-200 bg-white px-1 text-center text-xs font-medium text-slate-900 shadow-sm focus-visible:ring-0"
+                                      />
+                                      <span className="text-[11px] font-medium text-slate-500">с</span>
+                                    </div>
+                                  )}
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-[11px] font-medium text-slate-500">Часы:</span>
+                                    <Input
+                                      type="number"
+                                      min={0} max={23}
+                                      value={slide.startHour}
+                                      onChange={(e) => updateSlide(slide.id, { startHour: e.target.value ? Number(e.target.value) : 0 })}
+                                      className="h-6 w-9 border-slate-200 bg-white px-1 text-center text-xs font-medium text-slate-900 shadow-sm focus-visible:ring-0"
+                                    />
+                                    <span className="text-[11px] font-medium text-slate-400">-</span>
+                                    <Input
+                                      type="number"
+                                      min={0} max={23}
+                                      value={slide.endHour}
+                                      onChange={(e) => updateSlide(slide.id, { endHour: e.target.value ? Number(e.target.value) : 0 })}
+                                      className="h-6 w-9 border-slate-200 bg-white px-1 text-center text-xs font-medium text-slate-900 shadow-sm focus-visible:ring-0"
+                                    />
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2 px-1">
+                                  <span className="text-[11px] font-medium text-slate-500">Переход:</span>
+                                  <div className="flex rounded-lg border border-slate-200 bg-white p-0.5 shadow-sm">
+                                    {SLIDE_TRANSITION_OPTIONS.map((transition) => (
+                                      <button
+                                        key={transition}
+                                        type="button"
+                                        onClick={() => updateSlide(slide.id, { transition })}
+                                        className={cn(
+                                          "rounded-md px-2 py-1 text-[10px] font-semibold transition-colors",
+                                          slide.transition === transition
+                                            ? "bg-slate-900 text-white"
+                                            : "text-slate-500 hover:text-slate-900"
+                                        )}
+                                      >
+                                        {getSlideTransitionLabel(transition)}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Actions */}
+                              <div className="flex items-center gap-4 shrink-0 pl-4 pr-2">
+                                <Switch
+                                  checked={slide.enabled}
+                                  onCheckedChange={(checked) => updateSlide(slide.id, { enabled: checked })}
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => removeSlide(slide.id)}
+                                  className="text-slate-300 hover:text-red-500 p-1 transition-colors"
+                                >
+                                  <Trash2 className="h-4 w-4" strokeWidth={1.5} />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                      </div>
+                )}
+              </div>
+            </>
+          )}
+        </aside>
+
+        {/* Right Column: Preview Stage */}
+        <section className="flex flex-1 flex-col bg-slate-100/50 relative overflow-hidden">
+          <div className="absolute top-4 left-4 right-4 flex items-center justify-between z-10">
+            <div className="flex items-center gap-2 rounded-full border border-slate-200/60 bg-white/80 px-3 py-1.5 text-xs font-medium text-slate-600 shadow-sm backdrop-blur">
+              <PlaySquare className="h-3.5 w-3.5" />
+              Превью
+            </div>
+            
+            <div className="flex items-center rounded-full border border-slate-200/60 bg-white/80 p-1 shadow-sm backdrop-blur">
+              <button
+                type="button"
+                onClick={() => setPreviewOrientation("landscape")}
+                className={cn(
+                  "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors",
+                  previewOrientation === "landscape" ? "bg-slate-900 text-white" : "text-slate-500 hover:text-slate-900"
+                )}
+              >
+                <RectangleHorizontal className="h-3.5 w-3.5" />
+                Гор.
+              </button>
+              <button
+                type="button"
+                onClick={() => setPreviewOrientation("portrait")}
+                className={cn(
+                  "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors",
+                  previewOrientation === "portrait" ? "bg-slate-900 text-white" : "text-slate-500 hover:text-slate-900"
+                )}
+              >
+                <RectangleVertical className="h-3.5 w-3.5" />
+                Верт.
+              </button>
+            </div>
+          </div>
+          
+          <div className="flex flex-1 items-center justify-center p-8 pt-20 min-h-0 w-full h-full">
+            {layoutDraft && device ? (
+              <div 
+                className={cn(
+                  "relative overflow-hidden bg-black shadow-2xl ring-1 ring-black/10 transition-all duration-300 shrink-0",
+                  previewOrientation === "portrait" 
+                    ? "h-full max-h-[800px] aspect-[9/16]" 
+                    : "w-full max-w-[1200px] max-h-full aspect-[16/9]"
+                )}
+              >
+                <div className="absolute inset-0">
+                  <SignageStage layout={layoutDraft} orientation={previewOrientation} preview />
+                </div>
+              </div>
+            ) : (
+              <div className="text-sm text-slate-400">Загрузка превью...</div>
             )}
-          </CardContent>
-        </Card>
-      </div>
-    </PageShell>
+          </div>
+        </section>
+      </main>
+    </div>
   )
 }

@@ -1,4 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { spawn } from 'node:child_process';
+import { promises as fs } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { cookies } from 'next/headers';
 import { uploadFileToS3 } from '@/lib/s3';
 
@@ -22,6 +26,25 @@ type PreparedUpload = {
   mimeType: string;
 };
 
+const WEBM_MIME_TYPE = 'video/webm';
+
+const MIME_TYPE_BY_EXTENSION: Record<string, string> = {
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  webp: 'image/webp',
+  avif: 'image/avif',
+  gif: 'image/gif',
+  heic: 'image/heic',
+  heif: 'image/heif',
+  mp4: 'video/mp4',
+  webm: 'video/webm',
+  mov: 'video/quicktime',
+  m4v: 'video/x-m4v',
+  ogv: 'video/ogg',
+  ogg: 'video/ogg',
+};
+
 function sanitizeFileName(fileName: string) {
   return fileName.replace(/\s+/g, '-');
 }
@@ -30,10 +53,105 @@ function getFileBaseName(fileName: string) {
   return fileName.replace(/\.[^.]+$/, '') || 'image';
 }
 
+function getFileExtension(fileName: string) {
+  const match = sanitizeFileName(fileName).toLowerCase().match(/\.([a-z0-9]+)$/);
+  return match?.[1] || '';
+}
+
+function getNormalizedMimeType(fileName: string, mimeType: string) {
+  const normalizedMimeType = String(mimeType || '').trim().toLowerCase();
+  if (normalizedMimeType && normalizedMimeType !== 'application/octet-stream') {
+    return normalizedMimeType;
+  }
+
+  return MIME_TYPE_BY_EXTENSION[getFileExtension(fileName)] || 'application/octet-stream';
+}
+
+function isVideoMimeType(mimeType: string) {
+  return mimeType.startsWith('video/');
+}
+
+function shouldTranscodeVideo(fileName: string, mimeType: string, enabled: boolean) {
+  if (!enabled || !isVideoMimeType(mimeType)) return false;
+  return getFileExtension(fileName) !== 'webm';
+}
+
+async function runFfmpeg(args: string[]) {
+  const ffmpegBinaryPath = process.env.FFMPEG_BIN
+    || path.join(process.cwd(), 'node_modules', 'ffmpeg-static', process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg');
+
+  try {
+    await fs.access(ffmpegBinaryPath);
+  } catch {
+    throw new Error('FFmpeg binary is not available');
+  }
+
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn(ffmpegBinaryPath, args, {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let stderr = '';
+
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk.toString();
+    });
+
+    child.on('error', reject);
+    child.on('close', (code) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+
+      reject(new Error(stderr.trim() || `FFmpeg exited with code ${code}`));
+    });
+  });
+}
+
+async function transcodeVideoToWebm(buffer: Buffer | Uint8Array, fileName: string): Promise<PreparedUpload> {
+  const baseName = getFileBaseName(fileName);
+  const extension = getFileExtension(fileName) || 'bin';
+  const workDir = await fs.mkdtemp(path.join(os.tmpdir(), 'dashadmin-video-'));
+  const inputPath = path.join(workDir, `input.${extension}`);
+  const outputPath = path.join(workDir, `${baseName}.webm`);
+
+  try {
+    await fs.writeFile(inputPath, buffer);
+    await runFfmpeg([
+      '-y',
+      '-i',
+      inputPath,
+      '-an',
+      '-c:v',
+      'libvpx-vp9',
+      '-pix_fmt',
+      'yuv420p',
+      '-crf',
+      '34',
+      '-b:v',
+      '0',
+      '-deadline',
+      'good',
+      '-row-mt',
+      '1',
+      outputPath,
+    ]);
+
+    const outputBuffer = await fs.readFile(outputPath);
+    return {
+      buffer: outputBuffer,
+      fileName: `${baseName}.webm`,
+      mimeType: WEBM_MIME_TYPE,
+    };
+  } finally {
+    await fs.rm(workDir, { recursive: true, force: true });
+  }
+}
+
 async function prepareUpload(file: File): Promise<PreparedUpload> {
   const originalBuffer = Buffer.from(await file.arrayBuffer());
   const originalFileName = sanitizeFileName(file.name);
-  const originalMimeType = file.type || 'application/octet-stream';
+  const originalMimeType = getNormalizedMimeType(originalFileName, file.type);
 
   if (!COMPRESSIBLE_IMAGE_TYPES.has(originalMimeType)) {
     return {
@@ -130,10 +248,11 @@ async function prepareUpload(file: File): Promise<PreparedUpload> {
 }
 
 async function prepareOriginalUpload(file: File): Promise<PreparedUpload> {
+  const fileName = sanitizeFileName(file.name);
   return {
     buffer: Buffer.from(await file.arrayBuffer()),
-    fileName: sanitizeFileName(file.name),
-    mimeType: file.type || 'application/octet-stream',
+    fileName,
+    mimeType: getNormalizedMimeType(fileName, file.type),
   };
 }
 
@@ -147,18 +266,27 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData();
     const file = formData.get('file') as File | null;
     const preserveOriginal = String(formData.get('preserveOriginal') || '').trim() === '1';
+    const transcodeVideo = String(formData.get('transcodeVideo') || '').trim() === '1';
 
     if (!file) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 });
     }
 
-    const { buffer, fileName, mimeType } = preserveOriginal
+    const preparedUpload = preserveOriginal
       ? await prepareOriginalUpload(file)
       : await prepareUpload(file);
+    const finalUpload = shouldTranscodeVideo(preparedUpload.fileName, preparedUpload.mimeType, transcodeVideo)
+      ? await transcodeVideoToWebm(preparedUpload.buffer, preparedUpload.fileName)
+      : preparedUpload;
 
-    const url = await uploadFileToS3(buffer, fileName, mimeType);
+    const url = await uploadFileToS3(finalUpload.buffer, finalUpload.fileName, finalUpload.mimeType);
 
-    return NextResponse.json({ url });
+    return NextResponse.json({
+      url,
+      fileName: finalUpload.fileName,
+      mimeType: finalUpload.mimeType,
+      transcoded: finalUpload.fileName !== preparedUpload.fileName,
+    });
   } catch (error) {
     console.error('Error uploading file:', error);
     return NextResponse.json(
