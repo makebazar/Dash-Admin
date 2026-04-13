@@ -32,6 +32,9 @@ export type SignageSlide = {
   order: number
   startHour: number
   endHour: number
+  startMinute: number
+  endMinute: number
+  weekdays: number[]
   enabled: boolean
 }
 
@@ -50,6 +53,11 @@ export type BootstrapPayload = {
   pairedClubId: number | null
   pairedClubName: string | null
   layoutJson: SignageLayout | null
+  currentSlideId: string | null
+  controlAction: "jump" | "pause" | null
+  controlSlideId: string | null
+  controlUntil: string | null
+  controlUpdatedAt: string | null
   serverUpdatedAt: string | null
   fullscreen: boolean
   orientation: "landscape" | "portrait"
@@ -74,6 +82,7 @@ export type ElectronSignageApi = {
   setFullscreen: (enabled: boolean) => Promise<BootstrapPayload>
   reloadWindow: () => Promise<boolean>
   syncRemote: () => Promise<BootstrapPayload>
+  reportCurrentSlide: (currentSlideId: string | null) => Promise<boolean>
   onBootstrapUpdated: (callback: (payload: BootstrapPayload) => void) => () => void
 }
 

@@ -123,6 +123,11 @@ function readStore() {
       pairedClubId: null,
       pairedClubName: null,
       layoutJson: null,
+      currentSlideId: null,
+      controlAction: null,
+      controlSlideId: null,
+      controlUntil: null,
+      controlUpdatedAt: null,
       serverUpdatedAt: null,
       selectedDisplayId: null,
       fullscreen: false,
@@ -144,6 +149,11 @@ function readStore() {
       pairedClubId: null,
       pairedClubName: null,
       layoutJson: null,
+      currentSlideId: null,
+      controlAction: null,
+      controlSlideId: null,
+      controlUntil: null,
+      controlUpdatedAt: null,
       serverUpdatedAt: null,
       selectedDisplayId: null,
       fullscreen: false,
@@ -337,6 +347,11 @@ function buildBootstrapPayload() {
     pairedClubId: state.pairedClubId || null,
     pairedClubName: state.pairedClubName || null,
     layoutJson: state.layoutJson || null,
+    currentSlideId: state.currentSlideId || null,
+    controlAction: state.controlAction === "pause" ? "pause" : state.controlAction === "jump" ? "jump" : null,
+    controlSlideId: state.controlSlideId || null,
+    controlUntil: state.controlUntil || null,
+    controlUpdatedAt: state.controlUpdatedAt || null,
     serverUpdatedAt: state.serverUpdatedAt || null,
     fullscreen: Boolean(state.fullscreen),
     orientation: state.orientation === "portrait" ? "portrait" : "landscape",
@@ -364,6 +379,11 @@ function applyRemoteDeviceState(device) {
     pairedClubId: device.clubId ?? null,
     pairedClubName: device.clubName || null,
     layoutJson: device.layoutJson ?? null,
+    currentSlideId: device.currentSlideId || null,
+    controlAction: device.controlAction === "pause" ? "pause" : device.controlAction === "jump" ? "jump" : null,
+    controlSlideId: device.controlSlideId || null,
+    controlUntil: device.controlUntil || null,
+    controlUpdatedAt: device.controlUpdatedAt ? String(device.controlUpdatedAt) : null,
     serverUpdatedAt: device.serverUpdatedAt ? String(device.serverUpdatedAt) : null,
     orientation: device.orientation === "portrait" ? "portrait" : "landscape",
   })
@@ -429,6 +449,35 @@ async function sendHeartbeat() {
     })
   } catch (error) {
     console.error("Remote signage heartbeat error:", error)
+  }
+}
+
+async function reportCurrentSlide(currentSlideId) {
+  const serverUrl = getRemoteServerUrl()
+  const state = readStore()
+  if (!serverUrl || !state.deviceId || !state.deviceToken) return false
+
+  writeStore({
+    currentSlideId: currentSlideId ? String(currentSlideId) : null,
+  })
+
+  try {
+    await fetch(`${serverUrl}/api/signage/device/current-slide`, {
+      method: "POST",
+      headers: buildRemoteHeaders(serverUrl, {
+        "Content-Type": "application/json",
+      }),
+      body: JSON.stringify({
+        deviceId: state.deviceId,
+        deviceToken: state.deviceToken || null,
+        currentSlideId: currentSlideId ? String(currentSlideId) : null,
+      }),
+    })
+
+    return true
+  } catch (error) {
+    console.error("Remote signage current slide error:", error)
+    return false
   }
 }
 
@@ -631,6 +680,9 @@ app.whenReady().then(async () => {
     broadcastBootstrap()
     void syncRemoteDevice()
     return buildBootstrapPayload()
+  })
+  ipcMain.handle("signage:report-current-slide", async (_, currentSlideId) => {
+    return reportCurrentSlide(currentSlideId)
   })
   ipcMain.handle("signage:reload-window", async () => {
     if (mainWindow && !mainWindow.isDestroyed()) {

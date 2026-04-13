@@ -9,6 +9,8 @@ contextBridge.exposeInMainWorld("electronSignage", {
   setFullscreen: (enabled) => ipcRenderer.invoke("signage:set-fullscreen", enabled),
   setOrientation: (orientation) => ipcRenderer.invoke("signage:set-orientation", orientation),
   reloadWindow: () => ipcRenderer.invoke("signage:reload-window"),
+  reportCurrentSlide: (currentSlideId) =>
+    ipcRenderer.invoke("signage:report-current-slide", currentSlideId),
   onBootstrapUpdated: (callback) => {
     const listener = (_, payload) => callback(payload)
     ipcRenderer.on("signage:bootstrap-updated", listener)

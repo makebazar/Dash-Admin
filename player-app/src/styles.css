@@ -345,6 +345,20 @@ button {
   object-fit: cover;
 }
 
+.slide-layer {
+  z-index: 1;
+}
+
+.slide-layer.is-overlay {
+  z-index: 2;
+  pointer-events: none;
+  transition: opacity 220ms linear;
+}
+
+.slide-layer.is-hidden {
+  opacity: 0;
+}
+
 .transition-none {
   animation: none;
 }

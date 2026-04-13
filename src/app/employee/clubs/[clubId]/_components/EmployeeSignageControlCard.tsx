@@ -74,6 +74,24 @@ export function EmployeeSignageControlCard({
   const [error, setError] = useState<string | null>(null)
   const [now, setNow] = useState(() => Date.now())
 
+  const fetchDeviceDetails = useCallback(
+    async (deviceId: string) => {
+      const res = await fetch(`/api/employee/clubs/${clubId}/signage/devices/${deviceId}/control`, {
+        cache: "no-store",
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        throw new Error(data.error || "Не удалось загрузить управление экраном")
+      }
+
+      return {
+        device: (data.device || null) as SignageDeviceDetails | null,
+        slides: Array.isArray(data.slides) ? (data.slides as SignageSlideItem[]) : [],
+      }
+    },
+    [clubId]
+  )
+
   const loadDevices = useCallback(
     async (preferredDeviceId?: string) => {
       if (!enabled || !clubId) return []
@@ -107,31 +125,30 @@ export function EmployeeSignageControlCard({
   )
 
   const loadDeviceDetails = useCallback(
-    async (deviceId: string) => {
+    async (deviceId: string, options?: { silent?: boolean }) => {
       if (!enabled || !clubId || !deviceId) return
 
-      setIsDeviceLoading(true)
+      const isSilent = options?.silent === true
+      if (!isSilent) {
+        setIsDeviceLoading(true)
+      }
       try {
-        const res = await fetch(`/api/employee/clubs/${clubId}/signage/devices/${deviceId}/control`, {
-          cache: "no-store",
-        })
-        const data = await res.json().catch(() => ({}))
-        if (!res.ok) {
-          throw new Error(data.error || "Не удалось загрузить управление экраном")
-        }
-
-        setDevice(data.device || null)
-        setSlides(Array.isArray(data.slides) ? data.slides : [])
+        const details = await fetchDeviceDetails(deviceId)
+        setDevice(details.device)
+        setSlides(details.slides)
         setError(null)
+        return details
       } catch (nextError: any) {
         setDevice(null)
         setSlides([])
         setError(nextError?.message || "Не удалось загрузить управление экраном")
       } finally {
-        setIsDeviceLoading(false)
+        if (!isSilent) {
+          setIsDeviceLoading(false)
+        }
       }
     },
-    [clubId, enabled]
+    [clubId, enabled, fetchDeviceDetails]
   )
 
   useEffect(() => {
@@ -205,6 +222,16 @@ export function EmployeeSignageControlCard({
     return () => window.clearInterval(intervalId)
   }, [clubId, enabled, loadDevices, selectedDeviceId])
 
+  useEffect(() => {
+    if (!enabled || !selectedDeviceId) return
+
+    const intervalId = window.setInterval(() => {
+      void loadDeviceDetails(selectedDeviceId, { silent: true })
+    }, 2000)
+
+    return () => window.clearInterval(intervalId)
+  }, [enabled, loadDeviceDetails, selectedDeviceId])
+
   const currentSlideIndex = useMemo(
     () => slides.findIndex((slide) => slide.id === device?.currentSlideId),
     [device?.currentSlideId, slides]
@@ -219,12 +246,21 @@ export function EmployeeSignageControlCard({
 
       setIsActionLoading(action)
       try {
+        const latestDetails = await fetchDeviceDetails(selectedDeviceId).catch(() => null)
+        const latestDevice = latestDetails?.device || device
+        const latestSlides = latestDetails?.slides || slides
+        const latestCurrentSlideId =
+          latestDevice?.currentSlideId ||
+          latestSlides.find((slide) => slide.id === device?.currentSlideId)?.id ||
+          currentSlide?.id ||
+          null
+
         const res = await fetch(`/api/employee/clubs/${clubId}/signage/devices/${selectedDeviceId}/control`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             action,
-            currentSlideId: currentSlide?.id || device?.currentSlideId || null,
+            currentSlideId: latestCurrentSlideId,
           }),
         })
         const data = await res.json().catch(() => ({}))
@@ -248,7 +284,7 @@ export function EmployeeSignageControlCard({
         setIsActionLoading(null)
       }
     },
-    [clubId, currentSlide?.id, device?.currentSlideId, selectedDeviceId]
+    [clubId, currentSlide?.id, device, fetchDeviceDetails, selectedDeviceId, slides]
   )
 
   if (!enabled) return null

@@ -69,6 +69,30 @@ function getMediaTypeFromFile(file: File): SignageSlide["mediaType"] | null {
   return null
 }
 
+function formatTimeValue(hour: number, minute: number) {
+  return `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`
+}
+
+function parseTimeValue(value: string) {
+  const match = value.trim().match(/^(\d{2}):(\d{2})$/)
+  if (!match) return null
+
+  const hour = Number(match[1])
+  const minute = Number(match[2])
+  if (!Number.isInteger(hour) || !Number.isInteger(minute)) return null
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null
+
+  return { hour, minute }
+}
+
+function getWeekdaysSummary(weekdays: number[]) {
+  const normalized = [...weekdays].sort((a, b) => a - b)
+  if (normalized.length === 7) return "Каждый день"
+  return WEEKDAY_OPTIONS.filter((weekday) => normalized.includes(weekday.value))
+    .map((weekday) => weekday.label)
+    .join(", ")
+}
+
 type SignageDevice = {
   id: number
   name: string | null
@@ -270,6 +294,8 @@ export default function ClubSignageDeviceEditorPage({
             durationSec: 8,
             startHour: 0,
             endHour: 0,
+            startMinute: 0,
+            endMinute: 0,
             enabled: true,
           })
         )
@@ -322,6 +348,18 @@ export default function ClubSignageDeviceEditorPage({
 
     if (nextWeekdays.length === 0) return
     updateSlide(slideId, { weekdays: nextWeekdays })
+  }
+
+  function updateSlideTime(slideId: string, field: "start" | "end", value: string) {
+    const parsed = parseTimeValue(value)
+    if (!parsed) return
+
+    updateSlide(
+      slideId,
+      field === "start"
+        ? { startHour: parsed.hour, startMinute: parsed.minute }
+        : { endHour: parsed.hour, endMinute: parsed.minute }
+    )
   }
 
   function moveSlide(slideId: string, direction: -1 | 1) {
@@ -533,163 +571,187 @@ export default function ClubSignageDeviceEditorPage({
                             <div
                               key={slide.id}
                               className={cn(
-                                "group relative flex items-center gap-3 rounded-xl border p-2 pr-3 transition-colors",
-                                !slide.enabled 
-                                  ? "border-slate-100 bg-slate-50/80" 
-                                  : "border-slate-200 bg-white hover:border-slate-300 shadow-sm"
+                                "group rounded-3xl border px-4 py-4 shadow-[0_12px_35px_-24px_rgba(15,23,42,0.35)] transition-all",
+                                slide.enabled
+                                  ? "border-slate-200 bg-white hover:border-slate-300"
+                                  : "border-slate-200/70 bg-slate-50/90 opacity-75"
                               )}
                             >
-                              {/* Arrows */}
-                              <div className="flex flex-col gap-1 opacity-0 transition-opacity group-hover:opacity-100 shrink-0">
-                                <button
-                                  type="button"
-                                  onClick={() => moveSlide(slide.id, -1)}
-                                  disabled={index === 0}
-                                  className="text-slate-300 hover:text-slate-600 disabled:opacity-30"
-                                >
-                                  <ArrowUp className="h-3.5 w-3.5" />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => moveSlide(slide.id, 1)}
-                                  disabled={index === layoutDraft.slides.length - 1}
-                                  className="text-slate-300 hover:text-slate-600 disabled:opacity-30"
-                                >
-                                  <ArrowDown className="h-3.5 w-3.5" />
-                                </button>
-                              </div>
-
-                              {/* Preview */}
-                              <div className={cn(
-                                "relative h-12 w-16 shrink-0 overflow-hidden rounded-lg bg-slate-100 ring-1 ring-black/5",
-                                !slide.enabled && "opacity-50 grayscale"
-                              )}>
-                                {slide.mediaType === "video" ? (
-                                  <video
-                                    src={slide.imageUrl}
-                                    className="h-full w-full object-cover"
-                                    muted
-                                    playsInline
-                                    preload="metadata"
-                                  />
-                                ) : (
-                                  <img src={slide.imageUrl} alt={slide.title || ""} className="h-full w-full object-cover" />
-                                )}
-                                <div className="absolute inset-0 bg-black/10" />
-                                <div className="absolute bottom-1 left-1.5 text-[9px] font-bold text-white leading-none">
-                                  {index + 1}
+                              <div className="flex gap-4">
+                                <div className="flex flex-col items-center gap-2 pt-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => moveSlide(slide.id, -1)}
+                                    disabled={index === 0}
+                                    className="rounded-full border border-slate-200 p-1.5 text-slate-400 transition hover:border-slate-300 hover:text-slate-700 disabled:opacity-30"
+                                  >
+                                    <ArrowUp className="h-3.5 w-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => moveSlide(slide.id, 1)}
+                                    disabled={index === layoutDraft.slides.length - 1}
+                                    className="rounded-full border border-slate-200 p-1.5 text-slate-400 transition hover:border-slate-300 hover:text-slate-700 disabled:opacity-30"
+                                  >
+                                    <ArrowDown className="h-3.5 w-3.5" />
+                                  </button>
                                 </div>
-                                <div className="absolute right-1 top-1 rounded bg-black/55 px-1 py-0.5 text-[8px] font-semibold uppercase tracking-wide text-white">
-                                  {slide.mediaType === "video" ? "Video" : "Image"}
-                                </div>
-                              </div>
 
-                              {/* Details */}
-                              <div className="flex flex-1 flex-col gap-1.5 min-w-0 py-0.5">
-                                <Input
-                                  value={slide.title || ""}
-                                  onChange={(e) => updateSlide(slide.id, { title: e.target.value })}
-                                  placeholder="Название"
-                                  className={cn(
-                                    "h-7 border-transparent bg-transparent px-1 py-0 text-sm font-semibold focus-visible:border-slate-300 focus-visible:bg-white focus-visible:ring-0",
-                                    !slide.enabled ? "text-slate-500" : "text-slate-900"
-                                  )}
-                                />
-                                <div className="flex items-center gap-4 px-1">
+                                <div className="relative h-24 w-32 shrink-0 overflow-hidden rounded-2xl bg-slate-100 ring-1 ring-black/5">
                                   {slide.mediaType === "video" ? (
-                                    <div className="text-[11px] font-medium text-slate-500">
-                                      Видео проигрывается до конца файла
-                                    </div>
+                                    <video
+                                      src={slide.imageUrl}
+                                      className="h-full w-full object-cover"
+                                      muted
+                                      playsInline
+                                      preload="metadata"
+                                    />
                                   ) : (
-                                    <div className="flex items-center gap-1.5">
-                                      <span className="text-[11px] font-medium text-slate-500">Показ:</span>
-                                      <Input
-                                        type="number"
-                                        min={3}
-                                        value={slide.durationSec || ""}
-                                        onChange={(e) => updateSlide(slide.id, { durationSec: e.target.value ? Number(e.target.value) : 0 })}
-                                        className="h-6 w-11 border-slate-200 bg-white px-1 text-center text-xs font-medium text-slate-900 shadow-sm focus-visible:ring-0"
-                                      />
-                                      <span className="text-[11px] font-medium text-slate-500">с</span>
-                                    </div>
+                                    <img src={slide.imageUrl} alt={slide.title || ""} className="h-full w-full object-cover" />
                                   )}
-                                  <div className="flex items-center gap-1.5">
-                                    <span className="text-[11px] font-medium text-slate-500">Часы:</span>
-                                    <Input
-                                      type="number"
-                                      min={0} max={23}
-                                      value={slide.startHour}
-                                      onChange={(e) => updateSlide(slide.id, { startHour: e.target.value ? Number(e.target.value) : 0 })}
-                                      className="h-6 w-9 border-slate-200 bg-white px-1 text-center text-xs font-medium text-slate-900 shadow-sm focus-visible:ring-0"
-                                    />
-                                    <span className="text-[11px] font-medium text-slate-400">-</span>
-                                    <Input
-                                      type="number"
-                                      min={0} max={23}
-                                      value={slide.endHour}
-                                      onChange={(e) => updateSlide(slide.id, { endHour: e.target.value ? Number(e.target.value) : 0 })}
-                                      className="h-6 w-9 border-slate-200 bg-white px-1 text-center text-xs font-medium text-slate-900 shadow-sm focus-visible:ring-0"
-                                    />
+                                  <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-black/5 to-transparent" />
+                                  <div className="absolute left-2 top-2 rounded-full bg-white/90 px-2 py-0.5 text-[10px] font-semibold text-slate-700 shadow-sm">
+                                    #{index + 1}
+                                  </div>
+                                  <div className="absolute right-2 top-2 rounded-full bg-slate-900/80 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
+                                    {slide.mediaType === "video" ? "Video" : "Image"}
                                   </div>
                                 </div>
-                                <div className="flex items-center gap-2 px-1">
-                                  <span className="text-[11px] font-medium text-slate-500">Переход:</span>
-                                  <div className="flex rounded-lg border border-slate-200 bg-white p-0.5 shadow-sm">
-                                    {SLIDE_TRANSITION_OPTIONS.map((transition) => (
-                                      <button
-                                        key={transition}
-                                        type="button"
-                                        onClick={() => updateSlide(slide.id, { transition })}
-                                        className={cn(
-                                          "rounded-md px-2 py-1 text-[10px] font-semibold transition-colors",
-                                          slide.transition === transition
-                                            ? "bg-slate-900 text-white"
-                                            : "text-slate-500 hover:text-slate-900"
-                                        )}
-                                      >
-                                        {getSlideTransitionLabel(transition)}
-                                      </button>
-                                    ))}
-                                  </div>
-                                </div>
-                                <div className="flex items-center gap-2 px-1">
-                                  <span className="text-[11px] font-medium text-slate-500">Дни:</span>
-                                  <div className="flex flex-wrap gap-1.5">
-                                    {WEEKDAY_OPTIONS.map((weekday) => {
-                                      const isActive = slide.weekdays.includes(weekday.value)
-                                      return (
-                                        <button
-                                          key={weekday.value}
-                                          type="button"
-                                          onClick={() => toggleSlideWeekday(slide.id, weekday.value)}
-                                          className={cn(
-                                            "rounded-md border px-2 py-1 text-[10px] font-semibold transition-colors",
-                                            isActive
-                                              ? "border-slate-900 bg-slate-900 text-white"
-                                              : "border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-900"
-                                          )}
-                                        >
-                                          {weekday.label}
-                                        </button>
-                                      )
-                                    })}
-                                  </div>
-                                </div>
-                              </div>
 
-                              {/* Actions */}
-                              <div className="flex items-center gap-4 shrink-0 pl-4 pr-2">
-                                <Switch
-                                  checked={slide.enabled}
-                                  onCheckedChange={(checked) => updateSlide(slide.id, { enabled: checked })}
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => removeSlide(slide.id)}
-                                  className="text-slate-300 hover:text-red-500 p-1 transition-colors"
-                                >
-                                  <Trash2 className="h-4 w-4" strokeWidth={1.5} />
-                                </button>
+                                <div className="min-w-0 flex-1 space-y-4">
+                                  <div className="flex items-start justify-between gap-4">
+                                    <div className="min-w-0 flex-1">
+                                      <Input
+                                        value={slide.title || ""}
+                                        onChange={(e) => updateSlide(slide.id, { title: e.target.value })}
+                                        placeholder="Название слайда"
+                                        className="h-11 rounded-2xl border-slate-200 bg-slate-50/80 px-4 text-base font-semibold text-slate-900 shadow-none focus-visible:bg-white focus-visible:ring-0"
+                                      />
+                                      <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] font-medium text-slate-500">
+                                        <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">
+                                          {slide.mediaType === "video" ? "Видео до конца файла" : `Показ ${slide.durationSec} сек`}
+                                        </span>
+                                        <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">
+                                          {formatTimeValue(slide.startHour, slide.startMinute)} - {formatTimeValue(slide.endHour, slide.endMinute)}
+                                        </span>
+                                        <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">
+                                          {getWeekdaysSummary(slide.weekdays)}
+                                        </span>
+                                      </div>
+                                    </div>
+
+                                    <div className="flex items-center gap-3">
+                                      <Switch
+                                        checked={slide.enabled}
+                                        onCheckedChange={(checked) => updateSlide(slide.id, { enabled: checked })}
+                                      />
+                                      <button
+                                        type="button"
+                                        onClick={() => removeSlide(slide.id)}
+                                        className="rounded-full border border-rose-200 p-2 text-rose-500 transition hover:bg-rose-50"
+                                      >
+                                        <Trash2 className="h-4 w-4" strokeWidth={1.6} />
+                                      </button>
+                                    </div>
+                                  </div>
+
+                                  <div className="grid gap-3 xl:grid-cols-[160px_minmax(220px,1fr)_minmax(260px,1.2fr)]">
+                                    <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-3">
+                                      <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                                        Длительность
+                                      </div>
+                                      {slide.mediaType === "video" ? (
+                                        <div className="text-sm font-medium text-slate-600">
+                                          Видео идет до последнего кадра
+                                        </div>
+                                      ) : (
+                                        <div className="flex items-center gap-2">
+                                          <Input
+                                            type="number"
+                                            min={3}
+                                            value={slide.durationSec || ""}
+                                            onChange={(e) =>
+                                              updateSlide(slide.id, {
+                                                durationSec: e.target.value ? Number(e.target.value) : 0,
+                                              })
+                                            }
+                                            className="h-11 rounded-xl border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 focus-visible:ring-0"
+                                          />
+                                          <span className="text-sm font-medium text-slate-500">сек</span>
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-3">
+                                      <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                                        Время показа
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <Input
+                                          type="time"
+                                          step={60}
+                                          value={formatTimeValue(slide.startHour, slide.startMinute)}
+                                          onChange={(e) => updateSlideTime(slide.id, "start", e.target.value)}
+                                          className="h-11 rounded-xl border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 focus-visible:ring-0"
+                                        />
+                                        <span className="text-sm font-medium text-slate-400">-</span>
+                                        <Input
+                                          type="time"
+                                          step={60}
+                                          value={formatTimeValue(slide.endHour, slide.endMinute)}
+                                          onChange={(e) => updateSlideTime(slide.id, "end", e.target.value)}
+                                          className="h-11 rounded-xl border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 focus-visible:ring-0"
+                                        />
+                                      </div>
+                                      <div className="mt-2 text-[11px] text-slate-500">
+                                        Одинаковое время начала и конца означает показ 24/7.
+                                      </div>
+                                    </div>
+
+                                    <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-3">
+                                      <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                                        Переход и дни
+                                      </div>
+                                      <div className="mb-3 flex flex-wrap gap-1.5 rounded-2xl border border-slate-200 bg-white p-1">
+                                        {SLIDE_TRANSITION_OPTIONS.map((transition) => (
+                                          <button
+                                            key={transition}
+                                            type="button"
+                                            onClick={() => updateSlide(slide.id, { transition })}
+                                            className={cn(
+                                              "rounded-xl px-3 py-2 text-xs font-semibold transition-colors",
+                                              slide.transition === transition
+                                                ? "bg-slate-900 text-white shadow-sm"
+                                                : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+                                            )}
+                                          >
+                                            {getSlideTransitionLabel(transition)}
+                                          </button>
+                                        ))}
+                                      </div>
+                                      <div className="flex flex-wrap gap-2">
+                                        {WEEKDAY_OPTIONS.map((weekday) => {
+                                          const isActive = slide.weekdays.includes(weekday.value)
+                                          return (
+                                            <button
+                                              key={weekday.value}
+                                              type="button"
+                                              onClick={() => toggleSlideWeekday(slide.id, weekday.value)}
+                                              className={cn(
+                                                "min-w-12 rounded-xl border px-3 py-2 text-xs font-semibold transition-colors",
+                                                isActive
+                                                  ? "border-slate-900 bg-slate-900 text-white"
+                                                  : "border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-900"
+                                              )}
+                                            >
+                                              {weekday.label}
+                                            </button>
+                                          )
+                                        })}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
                               </div>
                             </div>
                           ))}

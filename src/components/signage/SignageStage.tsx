@@ -29,12 +29,16 @@ export function SignageStage({
   const [transitionTick, setTransitionTick] = useState(0)
   const [hasMediaError, setHasMediaError] = useState(false)
   const [controlNow, setControlNow] = useState(() => Date.now())
+  const [scheduleNow, setScheduleNow] = useState(() => Date.now())
   const [visibleSlide, setVisibleSlide] = useState<SignageSlide | null>(null)
   const [pendingSlide, setPendingSlide] = useState<SignageSlide | null>(null)
   const [pendingReady, setPendingReady] = useState(false)
   const activeSlides = useMemo(
-    () => (preview ? layout.slides.slice().sort((a, b) => a.order - b.order) : getActiveSlides(layout)),
-    [layout, preview]
+    () =>
+      preview
+        ? layout.slides.slice().sort((a, b) => a.order - b.order)
+        : getActiveSlides(layout, new Date(scheduleNow)),
+    [layout, preview, scheduleNow]
   )
   const hasAnySlides = layout.slides.length > 0
   const forcedUntilTimestamp = useMemo(() => {
@@ -64,8 +68,20 @@ export function SignageStage({
   )
 
   useEffect(() => {
-    setActiveIndex(0)
-  }, [layout, preview])
+    if (activeSlides.length === 0) {
+      setActiveIndex(0)
+      return
+    }
+
+    setActiveIndex((current) => {
+      if (visibleSlide?.id) {
+        const visibleIndex = activeSlides.findIndex((slide) => slide.id === visibleSlide.id)
+        if (visibleIndex >= 0) return visibleIndex
+      }
+
+      return Math.min(current, activeSlides.length - 1)
+    })
+  }, [activeSlides, preview, visibleSlide?.id])
 
   useEffect(() => {
     if (!forcedUntilTimestamp || forcedUntilTimestamp <= Date.now()) {
@@ -79,6 +95,16 @@ export function SignageStage({
 
     return () => window.clearTimeout(timeoutId)
   }, [forcedUntilTimestamp])
+
+  useEffect(() => {
+    if (preview) return
+
+    const intervalId = window.setInterval(() => {
+      setScheduleNow(Date.now())
+    }, 30000)
+
+    return () => window.clearInterval(intervalId)
+  }, [preview])
 
   useEffect(() => {
     if (!forcedSlide) return

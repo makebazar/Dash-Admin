@@ -13,6 +13,8 @@ export type SignageSlide = {
   order: number
   startHour: number
   endHour: number
+  startMinute: number
+  endMinute: number
   weekdays: number[]
   enabled: boolean
 }
@@ -91,6 +93,8 @@ export function normalizeSignageSlide(
     order: clampNumber(slide.order, 0, 999, 0),
     startHour: typeof slide.startHour === "number" ? Math.min(23, Math.max(0, Math.round(slide.startHour))) : 0,
     endHour: typeof slide.endHour === "number" ? Math.min(23, Math.max(0, Math.round(slide.endHour))) : 0,
+    startMinute: clampNumber(slide.startMinute, 0, 59, 0),
+    endMinute: clampNumber(slide.endMinute, 0, 59, 0),
     weekdays: normalizeSignageWeekdays(slide.weekdays),
     enabled: slide.enabled !== false,
   }
@@ -107,29 +111,40 @@ export function createSignageSlide(partial: Partial<SignageSlide> & { imageUrl: 
     order: partial.order ?? 0,
     startHour: partial.startHour ?? 0,
     endHour: partial.endHour ?? 0,
+    startMinute: partial.startMinute ?? 0,
+    endMinute: partial.endMinute ?? 0,
     weekdays: partial.weekdays ?? DEFAULT_SIGNAGE_WEEKDAYS,
     enabled: partial.enabled ?? true,
   })!
 }
 
 export function getActiveSlides(layout: SignageLayout, atDate = new Date()) {
-  const hour = atDate.getHours()
+  const minutesInDay = atDate.getHours() * 60 + atDate.getMinutes()
   const weekday = atDate.getDay()
   const slides = Array.isArray(layout?.slides) ? layout.slides : []
   return slides
     .filter(
       (slide) =>
         slide.enabled &&
-        isHourInRange(hour, slide.startHour, slide.endHour) &&
+        isTimeInRange(minutesInDay, slide.startHour, slide.startMinute, slide.endHour, slide.endMinute) &&
         isWeekdayAllowed(weekday, slide.weekdays)
     )
     .sort((a, b) => a.order - b.order)
 }
 
-export function isHourInRange(hour: number, startHour: number, endHour: number) {
-  if (startHour === endHour) return true
-  if (startHour < endHour) return hour >= startHour && hour < endHour
-  return hour >= startHour || hour < endHour
+export function isTimeInRange(
+  minutesInDay: number,
+  startHour: number,
+  startMinute: number,
+  endHour: number,
+  endMinute: number
+) {
+  const startTotal = startHour * 60 + startMinute
+  const endTotal = endHour * 60 + endMinute
+
+  if (startTotal === endTotal) return true
+  if (startTotal < endTotal) return minutesInDay >= startTotal && minutesInDay < endTotal
+  return minutesInDay >= startTotal || minutesInDay < endTotal
 }
 
 function clampNumber(value: unknown, min: number, max: number, fallback: number) {
