@@ -1,34 +1,16 @@
+"use client"
+
 import Link from "next/link"
-import { Activity, ArrowRight, CheckCircle2, ClipboardList, AlertTriangle, Refrigerator } from "lucide-react"
+import { ArrowRight, AlertTriangle, AlertCircle, CheckCircle2, Clock, FileText, ChevronLeft, ChevronRight } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { cn } from "@/lib/utils"
+import { useRouter, usePathname, useSearchParams } from "next/navigation"
 import type { ShiftZoneOverview } from "../actions"
 
 type ShiftZonesOverviewTabProps = {
     clubId: string
     overview: ShiftZoneOverview
-}
-
-const statusMeta: Record<ShiftZoneOverview["recent_shifts"][number]["status"], { label: string; className: string }> = {
-    COMPLETE: {
-        label: "Полный цикл",
-        className: "border-green-200 bg-green-50 text-green-700",
-    },
-    OPEN_ONLY: {
-        label: "Только приемка",
-        className: "border-blue-200 bg-blue-50 text-blue-700",
-    },
-    CLOSE_ONLY: {
-        label: "Только сдача",
-        className: "border-amber-200 bg-amber-50 text-amber-700",
-    },
-    PARTIAL: {
-        label: "Частично",
-        className: "border-border bg-muted text-foreground",
-    },
+    currentMonth?: string
 }
 
 function formatDateTime(value: string | null) {
@@ -42,222 +24,280 @@ function formatDateTime(value: string | null) {
     })
 }
 
-export function ShiftZonesOverviewTab({ clubId, overview }: ShiftZonesOverviewTabProps) {
-    const cards = [
-        {
-            label: "Смен в обзоре",
-            value: overview.summary.recent_shifts_count,
-            hint: "Последние смены с приемкой или сдачей остатков",
-            icon: ClipboardList,
-            tone: "text-foreground bg-muted border-border",
-        },
-        {
-            label: "Точек учета",
-            value: overview.summary.configured_zones_count,
-            hint: "Склады, участвующие в передаче остатков",
-            icon: Refrigerator,
-            tone: "text-blue-700 bg-blue-50 border-blue-200",
-        },
-        {
-            label: "Полный цикл",
-            value: overview.summary.complete_shifts_count,
-            hint: "И приемка, и сдача остатков за смену",
-            icon: CheckCircle2,
-            tone: "text-green-700 bg-green-50 border-green-200",
-        },
-        {
-            label: "С расхождениями",
-            value: overview.summary.discrepancy_shifts_count,
-            hint: "Смены, где есть отклонения по передаче",
-            icon: AlertTriangle,
-            tone: "text-amber-700 bg-amber-50 border-amber-200",
-        },
-        {
-            label: "Сумма отклонений",
-            value: overview.summary.discrepancy_total_abs,
-            hint: "Абсолютная сумма расхождений по позициям",
-            icon: Activity,
-            tone: "text-red-700 bg-red-50 border-red-200",
-            suffix: "шт.",
-        },
-    ]
+function getShiftStatusUi(status: string, hasDiscrepancy: boolean) {
+    if (status === 'COMPLETE') {
+        if (hasDiscrepancy) {
+            return { label: "Сдал с расхождениями", className: "bg-amber-50 text-amber-700 border-amber-200", icon: AlertTriangle }
+        }
+        return { label: "Сдал чисто", className: "bg-emerald-50 text-emerald-700 border-emerald-200", icon: CheckCircle2 }
+    }
+    if (status === 'OPEN_ONLY') {
+        return { label: "Принял смену (В работе)", className: "bg-blue-50 text-blue-700 border-blue-200", icon: Clock }
+    }
+    if (status === 'CLOSE_ONLY') {
+        return { label: "Сдал без приемки", className: "bg-rose-50 text-rose-700 border-rose-200", icon: AlertCircle }
+    }
+    return { label: "Передача не завершена", className: "bg-slate-50 text-slate-700 border-slate-200", icon: FileText }
+}
+
+export function ShiftZonesOverviewTab({ clubId, overview, currentMonth }: ShiftZonesOverviewTabProps) {
+    const router = useRouter()
+    const pathname = usePathname()
+    const searchParams = useSearchParams()
+
+    // Determine current display month
+    const defaultMonth = (() => {
+        const now = new Date()
+        return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+    })()
+    const displayMonth = currentMonth || defaultMonth
+
+    const [yearStr, monthStr] = displayMonth.split('-')
+    const displayDate = new Date(Number(yearStr), Number(monthStr) - 1)
+    const formattedMonth = displayDate.toLocaleString('ru-RU', { month: 'long', year: 'numeric' })
+    const capitalizedMonth = formattedMonth.charAt(0).toUpperCase() + formattedMonth.slice(1)
+
+    const navigateMonth = (direction: 'prev' | 'next') => {
+        const date = new Date(Number(yearStr), Number(monthStr) - 1)
+        if (direction === 'prev') {
+            date.setMonth(date.getMonth() - 1)
+        } else {
+            date.setMonth(date.getMonth() + 1)
+        }
+        const newVal = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+        
+        const newParams = new URLSearchParams(searchParams.toString())
+        newParams.set('month', newVal)
+        newParams.set('tab', 'zones')
+        router.push(`${pathname}?${newParams.toString()}`, { scroll: false })
+    }
+    // Выделяем проблемные смены (где есть расхождения, либо сдана без приемки, либо передача сломана)
+    const problematicShifts = overview.recent_shifts.filter(s => 
+        s.discrepancy_items_count > 0 || s.status === 'CLOSE_ONLY' || s.status === 'PARTIAL'
+    )
+    
+    // Обычные смены — это те, которые не попали в проблемные
+    const normalShifts = overview.recent_shifts.filter(s => !problematicShifts.includes(s))
+
+    const activeShiftsCount = overview.recent_shifts.filter(s => s.status === 'OPEN_ONLY').length
+    const discrepancyCount = overview.summary.discrepancy_shifts_count
+
+    const getHandoverContext = (shift: typeof overview.recent_shifts[0]) => {
+        const index = overview.recent_shifts.findIndex(s => s.shift_id === shift.shift_id)
+        const prevShift = overview.recent_shifts[index + 1]
+        const nextShift = overview.recent_shifts[index - 1]
+
+        const acceptedFrom = prevShift ? prevShift.employee_name : "—"
+        let handedOverTo = "—"
+        
+        if (shift.status === 'OPEN_ONLY' || shift.status === 'PARTIAL') {
+            handedOverTo = "Смена идет"
+        } else if (shift.status === 'COMPLETE' || shift.status === 'CLOSE_ONLY') {
+            handedOverTo = nextShift ? nextShift.employee_name : "Ожидает приемки"
+        }
+
+        return { acceptedFrom, handedOverTo }
+    }
 
     return (
-        <div className="space-y-5">
-            <div className="rounded-2xl border bg-gradient-to-br from-white via-slate-50 to-slate-100 p-4 md:p-6 shadow-sm">
-                <div className="space-y-2">
-                    <div className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
-                        <Refrigerator className="h-3.5 w-3.5 text-blue-500" />
-                        Передача Остатков
-                    </div>
-                    <div>
-                        <h3 className="text-lg font-bold text-foreground md:text-2xl">Общая картина по передаче остатков</h3>
-                        <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-                            Здесь видно, как по сменам проходили приемка и сдача остатков, где цикл завершен полностью и на каких складах накапливаются расхождения.
-                        </p>
-                    </div>
+        <div className="space-y-6">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-card p-4 sm:p-6 rounded-2xl border shadow-sm relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-1.5 h-full bg-indigo-500" />
+                <div className="pl-2">
+                    <h3 className="text-xl font-black text-foreground">Журнал передач смен</h3>
+                    <p className="text-sm text-muted-foreground mt-1 max-w-md">Контроль приемки и сдачи остатков. Кто дежурил, когда сдал, и какие были расхождения.</p>
                 </div>
-
-                <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-                    {cards.map((card) => {
-                        const Icon = card.icon
-                        return (
-                            <Card key={card.label} className="border-border/80 shadow-none">
-                                <CardContent className="flex items-start justify-between p-4">
-                                    <div className="space-y-1">
-                                        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted-foreground">{card.label}</p>
-                                        <p className="text-2xl font-black text-foreground">
-                                            {Number(card.value).toLocaleString("ru-RU")}
-                                            {card.suffix ? ` ${card.suffix}` : ""}
-                                        </p>
-                                        <p className="text-xs text-muted-foreground">{card.hint}</p>
-                                    </div>
-                                    <div className={cn("rounded-xl border p-2.5", card.tone)}>
-                                        <Icon className="h-4 w-4" />
-                                    </div>
-                                </CardContent>
-                            </Card>
-                        )
-                    })}
+                <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto items-stretch sm:items-center">
+                    <div className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-xl overflow-hidden shadow-sm flex-1 sm:flex-none w-full sm:w-[200px]">
+                        <button 
+                            onClick={() => navigateMonth('prev')}
+                            className="p-2.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors focus:outline-none focus:bg-slate-100 active:bg-slate-200"
+                        >
+                            <ChevronLeft className="h-4 w-4" />
+                        </button>
+                        <span className="text-sm font-bold text-slate-700 px-2 select-none">
+                            {capitalizedMonth}
+                        </span>
+                        <button 
+                            onClick={() => navigateMonth('next')}
+                            className="p-2.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors focus:outline-none focus:bg-slate-100 active:bg-slate-200"
+                        >
+                            <ChevronRight className="h-4 w-4" />
+                        </button>
+                    </div>
+                    <div className="flex gap-3 w-full sm:w-auto">
+                        <div className="bg-amber-50 border border-amber-100 rounded-xl px-4 py-2 flex flex-col items-end flex-1 sm:flex-none">
+                            <span className="text-[10px] uppercase font-black tracking-widest text-amber-600 mb-0.5">С расхождениями</span>
+                            <span className="text-xl font-black text-amber-700">{discrepancyCount}</span>
+                        </div>
+                        <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-2 flex flex-col items-end flex-1 sm:flex-none">
+                            <span className="text-[10px] uppercase font-black tracking-widest text-blue-600 mb-0.5">В работе</span>
+                            <span className="text-xl font-black text-blue-700">{activeShiftsCount}</span>
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            <Card className="shadow-sm">
-                <CardHeader className="pb-3">
-                    <CardTitle className="text-base">Последние передачи остатков</CardTitle>
-                </CardHeader>
-                <CardContent className="p-0">
-                    {overview.recent_shifts.length === 0 ? (
-                        <div className="px-6 py-14 text-center text-sm text-muted-foreground">
-                            По передаче остатков еще нет ни одной приемки или сдачи.
-                        </div>
-                    ) : (
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Смена</TableHead>
-                                    <TableHead>Сотрудник</TableHead>
-                                    <TableHead className="text-right">Приемка</TableHead>
-                                    <TableHead className="text-right">Сдача</TableHead>
-                                    <TableHead className="text-right">Расхождения</TableHead>
-                                    <TableHead>Статус</TableHead>
-                                    <TableHead className="w-[120px]"></TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {overview.recent_shifts.map((shift) => {
-                                    const status = statusMeta[shift.status]
-                                    return (
-                                        <TableRow key={shift.shift_id}>
-                                            <TableCell>
-                                                <div className="flex flex-col">
-                                                    <span className="font-medium">{formatDateTime(shift.check_in)}</span>
-                                                    <span className="text-xs text-muted-foreground">
-                                                        Последний снимок: {formatDateTime(shift.last_snapshot_at)}
-                                                    </span>
-                                                </div>
-                                            </TableCell>
-                                            <TableCell className="font-medium">{shift.employee_name}</TableCell>
-                                            <TableCell className="text-right tabular-nums">
-                                                {shift.open_zones_count}/{shift.total_zones}
-                                            </TableCell>
-                                            <TableCell className="text-right tabular-nums">
-                                                {shift.close_zones_count}/{shift.total_zones}
-                                            </TableCell>
-                                            <TableCell className="text-right">
-                                                <div className="flex flex-col items-end">
-                                                    <span className={cn(
-                                                        "font-semibold tabular-nums",
-                                                        shift.discrepancy_items_count > 0 ? "text-red-600" : "text-green-600"
-                                                    )}>
-                                                        {shift.discrepancy_items_count}
-                                                    </span>
-                                                    <span className="text-xs text-muted-foreground">
-                                                        {shift.discrepancy_total_abs.toLocaleString("ru-RU")} шт.
-                                                    </span>
-                                                </div>
-                                            </TableCell>
-                                            <TableCell>
-                                                <Badge variant="outline" className={status.className}>
-                                                    {status.label}
-                                                </Badge>
-                                            </TableCell>
-                                            <TableCell className="text-right">
-                                                <Button asChild variant="ghost" size="sm" className="h-8 px-2">
-                                                        <Link href={`/clubs/${clubId}/inventory/handovers/${shift.shift_id}`}>
-                                                        Детали
-                                                        <ArrowRight className="ml-1 h-4 w-4" />
-                                                    </Link>
-                                                </Button>
-                                            </TableCell>
-                                        </TableRow>
-                                    )
-                                })}
-                            </TableBody>
-                        </Table>
-                    )}
-                </CardContent>
-            </Card>
-
-            <Card className="shadow-sm">
-                <CardHeader className="pb-3">
-                    <CardTitle className="text-base">Сводка по складам ответственности</CardTitle>
-                </CardHeader>
-                <CardContent className="p-0">
-                    {overview.zones.length === 0 ? (
-                        <div className="px-6 py-14 text-center text-sm text-muted-foreground">
-                            Не настроены склады для передачи остатков.
-                        </div>
-                    ) : (
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Склад</TableHead>
-                                    <TableHead className="text-right">Приемок</TableHead>
-                                    <TableHead className="text-right">Сдач</TableHead>
-                                    <TableHead className="text-right">Смен с расхожд.</TableHead>
-                                    <TableHead className="text-right">Позиций</TableHead>
-                                    <TableHead className="text-right">Сумма</TableHead>
-                                    <TableHead>Последняя активность</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {overview.zones.map((zone) => (
-                                    <TableRow key={zone.warehouse_id}>
-                                        <TableCell>
+            {problematicShifts.length > 0 && (
+                <div className="space-y-3">
+                    <h4 className="text-sm font-bold uppercase tracking-widest text-rose-600 flex items-center gap-2 ml-1">
+                        <AlertCircle className="h-4 w-4" />
+                        Требуют внимания
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                        {problematicShifts.map(shift => {
+                            const hasDiscrepancy = shift.discrepancy_items_count > 0
+                            const statusUI = getShiftStatusUi(shift.status, hasDiscrepancy)
+                            const StatusIcon = statusUI.icon
+                            const { acceptedFrom, handedOverTo } = getHandoverContext(shift)
+                            
+                            return (
+                                <Link key={shift.shift_id} href={`/clubs/${clubId}/inventory/handovers/${shift.shift_id}`} className="block group">
+                                    <div className="bg-white rounded-2xl border border-rose-100 p-4 shadow-sm hover:shadow-md hover:border-rose-300 transition-all relative overflow-hidden h-full flex flex-col">
+                                        <div className="absolute top-0 left-0 w-1 h-full bg-rose-500" />
+                                        <div className="flex justify-between items-start mb-3">
                                             <div className="flex flex-col">
-                                                <span className="font-medium">{zone.warehouse_name}</span>
-                                                <span className="text-xs text-muted-foreground">{zone.shift_zone_label}</span>
+                                                <span className="text-[10px] text-slate-500 uppercase font-bold tracking-wider mb-1">
+                                                    {formatDateTime(shift.check_in)}
+                                                </span>
+                                                <span className="text-base font-black text-slate-900">{shift.employee_name}</span>
                                             </div>
-                                        </TableCell>
-                                        <TableCell className="text-right tabular-nums">{zone.open_snapshots_count}</TableCell>
-                                        <TableCell className="text-right tabular-nums">{zone.close_snapshots_count}</TableCell>
-                                        <TableCell className="text-right tabular-nums">{zone.discrepancy_shifts_count}</TableCell>
-                                        <TableCell className="text-right tabular-nums">{zone.discrepancy_items_count}</TableCell>
-                                        <TableCell className="text-right">
-                                            <span className={cn(
-                                                "font-semibold tabular-nums",
-                                                zone.discrepancy_total_abs > 0 ? "text-red-600" : "text-green-600"
-                                            )}>
-                                                {zone.discrepancy_total_abs.toLocaleString("ru-RU")} шт.
-                                            </span>
-                                        </TableCell>
-                                        <TableCell>
-                                            <div className="flex flex-col text-sm">
-                                                <span>Приемка: {formatDateTime(zone.latest_open_at)}</span>
-                                                <span className="text-muted-foreground">Сдача: {formatDateTime(zone.latest_close_at)}</span>
-                                            </div>
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    )}
-                </CardContent>
-            </Card>
+                                            <Badge variant="outline" className={cn("text-[10px] px-2 border-none font-bold uppercase shrink-0 text-right", statusUI.className)}>
+                                                <StatusIcon className="h-3 w-3 mr-1" />
+                                                {statusUI.label}
+                                            </Badge>
+                                        </div>
 
-            <div className="rounded-2xl border border-dashed bg-muted/70 px-4 py-3 text-xs text-muted-foreground">
-                            Сейчас обзор считает последние {overview.summary.recent_shifts_count} смен с событиями по передаче остатков и показывает их отдельно от обычных складских инвентаризаций.
+                                        <div className="flex flex-col gap-1.5 mb-4 mt-2">
+                                            <div className="flex justify-between items-center bg-slate-50 rounded-md px-3 py-1.5">
+                                                <span className="text-[10px] text-slate-500 font-bold uppercase">Принял от:</span>
+                                                <span className="text-xs font-black text-slate-700">{acceptedFrom}</span>
+                                            </div>
+                                            <div className="flex justify-between items-center bg-slate-50 rounded-md px-3 py-1.5">
+                                                <span className="text-[10px] text-slate-500 font-bold uppercase">Передал:</span>
+                                                <span className="text-xs font-black text-slate-700">{handedOverTo}</span>
+                                            </div>
+                                        </div>
+                                        
+                                        <div className="mt-auto pt-3 border-t border-slate-50 flex justify-between items-end">
+                                            {hasDiscrepancy ? (
+                                                <div>
+                                                    <p className="text-[10px] uppercase font-black tracking-widest text-slate-400 mb-1">Расхождения</p>
+                                                    <p className="text-sm font-black text-rose-600">{shift.discrepancy_items_count} поз. ({shift.discrepancy_total_abs} шт)</p>
+                                                </div>
+                                            ) : (
+                                                <div>
+                                                    <p className="text-[10px] uppercase font-black tracking-widest text-slate-400 mb-1">Ошибка передачи</p>
+                                                    <p className="text-xs font-bold text-amber-600">Нарушен цикл сдачи</p>
+                                                </div>
+                                            )}
+                                            <div className="h-8 w-8 rounded-full bg-slate-50 flex items-center justify-center group-hover:bg-rose-50 transition-colors">
+                                                <ArrowRight className="h-4 w-4 text-slate-400 group-hover:text-rose-600" />
+                                            </div>
+                                        </div>
+                                    </div>
+                                </Link>
+                            )
+                        })}
+                    </div>
+                </div>
+            )}
+
+            <div className="space-y-3">
+                <h4 className="text-sm font-bold uppercase tracking-widest text-slate-500 flex items-center gap-2 ml-1">
+                    <FileText className="h-4 w-4" />
+                    История смен
+                </h4>
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    {normalShifts.length === 0 && problematicShifts.length === 0 ? (
+                        <div className="px-6 py-14 text-center text-sm text-muted-foreground italic">
+                            Пока нет ни одной записи о передаче остатков.
+                        </div>
+                    ) : normalShifts.length === 0 ? (
+                        <div className="px-6 py-14 text-center text-sm text-muted-foreground italic bg-slate-50/50">
+                            Все недавние смены отображены в блоке "Требуют внимания".
+                        </div>
+                    ) : (
+                        <div className="divide-y divide-slate-100">
+                            {/* Desktop Header */}
+                            <div className="hidden lg:grid grid-cols-12 gap-4 p-4 bg-slate-50 border-b border-slate-100 text-[10px] uppercase font-black text-slate-500 tracking-wider items-center">
+                                <div className="col-span-3 pl-2">Сотрудник (Смена)</div>
+                                <div className="col-span-2">Принял от</div>
+                                <div className="col-span-2">Передал</div>
+                                <div className="col-span-4">Статус</div>
+                                <div className="col-span-1 text-right pr-2">Детали</div>
+                            </div>
+                            
+                            {/* Rows */}
+                            {normalShifts.map(shift => {
+                                const hasDiscrepancy = shift.discrepancy_items_count > 0
+                                const statusUI = getShiftStatusUi(shift.status, hasDiscrepancy)
+                                const StatusIcon = statusUI.icon
+                                const { acceptedFrom, handedOverTo } = getHandoverContext(shift)
+                                
+                                return (
+                                    <Link key={shift.shift_id} href={`/clubs/${clubId}/inventory/handovers/${shift.shift_id}`} className="block hover:bg-slate-50 transition-colors group">
+                                        {/* Desktop Row */}
+                                        <div className="hidden lg:grid grid-cols-12 gap-4 p-4 items-center">
+                                            <div className="col-span-3 pl-2">
+                                                <p className="font-bold text-sm text-slate-900">{shift.employee_name}</p>
+                                                <p className="text-[10px] text-slate-500 font-medium mt-0.5">{formatDateTime(shift.check_in)}</p>
+                                            </div>
+                                            <div className="col-span-2 min-w-0">
+                                                <p className="font-medium text-sm text-slate-700 truncate" title={acceptedFrom}>{acceptedFrom}</p>
+                                            </div>
+                                            <div className="col-span-2 min-w-0">
+                                                <p className="font-medium text-sm text-slate-700 truncate" title={handedOverTo}>{handedOverTo}</p>
+                                            </div>
+                                            <div className="col-span-4">
+                                                <Badge variant="outline" className={cn("text-[10px] px-2.5 py-1 border-none font-bold uppercase", statusUI.className)}>
+                                                    <StatusIcon className="h-3 w-3 mr-1.5" />
+                                                    {statusUI.label}
+                                                </Badge>
+                                            </div>
+                                            <div className="col-span-1 flex justify-end pr-2">
+                                                <div className="h-8 w-8 rounded-full bg-slate-100 flex items-center justify-center group-hover:bg-blue-100 transition-colors">
+                                                    <ArrowRight className="h-4 w-4 text-slate-400 group-hover:text-blue-600" />
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Mobile Row */}
+                                        <div className="lg:hidden p-4 flex flex-col gap-3">
+                                            <div className="flex justify-between items-start">
+                                                <div>
+                                                    <p className="font-black text-base text-slate-900">{shift.employee_name}</p>
+                                                    <p className="text-xs text-slate-500 font-medium mt-0.5">{formatDateTime(shift.check_in)}</p>
+                                                </div>
+                                            </div>
+                                            
+                                            <div className="flex flex-col gap-1 bg-slate-50 rounded-md p-2 mt-1">
+                                                <div className="flex justify-between items-center">
+                                                    <span className="text-[10px] text-slate-500 font-bold uppercase">Принял от:</span>
+                                                    <span className="text-xs font-bold text-slate-700">{acceptedFrom}</span>
+                                                </div>
+                                                <div className="flex justify-between items-center">
+                                                    <span className="text-[10px] text-slate-500 font-bold uppercase">Передал:</span>
+                                                    <span className="text-xs font-bold text-slate-700">{handedOverTo}</span>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex justify-between items-center mt-1">
+                                                <Badge variant="outline" className={cn("text-[9px] px-2 py-0.5 border-none font-bold uppercase shrink-0", statusUI.className)}>
+                                                    <StatusIcon className="h-3 w-3 mr-1" />
+                                                    {statusUI.label}
+                                                </Badge>
+                                                <div className="text-[11px] font-bold text-blue-600 flex items-center gap-1">
+                                                    Смотреть детали <ArrowRight className="h-3 w-3" />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </Link>
+                                )
+                            })}
+                        </div>
+                    )}
+                </div>
             </div>
         </div>
     )

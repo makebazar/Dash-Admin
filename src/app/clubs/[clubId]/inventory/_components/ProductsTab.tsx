@@ -11,7 +11,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
 import { createProduct, updateProduct, deleteProduct, bulkUpdatePrices, writeOffProduct, getProductHistory, Product, Category, adjustWarehouseStock, getReplenishmentRulesForProduct, createReplenishmentRule, deleteReplenishmentRule, ReplenishmentRule, Warehouse, PriceTagSettings } from "../actions"
-import { useParams } from "next/navigation"
+import { PageToolbar, ToolbarGroup, SearchInput } from "@/components/layout/PageShell"
+import { useParams, useRouter } from "next/navigation"
 import { format } from "date-fns"
 import { ru } from "date-fns/locale"
 import { cn } from "@/lib/utils"
@@ -29,6 +30,7 @@ interface ProductsTabProps {
 
 export function ProductsTab({ products, categories, warehouses, currentUserId, priceTagSettings }: ProductsTabProps) {
     const params = useParams()
+    const router = useRouter()
     const clubId = params.clubId as string
     
     const activeTemplate = priceTagSettings?.templates.find(t => t.id === priceTagSettings.active_template_id) || priceTagSettings?.templates[0]
@@ -380,21 +382,19 @@ export function ProductsTab({ products, categories, warehouses, currentUserId, p
     }
 
     return (
-        <div className="space-y-4">
+        <div className="space-y-6">
             {/* Toolbar */}
-            <div className="flex flex-col md:flex-row gap-4 justify-between bg-card p-3 md:p-4 rounded-lg border shadow-sm">
-                <div className="flex flex-col sm:flex-row gap-3 md:gap-4 flex-1">
-                    <div className="relative flex-1 max-w-sm">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input 
+            <PageToolbar>
+                <ToolbarGroup className="w-full md:w-auto">
+                    <div className="flex-1 min-w-[200px]">
+                        <SearchInput 
                             placeholder="Поиск товара..." 
-                            className="pl-9 h-10 md:h-9"
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
                         />
                     </div>
                     <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                        <SelectTrigger className="w-full sm:w-[150px] h-10 md:h-9">
+                        <SelectTrigger className="w-[140px] md:w-[180px] h-9 bg-white">
                             <SelectValue placeholder="Категория" />
                         </SelectTrigger>
                         <SelectContent>
@@ -404,91 +404,80 @@ export function ProductsTab({ products, categories, warehouses, currentUserId, p
                             ))}
                         </SelectContent>
                     </Select>
-                </div>
-                <div className="flex gap-2 w-full md:w-auto">
+                </ToolbarGroup>
+                <ToolbarGroup align="end" className="w-full md:w-auto mt-3 md:mt-0">
                     {selectedIds.size > 0 && (
                         <>
-                            <Button variant="secondary" onClick={() => setIsPrintDialogOpen(true)} className="flex-1 md:flex-none h-10 md:h-9 text-sm">
-                                <Printer className="mr-1 md:mr-2 h-4 w-4 shrink-0" />
-                                <span className="md:inline">Печать ({selectedIds.size})</span>
+                            <Button variant="outline" onClick={() => setIsPrintDialogOpen(true)} className="flex-1 md:flex-none h-9 bg-white">
+                                <Printer className="mr-2 h-4 w-4" />
+                                Печать ({selectedIds.size})
                             </Button>
-                            <Button variant="secondary" onClick={() => setIsBulkDialogOpen(true)} className="flex-1 md:flex-none h-10 md:h-9 text-sm">
-                                <Layers className="mr-1 md:mr-2 h-4 w-4 shrink-0" />
-                                <span className="md:inline">Цены ({selectedIds.size})</span>
+                            <Button variant="outline" onClick={() => setIsBulkDialogOpen(true)} className="flex-1 md:flex-none h-9 bg-white">
+                                <Layers className="mr-2 h-4 w-4" />
+                                Цены ({selectedIds.size})
                             </Button>
                         </>
                     )}
-                    <Button onClick={() => {
-                        setEditingProduct({ is_active: true, current_stock: 0, cost_price: 0, selling_price: 0 })
-                        setDesiredMarkup("")
-                        setDesiredMargin("")
-                        setIsDialogOpen(true)
-                    }} className="flex-1 md:flex-none h-10 md:h-9 text-sm">
-                        <Plus className="mr-1 md:mr-2 h-4 w-4 shrink-0" />
-                        Добавить
+                    <Button onClick={() => router.push(`/clubs/${clubId}/inventory/products/new`)} className="flex-1 md:flex-none h-9">
+                        <Plus className="mr-2 h-4 w-4" />
+                        Добавить товар
                     </Button>
-                </div>
-            </div>
+                </ToolbarGroup>
+            </PageToolbar>
 
             {/* Desktop Table */}
-            <div className="hidden md:block rounded-md border bg-card">
+            <div className="hidden md:block rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
                 <Table>
-                    <TableHeader>
-                        <TableRow>
+                    <TableHeader className="bg-slate-50/50">
+                        <TableRow className="hover:bg-transparent">
                             <TableHead className="w-[40px]">
                                 <input 
                                     type="checkbox"
-                                    className="rounded border-gray-300"
+                                    className="rounded border-slate-300"
                                     checked={selectedIds.size === displayedProducts.length && displayedProducts.length > 0}
                                     onChange={toggleSelectAll}
                                 />
                             </TableHead>
-                            <TableHead className="cursor-pointer hover:bg-muted/50 select-none" onClick={() => toggleSort("name")}>
-                                <div className="flex items-center gap-1">
+                            <TableHead className="cursor-pointer hover:bg-slate-100 select-none transition-colors" onClick={() => toggleSort("name")}>
+                                <div className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wider text-slate-500">
                                     Название
                                     {renderSortIcon("name")}
                                 </div>
                             </TableHead>
-                            <TableHead className="cursor-pointer hover:bg-muted/50 select-none" onClick={() => toggleSort("category")}>
-                                <div className="flex items-center gap-1">
+                            <TableHead className="cursor-pointer hover:bg-slate-100 select-none transition-colors" onClick={() => toggleSort("category")}>
+                                <div className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wider text-slate-500">
                                     Категория
                                     {renderSortIcon("category")}
                                 </div>
                             </TableHead>
-                            <TableHead className="text-right cursor-pointer hover:bg-muted/50 select-none" onClick={() => toggleSort("cost_price")}>
-                                <div className="flex items-center justify-end gap-1">
+                            <TableHead className="text-right cursor-pointer hover:bg-slate-100 select-none transition-colors" onClick={() => toggleSort("cost_price")}>
+                                <div className="flex items-center justify-end gap-1 text-xs font-semibold uppercase tracking-wider text-slate-500">
                                     Закупка
                                     {renderSortIcon("cost_price")}
                                 </div>
                             </TableHead>
-                            <TableHead className="text-right cursor-pointer hover:bg-muted/50 select-none" onClick={() => toggleSort("selling_price")}>
-                                <div className="flex items-center justify-end gap-1">
+                            <TableHead className="text-right cursor-pointer hover:bg-slate-100 select-none transition-colors" onClick={() => toggleSort("selling_price")}>
+                                <div className="flex items-center justify-end gap-1 text-xs font-semibold uppercase tracking-wider text-slate-500">
                                     Продажа
                                     {renderSortIcon("selling_price")}
                                 </div>
                             </TableHead>
-                            <TableHead className="text-right cursor-pointer hover:bg-muted/50 select-none" onClick={() => toggleSort("markup")}>
-                                <div className="flex items-center justify-end gap-1">
+                            <TableHead className="text-right cursor-pointer hover:bg-slate-100 select-none transition-colors" onClick={() => toggleSort("markup")}>
+                                <div className="flex items-center justify-end gap-1 text-xs font-semibold uppercase tracking-wider text-slate-500">
                                     Наценка
                                     {renderSortIcon("markup")}
                                 </div>
                             </TableHead>
-                            <TableHead className="text-right cursor-pointer hover:bg-muted/50 select-none" onClick={() => toggleSort("margin")}>
-                                <div className="flex items-center justify-end gap-1">
+                            <TableHead className="text-right cursor-pointer hover:bg-slate-100 select-none transition-colors" onClick={() => toggleSort("margin")}>
+                                <div className="flex items-center justify-end gap-1 text-xs font-semibold uppercase tracking-wider text-slate-500">
                                     Маржа
                                     {renderSortIcon("margin")}
                                 </div>
                             </TableHead>
-                            <TableHead className="text-right cursor-pointer hover:bg-muted/50 select-none" onClick={() => toggleSort("stock")}>
-                                <div className="flex items-center justify-end gap-1">
+                            <TableHead className="text-right cursor-pointer hover:bg-slate-100 select-none transition-colors" onClick={() => toggleSort("stock")}>
+                                <div className="flex items-center justify-end gap-1 text-xs font-semibold uppercase tracking-wider text-slate-500">
                                     Остаток
                                     {renderSortIcon("stock")}
-                                </div>
-                            </TableHead>
-                            <TableHead className="text-right cursor-pointer hover:bg-muted/50 select-none" onClick={() => toggleSort("sum")}>
-                                <div className="flex items-center justify-end gap-1">
-                                    Сумма
-                                    {renderSortIcon("sum")}
                                 </div>
                             </TableHead>
                             <TableHead className="w-[50px]"></TableHead>
@@ -497,8 +486,8 @@ export function ProductsTab({ products, categories, warehouses, currentUserId, p
                     <TableBody>
                         {displayedProducts.map(product => {
                             return (
-                                <TableRow key={product.id}>
-                                    <TableCell>
+                                <TableRow key={product.id} className="hover:bg-slate-50/50 transition-colors cursor-pointer" onClick={() => router.push(`/clubs/${clubId}/inventory/products/${product.id}`)}>
+                                    <TableCell onClick={(e) => e.stopPropagation()}>
                                         <input 
                                             type="checkbox"
                                             className="rounded border-gray-300"
@@ -543,96 +532,59 @@ export function ProductsTab({ products, categories, warehouses, currentUserId, p
                                     </TableCell>
                                     <TableCell>
                                         {product.category_name ? (
-                                            <Badge variant="outline">{product.category_name}</Badge>
-                                        ) : <span className="text-muted-foreground text-sm">—</span>}
+                                            <Badge variant="secondary" className="bg-slate-100 text-slate-700 hover:bg-slate-200 border-none font-normal">{product.category_name}</Badge>
+                                        ) : <span className="text-slate-400 text-sm">—</span>}
                                     </TableCell>
-                                    <TableCell className="text-right whitespace-nowrap">{product.cost_price} ₽</TableCell>
-                                    <TableCell className="text-right font-bold whitespace-nowrap">{product.selling_price} ₽</TableCell>
+                                    <TableCell className="text-right whitespace-nowrap text-slate-600">{product.cost_price} ₽</TableCell>
+                                    <TableCell className="text-right font-bold whitespace-nowrap text-slate-900">{product.selling_price} ₽</TableCell>
                                     <TableCell className="text-right">
                                         {product.cost_price > 0 ? (
-                                            <span className="text-sm font-medium">
+                                            <span className="text-sm font-medium text-emerald-600">
                                                 {Math.round(((product.selling_price - product.cost_price) / product.cost_price) * 100)}%
                                             </span>
                                         ) : (
-                                            <span className="text-muted-foreground">—</span>
+                                            <span className="text-slate-400">—</span>
                                         )}
                                     </TableCell>
                                     <TableCell className="text-right">
                                         {product.selling_price > 0 ? (
-                                            <span className="text-sm font-medium">
+                                            <span className="text-sm font-medium text-blue-600">
                                                 {Math.round(((product.selling_price - product.cost_price) / product.selling_price) * 100)}%
                                             </span>
                                         ) : (
-                                            <span className="text-muted-foreground">—</span>
+                                            <span className="text-slate-400">—</span>
                                         )}
                                     </TableCell>
                                     <TableCell className="text-right whitespace-nowrap">
                                         <div className="flex flex-col items-end">
-                                            <span className="text-sm font-medium">
-                                                {product.current_stock} шт
+                                            <span className="text-base font-medium text-slate-900 tracking-tight">
+                                                {product.current_stock} <span className="text-sm font-normal text-slate-500">шт</span>
                                             </span>
                                             {product.stocks && product.stocks.length > 0 && (
-                                                <div className="flex flex-col text-[10px] text-muted-foreground mt-1">
+                                                <div className="flex flex-col gap-0.5 mt-1">
                                                     {product.stocks.map((s, i) => (
-                                                        <span key={i} title={s.warehouse_name} className={s.is_default ? "font-semibold" : ""}>
-                                                            {s.warehouse_name.substring(0, 8)}{s.warehouse_name.length > 8 ? '...' : ''}: {s.quantity}
-                                                        </span>
+                                                        <div key={i} className="flex items-center justify-end gap-2 text-[11px]">
+                                                            <span className="text-slate-400 truncate max-w-[100px]" title={s.warehouse_name}>
+                                                                {s.warehouse_name}
+                                                            </span>
+                                                            <span className={cn(
+                                                                "font-medium tabular-nums min-w-[20px] text-right",
+                                                                s.is_default ? "text-slate-900" : "text-slate-500"
+                                                            )}>
+                                                                {s.quantity}
+                                                            </span>
+                                                        </div>
                                                     ))}
                                                 </div>
                                             )}
                                         </div>
                                     </TableCell>
-                                    <TableCell className="text-right whitespace-nowrap">
-                                        <span className="text-sm text-muted-foreground">
-                                            {((product.current_stock * product.cost_price) || 0).toLocaleString('ru-RU', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} ₽
-                                        </span>
-                                    </TableCell>
                                     <TableCell>
-                                        <DropdownMenu>
-                                            <DropdownMenuTrigger asChild>
-                                                <Button aria-label={`Действия для товара ${product.name}`} variant="ghost" size="icon" className="h-8 w-8">
-                                                    <MoreVertical className="h-4 w-4" />
-                                                </Button>
-                                            </DropdownMenuTrigger>
-                                            <DropdownMenuContent align="end">
-                                                <DropdownMenuItem onClick={() => {
-                                                    setEditingProduct(product)
-                                                    // Calculate initial markup/margin for display
-                                                    if (product.cost_price > 0 && product.selling_price > 0) {
-                                                        setDesiredMarkup(((product.selling_price - product.cost_price) / product.cost_price * 100).toFixed(1))
-                                                        setDesiredMargin(((product.selling_price - product.cost_price) / product.selling_price * 100).toFixed(1))
-                                                    } else {
-                                                        setDesiredMarkup("")
-                                                        setDesiredMargin("")
-                                                    }
-                                                    setIsDialogOpen(true)
-                                                }}>
-                                                    <Pencil className="mr-2 h-4 w-4" /> Редактировать
-                                                </DropdownMenuItem>
-                                                <DropdownMenuItem onClick={() => setManageStockDialog({ isOpen: true, product })}>
-                                                    <Box className="mr-2 h-4 w-4" /> Управление остатками
-                                                </DropdownMenuItem>
-                                                <DropdownMenuItem onClick={() => {
-                                                    setEditingProduct({ ...product, price_history: product.price_history })
-                                                    setIsPriceHistoryOpen(true)
-                                                }}>
-                                                    <TrendingUp className="mr-2 h-4 w-4" /> История цен
-                                                </DropdownMenuItem>
-                                                <DropdownMenuItem onClick={() => openReplenishment(product)}>
-                                                    <RefreshCw className="mr-2 h-4 w-4" /> Правила пополнения
-                                                </DropdownMenuItem>
-                                                <DropdownMenuItem onClick={() => openHistory(product)}>
-                                                    <RefreshCw className="mr-2 h-4 w-4" /> История
-                                                </DropdownMenuItem>
-                                                <DropdownMenuItem onClick={() => setWriteOffDialog({ isOpen: true, product })}>
-                                                    <Trash2 className="mr-2 h-4 w-4 text-orange-500" /> Списать
-                                                </DropdownMenuItem>
-                                                <DropdownMenuSeparator />
-                                                <DropdownMenuItem className="text-red-600" onClick={() => handleDelete(product.id)}>
-                                                    <Trash2 className="mr-2 h-4 w-4" /> Удалить
-                                                </DropdownMenuItem>
-                                            </DropdownMenuContent>
-                                        </DropdownMenu>
+                                        <div className="flex justify-end">
+                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-slate-600">
+                                                <MoreVertical className="h-4 w-4" />
+                                            </Button>
+                                        </div>
                                     </TableCell>
                                 </TableRow>
                             )
@@ -702,73 +654,59 @@ export function ProductsTab({ products, categories, warehouses, currentUserId, p
                                     </div>
                                 </div>
                                 <div onClick={(e) => e.stopPropagation()}>
-                                    <DropdownMenu>
-                                        <DropdownMenuTrigger asChild>
-                                            <Button variant="ghost" className="h-9 w-9 p-0 -mt-1 -mr-1">
-                                                <MoreVertical className="h-5 w-5 text-muted-foreground/70" />
-                                            </Button>
-                                        </DropdownMenuTrigger>
-                                        <DropdownMenuContent align="end" className="w-56">
-                                            <DropdownMenuItem onClick={() => {
-                                                setEditingProduct(product)
-                                                setIsDialogOpen(true)
-                                            }}>
-                                                <Pencil className="mr-2 h-4 w-4" /> Изменить
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem onClick={() => setManageStockDialog({ isOpen: true, product })}>
-                                                <Box className="mr-2 h-4 w-4" /> Управление остатками
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem onClick={() => openReplenishment(product)}>
-                                                <RefreshCw className="mr-2 h-4 w-4" /> Правила пополнения
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem onClick={() => openHistory(product)}>
-                                                <History className="mr-2 h-4 w-4" /> История
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem onClick={() => setWriteOffDialog({ isOpen: true, product })}>
-                                                <Trash2 className="mr-2 h-4 w-4 text-orange-500" /> Списать
-                                            </DropdownMenuItem>
-                                            <DropdownMenuSeparator />
-                                            <DropdownMenuItem className="text-red-600" onClick={() => handleDelete(product.id)}>
-                                                <Trash2 className="mr-2 h-4 w-4" /> Удалить
-                                            </DropdownMenuItem>
-                                        </DropdownMenuContent>
-                                    </DropdownMenu>
+                                    <Button variant="outline" size="sm" className="h-8 bg-slate-50 border-slate-200 text-xs font-medium" onClick={() => router.push(`/clubs/${clubId}/inventory/products/${product.id}`)}>
+                                        Открыть
+                                    </Button>
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-4 pt-3 border-t border-border/50">
+                            <div className="grid grid-cols-2 gap-4 pt-3 border-t border-slate-100 mt-2">
                                 <div>
-                                    <p className="text-[10px] text-muted-foreground/70 uppercase font-black tracking-widest mb-1">Цена продажи</p>
+                                    <p className="text-[10px] text-slate-400 uppercase font-black tracking-widest mb-1">Цена продажи</p>
                                     <div className="flex items-baseline gap-1.5">
-                                        <p className="font-black text-xl text-foreground">{product.selling_price} ₽</p>
-                                        {product.cost_price > 0 && (
-                                            <span className="text-[10px] font-bold text-green-600 bg-green-50 px-1 rounded">
-                                                +{Math.round(((product.selling_price - product.cost_price) / product.cost_price) * 100)}%
-                                            </span>
-                                        )}
+                                        <p className="font-black text-xl text-slate-900">{product.selling_price} ₽</p>
                                     </div>
-                                    <p className="text-[10px] text-muted-foreground/70 mt-1 font-medium">Закупка: {product.cost_price} ₽</p>
+                                    {product.cost_price > 0 && product.selling_price > 0 && (
+                                        <div className="flex flex-wrap gap-1.5 mt-1">
+                                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
+                                                Наценка +{Math.round(((product.selling_price - product.cost_price) / product.cost_price) * 100)}%
+                                            </span>
+                                            <span className="text-[10px] font-bold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded">
+                                                Маржа {Math.round(((product.selling_price - product.cost_price) / product.selling_price) * 100)}%
+                                            </span>
+                                        </div>
+                                    )}
+                                    <p className="text-[10px] text-slate-500 mt-1 font-medium">Закупка: {product.cost_price} ₽</p>
                                 </div>
                                 <div className="text-right">
-                                    <p className="text-[10px] text-muted-foreground/70 uppercase font-black tracking-widest mb-1">В наличии</p>
+                                    <p className="text-[10px] text-slate-400 uppercase font-black tracking-widest mb-1">На складе</p>
                                     <div className="flex items-center justify-end gap-1.5">
-                                        <span className="text-xl font-black text-foreground">
+                                        <span className="text-xl font-black text-slate-900">
                                             {product.current_stock}
                                         </span>
-                                        <span className="text-xs text-muted-foreground/70 font-bold">шт</span>
+                                        <span className="text-sm font-medium text-slate-500">шт</span>
                                     </div>
                                     <div className="flex flex-col items-end mt-1">
                                         {product.stocks && product.stocks.length > 0 && (
-                                            <div className="flex flex-wrap justify-end gap-x-2 text-[9px] text-muted-foreground max-w-[150px]">
-                                                {product.stocks.slice(0, 2).map((s, i) => (
-                                                    <span key={i} className="truncate">
-                                                        {s.warehouse_name.split(' ')[0]}: {s.quantity}
-                                                    </span>
+                                            <div className="flex flex-col gap-0.5 w-full items-end">
+                                                {product.stocks.slice(0, 3).map((s, i) => (
+                                                    <div key={i} className="flex items-center justify-end gap-2 text-[11px] w-full max-w-[120px]">
+                                                        <span className="text-slate-400 truncate text-right flex-1" title={s.warehouse_name}>
+                                                            {s.warehouse_name}
+                                                        </span>
+                                                        <span className={cn(
+                                                            "font-medium tabular-nums text-right min-w-[16px]",
+                                                            s.is_default ? "text-slate-900" : "text-slate-500"
+                                                        )}>
+                                                            {s.quantity}
+                                                        </span>
+                                                    </div>
                                                 ))}
-                                                {product.stocks.length > 2 && <span>...</span>}
+                                                {product.stocks.length > 3 && (
+                                                    <span className="text-[10px] text-slate-400 font-medium">и еще {product.stocks.length - 3}...</span>
+                                                )}
                                             </div>
                                         )}
-                                        <p className="text-[10px] text-muted-foreground/70 mt-0.5 font-medium italic">На сумму: {Math.round(product.current_stock * product.cost_price).toLocaleString('ru-RU')} ₽</p>
                                     </div>
                                 </div>
                             </div>

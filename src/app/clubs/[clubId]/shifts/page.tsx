@@ -1114,8 +1114,12 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                         >
                             <RefreshCw className={`h-5 w-5 ${isLoading ? 'animate-spin' : ''}`} />
                         </Button>
-                        <Button onClick={openCreateModal} className="h-12 rounded-xl px-6 bg-black text-white hover:bg-slate-800 font-medium transition-all">
-                            Добавить смену
+                        <Button
+                            onClick={openCreateModal}
+                            className="h-12 min-w-12 rounded-xl px-4 sm:px-6 bg-black text-white hover:bg-slate-800 font-medium transition-all"
+                        >
+                            <span className="sm:hidden text-lg leading-none">+</span>
+                            <span className="hidden sm:inline">Добавить смену</span>
                         </Button>
                     </div>
                 </div>

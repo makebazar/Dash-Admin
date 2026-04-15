@@ -11,6 +11,17 @@ import type { InventorySettings as NormalizedInventorySettings } from "@/lib/inv
 
 // ... existing code ...
 
+export type SupplyItem = {
+    id: number
+    supply_id: number
+    product_id: number
+    product_name?: string
+    quantity: number
+    cost_price: number
+    total_cost: number
+    created_at: string
+}
+
 export type Product = {
     id: number
     club_id: number
@@ -45,6 +56,21 @@ export type Product = {
     // Calculated Runway (Days left)
     days_of_stock?: number
     price_history?: { cost_price: number, created_at: string, supplier_name: string, supply_id: number }[]
+}
+
+export type Supply = {
+    id: number
+    club_id: string
+    created_by: string
+    created_by_name?: string
+    supplier_name: string
+    total_cost: number
+    notes: string | null
+    status: 'DRAFT' | 'COMPLETED'
+    warehouse_id: number | null
+    created_at: string
+    updated_at: string
+    items_count?: number
 }
 
 export type Category = {
@@ -198,7 +224,7 @@ async function assertSessionUserCanAccessClub(clubId: string, sessionUserId: str
     }
 }
 
-async function requireClubAccess(clubId: string) {
+export async function requireClubAccess(clubId: string) {
     const sessionUserId = await requireSessionUserId()
     await assertSessionUserCanAccessClub(clubId, sessionUserId)
     return sessionUserId
@@ -369,29 +395,6 @@ async function assertUserCanUseWarehouses(client: any, clubId: string, userId: s
     }
 
     return scope
-}
-
-export type Supply = {
-    id: number
-    supplier_name: string
-    supplier_id?: number | null
-    notes: string
-    total_cost: number
-    status: 'DRAFT' | 'COMPLETED'
-    warehouse_id?: number | null
-    created_at: string
-    created_by_name?: string
-    items_count?: number
-}
-
-export type SupplyItem = {
-    id: number
-    supply_id: number
-    product_id: number
-    product_name: string
-    quantity: number
-    cost_price: number
-    total_cost: number
 }
 
 export type Inventory = {
@@ -1369,7 +1372,7 @@ export async function getShiftZoneDiscrepancyReport(clubId: string, shiftId: str
     }
 }
 
-export async function getShiftZoneOverview(clubId: string, limit: number = 30) {
+export async function getShiftZoneOverview(clubId: string, monthStr?: string) {
     const sessionUserId = await requireClubAccess(clubId)
     const client = await import("@/db").then(m => m.getClient())
     try {
@@ -1393,6 +1396,16 @@ export async function getShiftZoneOverview(clubId: string, limit: number = 30) {
             warehouses.map((warehouse) => [Number(warehouse.id), warehouse as Warehouse])
         )
 
+        let targetMonth = monthStr
+        if (!targetMonth || !/^\d{4}-\d{2}$/.test(targetMonth)) {
+            const now = new Date()
+            targetMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+        }
+
+        const [year, month] = targetMonth.split('-').map(Number)
+        const startDate = new Date(year, month - 1, 1)
+        const endDate = new Date(year, month, 1)
+
         const recentShiftRows = await client.query(
             `
             SELECT DISTINCT ON (ss.shift_id)
@@ -1404,14 +1417,15 @@ export async function getShiftZoneOverview(clubId: string, limit: number = 30) {
             JOIN shifts s ON s.id = ss.shift_id
             LEFT JOIN users u ON u.id = s.user_id
             WHERE ss.club_id = $1
+              AND s.check_in >= $2
+              AND s.check_in < $3
             ORDER BY ss.shift_id, s.check_in DESC
             `,
-            [clubId]
+            [clubId, startDate.toISOString(), endDate.toISOString()]
         )
 
         const sortedRecentShifts = recentShiftRows.rows
             .sort((a: any, b: any) => new Date(b.check_in).getTime() - new Date(a.check_in).getTime())
-            .slice(0, Math.max(1, Math.trunc(limit)))
 
         const shiftIds = sortedRecentShifts.map((row: any) => String(row.shift_id))
         if (shiftIds.length === 0) {
@@ -1938,7 +1952,7 @@ export async function createTransfer(clubId: string, userId: string, data: { sou
     }
 }
 
-export async function getStockMovements(clubId: string, limit: number = 100) {
+export async function getStockMovements(clubId: string, limit: number = 1000) {
     await requireClubAccess(clubId)
     const res = await query(`
         SELECT m.*, p.name as product_name, u.full_name as user_name, w.name as warehouse_name
@@ -2449,6 +2463,18 @@ export async function getProcurementLists(clubId: string) {
         ORDER BY l.created_at DESC
     `, [clubId])
     return res.rows
+}
+
+export async function getProcurementListById(clubId: string, listId: number) {
+    await requireClubAccess(clubId)
+    const res = await query(`
+        SELECT l.*, u.full_name as creator_name,
+               (SELECT COUNT(*) FROM warehouse_procurement_items WHERE list_id = l.id) as items_count
+        FROM warehouse_procurement_lists l
+        LEFT JOIN users u ON l.created_by = u.id
+        WHERE l.club_id = $1 AND l.id = $2
+    `, [clubId, listId])
+    return res.rows[0]
 }
 
 export async function getProcurementListItems(clubId: string, listId: number) {
@@ -3075,6 +3101,7 @@ export async function getSalesAnalytics(clubId: string, limit: number = 500) {
             sm.*,
             p.name as product_name,
             p.selling_price as current_price,
+            p.cost_price as cost_price_snapshot,
             COALESCE(sm.price_at_time, p.selling_price) as price_at_time,
             u.full_name as user_name,
             su.full_name as shift_employee_name,
@@ -3101,7 +3128,8 @@ export async function getSalesAnalytics(clubId: string, limit: number = 500) {
             inv.revenue_difference as shift_revenue_difference,
             -- Mark returns
             CASE WHEN sm.type = 'RETURN' THEN true ELSE false END as is_return,
-            sm.reason as return_reason
+            sm.reason as return_reason,
+            (SELECT full_name FROM users WHERE id = sr.salary_target_user_id) as salary_target_user_name
         FROM warehouse_stock_movements sm
         JOIN warehouse_products p ON sm.product_id = p.id
         LEFT JOIN users u ON sm.user_id = u.id
@@ -3127,7 +3155,7 @@ export async function getSalesAnalytics(clubId: string, limit: number = 500) {
         WHERE sm.club_id = $1 
           AND sm.type IN ('SALE', 'RETURN')  -- Include both sales and returns
           AND COALESCE(sm.related_entity_type, '') != 'SHIFT_RECEIPT_VOID'
-          AND (sr.id IS NULL OR (sr.voided_at IS NULL AND COALESCE(sr.counts_in_revenue, true) = true))
+          AND (sr.id IS NULL OR sr.voided_at IS NULL)
         ORDER BY sm.created_at DESC
         LIMIT $2
     `, [clubId, limit, preferredMetricKey])
@@ -3878,8 +3906,8 @@ export async function createShiftReceipt(
                 newStock,
                 'SALE',
                 data.payment_type === 'salary'
-                    ? `В счет ЗП: POS чек #${receiptId}`
-                    : `POS чек #${receiptId}`,
+                    ? `В счет ЗП: Чек #${receiptId}`
+                    : `Чек #${receiptId}`,
                 'SHIFT_RECEIPT',
                 receiptId,
                 data.shift_id,
@@ -4987,12 +5015,13 @@ export async function writeOffProduct(clubId: string, userId: string, productId:
 export async function getProductHistory(clubId: string, productId: number) {
     await requireClubAccess(clubId)
     const res = await query(`
-        SELECT m.*, u.full_name as user_name
+        SELECT m.*, u.full_name as user_name, w.name as warehouse_name
         FROM warehouse_stock_movements m
         LEFT JOIN users u ON m.user_id = u.id
+        LEFT JOIN warehouses w ON m.warehouse_id = w.id
         WHERE m.club_id = $1 AND m.product_id = $2
         ORDER BY m.created_at DESC
-        LIMIT 50
+        LIMIT 1000
     `, [clubId, productId])
     return res.rows
 }
@@ -5205,6 +5234,18 @@ export async function createSupply(clubId: string, userId: string, data: { suppl
         client.release()
     }
     revalidatePath(`/clubs/${clubId}/inventory`)
+}
+
+export async function getSupplyById(clubId: string, supplyId: number) {
+    await requireClubAccess(clubId)
+    const res = await query(`
+        SELECT s.*, 
+            (SELECT COUNT(*) FROM warehouse_supply_items WHERE supply_id = s.id) as items_count,
+            (SELECT full_name FROM users WHERE id = s.created_by) as created_by_name
+        FROM warehouse_supplies s
+        WHERE s.club_id = $1 AND s.id = $2
+    `, [clubId, supplyId])
+    return res.rows[0] as Supply | undefined
 }
 
 export async function getSupplyItems(clubId: string, supplyId: number) {
@@ -6353,4 +6394,59 @@ export async function closeInventory(
         client.release()
     }
     revalidatePath(`/clubs/${clubId}/inventory`, 'layout')
+}
+
+export async function getProduct(clubId: string, productId: number) {
+    const client = await import("@/db").then(m => m.getClient())
+    try {
+        const userId = await requireClubAccess(clubId)
+        const scope = await getInventoryAccessScope(client, clubId, userId)
+        const stockFilter = !scope.canManageInventory && scope.allowedWarehouseIds.length > 0 ? " AND ws.warehouse_id = ANY($2)" : ""
+        const stockParams: any[] = [clubId, productId]
+        if (!scope.canManageInventory && scope.allowedWarehouseIds.length === 0) {
+            return null
+        }
+        if (!scope.canManageInventory) {
+            stockParams.push(scope.allowedWarehouseIds)
+        }
+
+        const queryStr = `
+            SELECT p.*, c.name as category_name,
+            (SELECT SUM(quantity) FROM warehouse_stock ws WHERE product_id = p.id${stockFilter.replace('$2', '$3')}) as total_stock,
+            (
+                SELECT json_agg(json_build_object(
+                    'warehouse_id', ws.warehouse_id,
+                    'warehouse_name', w.name,
+                    'quantity', ws.quantity,
+                    'is_default', w.is_default
+                ))
+                FROM warehouse_stock ws
+                JOIN warehouses w ON ws.warehouse_id = w.id
+                WHERE ws.product_id = p.id${stockFilter.replace('$2', '$3')}
+            ) as stocks,
+            (
+                SELECT json_agg(json_build_object(
+                    'cost_price', s.cost_price,
+                    'created_at', s.created_at,
+                    'supplier_name', s.supplier_name,
+                    'supply_id', s.id
+                ))
+                FROM (
+                    SELECT si.cost_price, sup.created_at, sup.supplier_name, sup.id
+                    FROM warehouse_supply_items si
+                    JOIN warehouse_supplies sup ON si.supply_id = sup.id
+                    WHERE si.product_id = p.id AND sup.status = 'COMPLETED'
+                    ORDER BY sup.created_at DESC
+                    LIMIT 5
+                ) s
+            ) as price_history
+            FROM warehouse_products p 
+            LEFT JOIN warehouse_categories c ON p.category_id = c.id 
+            WHERE p.club_id = $1 AND p.id = $2
+        `
+        const res = await client.query(queryStr, stockParams)
+        return res.rows[0] || null
+    } finally {
+        client.release()
+    }
 }

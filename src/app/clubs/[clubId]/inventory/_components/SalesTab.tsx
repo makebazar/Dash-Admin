@@ -4,7 +4,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge"
 import { Calendar, ShoppingCart, Clock, ChevronRight, Link, Unlink, Trash2, Check, X, Pencil, Plus, AlertCircle, RefreshCw } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { useState, useMemo, useTransition } from "react"
+import React, { useState, useMemo, useTransition } from "react"
 import { Button } from "@/components/ui/button"
 import { assignShiftToMovement, deleteStockMovement, massAssignShiftToMovements, correctStockMovement, createManualSale, Warehouse, Product } from "../actions"
 import { 
@@ -119,58 +119,72 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
 
     // Group sales by shift (returns subtract from stats)
     const groupedSales = useMemo(() => {
-        const groups: Record<string, { shift: any, items: any[], totalAmount: number, totalRevenue: number }> = {
-            'unassigned': { shift: null, items: [], totalAmount: 0, totalRevenue: 0 }
+        const groups: Record<string, { shift: any, items: any[], receipts: Record<string, { id: string, label: string, items: any[], isSalary: boolean, salaryTargetName: string | null, time: string, totalAmount: number, totalRevenue: number }>, totalAmount: number, totalRevenue: number, totalCost: number }> = {
+            'unassigned': { shift: null, items: [], receipts: {}, totalAmount: 0, totalRevenue: 0, totalCost: 0 }
         }
 
         sales.forEach(sale => {
             const shiftId = sale.shift_id_raw
             const amount = Math.abs(sale.change_amount)
             const isSalaryDeduction = sale.reason?.toLowerCase().includes('в счет зп')
+            const salaryTargetName = sale.salary_target_user_name || null
             const isReturn = sale.type === 'RETURN'  // Returns have type 'RETURN'
             const price = Number(sale.price_at_time || sale.current_price || 0)
+            const cost = Number(sale.cost_price_snapshot || 0)
 
             // Расчет выручки
             const itemRevenue = isSalaryDeduction ? 0 : (amount * price)
+            const itemCost = amount * cost
 
-            if (!shiftId) {
-                groups['unassigned'].items.push(sale)
-                if (isReturn) {
-                    // Возвраты вычитаются из статистики
-                    groups['unassigned'].totalAmount -= amount
-                    groups['unassigned'].totalRevenue -= itemRevenue
-                } else {
-                    // Продажи добавляются
-                    groups['unassigned'].totalAmount += amount
-                    groups['unassigned'].totalRevenue += itemRevenue
+            const targetGroup = shiftId ? (groups[shiftId] || (groups[shiftId] = {
+                shift: {
+                    id: shiftId,
+                    start: sale.shift_start,
+                    end: sale.shift_end,
+                    employee: sale.shift_employee_name || sale.user_name,
+                    reported: Number(sale.shift_reported_revenue || 0),
+                    calculated: Number(sale.shift_calculated_revenue || 0),
+                    difference: Number(sale.shift_revenue_difference || 0)
+                },
+                items: [],
+                receipts: {},
+                totalAmount: 0,
+                totalRevenue: 0,
+                totalCost: 0
+            })) : groups['unassigned']
+
+            targetGroup.items.push(sale)
+            
+            // Group by receipt
+            const isReceipt = sale.related_entity_type === 'SHIFT_RECEIPT'
+            const receiptId = isReceipt ? `receipt_${sale.related_entity_id}` : `single_${sale.id}`
+            
+            if (!targetGroup.receipts[receiptId]) {
+                targetGroup.receipts[receiptId] = {
+                    id: receiptId,
+                    label: isReceipt ? `Чек #${sale.related_entity_id}` : 'Без чека',
+                    isSalary: isSalaryDeduction,
+                    salaryTargetName: salaryTargetName,
+                    time: sale.created_at,
+                    items: [],
+                    totalAmount: 0,
+                    totalRevenue: 0
                 }
+            }
+            
+            targetGroup.receipts[receiptId].items.push(sale)
+            if (isReturn) {
+                targetGroup.receipts[receiptId].totalAmount -= amount
+                targetGroup.receipts[receiptId].totalRevenue -= itemRevenue
+                targetGroup.totalAmount -= amount
+                targetGroup.totalRevenue -= itemRevenue
+                targetGroup.totalCost -= itemCost
             } else {
-                if (!groups[shiftId]) {
-                    groups[shiftId] = {
-                        shift: {
-                            id: shiftId,
-                            start: sale.shift_start,
-                            end: sale.shift_end,
-                            employee: sale.shift_employee_name || sale.user_name,
-                            reported: Number(sale.shift_reported_revenue || 0),
-                            calculated: Number(sale.shift_calculated_revenue || 0),
-                            difference: Number(sale.shift_revenue_difference || 0)
-                        },
-                        items: [],
-                        totalAmount: 0,
-                        totalRevenue: 0
-                    }
-                }
-                groups[shiftId].items.push(sale)
-                if (isReturn) {
-                    // Возвраты вычитаются из статистики
-                    groups[shiftId].totalAmount -= amount
-                    groups[shiftId].totalRevenue -= itemRevenue
-                } else {
-                    // Продажи добавляются
-                    groups[shiftId].totalAmount += amount
-                    groups[shiftId].totalRevenue += itemRevenue
-                }
+                targetGroup.receipts[receiptId].totalAmount += amount
+                targetGroup.receipts[receiptId].totalRevenue += itemRevenue
+                targetGroup.totalAmount += amount
+                targetGroup.totalRevenue += itemRevenue
+                targetGroup.totalCost += itemCost
             }
         })
 
@@ -340,11 +354,11 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
                                     {!isUnassigned && (
                                         <div className="flex items-center gap-3 sm:gap-6">
                                             <div className="flex flex-col items-end shrink-0">
-                                                <span className="text-[7px] sm:text-[9px] text-muted-foreground/70 uppercase font-black tracking-tighter sm:tracking-widest leading-none mb-1">Склад</span>
+                                                <span className="text-[7px] sm:text-[9px] text-muted-foreground/70 uppercase font-black tracking-tighter sm:tracking-widest leading-none mb-1">Касса</span>
                                                 <span className="text-[11px] sm:text-sm font-black text-blue-600 leading-none whitespace-nowrap">{group.totalRevenue.toLocaleString('ru-RU')} ₽</span>
                                             </div>
                                             <div className="flex flex-col items-end shrink-0">
-                                                <span className="text-[7px] sm:text-[9px] text-muted-foreground/70 uppercase font-black tracking-tighter sm:tracking-widest leading-none mb-1">Касса</span>
+                                                <span className="text-[7px] sm:text-[9px] text-muted-foreground/70 uppercase font-black tracking-tighter sm:tracking-widest leading-none mb-1">Отчет</span>
                                                 <span className="text-[11px] sm:text-sm font-black text-foreground leading-none whitespace-nowrap">{group.shift.reported.toLocaleString('ru-RU')} ₽</span>
                                             </div>
                                             <div className="flex flex-col items-end shrink-0">
@@ -356,6 +370,10 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
                                                 )}>
                                                     {(group.shift.reported - group.totalRevenue) > 0 ? "+" : ""}{(group.shift.reported - group.totalRevenue).toLocaleString('ru-RU')} ₽
                                                 </span>
+                                            </div>
+                                            <div className="flex flex-col items-end shrink-0 border-l pl-3 border-border/50 hidden sm:flex">
+                                                <span className="text-[7px] sm:text-[9px] text-muted-foreground/70 uppercase font-black tracking-tighter sm:tracking-widest leading-none mb-1">Чистая выручка</span>
+                                                <span className="text-[11px] sm:text-sm font-black text-emerald-600 leading-none whitespace-nowrap">{(group.totalRevenue - group.totalCost).toLocaleString('ru-RU')} ₽</span>
                                             </div>
                                         </div>
                                     )}
@@ -392,16 +410,49 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
                                                 </TableRow>
                                             </TableHeader>
                                             <TableBody>
-                                                {items.map((sale, saleIdx) => {
-                                                    const isSalaryDeduction = sale.reason?.toLowerCase().includes('в счет зп')
-                                                    return (
-                                                        <TableRow 
-                                                            key={`${sale.id}-${saleIdx}`} 
-                                                            className={cn(
-                                                                "hover:bg-muted/50 group h-12 transition-colors",
-                                                                isSalaryDeduction && "bg-purple-50/30 hover:bg-purple-50/50"
-                                                            )}
-                                                        >
+                                                {Object.values(group.receipts)
+                                                    .sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime())
+                                                    .map((receipt) => (
+                                                    <React.Fragment key={receipt.id}>
+                                                        {receipt.id.startsWith('receipt_') && (
+                                                            <TableRow className="bg-slate-50/50 hover:bg-slate-50/50 border-y border-slate-100">
+                                                                <TableCell colSpan={7} className="py-2">
+                                                                    <div className="flex items-center justify-between">
+                                                                        <div className="flex items-center gap-2">
+                                                                            <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">{receipt.label}</span>
+                                                                            <span className="text-[10px] text-slate-400 font-medium">
+                                                                                {new Date(receipt.time).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
+                                                                            </span>
+                                                                            {receipt.isSalary && (
+                                                                                <Badge className="bg-purple-100 text-purple-700 border-purple-200 text-[9px] h-4 px-1.5 uppercase font-black">
+                                                                                    В счет ЗП {receipt.salaryTargetName ? `· ${receipt.salaryTargetName}` : ''}
+                                                                                </Badge>
+                                                                            )}
+                                                                        </div>
+                                                                        <div className="flex items-center gap-4">
+                                                                            <div className="flex items-center gap-1.5">
+                                                                                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Позиций:</span>
+                                                                                <span className="text-xs font-black text-slate-700">{receipt.totalAmount} шт</span>
+                                                                            </div>
+                                                                            <div className="flex items-center gap-1.5">
+                                                                                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Итого:</span>
+                                                                                <span className="text-sm font-black text-slate-900">{receipt.totalRevenue.toLocaleString('ru-RU')} ₽</span>
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                </TableCell>
+                                                            </TableRow>
+                                                        )}
+                                                        {receipt.items.map((sale, saleIdx) => {
+                                                            const isSalaryDeduction = sale.reason?.toLowerCase().includes('в счет зп')
+                                                            return (
+                                                                <TableRow 
+                                                                    key={`${sale.id}-${saleIdx}`} 
+                                                                    className={cn(
+                                                                        "hover:bg-muted/50 group h-12 transition-colors",
+                                                                        isSalaryDeduction && "bg-purple-50/30 hover:bg-purple-50/50"
+                                                                    )}
+                                                                >
                                                         <TableCell className="text-center p-0">
                                                             <Checkbox 
                                                                 checked={selectedIds.includes(sale.id)}
@@ -419,7 +470,7 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
                                                                             Возврат
                                                                         </Badge>
                                                                     )}
-                                                                    {sale.reason?.toLowerCase().includes('в счет зп') && (
+                                                                    {sale.reason?.toLowerCase().includes('в счет зп') && !receipt.id.startsWith('receipt_') && (
                                                                         <Badge className="bg-purple-100 text-purple-700 border-purple-200 text-[9px] h-4 px-1 px-1.5 uppercase font-black">
                                                                             В счет ЗП
                                                                         </Badge>
@@ -430,7 +481,7 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
                                                                         {sale.return_reason}
                                                                     </span>
                                                                 )}
-                                                                {sale.reason && sale.type !== 'RETURN' && (
+                                                                {sale.reason && sale.type !== 'RETURN' && sale.related_entity_type !== 'SHIFT_RECEIPT' && !sale.reason.toLowerCase().includes('в счет зп') && (
                                                                     <span className="text-[10px] text-blue-600 font-medium italic leading-tight">
                                                                         {sale.reason}
                                                                     </span>
@@ -522,102 +573,131 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
                                                             </div>
                                                         </TableCell>
                                                     </TableRow>
-                                                    )
-                                                })}
+                                                            )
+                                                        })}
+                                                    </React.Fragment>
+                                                ))}
                                             </TableBody>
                                         </Table>
                                     </div>
 
                                     {/* Mobile Card List */}
-                                    <div className="md:hidden divide-y divide-slate-100 bg-muted/30">
-                                        {items.map((sale, saleIdx) => {
-                                            const isSalaryDeduction = sale.reason?.toLowerCase().includes('в счет зп')
-                                            return (
-                                                <div 
-                                                    key={`${sale.id}-${saleIdx}`} 
-                                                    className={cn(
-                                                        "p-4 flex items-center gap-3 transition-colors group",
-                                                        isSalaryDeduction ? "bg-purple-50/40 active:bg-purple-100/50" : "active:bg-accent"
-                                                    )}
-                                                >
-                                                <div className="flex-none">
-                                                    <Checkbox 
-                                                        checked={selectedIds.includes(sale.id)}
-                                                        onCheckedChange={() => toggleSelect(sale.id)}
-                                                        className="h-5 w-5"
-                                                    />
-                                                </div>
+                                    <div className="md:hidden flex flex-col gap-4 p-2 bg-slate-50/50">
+                                        {Object.values(group.receipts)
+                                            .sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime())
+                                            .map((receipt) => (
+                                            <div key={receipt.id} className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+                                                {receipt.id.startsWith('receipt_') && (
+                                                    <div className="bg-slate-50/80 px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">{receipt.label}</span>
+                                                            <span className="text-[10px] text-slate-400 font-medium">
+                                                                {new Date(receipt.time).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
+                                                            </span>
+                                                            {receipt.isSalary && (
+                                                                <Badge className="bg-purple-100 text-purple-700 border-purple-200 text-[9px] h-4 px-1.5 uppercase font-black">
+                                                                    В счет ЗП {receipt.salaryTargetName ? `· ${receipt.salaryTargetName}` : ''}
+                                                                </Badge>
+                                                            )}
+                                                        </div>
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-xs font-black text-slate-900">{receipt.totalRevenue.toLocaleString('ru-RU')} ₽</span>
+                                                        </div>
+                                                    </div>
+                                                )}
                                                 
-                                                <div className="flex-1 min-w-0">
-                                                    <div className="flex items-center gap-2 mb-0.5">
-                                                        <h4 className="font-bold text-foreground text-sm leading-tight truncate">{sale.product_name}</h4>
-                                                        {sale.reason?.toLowerCase().includes('в счет зп') && (
-                                                            <Badge className="bg-purple-100 text-purple-700 border-purple-200 text-[8px] h-3.5 px-1 uppercase font-black">
-                                                                ЗП
-                                                            </Badge>
-                                                        )}
-                                                    </div>
-                                                    {sale.reason && (
-                                                        <p className="text-[10px] text-blue-600 font-medium italic mb-1 line-clamp-2 leading-tight">
-                                                            {sale.reason}
-                                                        </p>
-                                                    )}
-                                                    <div className="flex items-center gap-2 text-[10px] text-muted-foreground mt-0.5">
-                                                         <Clock className="h-2.5 w-2.5" />
-                                                         {new Date(sale.created_at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
-                                                         <span className="mx-1">•</span>
-                                                         <span className="text-blue-600 font-bold">{Math.abs(sale.change_amount)} шт</span>
-                                                     </div>
+                                                <div className="divide-y divide-slate-100">
+                                                    {receipt.items.map((sale, saleIdx) => {
+                                                        const isSalaryDeduction = sale.reason?.toLowerCase().includes('в счет зп')
+                                                        return (
+                                                            <div 
+                                                                key={`${sale.id}-${saleIdx}`} 
+                                                                className={cn(
+                                                                    "p-4 flex items-center gap-3 transition-colors group",
+                                                                    isSalaryDeduction ? "bg-purple-50/40 active:bg-purple-100/50" : "active:bg-slate-50"
+                                                                )}
+                                                            >
+                                                                <div className="flex-none">
+                                                                    <Checkbox 
+                                                                        checked={selectedIds.includes(sale.id)}
+                                                                        onCheckedChange={() => toggleSelect(sale.id)}
+                                                                        className="h-5 w-5 border-slate-300"
+                                                                    />
+                                                                </div>
+                                                                
+                                                                <div className="flex-1 min-w-0">
+                                                                    <div className="flex items-center gap-2 mb-0.5">
+                                                                        <h4 className="font-bold text-slate-900 text-sm leading-tight truncate">{sale.product_name}</h4>
+                                                                        {sale.reason?.toLowerCase().includes('в счет зп') && !receipt.id.startsWith('receipt_') && (
+                                                                            <Badge className="bg-purple-100 text-purple-700 border-purple-200 text-[8px] h-3.5 px-1 uppercase font-black">
+                                                                                ЗП
+                                                                            </Badge>
+                                                                        )}
+                                                                    </div>
+                                                                    {sale.reason && sale.type !== 'RETURN' && sale.related_entity_type !== 'SHIFT_RECEIPT' && !sale.reason.toLowerCase().includes('в счет зп') && (
+                                                                        <p className="text-[10px] text-blue-600 font-medium italic mb-1 line-clamp-2 leading-tight">
+                                                                            {sale.reason}
+                                                                        </p>
+                                                                    )}
+                                                                    <div className="flex items-center gap-2 text-[10px] text-slate-500 mt-0.5">
+                                                                        <Clock className="h-2.5 w-2.5 text-slate-400" />
+                                                                        {new Date(sale.created_at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
+                                                                        <span className="mx-1 text-slate-300">•</span>
+                                                                        <span className="text-blue-600 font-bold">{Math.abs(sale.change_amount)} шт</span>
+                                                                    </div>
+                                                                </div>
+
+                                                                <div className="flex flex-col items-end gap-1 px-2">
+                                                                    <div className="text-sm font-black text-slate-900">
+                                                                        {(Math.abs(sale.change_amount) * (sale.price_at_time || sale.current_price || 0)).toLocaleString('ru-RU')} ₽
+                                                                    </div>
+                                                                    <div className="text-[10px] text-slate-500 font-medium">
+                                                                        {Number(sale.price_at_time || sale.current_price || 0).toLocaleString('ru-RU')} ₽/шт
+                                                                    </div>
+                                                                </div>
+
+                                                                <div className="flex flex-none gap-1 pl-2 border-l border-slate-100">
+                                                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-500 hover:bg-blue-50 hover:text-blue-600" onClick={() => handleStartEdit(sale)}>
+                                                                        <Pencil className="h-4 w-4" />
+                                                                    </Button>
+
+                                                                    <DropdownMenu>
+                                                                        <DropdownMenuTrigger asChild>
+                                                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:bg-slate-50 hover:text-slate-600">
+                                                                                <Link className="h-4 w-4" />
+                                                                            </Button>
+                                                                        </DropdownMenuTrigger>
+                                                                        <DropdownMenuContent align="end" className="w-64 max-h-[300px] overflow-y-auto">
+                                                                            <DropdownMenuItem onClick={() => handleAssignShift(sale.id, null)} className="text-rose-600 focus:text-rose-700 focus:bg-rose-50">
+                                                                                <Unlink className="h-4 w-4 mr-2" /> Отвязать от смены
+                                                                            </DropdownMenuItem>
+                                                                            <div className="h-px bg-slate-100 my-1" />
+                                                                            {shifts.map(s => (
+                                                                                <DropdownMenuItem key={s.id} onClick={() => handleAssignShift(sale.id, s.id)} className="flex flex-col items-start gap-1 py-2">
+                                                                                    <div className="flex justify-between w-full">
+                                                                                        <span className="font-bold text-xs">{s.employee_name}</span>
+                                                                                        <span className="text-[10px] text-slate-500">#{s.id}</span>
+                                                                                    </div>
+                                                                                    <div className="flex items-center gap-2 text-[10px] text-slate-500">
+                                                                                        <Calendar className="h-3 w-3" />
+                                                                                        <span>{new Date(s.check_in).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })}</span>
+                                                                                    </div>
+                                                                                </DropdownMenuItem>
+                                                                            ))}
+                                                                        </DropdownMenuContent>
+                                                                    </DropdownMenu>
+
+                                                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-rose-500 hover:bg-rose-50 hover:text-rose-600" onClick={(e) => { e.stopPropagation(); handleDelete(sale.id, sale.product_name); }}>
+                                                                        <Trash2 className="h-4 w-4" />
+                                                                    </Button>
+                                                                </div>
+                                                            </div>
+                                                        )
+                                                    })}
                                                 </div>
-
-                                                <div className="flex flex-col items-end gap-1 px-2">
-                                                    <div className="text-sm font-black text-foreground">
-                                                        {(Math.abs(sale.change_amount) * (sale.price_at_time || sale.current_price || 0)).toLocaleString('ru-RU')} ₽
-                                                    </div>
-                                                    <div className="text-[10px] text-muted-foreground/70">
-                                                        {Number(sale.price_at_time || sale.current_price || 0).toLocaleString('ru-RU')} ₽/шт
-                                                    </div>
-                                                </div>
-
-                                                <div className="flex flex-none gap-1 pl-2 border-l border-border/50">
-                                                     <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-500 active:bg-blue-50" onClick={() => handleStartEdit(sale)}>
-                                                         <Pencil className="h-4 w-4" />
-                                                     </Button>
-
-                                                     <DropdownMenu>
-                                                         <DropdownMenuTrigger asChild>
-                                                             <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground/70 active:bg-blue-50">
-                                                                 <Link className="h-4 w-4" />
-                                                             </Button>
-                                                         </DropdownMenuTrigger>
-                                                         <DropdownMenuContent align="end" className="w-64 max-h-[300px] overflow-y-auto">
-                                                             <DropdownMenuItem onClick={() => handleAssignShift(sale.id, null)} className="text-red-600 focus:text-red-700 focus:bg-red-50">
-                                                                 <Unlink className="h-4 w-4 mr-2" /> Отвязать от смены
-                                                             </DropdownMenuItem>
-                                                             <div className="h-px bg-accent my-1" />
-                                                             {shifts.map(s => (
-                                                                 <DropdownMenuItem key={s.id} onClick={() => handleAssignShift(sale.id, s.id)} className="flex flex-col items-start gap-1 py-2">
-                                                                     <div className="flex justify-between w-full">
-                                                                         <span className="font-bold text-xs">{s.employee_name}</span>
-                                                                         <span className="text-[10px] text-muted-foreground/70">#{s.id}</span>
-                                                                     </div>
-                                                                     <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-                                                                         <Calendar className="h-3 w-3" />
-                                                                         <span>{new Date(s.check_in).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })}</span>
-                                                                     </div>
-                                                                 </DropdownMenuItem>
-                                                             ))}
-                                                         </DropdownMenuContent>
-                                                     </DropdownMenu>
-
-                                                     <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 active:bg-red-50" onClick={() => handleDelete(sale.id, sale.product_name)}>
-                                                         <Trash2 className="h-4 w-4" />
-                                                     </Button>
-                                                 </div>
-                                             </div>
-                                             )
-                                         })}
-                                     </div>
+                                            </div>
+                                        ))}
+                                    </div>
                                 </div>
                             )}
                         </div>

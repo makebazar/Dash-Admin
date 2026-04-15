@@ -13,10 +13,12 @@ import { InventoryTabsWrapper } from "./_components/InventoryTabsWrapper"
 import { ShiftZonesOverviewTab } from "./_components/ShiftZonesOverviewTab"
 import { cookies } from "next/headers"
 import { normalizeInventorySettings } from "@/lib/inventory-settings"
+import { PageShell } from "@/components/layout/PageShell"
+import { Package } from "lucide-react"
 
-export default async function InventoryPage({ params, searchParams }: { params: Promise<{ clubId: string }>, searchParams: Promise<{ tab?: string }> }) {
+export default async function InventoryPage({ params, searchParams }: { params: Promise<{ clubId: string }>, searchParams: Promise<{ tab?: string, month?: string }> }) {
     const { clubId } = await params
-    const { tab } = await searchParams
+    const { tab, month } = await searchParams
     const userId = (await cookies()).get("session_user_id")?.value
 
     if (!userId) return <div className="p-8 text-red-500">Доступ запрещен. Пожалуйста, авторизуйтесь.</div>
@@ -39,7 +41,7 @@ export default async function InventoryPage({ params, searchParams }: { params: 
         getClubSettings(clubId),
         getSalesAnalytics(clubId),
         getActiveShiftsForClub(clubId),
-        getShiftZoneOverview(clubId)
+        getShiftZoneOverview(clubId, month)
     ])
 
     const hasAdminPrivileges = access.isFullAccess
@@ -67,41 +69,44 @@ export default async function InventoryPage({ params, searchParams }: { params: 
         : "stock"
 
     return (
-        <div className="p-4 md:p-8 max-w-[1600px] mx-auto space-y-4 md:space-y-6">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div className="flex flex-col gap-1 md:gap-2">
-                    <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Склад и учет</h1>
-                    <p className="text-sm md:text-base text-muted-foreground">Управление товарными запасами, поставками, складами и проведение ревизий.</p>
-                </div>
+        <PageShell maxWidth="7xl">
+            {/* Minimalist Header */}
+            <div className="mb-8 md:mb-12">
+                <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-slate-900">
+                    Инвентарь клуба
+                </h1>
+                <p className="text-base text-slate-500 mt-3 max-w-2xl">
+                    Управление запасами, поставками, перемещениями и контроль товарных остатков.
+                </p>
             </div>
             
             <InventoryTabsWrapper activeTab={activeTab}>
-                <div className="border-b mb-4 md:mb-6 overflow-x-auto no-scrollbar">
-                    <TabsList className="bg-transparent p-0 h-auto space-x-4 md:space-x-6 w-full justify-start min-w-max flex">
+                <div className="border-b border-slate-200 mb-6 md:mb-8 overflow-x-auto no-scrollbar">
+                    <TabsList className="bg-transparent p-0 h-auto space-x-6 md:space-x-8 w-full justify-start min-w-max flex">
                         <TabsTrigger 
                             value="stock" 
-                            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:shadow-none px-0 py-3 bg-transparent font-medium"
+                            className="rounded-none border-b-2 border-transparent text-slate-500 hover:text-slate-800 data-[state=active]:border-black data-[state=active]:text-black data-[state=active]:shadow-none px-1 py-3 bg-transparent font-medium transition-colors"
                         >
                             Товары
                         </TabsTrigger>
                         {isCashboxEnabled && (
                             <TabsTrigger 
                                 value="sales" 
-                                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:shadow-none px-0 py-3 bg-transparent font-medium"
+                                className="rounded-none border-b-2 border-transparent text-slate-500 hover:text-slate-800 data-[state=active]:border-black data-[state=active]:text-black data-[state=active]:shadow-none px-1 py-3 bg-transparent font-medium transition-colors"
                             >
                                 Касса
                             </TabsTrigger>
                         )}
                         <TabsTrigger 
                             value="tasks" 
-                            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:shadow-none px-0 py-3 bg-transparent font-medium"
+                            className="rounded-none border-b-2 border-transparent text-slate-500 hover:text-slate-800 data-[state=active]:border-black data-[state=active]:text-black data-[state=active]:shadow-none px-1 py-3 bg-transparent font-medium transition-colors"
                         >
-                            Задачи {tasks.length > 0 && <span className="ml-2 bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full text-xs font-bold">{tasks.length}</span>}
+                            Задачи {tasks.length > 0 && <span className="ml-2 bg-slate-100 text-slate-900 px-1.5 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider">{tasks.length}</span>}
                         </TabsTrigger>
                         {isStockEnabled && (
                             <TabsTrigger 
                                 value="transfers" 
-                                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:shadow-none px-0 py-3 bg-transparent font-medium"
+                                className="rounded-none border-b-2 border-transparent text-slate-500 hover:text-slate-800 data-[state=active]:border-black data-[state=active]:text-black data-[state=active]:shadow-none px-1 py-3 bg-transparent font-medium transition-colors"
                             >
                                 Перемещения
                             </TabsTrigger>
@@ -109,7 +114,7 @@ export default async function InventoryPage({ params, searchParams }: { params: 
                         {isSuppliesEnabled && (
                             <TabsTrigger 
                                 value="supplies" 
-                                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:shadow-none px-0 py-3 bg-transparent font-medium"
+                                className="rounded-none border-b-2 border-transparent text-slate-500 hover:text-slate-800 data-[state=active]:border-black data-[state=active]:text-black data-[state=active]:shadow-none px-1 py-3 bg-transparent font-medium transition-colors"
                             >
                                 Поставки
                             </TabsTrigger>
@@ -117,7 +122,7 @@ export default async function InventoryPage({ params, searchParams }: { params: 
                         {isStockEnabled && (
                             <TabsTrigger 
                                 value="procurement" 
-                                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:shadow-none px-0 py-3 bg-transparent font-medium"
+                                className="rounded-none border-b-2 border-transparent text-slate-500 hover:text-slate-800 data-[state=active]:border-black data-[state=active]:text-black data-[state=active]:shadow-none px-1 py-3 bg-transparent font-medium transition-colors"
                             >
                                 Закупки
                             </TabsTrigger>
@@ -125,7 +130,7 @@ export default async function InventoryPage({ params, searchParams }: { params: 
                         {isShiftAccountabilityEnabled && (
                             <TabsTrigger 
                                 value="zones" 
-                                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:shadow-none px-0 py-3 bg-transparent font-medium"
+                                className="rounded-none border-b-2 border-transparent text-slate-500 hover:text-slate-800 data-[state=active]:border-black data-[state=active]:text-black data-[state=active]:shadow-none px-1 py-3 bg-transparent font-medium transition-colors"
                             >
                                 Передача
                             </TabsTrigger>
@@ -133,7 +138,7 @@ export default async function InventoryPage({ params, searchParams }: { params: 
                         {isStockEnabled && (
                             <TabsTrigger 
                                 value="inventory" 
-                                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:shadow-none px-0 py-3 bg-transparent font-medium"
+                                className="rounded-none border-b-2 border-transparent text-slate-500 hover:text-slate-800 data-[state=active]:border-black data-[state=active]:text-black data-[state=active]:shadow-none px-1 py-3 bg-transparent font-medium transition-colors"
                             >
                                 Инвентаризации
                             </TabsTrigger>
@@ -141,14 +146,14 @@ export default async function InventoryPage({ params, searchParams }: { params: 
                         {isStockEnabled && (
                             <TabsTrigger 
                                 value="abc-analysis" 
-                                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:shadow-none px-0 py-3 bg-transparent font-medium"
+                                className="rounded-none border-b-2 border-transparent text-slate-500 hover:text-slate-800 data-[state=active]:border-black data-[state=active]:text-black data-[state=active]:shadow-none px-1 py-3 bg-transparent font-medium transition-colors"
                             >
                                 Аналитика
                             </TabsTrigger>
                         )}
                         <TabsTrigger 
                             value="settings" 
-                            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:shadow-none px-0 py-3 bg-transparent font-medium"
+                            className="rounded-none border-b-2 border-transparent text-slate-500 hover:text-slate-800 data-[state=active]:border-black data-[state=active]:text-black data-[state=active]:shadow-none px-1 py-3 bg-transparent font-medium transition-colors"
                         >
                             Настройки
                         </TabsTrigger>
@@ -202,7 +207,7 @@ export default async function InventoryPage({ params, searchParams }: { params: 
 
                 {isShiftAccountabilityEnabled && (
                     <TabsContent value="zones" className="mt-0">
-                        <ShiftZonesOverviewTab clubId={clubId} overview={shiftZoneOverview} />
+                        <ShiftZonesOverviewTab clubId={clubId} overview={shiftZoneOverview} currentMonth={month} />
                     </TabsContent>
                 )}
 
@@ -235,6 +240,6 @@ export default async function InventoryPage({ params, searchParams }: { params: 
                     />
                 </TabsContent>
             </InventoryTabsWrapper>
-        </div>
+        </PageShell>
     )
 }

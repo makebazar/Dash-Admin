@@ -27,7 +27,6 @@ import {
   PencilLine,
   PlaySquare,
   Plus,
-  RefreshCw,
   Settings2,
   Signal,
   Tv,
@@ -252,24 +251,6 @@ export default function ClubSignagePage({
           </p>
         </div>
         
-        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap lg:justify-end hidden md:flex">
-          <Button
-            variant="outline"
-            className="w-full sm:w-auto rounded-xl h-12 border-slate-200 px-6 font-medium text-slate-700 hover:bg-slate-50 hover:text-black"
-            onClick={() => void fetchDevices()}
-            disabled={isRefreshing || isLoading}
-          >
-            <RefreshCw className={cn("mr-2 h-5 w-5", (isRefreshing || isLoading) && "animate-spin")} />
-            Синхронизировать
-          </Button>
-          <Button
-            className="w-full bg-slate-900 text-white hover:bg-slate-800 sm:w-auto rounded-xl h-12 px-6 font-medium shadow-sm"
-            onClick={() => document.getElementById('pairing-section')?.scrollIntoView({ behavior: 'smooth' })}
-          >
-            <Plus className="mr-2 h-5 w-5" />
-            Подключить экран
-          </Button>
-        </div>
       </div>
 
       <div className="space-y-8">

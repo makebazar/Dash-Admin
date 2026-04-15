@@ -66,7 +66,7 @@ interface PageToolbarProps extends React.HTMLAttributes<HTMLDivElement> {
 export function PageToolbar({ children, className, ...props }: PageToolbarProps) {
     return (
         <div className={cn("flex flex-col gap-4 mb-6", className)} {...props}>
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 {children}
             </div>
             <div className="h-px bg-border/40" />
@@ -83,7 +83,7 @@ export function ToolbarGroup({ children, className, align = "start", ...props }:
     return (
         <div 
             className={cn(
-                "flex flex-wrap items-center gap-2", 
+                "flex flex-wrap items-center gap-2 w-full sm:w-auto", 
                 align === "end" ? "sm:ml-auto" : "",
                 className
             )} 
@@ -100,11 +100,11 @@ interface SearchInputProps extends React.ComponentProps<typeof Input> {
 
 export function SearchInput({ className, ...props }: SearchInputProps) {
     return (
-        <div className="relative">
+        <div className="relative w-full">
             <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
                 type="search"
-                className={cn("pl-8 h-9 w-[150px] lg:w-[250px]", className)}
+                className={cn("pl-8 h-9 w-full", className)}
                 {...props}
             />
         </div>

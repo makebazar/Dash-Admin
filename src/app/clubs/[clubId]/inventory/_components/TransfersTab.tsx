@@ -41,7 +41,8 @@ export function TransfersTab({ warehouses, products, currentUserId }: TransfersT
     const [isPending, startTransition] = useTransition()
     const [movements, setMovements] = useState<any[]>([])
     const [movementSearch, setMovementSearch] = useState("")
-    const [movementFilter, setMovementFilter] = useState<"all" | "inventory" | "sales" | "transfers" | "supplies" | "manual">("all")
+    const [movementFilter, setMovementFilter] = useState<"all" | "inventory" | "sales" | "transfers" | "supplies" | "manual" | "writeoffs">("all")
+    const [historyPage, setHistoryPage] = useState(1)
     
     // Form State
     const [formData, setFormData] = useState({
@@ -61,7 +62,7 @@ export function TransfersTab({ warehouses, products, currentUserId }: TransfersT
 
     const refreshMovements = async () => {
         try {
-            const data = await getStockMovements(clubId, 50)
+            const data = await getStockMovements(clubId, 1000)
             setMovements(data)
         } catch (err) {
             console.error(err)
@@ -129,6 +130,8 @@ export function TransfersTab({ warehouses, products, currentUserId }: TransfersT
                 return { label: "Коррекция инв.", className: "bg-orange-50 text-orange-700" }
             case "ADJUSTMENT":
                 return { label: "Корректировка", className: "bg-accent text-foreground" }
+            case "WRITE_OFF":
+                return { label: "Списание", className: "bg-rose-50 text-rose-700" }
             default:
                 return { label: movement.type || "Движение", className: "bg-accent text-foreground" }
         }
@@ -155,11 +158,25 @@ export function TransfersTab({ warehouses, products, currentUserId }: TransfersT
                 (movementFilter === "sales" && ["SALE", "RETURN"].includes(movement.type)) ||
                 (movementFilter === "transfers" && movement.related_entity_type === "TRANSFER") ||
                 (movementFilter === "supplies" && movement.type === "SUPPLY") ||
-                (movementFilter === "manual" && movement.type === "ADJUSTMENT")
+                (movementFilter === "manual" && movement.type === "ADJUSTMENT") ||
+                (movementFilter === "writeoffs" && movement.type === "WRITE_OFF")
 
             return matchesSearch && matchesFilter
         })
     }, [movementFilter, movementSearch, movements])
+
+    const HISTORY_PER_PAGE = 20
+    const totalHistoryPages = Math.max(1, Math.ceil(filteredMovements.length / HISTORY_PER_PAGE))
+    
+    const paginatedMovements = useMemo(() => {
+        const start = (historyPage - 1) * HISTORY_PER_PAGE
+        return filteredMovements.slice(start, start + HISTORY_PER_PAGE)
+    }, [filteredMovements, historyPage])
+
+    // Reset page when filters change
+    useEffect(() => {
+        setHistoryPage(1)
+    }, [movementSearch, movementFilter])
 
     const movementFilterButtons: Array<{ value: typeof movementFilter, label: string }> = [
         { value: "all", label: "Все" },
@@ -167,7 +184,8 @@ export function TransfersTab({ warehouses, products, currentUserId }: TransfersT
         { value: "sales", label: "Продажи" },
         { value: "transfers", label: "Перемещения" },
         { value: "supplies", label: "Поставки" },
-        { value: "manual", label: "Коррекции" }
+        { value: "manual", label: "Коррекции" },
+        { value: "writeoffs", label: "Списания" }
     ]
 
     return (
@@ -197,9 +215,11 @@ export function TransfersTab({ warehouses, products, currentUserId }: TransfersT
                 <div className="flex items-center gap-2 text-muted-foreground">
                     <Filter className="h-4 w-4" />
                     <span className="text-sm font-bold uppercase tracking-wider">Фильтры журнала</span>
-                    <Badge variant="secondary" className="ml-auto bg-accent text-foreground">
-                        {filteredMovements.length} из {movements.length}
-                    </Badge>
+                    {filteredMovements.length !== movements.length && (
+                        <Badge variant="secondary" className="ml-auto bg-accent text-foreground">
+                            Найдено: {filteredMovements.length}
+                        </Badge>
+                    )}
                 </div>
 
                 <div className="relative">
@@ -251,7 +271,7 @@ export function TransfersTab({ warehouses, products, currentUserId }: TransfersT
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {filteredMovements.map((m) => {
+                        {paginatedMovements.map((m) => {
                             const meta = getMovementMeta(m)
                             return (
                             <TableRow key={m.id} className="hover:bg-muted transition-colors">
@@ -287,7 +307,7 @@ export function TransfersTab({ warehouses, products, currentUserId }: TransfersT
                                     </Badge>
                                 </TableCell>
                                 <TableCell className="py-4 text-xs text-muted-foreground italic max-w-[200px] truncate">
-                                    {m.reason || "—"}
+                                    {m.reason ? m.reason.replace(/\s*\(Смена #[a-f0-9-]+\)/g, '') : "—"}
                                 </TableCell>
                                 <TableCell className="py-4 text-right text-xs font-medium">
                                     {m.user_name || "Система"}
@@ -316,56 +336,84 @@ export function TransfersTab({ warehouses, products, currentUserId }: TransfersT
                         <Package className="h-8 w-8 opacity-10 mb-2" />
                         <p className="italic text-sm">По текущим фильтрам ничего не найдено</p>
                     </div>
-                ) : filteredMovements.map(m => {
+                ) : paginatedMovements.map(m => {
                     const meta = getMovementMeta(m)
                     return (
                     <div key={m.id} className="bg-card rounded-xl border p-4 shadow-sm relative">
-                        <div className="flex justify-between items-start mb-2">
-                            <div className="flex flex-col">
-                                <span className="text-[9px] text-muted-foreground/70 font-bold uppercase tracking-wider mb-0.5">
+                        <div className="flex justify-between items-start mb-3">
+                            <div className="flex flex-col gap-1">
+                                <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider">
                                     {new Date(m.created_at).toLocaleString('ru-RU', { 
                                         day: '2-digit', month: '2-digit', 
                                         hour: '2-digit', minute: '2-digit' 
                                     })}
                                 </span>
-                                <h4 className="font-bold text-foreground text-sm leading-tight">{m.product_name}</h4>
+                                <h4 className="font-bold text-foreground text-base leading-tight">{m.product_name}</h4>
                             </div>
                             <Badge 
                                 variant="secondary" 
                                 className={cn(
-                                    "font-black text-[10px] border-none px-2 py-0.5",
+                                    "font-black text-xs border-none px-2.5 py-1",
                                     m.change_amount > 0 ? "bg-emerald-50 text-emerald-600" : "bg-red-50 text-red-600"
                                 )}
                             >
                                 {m.change_amount > 0 ? "+" : ""}{m.change_amount} шт
                             </Badge>
                         </div>
-                        <div className="mb-3">
-                            <Badge variant="secondary" className={cn("font-bold text-[10px] border-none", meta.className)}>
+                        <div className="mb-4">
+                            <Badge variant="secondary" className={cn("font-bold text-xs border-none px-2.5 py-1", meta.className)}>
                                 {meta.label}
                             </Badge>
                         </div>
                         
-                        <div className="flex justify-between items-center mt-3 pt-2 border-t border-slate-50">
-                            <div className="flex items-center gap-3">
-                                <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                                    <WarehouseIcon className="h-3 w-3" />
+                        <div className="flex flex-col gap-2 mt-4 pt-3 border-t border-slate-100">
+                            <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+                                <div className="flex items-center gap-1.5">
+                                    <WarehouseIcon className="h-4 w-4" />
                                     <span>{m.warehouse_name || "???"}</span>
                                 </div>
-                                <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                                    <User className="h-3 w-3" />
+                                <div className="flex items-center gap-1.5">
+                                    <User className="h-4 w-4" />
                                     <span>{m.user_name?.split(' ')[0] || "Система"}</span>
                                 </div>
                             </div>
                             {m.reason && (
-                                <p className="text-[10px] text-muted-foreground/70 italic truncate max-w-[120px]">
-                                    {m.reason}
-                                </p>
+                                <div className="flex items-start gap-1.5 text-xs text-muted-foreground/80 mt-1">
+                                    <span className="italic leading-relaxed">
+                                        {m.reason.replace(/\s*\(Смена #[a-f0-9-]+\)/g, '')}
+                                    </span>
+                                </div>
                             )}
                         </div>
                     </div>
                 )})}
             </div>
+
+            {totalHistoryPages > 1 && (
+                <div className="flex items-center justify-between pt-4 mt-4 border-t border-slate-100">
+                    <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="h-8 text-xs text-slate-600"
+                        disabled={historyPage === 1}
+                        onClick={() => setHistoryPage(p => Math.max(1, p - 1))}
+                    >
+                        Назад
+                    </Button>
+                    <span className="text-xs font-medium text-slate-500">
+                        {historyPage} из {totalHistoryPages}
+                    </span>
+                    <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="h-8 text-xs text-slate-600"
+                        disabled={historyPage === totalHistoryPages}
+                        onClick={() => setHistoryPage(p => Math.min(totalHistoryPages, p + 1))}
+                    >
+                        Вперед
+                    </Button>
+                </div>
+            )}
 
             {/* Transfer Dialog */}
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
