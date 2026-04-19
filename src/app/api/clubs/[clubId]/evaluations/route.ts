@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/db';
 import { cookies } from 'next/headers';
+import { getEmployeeRoleAccess } from '@/lib/employee-role-access';
 
 export async function GET(
     request: Request,
@@ -79,6 +80,11 @@ export async function POST(
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
+        const roleAccess = await getEmployeeRoleAccess(clubId)
+        if (roleAccess.settings.handover_checklist_on_start === 'DISABLED' && roleAccess.settings.closing_checklist_enabled === false) {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+
         let targetUserId = target_user_id;
 
         if (!targetUserId) {
@@ -115,6 +121,20 @@ export async function POST(
 
         if ((accessCheck.rowCount || 0) === 0) {
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+
+        const templateTypeRes = await query(
+            `SELECT type FROM evaluation_templates WHERE id = $1 AND club_id = $2`,
+            [template_id, clubId]
+        )
+        if ((templateTypeRes.rowCount || 0) === 0) {
+            return NextResponse.json({ error: 'Invalid template' }, { status: 400 })
+        }
+        const templateType = templateTypeRes.rows[0]?.type || 'manager_audit'
+        if (templateType === 'shift_handover') {
+            if (roleAccess.settings.handover_checklist_on_start === 'DISABLED' && roleAccess.settings.closing_checklist_enabled !== true) {
+                return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+            }
         }
 
         // Get template items to calculate max score

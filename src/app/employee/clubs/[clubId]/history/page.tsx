@@ -24,6 +24,8 @@ interface Shift {
     expenses: number
     report_comment: string
     report_data: Record<string, any>
+    report_mode?: 'FULL_REPORT' | 'NO_REPORT'
+    actor_role_name_snapshot?: string | null
     status: string
     shift_type: 'DAY' | 'NIGHT'
 }
@@ -533,6 +535,9 @@ export default function EmployeeShiftHistoryPage() {
                                 </TableRow>
                             ) : sortedShifts.map((shift) => {
                                 const isWeekend = isWeekendDate(shift.check_in)
+                                const hours = Number(shift.total_hours) || 0
+                                const isSutki = hours >= 20
+                                const isLongShift = !isSutki && hours >= 13
 
                                 return (
                                 <TableRow key={shift.id} className="hover:bg-accent/30 border-b border-border">
@@ -543,17 +548,34 @@ export default function EmployeeShiftHistoryPage() {
                                         {formatDate(shift.check_in)}
                                     </TableCell>
                                     <TableCell className="whitespace-nowrap">
-                                        {shift.shift_type === 'NIGHT' ? (
-                                            <div className="flex items-center gap-1 text-blue-500">
-                                                <Moon className="h-4 w-4" />
-                                                <span className="text-xs">Ночь</span>
-                                            </div>
-                                        ) : (
-                                            <div className="flex items-center gap-1 text-amber-500">
-                                                <Sun className="h-4 w-4" />
-                                                <span className="text-xs">День</span>
-                                            </div>
-                                        )}
+                                        <div className="flex items-center gap-2">
+                                            {shift.shift_type === 'NIGHT' ? (
+                                                <div className="flex items-center gap-1 text-blue-500">
+                                                    <Moon className="h-4 w-4" />
+                                                    <span className="text-xs">Ночь</span>
+                                                </div>
+                                            ) : (
+                                                <div className="flex items-center gap-1 text-amber-500">
+                                                    <Sun className="h-4 w-4" />
+                                                    <span className="text-xs">День</span>
+                                                </div>
+                                            )}
+                                            {isSutki && (
+                                                <Badge variant="secondary" className="h-5 px-2 text-[10px] bg-violet-100 text-violet-700 border border-violet-200">
+                                                    Сутки
+                                                </Badge>
+                                            )}
+                                            {!isSutki && isLongShift && (
+                                                <Badge variant="secondary" className="h-5 px-2 text-[10px] bg-slate-100 text-slate-700 border border-slate-200">
+                                                    Длинная смена
+                                                </Badge>
+                                            )}
+                                            {shift.report_mode === 'NO_REPORT' && (
+                                                <Badge variant="secondary" className="h-5 px-2 text-[10px] bg-zinc-800 text-zinc-200 border border-zinc-700">
+                                                    Хостес
+                                                </Badge>
+                                            )}
+                                        </div>
                                     </TableCell>
                                     <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
                                         {formatTime(shift.check_in)} — {shift.check_out ? formatTime(shift.check_out) : '...'}
@@ -602,6 +624,9 @@ export default function EmployeeShiftHistoryPage() {
                 ) : (
                     sortedShifts.map((shift) => {
                         const isWeekend = isWeekendDate(shift.check_in)
+                        const hours = Number(shift.total_hours) || 0
+                        const isSutki = hours >= 20
+                        const isLongShift = !isSutki && hours >= 13
 
                         return (
                         <Card key={shift.id} className="border border-border bg-card shadow-sm overflow-hidden">
@@ -612,7 +637,24 @@ export default function EmployeeShiftHistoryPage() {
                                 )}>
                                     {formatDate(shift.check_in)}
                                 </div>
-                                {getStatusBadge(shift.status, !!shift.check_out)}
+                                <div className="flex items-center gap-2">
+                                    {isSutki && (
+                                        <Badge variant="secondary" className="h-6 px-2 text-[10px] bg-violet-100 text-violet-700 border border-violet-200">
+                                            Сутки
+                                        </Badge>
+                                    )}
+                                    {!isSutki && isLongShift && (
+                                        <Badge variant="secondary" className="h-6 px-2 text-[10px] bg-slate-100 text-slate-700 border border-slate-200">
+                                            Длинная смена
+                                        </Badge>
+                                    )}
+                                    {shift.report_mode === 'NO_REPORT' && (
+                                        <Badge variant="secondary" className="h-6 px-2 text-[10px] bg-zinc-800 text-zinc-200 border border-zinc-700">
+                                            Хостес
+                                        </Badge>
+                                    )}
+                                    {getStatusBadge(shift.status, !!shift.check_out)}
+                                </div>
                             </CardHeader>
                             <CardContent className="p-4 space-y-4">
                                 <div className="flex justify-between items-center">

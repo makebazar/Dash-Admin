@@ -433,6 +433,8 @@ interface Shift {
     expenses: number
     report_comment: string
     report_data: Record<string, any>
+    report_mode?: 'FULL_REPORT' | 'NO_REPORT'
+    actor_role_name_snapshot?: string | null
     status: string
     shift_type: 'DAY' | 'NIGHT'
     has_owner_corrections?: boolean
@@ -1338,6 +1340,10 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                         <div className="md:hidden space-y-3">
                             {sortedShifts.map((shift) => {
                                 const isWeekend = isWeekendDate(shift.check_in)
+                                const isNoReport = shift.report_mode === 'NO_REPORT'
+                                const hours = Number(shift.total_hours) || 0
+                                const isSutki = hours >= 20
+                                const isLongShift = !isSutki && hours >= 13
                                 return (
                                     <div
                                         key={shift.id}
@@ -1360,6 +1366,21 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                                                             <Sun className="h-3 w-3" /> День
                                                         </span>
                                                     )}
+                                                    {isSutki && (
+                                                        <Badge variant="secondary" className="bg-violet-100 text-violet-700 border border-violet-200 h-5 px-2 text-[10px]">
+                                                            Сутки
+                                                        </Badge>
+                                                    )}
+                                                    {!isSutki && isLongShift && (
+                                                        <Badge variant="secondary" className="bg-slate-100 text-slate-700 border border-slate-200 h-5 px-2 text-[10px]">
+                                                            Длинная смена
+                                                        </Badge>
+                                                    )}
+                                                    {isNoReport && (
+                                                        <Badge variant="secondary" className="bg-zinc-800 text-zinc-200 border border-zinc-700 h-5 px-2 text-[10px]">
+                                                            {shift.actor_role_name_snapshot || 'Хостес'}
+                                                        </Badge>
+                                                    )}
                                                 </div>
                                                 <div className="text-sm font-medium text-slate-700 truncate">
                                                     {shift.employee_name || 'Неизвестно'}
@@ -1370,8 +1391,11 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                                             </div>
 
                                             <div className="shrink-0 text-right">
-                                                <div className="text-lg font-bold text-emerald-600 tabular-nums">
-                                                    {formatMoney(calculateShiftTotalIncome(shift))}
+                                                <div className={cn(
+                                                    "text-lg font-bold tabular-nums",
+                                                    isNoReport ? "text-slate-400" : "text-emerald-600"
+                                                )}>
+                                                    {isNoReport ? '—' : formatMoney(calculateShiftTotalIncome(shift))}
                                                 </div>
                                                 <div className="mt-1 flex justify-end">
                                                     {getStatusBadge(shift)}
@@ -1379,46 +1403,63 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                                             </div>
                                         </div>
 
-                                        <div className="grid grid-cols-2 gap-2">
-                                            <div className="rounded-xl bg-slate-50 border border-slate-100 p-3">
-                                                <div className="text-[10px] uppercase font-bold tracking-widest text-slate-400 mb-1">Нал</div>
-                                                <div className="text-sm font-bold text-slate-900 tabular-nums">{formatMoney(shift.cash_income)}</div>
-                                            </div>
-                                            <div className="rounded-xl bg-slate-50 border border-slate-100 p-3">
-                                                <div className="text-[10px] uppercase font-bold tracking-widest text-slate-400 mb-1">Безнал</div>
-                                                <div className="text-sm font-bold text-slate-900 tabular-nums">{formatMoney(shift.card_income)}</div>
-                                            </div>
-                                            <div className="rounded-xl bg-rose-50 border border-rose-100 p-3">
-                                                <div className="text-[10px] uppercase font-bold tracking-widest text-rose-400 mb-1">Расходы</div>
-                                                <div className="text-sm font-bold text-rose-600 tabular-nums">{formatMoney(shift.expenses)}</div>
-                                            </div>
-                                            <div className="rounded-xl bg-slate-50 border border-slate-100 p-3">
-                                                <div className="text-[10px] uppercase font-bold tracking-widest text-slate-400 mb-1">Часы</div>
-                                                <div className="text-sm font-bold text-slate-900 tabular-nums">
-                                                    {shift.total_hours && !isNaN(Number(shift.total_hours))
-                                                        ? `${Number(shift.total_hours).toFixed(1)}ч`
-                                                        : '-'}
+                                        {isNoReport ? (
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <div className="rounded-xl bg-slate-50 border border-slate-100 p-3">
+                                                    <div className="text-[10px] uppercase font-bold tracking-widest text-slate-400 mb-1">Часы</div>
+                                                    <div className="text-sm font-bold text-slate-900 tabular-nums">
+                                                        {shift.total_hours && !isNaN(Number(shift.total_hours))
+                                                            ? `${Number(shift.total_hours).toFixed(1)}ч`
+                                                            : '-'}
+                                                    </div>
+                                                </div>
+                                                <div className="rounded-xl bg-slate-50 border border-slate-100 p-3">
+                                                    <div className="text-[10px] uppercase font-bold tracking-widest text-slate-400 mb-1">Отчёт</div>
+                                                    <div className="text-sm font-bold text-slate-900 tabular-nums">Не требуется</div>
                                                 </div>
                                             </div>
-                                            {reportFields.map((field: any) => {
-                                                const raw = shift.report_data?.[field.metric_key]
-                                                const parsed = parseFloat(String(raw))
-                                                const value = Array.isArray(raw)
-                                                    ? formatMoney(getMetricValue(shift, field.metric_key))
-                                                    : raw === null || raw === undefined || raw === ''
-                                                        ? '-'
-                                                        : (!Number.isNaN(parsed) ? formatMoney(parsed) : String(raw))
-
-                                                return (
-                                                    <div key={field.metric_key} className="rounded-xl bg-slate-50 border border-slate-100 p-3">
-                                                        <div className="text-[10px] uppercase font-bold tracking-widest text-slate-400 mb-1 truncate" title={field.custom_label}>
-                                                            {field.custom_label}
-                                                        </div>
-                                                        <div className="text-sm font-bold text-slate-900 tabular-nums">{value}</div>
+                                        ) : (
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <div className="rounded-xl bg-slate-50 border border-slate-100 p-3">
+                                                    <div className="text-[10px] uppercase font-bold tracking-widest text-slate-400 mb-1">Нал</div>
+                                                    <div className="text-sm font-bold text-slate-900 tabular-nums">{formatMoney(shift.cash_income)}</div>
+                                                </div>
+                                                <div className="rounded-xl bg-slate-50 border border-slate-100 p-3">
+                                                    <div className="text-[10px] uppercase font-bold tracking-widest text-slate-400 mb-1">Безнал</div>
+                                                    <div className="text-sm font-bold text-slate-900 tabular-nums">{formatMoney(shift.card_income)}</div>
+                                                </div>
+                                                <div className="rounded-xl bg-rose-50 border border-rose-100 p-3">
+                                                    <div className="text-[10px] uppercase font-bold tracking-widest text-rose-400 mb-1">Расходы</div>
+                                                    <div className="text-sm font-bold text-rose-600 tabular-nums">{formatMoney(shift.expenses)}</div>
+                                                </div>
+                                                <div className="rounded-xl bg-slate-50 border border-slate-100 p-3">
+                                                    <div className="text-[10px] uppercase font-bold tracking-widest text-slate-400 mb-1">Часы</div>
+                                                    <div className="text-sm font-bold text-slate-900 tabular-nums">
+                                                        {shift.total_hours && !isNaN(Number(shift.total_hours))
+                                                            ? `${Number(shift.total_hours).toFixed(1)}ч`
+                                                            : '-'}
                                                     </div>
-                                                )
-                                            })}
-                                        </div>
+                                                </div>
+                                                {reportFields.map((field: any) => {
+                                                    const raw = shift.report_data?.[field.metric_key]
+                                                    const parsed = parseFloat(String(raw))
+                                                    const value = Array.isArray(raw)
+                                                        ? formatMoney(getMetricValue(shift, field.metric_key))
+                                                        : raw === null || raw === undefined || raw === ''
+                                                            ? '-'
+                                                            : (!Number.isNaN(parsed) ? formatMoney(parsed) : String(raw))
+
+                                                    return (
+                                                        <div key={field.metric_key} className="rounded-xl bg-slate-50 border border-slate-100 p-3">
+                                                            <div className="text-[10px] uppercase font-bold tracking-widest text-slate-400 mb-1 truncate" title={field.custom_label}>
+                                                                {field.custom_label}
+                                                            </div>
+                                                            <div className="text-sm font-bold text-slate-900 tabular-nums">{value}</div>
+                                                        </div>
+                                                    )
+                                                })}
+                                            </div>
+                                        )}
 
                                         <div className="mt-4 pt-4 border-t border-slate-100">
                                             <Button
@@ -1487,41 +1528,74 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
                                                     )}>{formatTime(shift.check_in)} — {shift.check_out ? formatTime(shift.check_out) : '...'}</div>
                                                 </TableCell>
                                                 <TableCell className="py-4">
-                                                    {shift.shift_type === 'NIGHT' ? (
-                                                        <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-blue-50 text-blue-700 text-xs font-medium">
-                                                            <Moon className="h-3 w-3" /> Ночь
-                                                        </span>
-                                                    ) : (
-                                                        <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-orange-50 text-orange-700 text-xs font-medium">
-                                                            <Sun className="h-3 w-3" /> День
-                                                        </span>
-                                                    )}
+                                                    {(() => {
+                                                        const hours = Number(shift.total_hours) || 0
+                                                        const isSutki = hours >= 20
+                                                        const isLongShift = !isSutki && hours >= 13
+
+                                                        return (
+                                                            <div className="flex items-center gap-2">
+                                                                {shift.shift_type === 'NIGHT' ? (
+                                                                    <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-blue-50 text-blue-700 text-xs font-medium">
+                                                                        <Moon className="h-3 w-3" /> Ночь
+                                                                    </span>
+                                                                ) : (
+                                                                    <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-orange-50 text-orange-700 text-xs font-medium">
+                                                                        <Sun className="h-3 w-3" /> День
+                                                                    </span>
+                                                                )}
+                                                                {isSutki && (
+                                                                    <Badge variant="secondary" className="bg-violet-100 text-violet-700 border border-violet-200 h-5 px-2 text-[10px]">
+                                                                        Сутки
+                                                                    </Badge>
+                                                                )}
+                                                                {!isSutki && isLongShift && (
+                                                                    <Badge variant="secondary" className="bg-slate-100 text-slate-700 border border-slate-200 h-5 px-2 text-[10px]">
+                                                                        Длинная смена
+                                                                    </Badge>
+                                                                )}
+                                                            </div>
+                                                        )
+                                                    })()}
                                                 </TableCell>
                                                 <TableCell className="py-4">
                                                     <div className="font-medium text-slate-900">{shift.employee_name || 'Неизвестно'}</div>
                                                     <div className="text-xs text-slate-500 mt-0.5">
                                                         {shift.total_hours ? `${Number(shift.total_hours).toFixed(1)} ч` : '-'}
                                                     </div>
+                                                    {shift.report_mode === 'NO_REPORT' && (
+                                                        <div className="mt-1">
+                                                            <Badge variant="secondary" className="bg-zinc-800 text-zinc-200 border border-zinc-700 h-5 px-2 text-[10px]">
+                                                                {shift.actor_role_name_snapshot || 'Без отчёта'}
+                                                            </Badge>
+                                                        </div>
+                                                    )}
                                                 </TableCell>
                                                 <TableCell className="py-4 text-right">
-                                                    <span className="font-bold text-emerald-600 tabular-nums text-base">
-                                                        {formatMoney(calculateShiftTotalIncome(shift))}
-                                                    </span>
+                                                    {shift.report_mode === 'NO_REPORT' ? (
+                                                        <span className="font-bold text-slate-400 tabular-nums text-base">—</span>
+                                                    ) : (
+                                                        <span className="font-bold text-emerald-600 tabular-nums text-base">
+                                                            {formatMoney(calculateShiftTotalIncome(shift))}
+                                                        </span>
+                                                    )}
                                                 </TableCell>
                                                 <TableCell className="py-4 text-right font-medium text-slate-600 tabular-nums">
-                                                    {formatMoney(getMetricValue(shift, 'cash_income'))}
+                                                    {shift.report_mode === 'NO_REPORT' ? '-' : formatMoney(getMetricValue(shift, 'cash_income'))}
                                                 </TableCell>
                                                 <TableCell className="py-4 text-right font-medium text-slate-600 tabular-nums">
-                                                    {formatMoney(getMetricValue(shift, 'card_income'))}
+                                                    {shift.report_mode === 'NO_REPORT' ? '-' : formatMoney(getMetricValue(shift, 'card_income'))}
                                                 </TableCell>
                                                 <TableCell className="py-4 text-right font-medium text-rose-600 tabular-nums">
-                                                    {formatMoney(getMetricValue(shift, 'expenses'))}
+                                                    {shift.report_mode === 'NO_REPORT' ? '-' : formatMoney(getMetricValue(shift, 'expenses'))}
                                                 </TableCell>
                                                 {reportFields.map((field: any) => (
                                                     <TableCell key={field.metric_key} className="py-4 text-right text-slate-500 tabular-nums">
-                                                        {shift.report_data && shift.report_data[field.metric_key] !== undefined
-                                                            ? formatMoney(getMetricValue(shift, field.metric_key))
-                                                            : '-'}
+                                                        {shift.report_mode === 'NO_REPORT'
+                                                            ? '-'
+                                                            : (shift.report_data && shift.report_data[field.metric_key] !== undefined
+                                                                ? formatMoney(getMetricValue(shift, field.metric_key))
+                                                                : '-')}
                                                     </TableCell>
                                                 ))}
                                                 <TableCell className="py-4 text-right">

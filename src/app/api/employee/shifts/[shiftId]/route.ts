@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { query } from '@/db';
 import { cookies } from 'next/headers';
 import { calculateSalary } from '@/lib/salary-calculator';
+import { getEmployeeRoleAccess } from '@/lib/employee-role-access';
 
 export async function PATCH(
     request: Request,
@@ -19,7 +20,8 @@ export async function PATCH(
             return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
         }
 
-        const { reportData, templateId } = body;
+        let reportData = body?.reportData;
+        let templateId = body?.templateId;
 
         if (!userId) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -38,6 +40,19 @@ export async function PATCH(
         const clubId = shiftCheck.rows[0].club_id;
         const checkIn = new Date(shiftCheck.rows[0].check_in);
         const shiftUserId = shiftCheck.rows[0].user_id;
+
+        const roleAccess = await getEmployeeRoleAccess(String(clubId))
+        if (roleAccess.settings.shift_end_mode === 'NO_REPORT') {
+            reportData = {}
+            templateId = null
+        } else {
+            if (!reportData || typeof reportData !== 'object') {
+                return NextResponse.json({ error: 'reportData is required' }, { status: 400 });
+            }
+        }
+
+        const safeReportData = reportData && typeof reportData === 'object' ? reportData : {}
+        const reportMode = roleAccess.settings.shift_end_mode === 'NO_REPORT' ? 'NO_REPORT' : 'FULL_REPORT'
 
         // Calculate hours
         const now = new Date();
@@ -77,10 +92,10 @@ export async function PATCH(
         };
 
         // Extract system metrics for separate columns
-        const cashIncome = sumMetric(reportData['cash_income']);
-        const cardIncome = sumMetric(reportData['card_income']);
-        const expenses = sumMetric(reportData['expenses_cash']);
-        const comment = reportData['shift_comment'] || '';
+        const cashIncome = sumMetric(safeReportData['cash_income']);
+        const cardIncome = sumMetric(safeReportData['card_income']);
+        const expenses = sumMetric(safeReportData['expenses_cash']);
+        const comment = safeReportData['shift_comment'] || '';
 
         // Prepare metrics for salary calculator (must be flat Record<string, number>)
         const metrics: Record<string, number> = {
@@ -91,8 +106,8 @@ export async function PATCH(
         };
         
         // Add all other report fields, summing them if they are arrays
-        for (const key in reportData) {
-            metrics[key] = sumMetric(reportData[key]);
+        for (const key in safeReportData) {
+            metrics[key] = sumMetric(safeReportData[key]);
         }
 
         if ((schemeRes.rowCount || 0) > 0) {
@@ -122,11 +137,14 @@ export async function PATCH(
            card_income = $4,
            expenses = $5,
            report_comment = $6,
+           report_mode = $11,
+           actor_role_id_snapshot = $12,
+           actor_role_name_snapshot = $13,
            calculated_salary = $9,
            salary_breakdown = $10
        WHERE id = $7`,
             [
-                JSON.stringify(reportData),
+                JSON.stringify(safeReportData),
                 templateId,
                 cashIncome,
                 cardIncome,
@@ -136,7 +154,10 @@ export async function PATCH(
                 // check_out handled by NOW()
                 totalHours.toFixed(2), // $8 total_hours
                 calculatedSalary, // $9
-                JSON.stringify(salaryBreakdown) // $10
+                JSON.stringify(salaryBreakdown), // $10
+                reportMode, // $11
+                roleAccess.roleId, // $12
+                roleAccess.roleName // $13
             ]
         );
 

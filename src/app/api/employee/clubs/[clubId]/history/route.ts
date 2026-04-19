@@ -144,7 +144,8 @@ export async function GET(
         const currentShiftsRaw = await query(
             `SELECT 
                 id, check_in, check_out, total_hours, calculated_salary as earnings, 
-                status, shift_type, cash_income, card_income, report_data, salary_breakdown
+                status, shift_type, cash_income, card_income, report_data, salary_breakdown,
+                report_mode, actor_role_name_snapshot, actor_role_id_snapshot
              FROM shifts
              WHERE user_id = $1 AND club_id = $2 
                AND check_in >= $3 AND check_in <= $4

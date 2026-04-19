@@ -24,10 +24,13 @@ export async function GET() {
     const auth = await ensureSuperAdmin()
     if (!auth.ok) return auth.response
 
+    const hasEmployeeAccessSettings = await hasColumn('roles', 'employee_access_settings')
+
     const result = await query(
       `SELECT 
           r.id,
           r.name,
+          ${hasEmployeeAccessSettings ? "COALESCE(r.employee_access_settings, '{}'::jsonb) as employee_access_settings," : "'{}'::jsonb as employee_access_settings,"}
           COALESCE(u_cnt.users_count, 0) as users_count,
           COALESCE(ce_cnt.club_employees_count, 0) as club_employees_count
        FROM roles r
@@ -48,6 +51,7 @@ export async function GET() {
     const roles = result.rows.map(r => ({
       id: Number(r.id),
       name: r.name as string,
+      employee_access_settings: r.employee_access_settings || {},
       users_count: Number(r.users_count || 0),
       club_employees_count: Number(r.club_employees_count || 0),
     }))
@@ -86,6 +90,48 @@ export async function POST(request: Request) {
     }
   } catch (error) {
     console.error('Create Super Admin Role Error:', error)
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
+  }
+}
+
+export async function PATCH(request: Request) {
+  try {
+    const auth = await ensureSuperAdmin()
+    if (!auth.ok) return auth.response
+
+    const hasEmployeeAccessSettings = await hasColumn('roles', 'employee_access_settings')
+    if (!hasEmployeeAccessSettings) {
+      return NextResponse.json({ error: 'Колонка employee_access_settings отсутствует. Примените миграции.' }, { status: 400 })
+    }
+
+    const body = await request.json().catch(() => ({}))
+    const roleIdNum = Number(body?.roleId)
+    const employeeAccessSettings = body?.employee_access_settings
+
+    if (!Number.isFinite(roleIdNum)) return NextResponse.json({ error: 'roleId обязателен' }, { status: 400 })
+    if (employeeAccessSettings === null || employeeAccessSettings === undefined || typeof employeeAccessSettings !== 'object') {
+      return NextResponse.json({ error: 'employee_access_settings должен быть объектом' }, { status: 400 })
+    }
+
+    const update = await query(
+      `UPDATE roles
+       SET employee_access_settings = $1::jsonb
+       WHERE id = $2
+       RETURNING id, name, employee_access_settings`,
+      [JSON.stringify(employeeAccessSettings), roleIdNum]
+    )
+
+    if ((update.rowCount || 0) === 0) return NextResponse.json({ error: 'Роль не найдена' }, { status: 404 })
+
+    return NextResponse.json({
+      role: {
+        id: Number(update.rows[0].id),
+        name: update.rows[0].name as string,
+        employee_access_settings: update.rows[0].employee_access_settings || {},
+      }
+    })
+  } catch (error) {
+    console.error('Update Super Admin Role Settings Error:', error)
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
   }
 }

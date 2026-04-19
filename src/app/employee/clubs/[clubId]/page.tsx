@@ -219,12 +219,22 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
     const [handoverTemplate, setHandoverTemplate] = useState<any>(null)
 
     const [currentUserId, setCurrentUserId] = useState<string>('')
+    const [employeeAccess, setEmployeeAccess] = useState<any>(null)
     const [evaluationScore, setEvaluationScore] = useState<number | null>(null)
     const [isEvaluationsLoading, setIsEvaluationsLoading] = useState(false)
     const normalizedInventorySettings = useMemo(() => normalizeInventorySettings(club?.inventory_settings), [club?.inventory_settings])
-    const isSuppliesEnabled = normalizedInventorySettings.supplies_enabled
-    const isStockEnabled = normalizedInventorySettings.stock_enabled
-    const isCashboxEnabled = normalizedInventorySettings.cashbox_enabled && Boolean(normalizedInventorySettings.cashbox_warehouse_id)
+    const isEmployeeAccessLoaded = employeeAccess !== null
+    const employeeSettings = employeeAccess?.settings || {}
+    const shiftEndMode = employeeSettings.shift_end_mode
+    const canUseShiftReport = isEmployeeAccessLoaded && shiftEndMode !== 'NO_REPORT'
+    const canUseInventoryActions = isEmployeeAccessLoaded && employeeSettings.inventory_actions_enabled !== false
+    const canUseShiftZoneHandover = isEmployeeAccessLoaded && employeeSettings.shift_zone_handover_enabled !== false
+    const canUseEmployeeChecklists = isEmployeeAccessLoaded && (employeeSettings.handover_checklist_on_start !== 'DISABLED' || employeeSettings.closing_checklist_enabled === true)
+    const canStartShift = isEmployeeAccessLoaded && employeeSettings.shift_start_enabled !== false
+
+    const isSuppliesEnabled = normalizedInventorySettings.supplies_enabled && canUseInventoryActions
+    const isStockEnabled = normalizedInventorySettings.stock_enabled && canUseInventoryActions
+    const isCashboxEnabled = normalizedInventorySettings.cashbox_enabled && Boolean(normalizedInventorySettings.cashbox_warehouse_id) && canUseInventoryActions
     const canUseEmployeeWriteOff = isStockEnabled && normalizedInventorySettings.employee_writeoff_enabled
     const canUseEmployeeTransfer = isStockEnabled && normalizedInventorySettings.employee_transfer_enabled
 
@@ -289,7 +299,7 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
     }, [])
 
     useEffect(() => {
-        if (!clubId || !activeShift?.id) {
+        if (!canUseShiftZoneHandover || !clubId || !activeShift?.id) {
             setHasOpenZoneSnapshotDraft(false)
             return
         }
@@ -307,10 +317,10 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
             console.error("Failed to inspect open snapshot draft", error)
             setHasOpenZoneSnapshotDraft(false)
         }
-    }, [activeShift?.id, clubId, isOpenZoneSnapshotModalOpen])
+    }, [activeShift?.id, canUseShiftZoneHandover, clubId, isOpenZoneSnapshotModalOpen])
 
     useEffect(() => {
-        if (!clubId || !activeShift?.id || !hasShiftAccountability) {
+        if (!canUseShiftZoneHandover || !clubId || !activeShift?.id || !hasShiftAccountability) {
             setHasPendingZoneStartAcceptance(false)
             return
         }
@@ -336,7 +346,7 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
         return () => {
             cancelled = true
         }
-    }, [activeShift?.id, clubId, hasShiftAccountability, isOpenZoneSnapshotModalOpen])
+    }, [activeShift?.id, canUseShiftZoneHandover, clubId, hasShiftAccountability, isOpenZoneSnapshotModalOpen])
 
     const maintenanceComponent = useMemo(() => {
         if (!kpiData?.maintenance) return null
@@ -363,7 +373,6 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
         params.then(p => {
             setClubId(p.clubId)
             fetchData(p.clubId)
-            fetchChecklistTemplates(p.clubId)
         })
     }, [params])
 
@@ -377,7 +386,7 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
     }, [clubId, employeeClubs])
 
     useEffect(() => {
-        if (!clubId || !currentUserId) return
+        if (!clubId || !currentUserId || !canUseEmployeeChecklists) return
         const fetchEvaluationScore = async () => {
             setIsEvaluationsLoading(true)
             try {
@@ -414,10 +423,19 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
             }
         }
         fetchEvaluationScore()
-    }, [clubId, currentUserId])
+    }, [canUseEmployeeChecklists, clubId, currentUserId])
 
     useEffect(() => {
-        if (!clubId || !currentUserId) return
+        if (!canUseEmployeeChecklists) {
+            setEvaluationScore(null)
+        }
+    }, [canUseEmployeeChecklists])
+
+    useEffect(() => {
+        if (!canUseShiftZoneHandover || !clubId || !currentUserId) {
+            setHasShiftAccountability(false)
+            return
+        }
         let cancelled = false
 
         fetchShiftAccountabilityStatus(clubId)
@@ -434,7 +452,7 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
         return () => {
             cancelled = true
         }
-    }, [clubId, currentUserId])
+    }, [canUseShiftZoneHandover, clubId, currentUserId])
 
     useEffect(() => {
         if (!clubId || !currentUserId) return
@@ -507,6 +525,14 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
             const clubTimezone = employeeClubs.find((item: ClubInfo) => String(item.id) === id)?.timezone || 'Europe/Moscow'
             const { firstDay: monthStart, lastDay: monthEnd } = getMonthRangeInTimezone(new Date(), clubTimezone)
 
+            const accessRes = await fetch(`/api/employee/clubs/${id}/me`, { cache: 'no-store' })
+            const accessJson = await accessRes.json().catch(() => ({}))
+            if (accessRes.ok) setEmployeeAccess(accessJson)
+            const localSettings = accessRes.ok ? (accessJson?.settings || {}) : {}
+            const localCanUseShiftReport = localSettings.shift_end_mode !== 'NO_REPORT'
+            const localCanUseInventoryActions = localSettings.inventory_actions_enabled !== false
+            const localCanUseEmployeeChecklists = localSettings.handover_checklist_on_start !== 'DISABLED' || localSettings.closing_checklist_enabled === true
+
             await fetch(`/api/clubs/${id}/equipment/maintenance`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -517,16 +543,26 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                 })
             })
 
+            if (localCanUseEmployeeChecklists) {
+                await fetchChecklistTemplates(id)
+            } else {
+                setChecklistTemplates([])
+            }
+
             // Оптимизация: выполняем все запросы параллельно
             const results = await Promise.all([
                 fetch(`/api/employee/clubs/${id}/active-shift`).then(r => r.json()),
                 fetch(`/api/employee/clubs/${id}/stats`).then(r => r.json()),
                 fetch(`/api/employee/clubs/${id}/kpi`).then(r => r.json()),
-                fetch(`/api/clubs/${id}/settings/reports`, { cache: 'no-store' }).then(r => r.json()),
+                localCanUseShiftReport
+                    ? fetch(`/api/clubs/${id}/settings/reports`, { cache: 'no-store' }).then(r => r.json())
+                    : Promise.resolve({ currentTemplate: null }),
                 fetch(`/api/clubs/${id}/equipment/maintenance?assigned=me&status=PENDING,IN_PROGRESS`).then(r => r.json()),
                 fetch(`/api/clubs/${id}/equipment/maintenance?assigned=me&verification_status=REJECTED`).then(r => r.json()),
                 fetch(`/api/employee/clubs/${id}/equipment-rating`).then(r => r.json()),
-                fetch(`/api/clubs/${id}/tasks`).then(r => r.json()),
+                localCanUseInventoryActions
+                    ? fetch(`/api/clubs/${id}/tasks`).then(r => r.json())
+                    : Promise.resolve({ tasks: [] }),
             ])
 
             const [
@@ -558,8 +594,10 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
             }
 
             // Report template
-            if (reportJson?.currentTemplate) {
+            if (localCanUseShiftReport && reportJson?.currentTemplate) {
                 setReportTemplate(reportJson.currentTemplate)
+            } else if (!localCanUseShiftReport) {
+                setReportTemplate(null)
             }
 
             // Tasks
@@ -578,8 +616,12 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
             }
 
             // Club Tasks
-            if (tasksJson?.tasks) {
-                setClubTasks(tasksJson.tasks || [])
+            if (localCanUseInventoryActions) {
+                if (tasksJson?.tasks) {
+                    setClubTasks(tasksJson.tasks || [])
+                }
+            } else {
+                setClubTasks([])
             }
 
         } catch (error) {
@@ -588,20 +630,6 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
             setIsLoading(false)
         }
     }
-
-    // Оптимизация: мемоизация обработчиков
-    const handleStartShift = useCallback(async () => {
-        console.log('[handleStartShift] clubId:', clubId, 'club:', club)
-        const requiredHandover = checklistTemplates.find((t: any) => t.type === 'shift_handover' && t.settings?.block_shift_open)
-
-        if (requiredHandover) {
-            setHandoverTemplate(requiredHandover)
-            setIsHandoverOpen(true)
-            return
-        }
-
-        await executeStartShift()
-    }, [checklistTemplates, clubId, club])
 
     const executeStartShift = useCallback(async () => {
         setIsActionLoading(true)
@@ -615,13 +643,16 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
             const data = await res.json()
 
             if (res.ok) {
-                const accountabilityStatus = await fetchShiftAccountabilityStatus(clubId)
-                const hasShiftZones = accountabilityStatus.enabled && accountabilityStatus.ready
+                let hasShiftZones = false
+                if (canUseShiftZoneHandover) {
+                    const accountabilityStatus = await fetchShiftAccountabilityStatus(clubId)
+                    hasShiftZones = accountabilityStatus.enabled && accountabilityStatus.ready
+                }
                 setHasShiftAccountability(hasShiftZones)
 
                 if (data.shift_id) {
                     setStartedShiftId(data.shift_id)
-                    if (hasShiftZones) {
+                    if (hasShiftZones && canUseShiftZoneHandover) {
                         setIsOpenZoneSnapshotModalOpen(true)
                     }
                 }
@@ -635,9 +666,39 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
         } finally {
             setIsActionLoading(false)
         }
-    }, [clubId])
+    }, [canUseShiftZoneHandover, clubId])
+
+    // Оптимизация: мемоизация обработчиков
+    const handleStartShift = useCallback(async () => {
+        console.log('[handleStartShift] clubId:', clubId, 'club:', club)
+        if (!canStartShift) {
+            alert('Запуск смены недоступен для вашей роли')
+            return
+        }
+
+        const mode = employeeSettings?.handover_checklist_on_start
+        const shouldBlock = mode === 'REQUIRED' || mode === undefined
+        const requiredHandover = shouldBlock
+            ? checklistTemplates.find((t: any) => t.type === 'shift_handover' && t.settings?.block_shift_open)
+            : null
+
+        if (requiredHandover) {
+            setHandoverTemplate(requiredHandover)
+            setIsHandoverOpen(true)
+            return
+        }
+
+        await executeStartShift()
+    }, [canStartShift, checklistTemplates, clubId, club, employeeSettings?.handover_checklist_on_start, executeStartShift])
 
     const handleEndShiftClick = async () => {
+        if (!canUseShiftReport) {
+            if (confirm('Завершить смену?')) {
+                submitEndShift({})
+            }
+            return
+        }
+
         try {
             const res = await fetch(`/api/clubs/${clubId}/settings/reports`, { cache: 'no-store' })
             const data = await res.json()
@@ -647,6 +708,23 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                 setIsReportModalOpen(true)
             } else {
                 if (confirm('Завершить смену?')) {
+                    if (canUseShiftZoneHandover) {
+                        const accountabilityStatus = await fetchShiftAccountabilityStatus(clubId)
+                        const hasShiftZones = accountabilityStatus.enabled && accountabilityStatus.ready
+                        setHasShiftAccountability(hasShiftZones)
+                        if (activeShift?.id && hasShiftZones) {
+                            setPendingShiftCloseData({})
+                            setIsCloseZoneSnapshotModalOpen(true)
+                            return
+                        }
+                    }
+                    submitEndShift({})
+                }
+            }
+        } catch (e) {
+            console.error(e)
+            if (confirm('Завершить смену?')) {
+                if (canUseShiftZoneHandover) {
                     const accountabilityStatus = await fetchShiftAccountabilityStatus(clubId)
                     const hasShiftZones = accountabilityStatus.enabled && accountabilityStatus.ready
                     setHasShiftAccountability(hasShiftZones)
@@ -655,19 +733,6 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                         setIsCloseZoneSnapshotModalOpen(true)
                         return
                     }
-                    submitEndShift({})
-                }
-            }
-        } catch (e) {
-            console.error(e)
-            if (confirm('Завершить смену?')) {
-                const accountabilityStatus = await fetchShiftAccountabilityStatus(clubId)
-                const hasShiftZones = accountabilityStatus.enabled && accountabilityStatus.ready
-                setHasShiftAccountability(hasShiftZones)
-                if (activeShift?.id && hasShiftZones) {
-                    setPendingShiftCloseData({})
-                    setIsCloseZoneSnapshotModalOpen(true)
-                    return
                 }
                 submitEndShift({})
             }
@@ -917,6 +982,7 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                                         variant="default"
                                         className="w-full h-12 text-sm font-semibold shadow-none"
                                         onClick={handleEndShiftClick}
+                                        disabled={isActionLoading || !isEmployeeAccessLoaded}
                                     >
                                         {isActionLoading && !isReportModalOpen ? (
                                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -993,6 +1059,7 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                                 <Button
                                     className="h-11 px-8 shadow-none"
                                     onClick={handleStartShift}
+                                    disabled={isActionLoading || !canStartShift}
                                 >
                                     {isActionLoading ? (
                                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -1208,7 +1275,7 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
             )}
 
             {/* Modals and Wizards */}
-            {isHandoverOpen && handoverTemplate && (
+            {canUseEmployeeChecklists && isHandoverOpen && handoverTemplate && (
                 <ShiftOpeningWizard
                     isOpen={isHandoverOpen}
                     onClose={() => setIsHandoverOpen(false)}
@@ -1266,7 +1333,7 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                 />
             )}
 
-            {activeShift && club && (
+            {canUseShiftReport && activeShift && club && (
                 <SSEProvider clubId={clubId} userId={currentUserId}>
                     <ShiftClosingWizard
                         isOpen={isReportModalOpen}
@@ -1292,7 +1359,7 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                 </SSEProvider>
             )}
 
-            {startedShiftId && (
+            {canUseShiftZoneHandover && startedShiftId && (
                 <ShiftZoneSnapshotWizard
                     isOpen={isOpenZoneSnapshotModalOpen}
                     onClose={() => setIsOpenZoneSnapshotModalOpen(false)}
@@ -1305,7 +1372,7 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                 />
             )}
 
-            {activeShift?.id && (
+            {canUseShiftZoneHandover && activeShift?.id && (
                 <ShiftZoneSnapshotWizard
                     isOpen={isCloseZoneSnapshotModalOpen}
                     onClose={() => setIsCloseZoneSnapshotModalOpen(false)}
@@ -1352,43 +1419,45 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                 userId={currentUserId}
             />
 
-            <Dialog open={isIndicatorsModalOpen} onOpenChange={setIsIndicatorsModalOpen}>
-                <DialogContent className="max-w-md">
-                    <DialogHeader>
-                        <DialogTitle>Промежуточные показатели</DialogTitle>
-                        <DialogDescription>
-                            Внесите текущие данные, чтобы увидеть обновленный прогноз KPI
-                        </DialogDescription>
-                    </DialogHeader>
-                    <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto pr-2">
-                        {reportTemplate?.schema?.map((field: any, idx: number) => (
-                            <div key={idx} className="space-y-2">
-                                <Label>{field.custom_label}</Label>
-                                <Input
-                                    type={field.metric_key.includes('comment') ? 'text' : 'number'}
-                                    placeholder="Текущее значение"
-                                    onChange={(e) => setReportData({ ...reportData, [field.metric_key]: e.target.value })}
-                                    defaultValue={activeShift ? (
-                                        typeof activeShift.report_data === 'string'
-                                            ? JSON.parse(activeShift.report_data || '{}')[field.metric_key]
-                                            : (activeShift.report_data as any)?.[field.metric_key]
-                                    ) : ''}
-                                />
-                            </div>
-                        ))}
-                    </div>
-                    <DialogFooter>
-                        <Button
-                            onClick={() => submitUpdateIndicators(reportData)}
-                            disabled={isActionLoading}
-                            className="w-full"
-                        >
-                            {isActionLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                            Обновить показатели
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+            {canUseShiftReport && (
+                <Dialog open={isIndicatorsModalOpen} onOpenChange={setIsIndicatorsModalOpen}>
+                    <DialogContent className="max-w-md">
+                        <DialogHeader>
+                            <DialogTitle>Промежуточные показатели</DialogTitle>
+                            <DialogDescription>
+                                Внесите текущие данные, чтобы увидеть обновленный прогноз KPI
+                            </DialogDescription>
+                        </DialogHeader>
+                        <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto pr-2">
+                            {reportTemplate?.schema?.map((field: any, idx: number) => (
+                                <div key={idx} className="space-y-2">
+                                    <Label>{field.custom_label}</Label>
+                                    <Input
+                                        type={field.metric_key.includes('comment') ? 'text' : 'number'}
+                                        placeholder="Текущее значение"
+                                        onChange={(e) => setReportData({ ...reportData, [field.metric_key]: e.target.value })}
+                                        defaultValue={activeShift ? (
+                                            typeof activeShift.report_data === 'string'
+                                                ? JSON.parse(activeShift.report_data || '{}')[field.metric_key]
+                                                : (activeShift.report_data as any)?.[field.metric_key]
+                                        ) : ''}
+                                    />
+                                </div>
+                            ))}
+                        </div>
+                        <DialogFooter>
+                            <Button
+                                onClick={() => submitUpdateIndicators(reportData)}
+                                disabled={isActionLoading}
+                                className="w-full"
+                            >
+                                {isActionLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                Обновить показатели
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+            )}
         </div>
     )
 }

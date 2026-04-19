@@ -59,12 +59,18 @@ export async function calculateSalary(
         baseAmount = amount * (shift.total_hours || 0);
     } else if (type === 'fixed' || type === 'per_shift') {
         const hours = shift.total_hours || 0;
+        const graceHoursRaw = (scheme.base as any)?.overtime_grace_hours ?? (scheme as any).overtime_grace_hours ?? 1
+        const graceHours = Number.isFinite(Number(graceHoursRaw)) ? Number(graceHoursRaw) : 1
 
-        if (hours >= fullShiftHours) {
+        if (hours <= 0) {
+            baseAmount = 0
+        } else if (hours < fullShiftHours) {
+            baseAmount = (amount / fullShiftHours) * hours;
+        } else if (hours <= fullShiftHours + graceHours) {
             baseAmount = amount;
         } else {
-            // Proportional
-            baseAmount = (amount / fullShiftHours) * hours;
+            const hourlyRate = fullShiftHours > 0 ? (amount / fullShiftHours) : 0
+            baseAmount = amount + (hours - fullShiftHours) * hourlyRate
         }
     } else if (type === 'percent_revenue') {
         const sourceValue = reportMetrics['total_revenue'] || 0;

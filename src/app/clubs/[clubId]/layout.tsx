@@ -5,6 +5,7 @@ import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
 import { hasColumn } from "@/lib/db-compat"
 import { resolveSubscriptionState } from "@/lib/subscriptions"
+import { getEmployeeRoleAccess } from "@/lib/employee-role-access"
 
 export default async function ClubLayout({
     children,
@@ -48,6 +49,11 @@ export default async function ClubLayout({
     const subscriptionState = resolveSubscriptionState(clubOwner)
     if (!subscriptionState.isActive) {
         redirect('/dashboard')
+    }
+
+    const roleAccess = await getEmployeeRoleAccess(clubId)
+    if (roleAccess.settings.employee_only) {
+        redirect(`/employee/clubs/${clubId}`)
     }
 
     // Fetch club data for sidebar

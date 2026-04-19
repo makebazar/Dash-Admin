@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { query } from '@/db';
 import { cookies } from 'next/headers';
 import { formatLocalDate } from '@/lib/utils';
+import { getEmployeeRoleAccess } from '@/lib/employee-role-access';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,12 +24,8 @@ export async function GET(
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        // Check if user is an employee of this club
-        const employeeCheck = await query(
-            `SELECT 1 FROM club_employees WHERE club_id = $1 AND user_id = $2`,
-            [clubId, userId]
-        );
-        if ((employeeCheck.rowCount || 0) === 0) {
+        const access = await getEmployeeRoleAccess(clubId)
+        if (!access.settings.schedule_enabled) {
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
@@ -50,8 +47,7 @@ export async function GET(
         const startOfMonth = `${year}-${month.toString().padStart(2, '0')}-01`;
         const endOfMonth = formatLocalDate(new Date(year, month, 0));
 
-        // Get employees - FILTERED for Admins
-        // We look for roles containing 'админ' or 'admin' (case insensitive)
+        // Get employees - Filtered for shift staff
         let employees = [];
         try {
             const employeesRes = await query(
@@ -61,7 +57,7 @@ export async function GET(
                  LEFT JOIN roles r ON u.role_id = r.id
                  WHERE ce.club_id = $1 
                  AND (ce.dismissed_at IS NULL OR ce.dismissed_at >= $2::date)
-                 AND (LOWER(r.name) LIKE '%админ%' OR LOWER(r.name) LIKE '%admin%')
+                 AND (LOWER(r.name) LIKE '%админ%' OR LOWER(r.name) LIKE '%admin%' OR r.name = 'Хостес')
                  ORDER BY ce.dismissed_at ASC NULLS FIRST, ce.display_order ASC, u.full_name ASC`,
                 [clubId, startOfMonth]
             );

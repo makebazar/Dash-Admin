@@ -13,7 +13,8 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE TABLE IF NOT EXISTS roles (
     id SERIAL PRIMARY KEY,
     name VARCHAR(50) NOT NULL UNIQUE,
-    default_kpi_settings JSONB DEFAULT '{}'
+    default_kpi_settings JSONB DEFAULT '{}',
+    employee_access_settings JSONB DEFAULT '{}'
 );
 
 -- Role Permissions table
@@ -144,6 +145,9 @@ CREATE TABLE IF NOT EXISTS shifts (
     calculated_salary DECIMAL(10,2),
     salary_breakdown JSONB,
     shift_type VARCHAR(20) DEFAULT 'regular',
+    report_mode VARCHAR(20) DEFAULT 'FULL_REPORT',
+    actor_role_id_snapshot INTEGER,
+    actor_role_name_snapshot VARCHAR(50),
     report_data JSONB DEFAULT '{}',
     cash_revenue DECIMAL(10,2) DEFAULT 0,
     card_revenue DECIMAL(10,2) DEFAULT 0,
