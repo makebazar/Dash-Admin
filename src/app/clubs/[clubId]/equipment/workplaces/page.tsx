@@ -16,7 +16,9 @@ const AssignEquipmentDialog = dynamic(() => import("./AssignEquipmentDialog"), {
 const WorkplaceFormDialog = dynamic(() => import("./WorkplaceFormDialog"), { ssr: false })
 
 const sortWorkstationsByZoneAndName = (a: Workstation, b: Workstation) => {
-    const zoneCompare = a.zone.localeCompare(b.zone, "ru", { sensitivity: "base" })
+    const zoneA = a.zone || ''
+    const zoneB = b.zone || ''
+    const zoneCompare = zoneA.localeCompare(zoneB, "ru", { sensitivity: "base" })
     if (zoneCompare !== 0) return zoneCompare
     return a.name.localeCompare(b.name, "ru", { numeric: true, sensitivity: "base" })
 }
@@ -293,9 +295,10 @@ export default function WorkplacesPage() {
         const map = new Map<string, Workstation[]>()
 
         for (const workstation of workstations) {
-            const current = map.get(workstation.zone)
+            const zone = workstation.zone || ''
+            const current = map.get(zone)
             if (current) current.push(workstation)
-            else map.set(workstation.zone, [workstation])
+            else map.set(zone, [workstation])
         }
 
         return map

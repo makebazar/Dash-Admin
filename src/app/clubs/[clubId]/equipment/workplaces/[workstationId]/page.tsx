@@ -4,6 +4,7 @@ import { memo, useCallback, useEffect, useMemo, useState, type ReactNode } from 
 import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
 import {
+    Activity,
     AlertCircle,
     AlertTriangle,
     ArrowRightLeft,
@@ -11,12 +12,15 @@ import {
     ChevronDown,
     ChevronLeft,
     ChevronRight,
+    Cpu,
+    Gauge,
     Loader2,
     Pencil,
     Plus,
     RefreshCw,
     Shirt,
     Trash2,
+    Wifi,
     Wrench,
     X,
 } from "lucide-react"
@@ -280,7 +284,7 @@ export default function WorkstationDetailsPage() {
     const [savingMaintenanceId, setSavingMaintenanceId] = useState<string | null>(null)
     const [savingCpuThermalId, setSavingCpuThermalId] = useState<string | null>(null)
     const [savingGpuThermalId, setSavingGpuThermalId] = useState<string | null>(null)
-    const [activeTab, setActiveTab] = useState<"equipment" | "maintenance" | "history">("equipment")
+    const [activeTab, setActiveTab] = useState<"equipment" | "maintenance" | "history" | "monitoring">("equipment")
     const [history, setHistory] = useState<HistoryLog[]>([])
     const [historyFilter, setHistoryFilter] = useState<HistoryFilter>("all")
     const [historyEquipmentFilter, setHistoryEquipmentFilter] = useState<string>("all")
@@ -299,6 +303,16 @@ export default function WorkstationDetailsPage() {
     const [expandedPeripheralIds, setExpandedPeripheralIds] = useState<Record<string, boolean>>({})
     const [isCpuSectionOpen, setIsCpuSectionOpen] = useState(false)
     const [isGpuSectionOpen, setIsGpuSectionOpen] = useState(false)
+
+    // Telemetry state
+    const [telemetry, setTelemetry] = useState<{
+        latest: any;
+        history: any[];
+        workstation: any;
+    } | null>(null)
+    const [isTelemetryLoading, setIsTelemetryLoading] = useState(false)
+    const [isGeneratingCode, setIsGeneratingCode] = useState(false)
+    const [showBindingCode, setShowBindingCode] = useState(false)
 
     const equipmentById = useMemo(() => new Map(equipment.map(item => [item.id, item])), [equipment])
     const workstation = useMemo(() => workstations.find(item => item.id === workstationId) || null, [workstations, workstationId])
@@ -471,6 +485,30 @@ export default function WorkstationDetailsPage() {
             fetchHistory()
         }
     }, [activeTab, fetchHistory])
+
+    const fetchTelemetry = useCallback(async () => {
+        if (!workstationId) return
+        setIsTelemetryLoading(true)
+        try {
+            const res = await fetch(`/api/agents/telemetry/${workstationId}`, { cache: "no-store" })
+            if (res.ok) {
+                const data = await res.json()
+                setTelemetry(data)
+            }
+        } catch (error) {
+            console.error("Error fetching telemetry:", error)
+        } finally {
+            setIsTelemetryLoading(false)
+        }
+    }, [workstationId])
+
+    useEffect(() => {
+        if (activeTab === "monitoring") {
+            fetchTelemetry()
+            const interval = setInterval(fetchTelemetry, 10000) // refresh every 10s
+            return () => clearInterval(interval)
+        }
+    }, [activeTab, fetchTelemetry])
 
     const mergeEquipmentState = useCallback((equipmentId: string, patch: Partial<Equipment>) => {
         setEquipment(prev => prev.map(item => item.id === equipmentId ? { ...item, ...patch } : item))
@@ -1054,11 +1092,12 @@ export default function WorkstationDetailsPage() {
             </div>
 
             <div className="space-y-6">
-                <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as "equipment" | "maintenance" | "history")} className="pt-0">
+                <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as "equipment" | "maintenance" | "history" | "monitoring")} className="pt-0">
                     <TabsList className="h-auto w-full justify-start gap-8 overflow-x-auto rounded-none border-b border-slate-200 bg-transparent p-0 mb-8">
                         <TabsTrigger value="equipment" className="relative shrink-0 rounded-none border-b-2 border-transparent px-0 pb-4 pt-2 font-medium text-slate-500 hover:text-slate-700 data-[state=active]:border-slate-900 data-[state=active]:text-slate-900 data-[state=active]:shadow-none data-[state=active]:bg-transparent">Оборудование</TabsTrigger>
                         <TabsTrigger value="maintenance" className="relative shrink-0 rounded-none border-b-2 border-transparent px-0 pb-4 pt-2 font-medium text-slate-500 hover:text-slate-700 data-[state=active]:border-slate-900 data-[state=active]:text-slate-900 data-[state=active]:shadow-none data-[state=active]:bg-transparent">Обслуживание</TabsTrigger>
                         <TabsTrigger value="history" className="relative shrink-0 rounded-none border-b-2 border-transparent px-0 pb-4 pt-2 font-medium text-slate-500 hover:text-slate-700 data-[state=active]:border-slate-900 data-[state=active]:text-slate-900 data-[state=active]:shadow-none data-[state=active]:bg-transparent">История</TabsTrigger>
+                        <TabsTrigger value="monitoring" className="relative shrink-0 rounded-none border-b-2 border-transparent px-0 pb-4 pt-2 font-medium text-slate-500 hover:text-slate-700 data-[state=active]:border-slate-900 data-[state=active]:text-slate-900 data-[state=active]:shadow-none data-[state=active]:bg-transparent">Мониторинг</TabsTrigger>
                     </TabsList>
 
                     <TabsContent value="equipment" className="mt-0">
@@ -1543,6 +1582,277 @@ export default function WorkstationDetailsPage() {
                                     </div>
                                 )}
                             </div>
+                        </div>
+                    </TabsContent>
+
+                    <TabsContent value="monitoring" className="mt-0">
+                        <div className="space-y-6">
+                            {/* Agent Status Header */}
+                            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                                <div className="flex items-center gap-3">
+                                    <div className={cn(
+                                        "flex h-10 w-10 shrink-0 items-center justify-center rounded-full",
+                                        workstation?.agent_status === 'ONLINE' ? "bg-emerald-100" : "bg-slate-100"
+                                    )}>
+                                        <Activity className={cn(
+                                            "h-5 w-5",
+                                            workstation?.agent_status === 'ONLINE' ? "text-emerald-600" : "text-slate-400"
+                                        )} />
+                                    </div>
+                                    <div>
+                                        <div className="flex items-center gap-2">
+                                            <span className={cn(
+                                                "inline-flex h-2 w-2 rounded-full",
+                                                workstation?.agent_status === 'ONLINE' ? "bg-emerald-500" : "bg-slate-300"
+                                            )} />
+                                            <span className="text-sm font-semibold text-slate-900">
+                                                {workstation?.agent_status === 'ONLINE' ? 'Агент подключен' : 'Агент не подключен'}
+                                            </span>
+                                        </div>
+                                        {workstation?.agent_last_seen && (
+                                            <p className="text-xs text-muted-foreground">
+                                                Последний сигнал: {new Date(workstation.agent_last_seen).toLocaleString('ru-RU')}
+                                            </p>
+                                        )}
+                                    </div>
+                                </div>
+                                <div className="flex gap-2">
+                                    <Button
+                                        variant="outline"
+                                        className="rounded-xl font-medium"
+                                        onClick={fetchTelemetry}
+                                        disabled={isTelemetryLoading}
+                                    >
+                                        <RefreshCw className={cn("mr-1.5 h-4 w-4", isTelemetryLoading && "animate-spin")} />
+                                        Обновить
+                                    </Button>
+                                    <Button
+                                        variant="outline"
+                                        className="rounded-xl font-medium"
+                                        onClick={() => {
+                                            setIsGeneratingCode(true)
+                                            fetch(`/api/clubs/${clubId}/workstations`, {
+                                                method: "POST",
+                                                headers: { "Content-Type": "application/json" },
+                                                body: JSON.stringify({
+                                                    action: "generate_binding_code",
+                                                    workstation_id: workstationId
+                                                })
+                                            }).then(res => res.json()).then(data => {
+                                                if (data.binding_code) {
+                                                    mergeWorkstationState(workstationId, { binding_code: data.binding_code })
+                                                    setShowBindingCode(true)
+                                                }
+                                            }).finally(() => setIsGeneratingCode(false))
+                                        }}
+                                        disabled={isGeneratingCode}
+                                    >
+                                        <Wifi className="mr-1.5 h-4 w-4" />
+                                        {workstation?.binding_code ? 'Новый код' : 'Получить код'}
+                                    </Button>
+                                </div>
+                            </div>
+
+                            {/* Binding Code Display */}
+                            {showBindingCode && workstation?.binding_code && (
+                                <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6">
+                                    <div className="text-center">
+                                        <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-2">Код для привязки агента</p>
+                                        <div className="flex justify-center gap-2 mb-4">
+                                            {workstation.binding_code.split('').map((char: string, i: number) => (
+                                                <div key={i} className="flex h-14 w-10 items-center justify-center rounded-lg bg-white border-2 border-slate-200 text-2xl font-bold text-slate-900">
+                                                    {char}
+                                                </div>
+                                            ))}
+                                        </div>
+                                        <p className="text-xs text-muted-foreground">
+                                            Введите этот код на ПК при запуске агента
+                                        </p>
+                                        <Button variant="ghost" size="sm" className="mt-2" onClick={() => setShowBindingCode(false)}>
+                                            Закрыть
+                                        </Button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* No Agent */}
+                            {!workstation?.binding_code && workstation?.agent_status !== 'ONLINE' && (
+                                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 p-8 text-center">
+                                    <Wifi className="mx-auto h-12 w-12 text-slate-300 mb-3" />
+                                    <h3 className="text-lg font-semibold text-slate-900 mb-1">Агент не привязан</h3>
+                                    <p className="text-sm text-muted-foreground mb-4">
+                                        Нажмите "Получить код", чтобы сгенерировать код для привязки агента мониторинга
+                                    </p>
+                                </div>
+                            )}
+
+                            {/* Telemetry Data */}
+                            {telemetry?.latest && (
+                                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                                    {/* CPU Card */}
+                                    <div className="rounded-2xl border border-slate-200 bg-white p-6">
+                                        <div className="flex items-center gap-3 mb-4">
+                                            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100">
+                                                <Cpu className="h-5 w-5 text-slate-600" />
+                                            </div>
+                                            <div>
+                                                <h3 className="text-sm font-semibold text-slate-900">Процессор</h3>
+                                                <p className="text-xs text-muted-foreground truncate max-w-[180px]">
+                                                    {telemetry.latest.cpu_model || 'CPU'}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <div className="space-y-3">
+                                            <div>
+                                                <div className="flex justify-between text-xs mb-1">
+                                                    <span className="text-muted-foreground">Температура</span>
+                                                    <span className={cn(
+                                                        "font-semibold",
+                                                        (telemetry.latest.cpu_temp || 0) > 80 ? "text-rose-600" :
+                                                        (telemetry.latest.cpu_temp || 0) > 60 ? "text-amber-600" : "text-emerald-600"
+                                                    )}>
+                                                        {telemetry.latest.cpu_temp ? `${telemetry.latest.cpu_temp}°C` : '—'}
+                                                    </span>
+                                                </div>
+                                                <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
+                                                    <div 
+                                                        className={cn(
+                                                            "h-full rounded-full transition-all",
+                                                            (telemetry.latest.cpu_temp || 0) > 80 ? "bg-rose-500" :
+                                                            (telemetry.latest.cpu_temp || 0) > 60 ? "bg-amber-500" : "bg-emerald-500"
+                                                        )}
+                                                        style={{ width: `${Math.min((telemetry.latest.cpu_temp || 0) / 100 * 100, 100)}%` }}
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <div className="flex justify-between text-xs mb-1">
+                                                    <span className="text-muted-foreground">Загрузка</span>
+                                                    <span className="font-semibold text-slate-900">
+                                                        {telemetry.latest.cpu_usage ? `${telemetry.latest.cpu_usage.toFixed(0)}%` : '—'}
+                                                    </span>
+                                                </div>
+                                                <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
+                                                    <div 
+                                                        className="h-full rounded-full bg-slate-900 transition-all"
+                                                        style={{ width: `${telemetry.latest.cpu_usage || 0}%` }}
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* GPU Cards */}
+                                    {telemetry.latest.gpu_data && Array.isArray(telemetry.latest.gpu_data) && telemetry.latest.gpu_data.length > 0 ? (
+                                        telemetry.latest.gpu_data.map((gpu: any, i: number) => (
+                                            <div key={i} className="rounded-2xl border border-slate-200 bg-white p-6">
+                                                <div className="flex items-center gap-3 mb-4">
+                                                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100">
+                                                        <Gauge className="h-5 w-5 text-slate-600" />
+                                                    </div>
+                                                    <div>
+                                                        <h3 className="text-sm font-semibold text-slate-900">Видеокарта</h3>
+                                                        <p className="text-xs text-muted-foreground truncate max-w-[180px]">
+                                                            {gpu.name || 'GPU'}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                <div className="space-y-3">
+                                                    <div>
+                                                        <div className="flex justify-between text-xs mb-1">
+                                                            <span className="text-muted-foreground">Температура</span>
+                                                            <span className={cn(
+                                                                "font-semibold",
+                                                                (gpu.temp || 0) > 85 ? "text-rose-600" :
+                                                                (gpu.temp || 0) > 70 ? "text-amber-600" : "text-emerald-600"
+                                                            )}>
+                                                                {gpu.temp ? `${gpu.temp}°C` : '—'}
+                                                            </span>
+                                                        </div>
+                                                        <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
+                                                            <div 
+                                                                className={cn(
+                                                                    "h-full rounded-full transition-all",
+                                                                    (gpu.temp || 0) > 85 ? "bg-rose-500" :
+                                                                    (gpu.temp || 0) > 70 ? "bg-amber-500" : "bg-emerald-500"
+                                                                )}
+                                                                style={{ width: `${Math.min((gpu.temp || 0) / 100 * 100, 100)}%` }}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                    <div>
+                                                        <div className="flex justify-between text-xs mb-1">
+                                                            <span className="text-muted-foreground">Загрузка</span>
+                                                            <span className="font-semibold text-slate-900">
+                                                                {gpu.usage ? `${gpu.usage.toFixed(0)}%` : '—'}
+                                                            </span>
+                                                        </div>
+                                                        <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
+                                                            <div 
+                                                                className="h-full rounded-full bg-slate-900 transition-all"
+                                                                style={{ width: `${gpu.usage || 0}%` }}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                    {gpu.memory_total > 0 && (
+                                                        <div>
+                                                            <div className="flex justify-between text-xs mb-1">
+                                                                <span className="text-muted-foreground">Память</span>
+                                                                <span className="font-semibold text-slate-900">
+                                                                    {gpu.memory_used && gpu.memory_total 
+                                                                        ? `${(gpu.memory_used / (1024 * 1024 * 1024)).toFixed(1)} / ${(gpu.memory_total / (1024 * 1024 * 1024)).toFixed(1)} ГБ`
+                                                                        : '—'}
+                                                                </span>
+                                                            </div>
+                                                            <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
+                                                                <div 
+                                                                    className="h-full rounded-full bg-blue-500 transition-all"
+                                                                    style={{ width: `${gpu.memory_total > 0 ? (gpu.memory_used / gpu.memory_total * 100) : 0}%` }}
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                    {gpu.fan_speed > 0 && (
+                                                        <div>
+                                                            <div className="flex justify-between text-xs mb-1">
+                                                                <span className="text-muted-foreground">Вентилятор</span>
+                                                                <span className="font-semibold text-slate-900">{gpu.fan_speed}%</span>
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ))
+                                    ) : (
+                                        <div className="rounded-2xl border border-slate-200 bg-white p-6">
+                                            <div className="flex items-center gap-3 mb-4">
+                                                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100">
+                                                    <Gauge className="h-5 w-5 text-slate-600" />
+                                                </div>
+                                                <h3 className="text-sm font-semibold text-slate-900">Видеокарта</h3>
+                                            </div>
+                                            <p className="text-sm text-muted-foreground">Данные не получены</p>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* History Chart Placeholder */}
+                            {telemetry?.history && telemetry.history.length > 0 && (
+                                <div className="rounded-2xl border border-slate-200 bg-white p-6">
+                                    <h3 className="text-sm font-semibold text-slate-900 mb-4">История загрузки (последний час)</h3>
+                                    <div className="h-32 flex items-end gap-1">
+                                        {telemetry.history.map((point: any, i: number) => (
+                                            <div 
+                                                key={i} 
+                                                className="flex-1 rounded-t bg-slate-200 hover:bg-slate-300 transition-colors"
+                                                style={{ height: `${(point.cpu_usage || 0)}%` }}
+                                                title={`${new Date(point.created_at).toLocaleTimeString('ru-RU')} - ${point.cpu_usage?.toFixed(0)}%`}
+                                            />
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </TabsContent>
                 </Tabs>

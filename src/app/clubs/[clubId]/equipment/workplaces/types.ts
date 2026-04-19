@@ -7,6 +7,9 @@ export interface Workstation {
     assigned_user_id?: string | null
     assigned_user_name?: string | null
     equipment_count?: number
+    binding_code?: string | null
+    agent_last_seen?: string | null
+    agent_status?: string | null
 }
 
 export interface Equipment {

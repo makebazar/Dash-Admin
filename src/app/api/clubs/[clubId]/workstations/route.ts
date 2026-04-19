@@ -2,6 +2,16 @@ import { NextResponse } from 'next/server';
 import { query } from '@/db';
 import { cookies } from 'next/headers';
 
+// Generate random 6-char binding code
+function generateBindingCode(): string {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let code = '';
+    for (let i = 0; i < 6; i++) {
+        code += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return code;
+}
+
 export async function GET(
     request: Request,
     { params }: { params: Promise<{ clubId: string }> }
@@ -49,7 +59,8 @@ export async function POST(
     try {
         const userId = (await cookies()).get('session_user_id')?.value;
         const { clubId } = await params;
-        const { name, zone } = await request.json();
+        const body = await request.json();
+        const { name, zone, action } = body;
 
         if (!userId) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -65,11 +76,57 @@ export async function POST(
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
+        // Action: generate new binding code
+        if (action === 'generate_binding_code') {
+            const workstationId = body.workstation_id;
+            if (!workstationId) {
+                return NextResponse.json({ error: 'workstation_id required' }, { status: 400 });
+            }
+
+            let code = generateBindingCode();
+            
+            // Ensure unique code (rare collision)
+            let attempts = 0;
+            while (attempts < 10) {
+                const existing = await query(
+                    `SELECT 1 FROM club_workstations WHERE binding_code = $1`,
+                    [code]
+                );
+                if ((existing.rowCount || 0) === 0) break;
+                code = generateBindingCode();
+                attempts++;
+            }
+
+            const result = await query(
+                `UPDATE club_workstations SET binding_code = $1 WHERE id = $2 AND club_id = $3 RETURNING id, name, binding_code`,
+                [code, workstationId, clubId]
+            );
+
+            if ((result.rowCount || 0) === 0) {
+                return NextResponse.json({ error: 'Workstation not found' }, { status: 404 });
+            }
+
+            return NextResponse.json(result.rows[0]);
+        }
+
+        // Default: create workstation
+        let bindingCode = generateBindingCode();
+        let attempts = 0;
+        while (attempts < 10) {
+            const existing = await query(
+                `SELECT 1 FROM club_workstations WHERE binding_code = $1`,
+                [bindingCode]
+            );
+            if ((existing.rowCount || 0) === 0) break;
+            bindingCode = generateBindingCode();
+            attempts++;
+        }
+
         const result = await query(
-            `INSERT INTO club_workstations (club_id, name, zone)
-             VALUES ($1, $2, $3)
-             RETURNING id, name, zone`,
-            [clubId, name, zone || 'General']
+            `INSERT INTO club_workstations (club_id, name, zone, binding_code)
+             VALUES ($1, $2, $3, $4)
+             RETURNING *`,
+            [clubId, name, zone || 'General', bindingCode]
         );
 
         return NextResponse.json(result.rows[0]);
