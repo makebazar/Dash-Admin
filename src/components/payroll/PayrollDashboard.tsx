@@ -92,7 +92,10 @@ interface Employee {
         total_revenue: number;
         calculated_salary: number;  // Только REAL_MONEY
         virtual_balance_earned: number;  // VIRTUAL_BALANCE
+        base_salary?: number;
         kpi_bonus: number;
+        bar_deduction?: number;
+        deductions?: any[];
         status: string;
         is_paid: boolean;
         type: string;
@@ -171,6 +174,10 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
     const [paymentModal, setPaymentModal] = useState<{ open: boolean; employee: Employee | null }>({ open: false, employee: null });
     const [paymentForm, setPaymentForm] = useState({ amount: '', method: 'CASH', notes: '', paymentType: 'salary' as 'salary' | 'advance' | 'bonus' });
     const [processingPayment, setProcessingPayment] = useState(false);
+    const [periodCalcOpen, setPeriodCalcOpen] = useState(false)
+    const [periodCalcStart, setPeriodCalcStart] = useState('')
+    const [periodCalcEnd, setPeriodCalcEnd] = useState('')
+    const [periodCalcSummary, setPeriodCalcSummary] = useState<null | { shiftsCount: number, base: number, bonuses: number, bar: number, total: number }>(null)
 
     const toggleCard = (employeeId: number) => {
         setExpandedCards(prev => {
@@ -189,6 +196,10 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
 
     const openPaymentModal = (employee: Employee) => {
         setPaymentModal({ open: true, employee });
+        setPeriodCalcOpen(false)
+        setPeriodCalcStart('')
+        setPeriodCalcEnd('')
+        setPeriodCalcSummary(null)
         setPaymentForm({
             amount: employee.balance.toString(),
             method: 'CASH',
@@ -199,6 +210,10 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
 
     const closePaymentModal = () => {
         setPaymentModal({ open: false, employee: null });
+        setPeriodCalcOpen(false)
+        setPeriodCalcStart('')
+        setPeriodCalcEnd('')
+        setPeriodCalcSummary(null)
         setPaymentForm({ amount: '', method: 'CASH', notes: '', paymentType: 'salary' });
     };
 
@@ -309,6 +324,35 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
     useEffect(() => {
         fetchData();
     }, [selectedMonth, selectedYear, clubId]);
+
+    useEffect(() => {
+        if (!paymentModal.open || !paymentModal.employee || !periodCalcStart || !periodCalcEnd) {
+            setPeriodCalcSummary(null)
+            return
+        }
+
+        const shifts = paymentModal.employee.shifts || []
+        const filtered = shifts.filter((s) => {
+            const d = new Date(s.date).toISOString().slice(0, 10)
+            return d >= periodCalcStart && d <= periodCalcEnd
+        })
+
+        const base = filtered.reduce((sum, s) => sum + (Number(s.base_salary) || 0), 0)
+        const bonuses = filtered.reduce((sum, s) => {
+            const list = Array.isArray(s.real_money_bonuses) ? s.real_money_bonuses : []
+            return sum + list.reduce((acc: number, b: any) => acc + (parseFloat(b.amount) || 0), 0)
+        }, 0)
+        const bar = filtered.reduce((sum, s) => sum + (Number(s.bar_deduction) || 0), 0)
+        const total = filtered.reduce((sum, s) => sum + (Number(s.calculated_salary) || 0), 0)
+
+        setPeriodCalcSummary({
+            shiftsCount: filtered.length,
+            base,
+            bonuses,
+            bar,
+            total
+        })
+    }, [paymentModal.employee, paymentModal.open, periodCalcEnd, periodCalcStart])
 
     const fetchData = async () => {
         setLoading(true);
@@ -1481,6 +1525,75 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                 <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">Сумма</label>
                                 <input type="number" step="0.01" value={paymentForm.amount} onChange={(e) => setPaymentForm({ ...paymentForm, amount: e.target.value })} className="w-full h-12 bg-slate-50/50 border border-slate-200 rounded-xl px-4 font-medium text-slate-900 focus:bg-white transition-colors" placeholder="0.00" />
                                 <p className="text-xs text-muted-foreground mt-1">Остаток к выплате: {formatCurrency(paymentModal.employee.balance)}</p>
+                            </div>
+                            <div>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    className="w-full"
+                                    onClick={() => setPeriodCalcOpen((v) => !v)}
+                                >
+                                    Доп. расчёт по периоду
+                                </Button>
+                                {periodCalcOpen && (
+                                    <div className="mt-3 space-y-3 rounded-2xl border border-slate-200 bg-slate-50/30 p-4">
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div>
+                                                <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">С</label>
+                                                <input
+                                                    type="date"
+                                                    value={periodCalcStart}
+                                                    onChange={(e) => setPeriodCalcStart(e.target.value)}
+                                                    className="w-full h-11 bg-white border border-slate-200 rounded-xl px-3 font-medium text-slate-900"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">По</label>
+                                                <input
+                                                    type="date"
+                                                    value={periodCalcEnd}
+                                                    onChange={(e) => setPeriodCalcEnd(e.target.value)}
+                                                    className="w-full h-11 bg-white border border-slate-200 rounded-xl px-3 font-medium text-slate-900"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        {periodCalcSummary && (
+                                            <div className="space-y-2 text-sm">
+                                                <div className="flex justify-between gap-4">
+                                                    <span className="text-slate-500">Смен</span>
+                                                    <span className="font-bold text-slate-900">{periodCalcSummary.shiftsCount}</span>
+                                                </div>
+                                                <div className="flex justify-between gap-4">
+                                                    <span className="text-slate-500">За смены</span>
+                                                    <span className="font-bold text-slate-900">{formatCurrency(periodCalcSummary.base)}</span>
+                                                </div>
+                                                <div className="flex justify-between gap-4">
+                                                    <span className="text-slate-500">KPI/бонусы</span>
+                                                    <span className="font-bold text-emerald-600">+{formatCurrency(periodCalcSummary.bonuses)}</span>
+                                                </div>
+                                                <div className="flex justify-between gap-4">
+                                                    <span className="text-slate-500">Бар</span>
+                                                    <span className="font-bold text-rose-600">-{formatCurrency(periodCalcSummary.bar)}</span>
+                                                </div>
+                                                <div className="flex justify-between gap-4 pt-2 border-t border-slate-200">
+                                                    <span className="text-slate-500">Итого</span>
+                                                    <span className="font-black text-slate-900">{formatCurrency(periodCalcSummary.total)}</span>
+                                                </div>
+                                                {paymentForm.paymentType !== 'bonus' && (
+                                                    <Button
+                                                        type="button"
+                                                        variant="default"
+                                                        className="w-full mt-2"
+                                                        onClick={() => setPaymentForm((prev) => ({ ...prev, amount: periodCalcSummary.total.toString() }))}
+                                                    >
+                                                        Подставить сумму
+                                                    </Button>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                             <div>
                                 <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3">Тип выплаты</label>

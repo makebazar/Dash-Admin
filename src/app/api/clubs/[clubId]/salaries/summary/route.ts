@@ -992,6 +992,11 @@ export async function GET(
                         // Разделяем бонусы по типам выплат
                         const realMoneyBonuses = breakdown.bonuses?.filter((b: any) => b.payout_type !== 'VIRTUAL_BALANCE') || [];
                         const virtualBonuses = breakdown.bonuses?.filter((b: any) => b.payout_type === 'VIRTUAL_BALANCE') || [];
+                        const deductions = breakdown.deductions || []
+                        const barDeduction = deductions.reduce((sum: number, d: any) => {
+                            if (d?.name !== 'Покупка бара') return sum
+                            return sum + (parseFloat(d.amount) || 0)
+                        }, 0)
 
                         return {
                             id: s.id,
@@ -1000,7 +1005,10 @@ export async function GET(
                             total_revenue: calculateShiftIncome(s),
                             calculated_salary: s.calculated_salary,  // Только REAL_MONEY
                             virtual_balance_earned: breakdown.virtual_balance_total || 0,  // VIRTUAL_BALANCE
+                            base_salary: parseFloat(breakdown.base) || 0,
                             kpi_bonus: kpiBonus,
+                            bar_deduction: barDeduction,
+                            deductions,
                             status: s.status,
                             is_paid: !!(s.salary_snapshot?.paid_at),
                             type: s.salary_snapshot?.type || 'REGULAR',

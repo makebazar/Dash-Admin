@@ -59,8 +59,8 @@ export async function calculateSalary(
         baseAmount = amount * (shift.total_hours || 0);
     } else if (type === 'fixed' || type === 'per_shift') {
         const hours = shift.total_hours || 0;
-        const graceHoursRaw = (scheme.base as any)?.overtime_grace_hours ?? (scheme as any).overtime_grace_hours ?? 1
-        const graceHours = Number.isFinite(Number(graceHoursRaw)) ? Number(graceHoursRaw) : 1
+        const graceHoursRaw = (scheme.base as any)?.overtime_grace_hours ?? (scheme as any).overtime_grace_hours ?? 2
+        const graceHours = Number.isFinite(Number(graceHoursRaw)) ? Number(graceHoursRaw) : 2
 
         if (hours <= 0) {
             baseAmount = 0
@@ -70,7 +70,7 @@ export async function calculateSalary(
             baseAmount = amount;
         } else {
             const hourlyRate = fullShiftHours > 0 ? (amount / fullShiftHours) : 0
-            baseAmount = amount + (hours - fullShiftHours) * hourlyRate
+            baseAmount = amount + (hours - (fullShiftHours + graceHours)) * hourlyRate
         }
     } else if (type === 'percent_revenue') {
         const sourceValue = reportMetrics['total_revenue'] || 0;
