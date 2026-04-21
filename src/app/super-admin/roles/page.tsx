@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
 import { Briefcase, Loader2, Plus, Settings, Trash2 } from "lucide-react"
+import { SuperAdminPage } from "../_components/page-shell"
 
 type RoleItem = {
   id: number
@@ -169,25 +170,23 @@ export default function SuperAdminRolesPage() {
   }, [roles, deleteRole])
 
   return (
-    <div className="p-8 space-y-6">
-      <div className="flex items-start justify-between gap-6">
-        <div className="space-y-1">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-xl bg-red-500/10 flex items-center justify-center">
-              <Briefcase className="h-5 w-5 text-red-500" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight">Должности</h1>
-              <p className="text-sm text-zinc-400">Управление справочником roles (то, что видит селект “Должность”)</p>
-            </div>
+    <SuperAdminPage
+      title={
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 rounded-xl bg-red-500/10 flex items-center justify-center">
+            <Briefcase className="h-5 w-5 text-red-500" />
           </div>
+          <span>Должности</span>
         </div>
-
+      }
+      description="Управление справочником roles (то, что видит селект “Должность”)"
+      actions={
         <Button onClick={() => setIsCreateOpen(true)} className="bg-red-500 hover:bg-red-600 text-white">
           <Plus className="h-4 w-4 mr-2" />
           Добавить
         </Button>
-      </div>
+      }
+    >
 
       <Card className="bg-zinc-900/50 border-zinc-800">
         <CardHeader className="border-b border-zinc-800">
@@ -495,6 +494,6 @@ export default function SuperAdminRolesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </SuperAdminPage>
   )
 }

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Loader2, CreditCard, Plus, Pencil, Trash2 } from "lucide-react"
+import { SuperAdminPage } from "../_components/page-shell"
 
 interface SubscriptionItem {
     id: string
@@ -314,11 +315,10 @@ export default function SuperAdminSubscriptionsPage() {
     }, [plans])
 
     return (
-        <div className="p-8 space-y-6">
-            <div className="flex flex-col gap-2">
-                <h1 className="text-3xl font-bold text-zinc-100">Подписки</h1>
-                <p className="text-zinc-400">Управление тарифами и статусами подписок без платежного провайдера</p>
-            </div>
+        <SuperAdminPage
+            title="Подписки"
+            description="Управление тарифами и статусами подписок без платежного провайдера"
+        >
 
             <div className="grid gap-4 md:grid-cols-5">
                 <Card className="bg-zinc-900 border-zinc-800">
@@ -673,6 +673,6 @@ export default function SuperAdminSubscriptionsPage() {
                     )}
                 </CardContent>
             </Card>
-        </div>
+        </SuperAdminPage>
     )
 }

@@ -98,10 +98,6 @@ export async function GET() {
         }
 
         await ensurePlansTable();
-        const ownerClubIds = await getOwnerClubIds(userId);
-        if (ownerClubIds.length === 0) {
-            return NextResponse.json({ error: 'Смена тарифа доступна только владельцам клубов' }, { status: 403 });
-        }
 
         const plansResult = await query(
             `SELECT id, code, name, tagline, description, features, badge_text, badge_tone, cta_text, card_theme, display_order, is_highlighted, price_amount, period_unit, period_value, is_active
@@ -110,9 +106,13 @@ export async function GET() {
              ORDER BY display_order ASC, created_at DESC`
         );
 
+        const hasSubscriptionPlan = await hasColumn('users', 'subscription_plan');
         const hasSubscriptionStatus = await hasColumn('users', 'subscription_status');
+        const hasSubscriptionEndsAt = await hasColumn('users', 'subscription_ends_at');
         const userResult = await query(
-            `SELECT subscription_plan, ${hasSubscriptionStatus ? 'subscription_status' : "NULL::varchar as subscription_status"}, subscription_ends_at
+            `SELECT ${hasSubscriptionPlan ? 'subscription_plan' : "NULL::varchar as subscription_plan"},
+                    ${hasSubscriptionStatus ? 'subscription_status' : "NULL::varchar as subscription_status"},
+                    ${hasSubscriptionEndsAt ? 'subscription_ends_at' : "NULL::timestamp as subscription_ends_at"}
              FROM users
              WHERE id = $1`,
             [userId]
@@ -137,9 +137,6 @@ export async function POST(request: Request) {
 
         await ensurePlansTable();
         const ownerClubIds = await getOwnerClubIds(userId);
-        if (ownerClubIds.length === 0) {
-            return NextResponse.json({ error: 'Смена тарифа доступна только владельцам клубов' }, { status: 403 });
-        }
 
         const body = await request.json();
         const planCode = String(body?.plan_code || '').trim().toLowerCase();
@@ -165,102 +162,86 @@ export async function POST(request: Request) {
 
         const hasSubscriptionStatus = await hasColumn('users', 'subscription_status');
         const hasSubscriptionCanceledAt = await hasColumn('users', 'subscription_canceled_at');
+        const hasSubscriptionPlan = await hasColumn('users', 'subscription_plan');
+        const hasSubscriptionStartedAt = await hasColumn('users', 'subscription_started_at');
+        const hasSubscriptionEndsAt = await hasColumn('users', 'subscription_ends_at');
         const now = new Date();
         const nextEndsAt = addPeriod(now, normalizePeriodUnit(plan.period_unit), Number(plan.period_value || 1));
         const nextStatus = planCode === 'new_user' ? 'trialing' : 'active';
 
+        const setParts: string[] = []
+        const params: any[] = []
+        let i = 1
+
+        let statusParamIndex: number | null = null
+
+        if (hasSubscriptionPlan) {
+            setParts.push(`subscription_plan = $${i}`)
+            params.push(planCode)
+            i += 1
+        }
+
+        if (hasSubscriptionStatus) {
+            statusParamIndex = i
+            setParts.push(`subscription_status = $${i}`)
+            params.push(nextStatus)
+            i += 1
+        }
+
+        if (hasSubscriptionStartedAt) {
+            setParts.push(`subscription_started_at = $${i}::timestamp`)
+            params.push(now.toISOString())
+            i += 1
+        }
+
+        if (hasSubscriptionEndsAt) {
+            setParts.push(`subscription_ends_at = $${i}::timestamp`)
+            params.push(nextEndsAt.toISOString())
+            i += 1
+        }
+
+        if (hasSubscriptionCanceledAt) {
+            if (statusParamIndex !== null) {
+                setParts.push(`subscription_canceled_at = CASE WHEN $${statusParamIndex}::varchar = 'canceled' THEN NOW() ELSE NULL END`)
+            } else {
+                setParts.push(`subscription_canceled_at = NULL`)
+            }
+        }
+
+        if (setParts.length === 0) {
+            return NextResponse.json({ error: 'Subscription fields are not available' }, { status: 500 });
+        }
+
         let updated;
-        if (hasSubscriptionStatus && hasSubscriptionCanceledAt) {
+        if (ownerClubIds.length === 0) {
+            params.push(userId)
             updated = await query(
-                `WITH owner_users AS (
-                    SELECT c.owner_id as owner_user_id
-                    FROM clubs c
-                    WHERE c.id = ANY($6::int[])
-                    UNION
-                    SELECT ce.user_id as owner_user_id
-                    FROM club_employees ce
-                    WHERE ce.club_id = ANY($6::int[])
-                      AND ce.role = 'Владелец'
-                      AND ce.is_active = TRUE
-                      AND ce.dismissed_at IS NULL
-                 )
-                 UPDATE users
-                 SET subscription_plan = $1,
-                     subscription_status = $2,
-                     subscription_started_at = $3::timestamp,
-                     subscription_ends_at = $4::timestamp,
-                     subscription_canceled_at = $5::timestamp
-                 WHERE id IN (SELECT owner_user_id FROM owner_users)
+                `UPDATE users
+                 SET ${setParts.join(', ')}
+                 WHERE id = $${i}
                  RETURNING id`,
-                [planCode, nextStatus, now.toISOString(), nextEndsAt.toISOString(), null, ownerClubIds]
-            );
-        } else if (hasSubscriptionStatus) {
-            updated = await query(
-                `WITH owner_users AS (
-                    SELECT c.owner_id as owner_user_id
-                    FROM clubs c
-                    WHERE c.id = ANY($5::int[])
-                    UNION
-                    SELECT ce.user_id as owner_user_id
-                    FROM club_employees ce
-                    WHERE ce.club_id = ANY($5::int[])
-                      AND ce.role = 'Владелец'
-                      AND ce.is_active = TRUE
-                      AND ce.dismissed_at IS NULL
-                 )
-                 UPDATE users
-                 SET subscription_plan = $1,
-                     subscription_status = $2,
-                     subscription_started_at = $3::timestamp,
-                     subscription_ends_at = $4::timestamp
-                 WHERE id IN (SELECT owner_user_id FROM owner_users)
-                 RETURNING id`,
-                [planCode, nextStatus, now.toISOString(), nextEndsAt.toISOString(), ownerClubIds]
-            );
-        } else if (hasSubscriptionCanceledAt) {
-            updated = await query(
-                `WITH owner_users AS (
-                    SELECT c.owner_id as owner_user_id
-                    FROM clubs c
-                    WHERE c.id = ANY($5::int[])
-                    UNION
-                    SELECT ce.user_id as owner_user_id
-                    FROM club_employees ce
-                    WHERE ce.club_id = ANY($5::int[])
-                      AND ce.role = 'Владелец'
-                      AND ce.is_active = TRUE
-                      AND ce.dismissed_at IS NULL
-                 )
-                 UPDATE users
-                 SET subscription_plan = $1,
-                     subscription_started_at = $2::timestamp,
-                     subscription_ends_at = $3::timestamp,
-                     subscription_canceled_at = $4::timestamp
-                 WHERE id IN (SELECT owner_user_id FROM owner_users)
-                 RETURNING id`,
-                [planCode, now.toISOString(), nextEndsAt.toISOString(), null, ownerClubIds]
+                params
             );
         } else {
+            params.push(ownerClubIds)
             updated = await query(
                 `WITH owner_users AS (
                     SELECT c.owner_id as owner_user_id
                     FROM clubs c
-                    WHERE c.id = ANY($4::int[])
+                    WHERE c.id = ANY($${i}::int[])
                     UNION
                     SELECT ce.user_id as owner_user_id
                     FROM club_employees ce
-                    WHERE ce.club_id = ANY($4::int[])
+                    WHERE ce.club_id = ANY($${i}::int[])
                       AND ce.role = 'Владелец'
                       AND ce.is_active = TRUE
                       AND ce.dismissed_at IS NULL
                  )
                  UPDATE users
-                 SET subscription_plan = $1,
-                     subscription_started_at = $2::timestamp,
-                     subscription_ends_at = $3::timestamp
+                 SET ${setParts.join(', ')}
                  WHERE id IN (SELECT owner_user_id FROM owner_users)
                  RETURNING id`,
-                [planCode, now.toISOString(), nextEndsAt.toISOString(), ownerClubIds]
+                params
             );
         }
 

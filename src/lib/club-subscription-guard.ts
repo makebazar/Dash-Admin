@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { query } from '@/db'
 import { hasColumn } from '@/lib/db-compat'
-import { resolveSubscriptionState } from '@/lib/subscriptions'
+import { resolveSubscriptionState, getGracePeriodInfo } from '@/lib/subscriptions'
 import { requireClubFullAccess } from '@/lib/club-api-access'
 
 export async function ensureOwnerSubscriptionActive(clubId: string | number, userId: string) {
@@ -31,8 +31,36 @@ export async function ensureOwnerSubscriptionActive(clubId: string | number, use
     }
 
     const subscriptionState = resolveSubscriptionState(subscriptionResult.rows[0])
+    
     if (!subscriptionState.isActive) {
-        return { ok: false as const, response: NextResponse.json({ error: 'Подписка закончилась. Доступ к управлению клубом ограничен.' }, { status: 402 }) }
+        // Проверяем grace period
+        if (subscriptionState.graceEndsAt) {
+            const graceInfo = getGracePeriodInfo(subscriptionState.endsAt, subscriptionState.gracePeriodDays)
+            if (graceInfo) {
+                return { 
+                    ok: true as const, 
+                    gracePeriod: true,
+                    graceDaysLeft: graceInfo.daysLeft
+                }
+            }
+        }
+        
+        return { 
+            ok: false as const, 
+            response: NextResponse.json({ 
+                error: 'Подписка закончилась. Доступ к управлению клубом ограничен.' 
+            }, { status: 402 }) 
+        }
+    }
+
+    // Проверяем предупреждение о grace period
+    if (subscriptionState.isInGracePeriod) {
+        const graceInfo = getGracePeriodInfo(subscriptionState.endsAt, subscriptionState.gracePeriodDays)
+        return { 
+            ok: true as const,
+            graceWarning: true,
+            graceDaysLeft: graceInfo?.daysLeft ?? 0
+        }
     }
 
     return { ok: true as const }

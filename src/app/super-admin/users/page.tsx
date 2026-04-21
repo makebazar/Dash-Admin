@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
+import { SuperAdminPage } from "../_components/page-shell"
 
 interface DirectoryUser {
     id: string
@@ -229,14 +230,7 @@ export default function SuperAdminUsersPage() {
     const unassignedUsers = users.filter(user => !linkedUserIds.has(user.id))
 
     return (
-        <div className="p-8 space-y-8">
-            <div>
-                <div>
-                    <h1 className="text-3xl font-bold tracking-tight text-white">Клубы и доступы</h1>
-                    <p className="text-zinc-400">Выберите клуб и управляйте владельцем и командой в одном месте</p>
-                </div>
-            </div>
-
+        <SuperAdminPage title="Клубы и доступы" description="Выберите клуб и управляйте владельцем и командой в одном месте">
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-[380px_1fr]">
                 <Card className="bg-zinc-900 border-zinc-800 text-white">
                     <CardHeader className="pb-3">
@@ -522,6 +516,6 @@ export default function SuperAdminUsersPage() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
-        </div>
+        </SuperAdminPage>
     )
 }

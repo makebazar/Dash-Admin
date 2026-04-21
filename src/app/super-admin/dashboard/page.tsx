@@ -1,8 +1,8 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { type ReactNode, useEffect, useState } from "react"
 import { Users, CreditCard, Activity, DollarSign, Loader2 } from "lucide-react"
+import { SuperAdminPage } from "../_components/page-shell"
 
 interface AdminStats {
     total_clubs: string
@@ -43,55 +43,57 @@ export default function SuperAdminDashboard() {
     }
 
     return (
-        <div className="p-8 space-y-8">
-            <h1 className="text-3xl font-bold tracking-tight text-white">Обзор платформы</h1>
+        <SuperAdminPage title="Обзор" description="Сводка по платформе (клубы, пользователи, биллинг)">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                <Stat
+                    label="Всего клубов"
+                    value={stats?.total_clubs || 0}
+                    hint="Зарегистрировано в системе"
+                    icon={<Activity className="h-4 w-4 text-red-200" />}
+                />
+                <Stat
+                    label="Пользователей"
+                    value={stats?.total_users || 0}
+                    hint="Включая владельцев и персонал"
+                    icon={<Users className="h-4 w-4 text-red-200" />}
+                />
+                <Stat
+                    label="Платных подписок"
+                    value={stats?.paid_subscriptions || 0}
+                    hint={`${stats?.trial_subscriptions || 0} с временным доступом`}
+                    icon={<CreditCard className="h-4 w-4 text-red-200" />}
+                />
+                <Stat
+                    label="MRR (эстимейт)"
+                    value={`${Number(stats?.estimated_mrr || 0).toLocaleString("ru-RU")} ₽`}
+                    hint="На основе активных тарифов"
+                    icon={<DollarSign className="h-4 w-4 text-red-200" />}
+                />
+            </div>
+        </SuperAdminPage>
+    )
+}
 
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-                <Card className="bg-zinc-900 border-zinc-800">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium text-zinc-400">Всего клубов</CardTitle>
-                        <Activity className="h-4 w-4 text-purple-500" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold text-zinc-100">{stats?.total_clubs || 0}</div>
-                        <p className="text-xs text-zinc-500">Зарегистрировано в системе</p>
-                    </CardContent>
-                </Card>
-
-                <Card className="bg-zinc-900 border-zinc-800">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium text-zinc-400">Пользователей</CardTitle>
-                        <Users className="h-4 w-4 text-blue-500" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold text-zinc-100">{stats?.total_users || 0}</div>
-                        <p className="text-xs text-zinc-500">Включая владельцев и персонал</p>
-                    </CardContent>
-                </Card>
-
-                <Card className="bg-zinc-900 border-zinc-800">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium text-zinc-400">Подписки</CardTitle>
-                        <CreditCard className="h-4 w-4 text-green-500" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold text-zinc-100">{stats?.paid_subscriptions || 0}</div>
-                        <p className="text-xs text-zinc-500">{stats?.trial_subscriptions || 0} с временным доступом</p>
-                    </CardContent>
-                </Card>
-
-                <Card className="bg-zinc-900 border-zinc-800">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium text-zinc-400">MRR (Эстимейт)</CardTitle>
-                        <DollarSign className="h-4 w-4 text-yellow-500" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold text-zinc-100">
-                            {Number(stats?.estimated_mrr || 0).toLocaleString('ru-RU')} ₽
-                        </div>
-                        <p className="text-xs text-zinc-500">На основе активных тарифов</p>
-                    </CardContent>
-                </Card>
+function Stat({
+    label,
+    value,
+    hint,
+    icon,
+}: {
+    label: string
+    value: ReactNode
+    hint?: string
+    icon?: ReactNode
+}) {
+    return (
+        <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
+            <div className="flex items-start justify-between gap-4">
+                <div className="space-y-1">
+                    <div className="text-xs font-medium tracking-wide text-zinc-400 uppercase">{label}</div>
+                    <div className="text-3xl font-semibold tracking-tight text-white">{value}</div>
+                    {hint ? <div className="text-xs text-zinc-500">{hint}</div> : null}
+                </div>
+                {icon ? <div className="h-9 w-9 rounded-lg bg-red-500/10 flex items-center justify-center">{icon}</div> : null}
             </div>
         </div>
     )

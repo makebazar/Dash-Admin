@@ -1,0 +1,50 @@
+{
+  "name": "dashadmin-agent",
+  "version": "1.0.0",
+  "description": "DashAdmin telemetry agent",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win",
+    "build:dir": "electron-builder --win --dir"
+  },
+  "build": {
+    "appId": "ru.dashadmin.agent",
+    "productName": "DashAdmin Agent",
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "icons/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "icons/icon.ico",
+      "uninstallerIcon": "icons/icon.ico"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "index.html",
+      "renderer.js",
+      "icons/**"
+    ]
+  },
+  "dependencies": {
+    "electron-log": "^5.1.1",
+    "systeminformation": "^5.21.24"
+  },
+  "devDependencies": {
+    "electron": "^28.1.0",
+    "electron-builder": "^24.9.1"
+  },
+  "author": "DashAdmin",
+  "license": "MIT"
+}

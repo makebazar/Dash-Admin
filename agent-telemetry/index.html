@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DashAdmin Agent</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { 
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; 
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); 
+  color: #eee; 
+  min-height: 100vh; 
+  padding: 20px; 
+}
+.container { max-width: 500px; margin: 0 auto; }
+h1 { text-align: center; margin-bottom: 30px; color: #fff; font-size: 24px; }
+.card { 
+  background: rgba(255,255,255,0.1); 
+  backdrop-filter: blur(10px); 
+  border-radius: 16px; 
+  padding: 24px; 
+  margin-bottom: 16px; 
+  border: 1px solid rgba(255,255,255,0.1); 
+}
+.card-title { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: #888; margin-bottom: 16px; }
+.status { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.status-dot { width: 12px; height: 12px; border-radius: 50%; animation: pulse 2s infinite; }
+.status-dot.online { background: #4ade80; box-shadow: 0 0 10px #4ade80; }
+.status-dot.offline { background: #666; }
+.status-dot.error { background: #f87171; box-shadow: 0 0 10px #f87171; animation: none; }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+.status-text { font-size: 16px; font-weight: 500; }
+.row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.1); }
+.row:last-child { border-bottom: none; }
+.row-label { color: #888; }
+.row-value { font-weight: 500; }
+.temp-good { color: #4ade80; }
+.temp-warn { color: #fbbf24; }
+.temp-hot { color: #f87171; }
+.progress { height: 8px; background: rgba(255,255,255,0.1); border-radius: 4px; margin-top: 8px; overflow: hidden; }
+.progress-bar { height: 100%; border-radius: 4px; transition: width 0.3s; background: linear-gradient(90deg, #3b82f6, #8b5cf6); }
+.input { 
+  background: rgba(255,255,255,0.1); 
+  border: 1px solid rgba(255,255,255,0.2); 
+  border-radius: 8px; 
+  padding: 14px; 
+  color: #fff; 
+  width: 100%; 
+  font-size: 16px; 
+  margin-bottom: 12px; 
+}
+.input:focus { outline: none; border-color: #3b82f6; }
+.input::placeholder { color: #666; }
+.btn { 
+  background: linear-gradient(135deg, #3b82f6, #6366f1); 
+  color: white; 
+  border: none; 
+  padding: 14px 24px; 
+  border-radius: 8px; 
+  font-size: 14px; 
+  font-weight: 500; 
+  cursor: pointer; 
+  width: 100%; 
+  transition: transform 0.2s, box-shadow 0.2s; 
+}
+.btn:hover { transform: translateY(-2px); box-shadow: 0 4px 20px rgba(59,130,246,0.4); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+.btn-danger { background: linear-gradient(135deg, #ef4444, #dc2626); }
+.btn-ghost { background: transparent; border: 1px solid rgba(255,255,255,0.2); margin-top: 8px; }
+.error-msg { color: #f87171; font-size: 12px; margin-top: 8px; text-align: center; }
+.hidden { display: none !important; }
+.info { font-size: 11px; color: #666; text-align: center; margin-top: 16px; }
+.minimize-hint { font-size: 11px; color: #666; text-align: center; margin-top: 8px; }
+</style>
+</head>
+<body>
+<div class="container">
+<h1>🖥️ DashAdmin Agent</h1>
+
+<div id="statusCard" class="card">
+  <div class="card-title">Подключение</div>
+  <div class="status">
+    <div id="statusDot" class="status-dot offline"></div>
+    <div id="statusText" class="status-text">Не подключен</div>
+  </div>
+  <div id="workstationInfo" class="hidden">
+    <div class="row"><span class="row-label">Рабочее место</span><span id="wsName" class="row-value">-</span></div>
+    <div class="row"><span class="row-label">Hostname</span><span id="hostname" class="row-value">-</span></div>
+  </div>
+</div>
+
+<div id="bindCard" class="card">
+  <div class="card-title">Привязка к серверу</div>
+  <input type="text" id="codeInput" class="input" placeholder="Введите 6-значный код" maxlength="6">
+  <button id="bindBtn" class="btn" onclick="bind()">Подключить</button>
+  <div id="errorMsg" class="error-msg hidden"></div>
+  <div class="info">Код можно получить в карточке рабочего места в DashAdmin</div>
+</div>
+
+<div id="mainCard" class="card hidden">
+  <div class="card-title">Процессор</div>
+  <div class="row"><span class="row-label">Модель</span><span id="cpuModel" class="row-value">-</span></div>
+  <div class="row"><span class="row-label">Ядра</span><span id="cpuCores" class="row-value">-</span></div>
+  <div class="row"><span class="row-label">Температура</span><span id="cpuTemp" class="row-value">-</span></div>
+  <div class="row"><span class="row-label">Нагрузка</span><span id="cpuUsage" class="row-value">-</span></div>
+  <div class="progress"><div id="cpuBar" class="progress-bar" style="width: 0%"></div></div>
+  
+  <div id="gpuSection" class="hidden" style="margin-top: 16px;">
+    <div class="card-title">Видеокарта</div>
+    <div class="row"><span class="row-label">Название</span><span id="gpuName" class="row-value">-</span></div>
+    <div class="row"><span class="row-label">Температура</span><span id="gpuTemp" class="row-value">-</span></div>
+    <div class="row"><span class="row-label">Память</span><span id="gpuMem" class="row-value">-</span></div>
+  </div>
+  
+  <button id="unbindBtn" class="btn btn-danger btn-ghost" onclick="unbind()">Отвязать</button>
+</div>
+
+<div class="minimize-hint">Закройте окно чтобы свернуть в трей</div>
+</div>
+
+<script src="renderer.js"></script>
+</body>
+</html>

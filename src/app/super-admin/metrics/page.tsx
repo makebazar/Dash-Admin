@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Plus, Database, DollarSign, FileText, ToggleLeft } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
+import { SuperAdminPage } from "../_components/page-shell"
 
 interface Metric {
     id: number
@@ -63,13 +64,10 @@ export default function MetricsPage() {
     }
 
     return (
-        <div className="p-8 max-w-6xl mx-auto">
-            <div className="flex justify-between items-center mb-8">
-                <div>
-                    <h1 className="text-3xl font-bold tracking-tight text-white">System Metrics</h1>
-                    <p className="text-zinc-400">Глобальный справочник переменных для отчетов</p>
-                </div>
-
+        <SuperAdminPage
+            title="Метрики"
+            description="Глобальный справочник переменных для отчетов"
+            actions={
                 <Dialog open={isOpen} onOpenChange={setIsOpen}>
                     <DialogTrigger asChild>
                         <Button className="bg-red-600 hover:bg-red-700 text-white">
@@ -121,8 +119,8 @@ export default function MetricsPage() {
                         </div>
                     </DialogContent>
                 </Dialog>
-            </div>
-
+            }
+        >
             <div className="grid gap-4">
                 {metrics.map((metric) => (
                     <Card key={metric.id} className="bg-zinc-900 border-zinc-800">
@@ -150,6 +148,6 @@ export default function MetricsPage() {
                     </Card>
                 ))}
             </div>
-        </div>
+        </SuperAdminPage>
     )
 }

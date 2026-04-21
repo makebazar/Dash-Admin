@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 import { Headphones, Loader2, MessageSquare, Search, Send, ShieldCheck, UserRound } from "lucide-react"
+import { SuperAdminPage } from "../_components/page-shell"
 
 type SupportTicket = {
   id: number
@@ -217,19 +218,16 @@ export default function SuperAdminSupportPage() {
   const guestCount = tickets.filter((ticket) => !ticket.user_id).length
 
   return (
-    <div className="p-8 space-y-8 text-white">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Поддержка</h1>
-          <p className="mt-2 text-sm text-zinc-400">
-            Все обращения сайта: гости, владельцы клубов и пользователи внутри кабинетов
-          </p>
-        </div>
+    <SuperAdminPage
+      title="Поддержка"
+      description="Все обращения сайта: гости, владельцы клубов и пользователи внутри кабинетов"
+      actions={
         <div className="inline-flex items-center gap-2 rounded-full border border-red-500/20 bg-red-500/10 px-3 py-1 text-sm text-red-200">
           <Headphones className="h-4 w-4" />
           Очередь super admin
         </div>
-      </div>
+      }
+    >
 
       {error ? (
         <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">
@@ -424,7 +422,7 @@ export default function SuperAdminSupportPage() {
           </CardContent>
         </Card>
       </div>
-    </div>
+    </SuperAdminPage>
   )
 }
 

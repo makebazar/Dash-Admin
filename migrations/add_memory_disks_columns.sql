@@ -1,0 +1,3 @@
+ALTER TABLE agent_telemetry
+  ADD COLUMN IF NOT EXISTS memory JSONB,
+  ADD COLUMN IF NOT EXISTS disks JSONB;

@@ -23,84 +23,44 @@ async function ensureSuperAdmin() {
 }
 
 async function ensurePlansTable() {
+    // Основная таблица планов
     await query(`
         CREATE TABLE IF NOT EXISTS subscription_plans (
             id SERIAL PRIMARY KEY,
             code VARCHAR(100) NOT NULL UNIQUE,
             name VARCHAR(255) NOT NULL,
+            tagline VARCHAR(255),
+            description TEXT,
             price_amount DECIMAL(12, 2) NOT NULL DEFAULT 0,
+            price_per_extra_club DECIMAL(12, 2) NOT NULL DEFAULT 0,
             period_unit VARCHAR(20) NOT NULL DEFAULT 'month',
             period_value INTEGER NOT NULL DEFAULT 1,
+            grace_period_days INTEGER NOT NULL DEFAULT 7,
+            display_order INTEGER NOT NULL DEFAULT 100,
             is_active BOOLEAN NOT NULL DEFAULT TRUE,
             created_at TIMESTAMP DEFAULT NOW(),
             updated_at TIMESTAMP DEFAULT NOW()
         )
     `);
 
-    await query(`CREATE INDEX IF NOT EXISTS idx_subscription_plans_active ON subscription_plans(is_active, created_at DESC)`);
+    await query(`CREATE INDEX IF NOT EXISTS idx_subscription_plans_active ON subscription_plans(is_active, display_order ASC)`);
+
+    // Добавляем поля если их нет (для существующих инсталляций)
     await query(`ALTER TABLE subscription_plans ADD COLUMN IF NOT EXISTS tagline VARCHAR(255)`);
     await query(`ALTER TABLE subscription_plans ADD COLUMN IF NOT EXISTS description TEXT`);
-    await query(`ALTER TABLE subscription_plans ADD COLUMN IF NOT EXISTS features JSONB NOT NULL DEFAULT '[]'::jsonb`);
-    await query(`ALTER TABLE subscription_plans ADD COLUMN IF NOT EXISTS badge_text VARCHAR(100)`);
-    await query(`ALTER TABLE subscription_plans ADD COLUMN IF NOT EXISTS badge_tone VARCHAR(30) NOT NULL DEFAULT 'default'`);
-    await query(`ALTER TABLE subscription_plans ADD COLUMN IF NOT EXISTS cta_text VARCHAR(100)`);
-    await query(`ALTER TABLE subscription_plans ADD COLUMN IF NOT EXISTS card_theme VARCHAR(30) NOT NULL DEFAULT 'light'`);
+    await query(`ALTER TABLE subscription_plans ADD COLUMN IF NOT EXISTS price_per_extra_club DECIMAL(12, 2) NOT NULL DEFAULT 0`);
+    await query(`ALTER TABLE subscription_plans ADD COLUMN IF NOT EXISTS grace_period_days INTEGER NOT NULL DEFAULT 7`);
     await query(`ALTER TABLE subscription_plans ADD COLUMN IF NOT EXISTS display_order INTEGER NOT NULL DEFAULT 100`);
-    await query(`ALTER TABLE subscription_plans ADD COLUMN IF NOT EXISTS is_highlighted BOOLEAN NOT NULL DEFAULT FALSE`);
+
+    // Дефолтные тарифы
     await query(
-        `INSERT INTO subscription_plans (code, name, tagline, description, features, badge_text, badge_tone, cta_text, card_theme, display_order, is_highlighted, price_amount, period_unit, period_value, is_active)
+        `INSERT INTO subscription_plans (code, name, tagline, description, price_amount, price_per_extra_club, period_unit, period_value, grace_period_days, display_order, is_active)
          VALUES
-            ('new_user', 'Бесплатно', '14 дней доступа', 'Подходит для быстрого старта нового клуба', '["До 1 клуба","До 3 сотрудников в клубе","Базовый доступ"]'::jsonb, 'Старт', 'info', 'Начать бесплатно', 'light', 10, FALSE, 0, 'day', 14, TRUE),
-            ('starter', 'Стартовый', 'Для небольшого клуба', 'Оптимальный тариф для стабильной работы', '["До 1 клуба","До 15 сотрудников в клубе","Базовая аналитика"]'::jsonb, NULL, 'default', 'Выбрать Стартовый', 'light', 20, FALSE, 2900, 'month', 1, TRUE),
-            ('pro', 'Про', 'Для роста сети', 'Расширенные лимиты и аналитика', '["До 3 клубов","До 50 сотрудников в клубе","Продвинутая аналитика"]'::jsonb, 'Популярный', 'success', 'Перейти на Про', 'dark', 30, TRUE, 7900, 'month', 1, TRUE),
-            ('enterprise', 'Энтерпрайз', 'Без ограничений', 'Максимальные возможности для сети клубов', '["Безлимит клубов","Безлимит сотрудников","Приоритетная поддержка"]'::jsonb, 'Максимум', 'warning', 'Связаться с нами', 'accent', 40, FALSE, 19900, 'month', 1, TRUE)
+            ('starter', 'Стандарт', 'Для первого клуба', 'Всё включено: сотрудники, смены, зарплаты, аналитика', 2900, 1500, 'month', 1, 7, 10, TRUE),
+            ('annual', 'Годовой', 'Выгоднее на 20%', 'Оплата за год вперёд', 27840, 14400, 'year', 1, 14, 20, TRUE)
          ON CONFLICT (code) DO NOTHING`
     );
-    await query(
-        `UPDATE subscription_plans
-         SET name = 'Бесплатно',
-             tagline = '14 дней доступа',
-             price_amount = 0,
-             period_unit = 'day',
-             period_value = 14,
-             is_active = TRUE,
-             updated_at = NOW()
-         WHERE code = 'new_user'`
-    );
-    await query(`UPDATE subscription_plans SET is_active = FALSE, updated_at = NOW() WHERE code = 'trial'`);
 }
-
-const normalizePeriodUnit = (value: string | null | undefined) => {
-    if (value === 'day' || value === 'month' || value === 'year') return value;
-    return 'month';
-};
-
-const normalizeTone = (value: string | null | undefined) => {
-    if (value === 'default' || value === 'info' || value === 'success' || value === 'warning' || value === 'danger') return value;
-    return 'default';
-};
-
-const normalizeTheme = (value: string | null | undefined) => {
-    if (value === 'light' || value === 'dark' || value === 'accent') return value;
-    return 'light';
-};
-
-const normalizeFeatures = (value: unknown) => {
-    if (Array.isArray(value)) {
-        return value.map(item => String(item).trim()).filter(Boolean);
-    }
-    if (typeof value === 'string') {
-        try {
-            const parsed = JSON.parse(value);
-            if (Array.isArray(parsed)) {
-                return parsed.map(item => String(item).trim()).filter(Boolean);
-            }
-        } catch {
-            return value.split('\n').map(item => item.trim()).filter(Boolean);
-        }
-    }
-    return [];
-};
 
 export async function GET() {
     try {
@@ -109,7 +69,7 @@ export async function GET() {
         await ensurePlansTable();
 
         const result = await query(
-            `SELECT id, code, name, tagline, description, features, badge_text, badge_tone, cta_text, card_theme, display_order, is_highlighted, price_amount, period_unit, period_value, is_active, created_at, updated_at
+            `SELECT id, code, name, tagline, description, price_amount, price_per_extra_club, period_unit, period_value, grace_period_days, display_order, is_active, created_at, updated_at
              FROM subscription_plans
              ORDER BY display_order ASC, created_at DESC`
         );
@@ -130,18 +90,15 @@ export async function POST(request: Request) {
         const body = await request.json();
         const code = String(body.code || '').trim().toLowerCase();
         const name = String(body.name || '').trim();
-        const priceAmount = Number(body.price_amount);
-        const periodUnit = normalizePeriodUnit(body.period_unit);
-        const periodValue = Number(body.period_value);
         const tagline = body.tagline ? String(body.tagline).trim() : null;
         const description = body.description ? String(body.description).trim() : null;
-        const features = normalizeFeatures(body.features);
-        const badgeText = body.badge_text ? String(body.badge_text).trim() : null;
-        const badgeTone = normalizeTone(body.badge_tone);
-        const ctaText = body.cta_text ? String(body.cta_text).trim() : null;
-        const cardTheme = normalizeTheme(body.card_theme);
-        const displayOrder = Number(body.display_order ?? 100);
-        const isHighlighted = Boolean(body.is_highlighted);
+        const priceAmount = Number(body.price_amount || 0);
+        const pricePerExtraClub = Number(body.price_per_extra_club || 0);
+        const periodUnit = body.period_unit === 'year' ? 'year' : 'month';
+        const periodValue = Number(body.period_value || 1);
+        const gracePeriodDays = Number(body.grace_period_days || 7);
+        const displayOrder = Number(body.display_order || 100);
+        const isActive = body.is_active !== false;
 
         if (!code || !name) {
             return NextResponse.json({ error: 'Code and name are required' }, { status: 400 });
@@ -149,18 +106,12 @@ export async function POST(request: Request) {
         if (Number.isNaN(priceAmount) || priceAmount < 0) {
             return NextResponse.json({ error: 'Invalid price amount' }, { status: 400 });
         }
-        if (!Number.isInteger(periodValue) || periodValue <= 0) {
-            return NextResponse.json({ error: 'Invalid period value' }, { status: 400 });
-        }
-        if (!Number.isInteger(displayOrder) || displayOrder < 0) {
-            return NextResponse.json({ error: 'Invalid display order' }, { status: 400 });
-        }
 
         const result = await query(
-            `INSERT INTO subscription_plans (code, name, tagline, description, features, badge_text, badge_tone, cta_text, card_theme, display_order, is_highlighted, price_amount, period_unit, period_value, is_active, updated_at)
-             VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9, $10, $11, $12, $13, $14, COALESCE($15, TRUE), NOW())
-             RETURNING id, code, name, tagline, description, features, badge_text, badge_tone, cta_text, card_theme, display_order, is_highlighted, price_amount, period_unit, period_value, is_active, created_at, updated_at`,
-            [code, name, tagline, description, JSON.stringify(features), badgeText, badgeTone, ctaText, cardTheme, displayOrder, isHighlighted, priceAmount, periodUnit, periodValue, body.is_active]
+            `INSERT INTO subscription_plans (code, name, tagline, description, price_amount, price_per_extra_club, period_unit, period_value, grace_period_days, display_order, is_active, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW())
+             RETURNING id, code, name, tagline, description, price_amount, price_per_extra_club, period_unit, period_value, grace_period_days, display_order, is_active, created_at, updated_at`,
+            [code, name, tagline, description, priceAmount, pricePerExtraClub, periodUnit, periodValue, gracePeriodDays, displayOrder, isActive]
         );
 
         return NextResponse.json({ plan: result.rows[0] });
@@ -187,31 +138,18 @@ export async function PATCH(request: Request) {
 
         const code = String(body.code || '').trim().toLowerCase();
         const name = String(body.name || '').trim();
-        const priceAmount = Number(body.price_amount);
-        const periodUnit = normalizePeriodUnit(body.period_unit);
-        const periodValue = Number(body.period_value);
-        const isActive = Boolean(body.is_active);
         const tagline = body.tagline ? String(body.tagline).trim() : null;
         const description = body.description ? String(body.description).trim() : null;
-        const features = normalizeFeatures(body.features);
-        const badgeText = body.badge_text ? String(body.badge_text).trim() : null;
-        const badgeTone = normalizeTone(body.badge_tone);
-        const ctaText = body.cta_text ? String(body.cta_text).trim() : null;
-        const cardTheme = normalizeTheme(body.card_theme);
-        const displayOrder = Number(body.display_order ?? 100);
-        const isHighlighted = Boolean(body.is_highlighted);
+        const priceAmount = Number(body.price_amount || 0);
+        const pricePerExtraClub = Number(body.price_per_extra_club || 0);
+        const periodUnit = body.period_unit === 'year' ? 'year' : 'month';
+        const periodValue = Number(body.period_value || 1);
+        const gracePeriodDays = Number(body.grace_period_days || 7);
+        const displayOrder = Number(body.display_order || 100);
+        const isActive = body.is_active !== false;
 
         if (!code || !name) {
             return NextResponse.json({ error: 'Code and name are required' }, { status: 400 });
-        }
-        if (Number.isNaN(priceAmount) || priceAmount < 0) {
-            return NextResponse.json({ error: 'Invalid price amount' }, { status: 400 });
-        }
-        if (!Number.isInteger(periodValue) || periodValue <= 0) {
-            return NextResponse.json({ error: 'Invalid period value' }, { status: 400 });
-        }
-        if (!Number.isInteger(displayOrder) || displayOrder < 0) {
-            return NextResponse.json({ error: 'Invalid display order' }, { status: 400 });
         }
 
         const result = await query(
@@ -220,21 +158,17 @@ export async function PATCH(request: Request) {
                  name = $2,
                  tagline = $3,
                  description = $4,
-                 features = $5::jsonb,
-                 badge_text = $6,
-                 badge_tone = $7,
-                 cta_text = $8,
-                 card_theme = $9,
+                 price_amount = $5,
+                 price_per_extra_club = $6,
+                 period_unit = $7,
+                 period_value = $8,
+                 grace_period_days = $9,
                  display_order = $10,
-                 is_highlighted = $11,
-                 price_amount = $12,
-                 period_unit = $13,
-                 period_value = $14,
-                 is_active = $15,
+                 is_active = $11,
                  updated_at = NOW()
-             WHERE id = $16
-             RETURNING id, code, name, tagline, description, features, badge_text, badge_tone, cta_text, card_theme, display_order, is_highlighted, price_amount, period_unit, period_value, is_active, created_at, updated_at`,
-            [code, name, tagline, description, JSON.stringify(features), badgeText, badgeTone, ctaText, cardTheme, displayOrder, isHighlighted, priceAmount, periodUnit, periodValue, isActive, id]
+             WHERE id = $12
+             RETURNING id, code, name, tagline, description, price_amount, price_per_extra_club, period_unit, period_value, grace_period_days, display_order, is_active, created_at, updated_at`,
+            [code, name, tagline, description, priceAmount, pricePerExtraClub, periodUnit, periodValue, gracePeriodDays, displayOrder, isActive, id]
         );
 
         if (result.rowCount === 0) {

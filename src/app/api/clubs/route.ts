@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/db';
 import { cookies } from 'next/headers';
-import { canCreateMoreClubs, normalizeSubscriptionPlan, normalizeSubscriptionStatus, resolveSubscriptionState } from '@/lib/subscriptions';
+import { normalizeSubscriptionPlan, normalizeSubscriptionStatus, resolveSubscriptionState } from '@/lib/subscriptions';
 import { hasColumn } from '@/lib/db-compat';
 
 const isUuid = (value: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
@@ -152,14 +152,6 @@ export async function POST(request: Request) {
             );
         }
 
-        const clubsLimitCheck = canCreateMoreClubs(ownedClubs, planToApply);
-        if (!clubsLimitCheck.allowed) {
-            return NextResponse.json(
-                { error: `Лимит тарифа: максимум ${clubsLimitCheck.limit} клуб(а/ов).` },
-                { status: 403 }
-            );
-        }
-
         if (owner.subscription_plan !== planToApply || owner.subscription_status !== statusToApply || owner.subscription_ends_at !== endsAtToApply) {
             const setParts: string[] = []
             const params: any[] = []
@@ -192,7 +184,7 @@ export async function POST(request: Request) {
 
             if (hasSubscriptionCanceledAt) {
                 if (statusParamIndex !== null) {
-                    setParts.push(`subscription_canceled_at = CASE WHEN $${statusParamIndex} = 'canceled' THEN NOW() ELSE NULL END`)
+                    setParts.push(`subscription_canceled_at = CASE WHEN $${statusParamIndex}::varchar = 'canceled' THEN NOW() ELSE NULL END`)
                 } else {
                     setParts.push(`subscription_canceled_at = NULL`)
                 }

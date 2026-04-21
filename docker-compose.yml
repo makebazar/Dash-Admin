@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: dashadmin-mqtt
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./mosquitto/config:/mosquitto/config
+      - ./mosquitto/data:/mosquitto/data
+      - ./mosquitto/log:/mosquitto/log
+    environment:
+      - MQTT_USERNAME=${MQTT_USERNAME:-dashadmin}
+      - MQTT_PASSWORD=${MQTT_PASSWORD:-changeme}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mosquitto_sub", "-t", "$$SYS/#", "-C", "1", "-i", "healthcheck", "-W", "3"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  mqtt-consumer:
+    build:
+      context: ./mqtt-consumer
+      dockerfile: Dockerfile
+    container_name: dashadmin-mqtt-consumer
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - MQTT_BROKER_URL=mqtt://mosquitto:1883
+      - MQTT_USERNAME=${MQTT_USERNAME:-dashadmin}
+      - MQTT_PASSWORD=${MQTT_PASSWORD:-changeme}
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Next.js app (если нужен полный стек)
+  # app:
+  #   build: .
+  #   ports:
+  #     - "3000:3000"
+  #   environment:
+  #     - DATABASE_URL=${DATABASE_URL}
+  #   depends_on:
+  #     - mosquitto
+  #   restart: unless-stopped

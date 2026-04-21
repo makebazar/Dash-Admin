@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { query } from '@/db';
 import { cookies } from 'next/headers';
 import { normalizePhone } from '@/lib/phone-utils';
-import { canAddMoreEmployeesToClub, resolveSubscriptionState } from '@/lib/subscriptions';
+import { resolveSubscriptionState } from '@/lib/subscriptions';
 import { hasColumn } from '@/lib/db-compat';
 import { ensureOwnerSubscriptionActive } from '@/lib/club-subscription-guard';
 import { requireClubFullAccess } from '@/lib/club-api-access';
@@ -237,26 +237,6 @@ export async function POST(
             `SELECT 1 FROM club_employees WHERE club_id = $1 AND user_id = $2`,
             [clubId, employeeId]
         );
-
-        if (memberExistsResult.rowCount === 0) {
-            const employeeCountResult = await query(
-                `SELECT COUNT(*)::integer as total
-                 FROM club_employees
-                 WHERE club_id = $1
-                   AND is_active = TRUE
-                   AND dismissed_at IS NULL`,
-                [clubId]
-            );
-            const currentCount = Number(employeeCountResult.rows[0]?.total || 0);
-            const employeesLimitCheck = canAddMoreEmployeesToClub(currentCount, ownerSubscription.subscription_plan);
-
-            if (!employeesLimitCheck.allowed) {
-                return NextResponse.json(
-                    { error: `Лимит тарифа: максимум ${employeesLimitCheck.limit} сотрудник(а/ов) в клубе.` },
-                    { status: 403 }
-                );
-            }
-        }
 
         // Add to club_employees with role
         console.log('[API] Adding to club_employees. Club:', clubId, 'User:', employeeId, 'Role:', roleName);

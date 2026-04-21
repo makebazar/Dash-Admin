@@ -183,14 +183,7 @@ export async function GET() {
                 legal_accepted_at: user.legal_accepted_at,
                 legal_acceptance_version: user.legal_acceptance_version,
                 legal_acceptance_required: legalAcceptanceRequired,
-                subscription_limits: {
-                    max_clubs: subscription.planDefinition.maxClubs,
-                    max_employees_per_club: subscription.planDefinition.maxEmployeesPerClub,
-                    price_monthly: subscription.planDefinition.priceMonthly,
-                    advanced_analytics: subscription.planDefinition.advancedAnalytics,
-                    inventory_lite: subscription.planDefinition.inventoryLite,
-                    priority_support: subscription.planDefinition.prioritySupport
-                }
+                subscription_limits: null, // Лимиты теперь не используются - всё включено
             },
             ownedClubs,
             employeeClubs,
