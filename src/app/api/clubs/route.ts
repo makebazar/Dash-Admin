@@ -4,6 +4,8 @@ import { cookies } from 'next/headers';
 import { canCreateMoreClubs, normalizeSubscriptionPlan, normalizeSubscriptionStatus, resolveSubscriptionState } from '@/lib/subscriptions';
 import { hasColumn } from '@/lib/db-compat';
 
+const isUuid = (value: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+
 export async function GET() {
     try {
         const userId = (await cookies()).get('session_user_id')?.value;
@@ -81,22 +83,36 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        const { name, address } = await request.json();
+        if (!isUuid(userId)) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
+        let body: any;
+        try {
+            body = await request.json();
+        } catch {
+            return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+        }
+
+        const { name, address } = body ?? {};
 
         if (!name || name.trim().length === 0) {
             return NextResponse.json({ error: 'Club name is required' }, { status: 400 });
         }
 
+        const hasSubscriptionPlan = await hasColumn('users', 'subscription_plan');
         const hasSubscriptionStatus = await hasColumn('users', 'subscription_status');
+        const hasSubscriptionStartedAt = await hasColumn('users', 'subscription_started_at');
+        const hasSubscriptionEndsAt = await hasColumn('users', 'subscription_ends_at');
         const hasSubscriptionCanceledAt = await hasColumn('users', 'subscription_canceled_at');
         const hasPublicId = await hasColumn('clubs', 'public_id');
 
         const ownerResult = await query(
             `SELECT 
                 u.id,
-                u.subscription_plan,
+                ${hasSubscriptionPlan ? 'u.subscription_plan' : "NULL::varchar as subscription_plan"},
                 ${hasSubscriptionStatus ? 'u.subscription_status' : "NULL::varchar as subscription_status"},
-                u.subscription_ends_at,
+                ${hasSubscriptionEndsAt ? 'u.subscription_ends_at' : "NULL::timestamp as subscription_ends_at"},
                 (
                     SELECT COUNT(*)
                     FROM clubs c
@@ -120,7 +136,7 @@ export async function POST(request: Request) {
         if (ownedClubs === 0) {
             planToApply = 'new_user';
             statusToApply = 'trialing';
-            endsAtToApply = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
+            endsAtToApply = hasSubscriptionEndsAt ? new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString() : null;
         }
 
         const subscriptionState = resolveSubscriptionState({
@@ -145,26 +161,51 @@ export async function POST(request: Request) {
         }
 
         if (owner.subscription_plan !== planToApply || owner.subscription_status !== statusToApply || owner.subscription_ends_at !== endsAtToApply) {
-            if (hasSubscriptionStatus && hasSubscriptionCanceledAt) {
+            const setParts: string[] = []
+            const params: any[] = []
+            let i = 1
+
+            let statusParamIndex: number | null = null
+
+            if (hasSubscriptionPlan) {
+                setParts.push(`subscription_plan = $${i}`)
+                params.push(planToApply)
+                i += 1
+            }
+
+            if (hasSubscriptionStatus) {
+                statusParamIndex = i
+                setParts.push(`subscription_status = $${i}`)
+                params.push(statusToApply)
+                i += 1
+            }
+
+            if (hasSubscriptionStartedAt) {
+                setParts.push(`subscription_started_at = COALESCE(subscription_started_at, NOW())`)
+            }
+
+            if (hasSubscriptionEndsAt) {
+                setParts.push(`subscription_ends_at = $${i}::timestamp`)
+                params.push(endsAtToApply)
+                i += 1
+            }
+
+            if (hasSubscriptionCanceledAt) {
+                if (statusParamIndex !== null) {
+                    setParts.push(`subscription_canceled_at = CASE WHEN $${statusParamIndex} = 'canceled' THEN NOW() ELSE NULL END`)
+                } else {
+                    setParts.push(`subscription_canceled_at = NULL`)
+                }
+            }
+
+            if (setParts.length > 0) {
+                params.push(userId)
                 await query(
                     `UPDATE users
-                     SET subscription_plan = $1,
-                         subscription_status = $2,
-                         subscription_started_at = COALESCE(subscription_started_at, NOW()),
-                         subscription_ends_at = $3::timestamp,
-                         subscription_canceled_at = CASE WHEN $2 = 'canceled' THEN NOW() ELSE NULL END
-                     WHERE id = $4`,
-                    [planToApply, statusToApply, endsAtToApply, userId]
-                );
-            } else {
-                await query(
-                    `UPDATE users
-                     SET subscription_plan = $1,
-                         subscription_started_at = COALESCE(subscription_started_at, NOW()),
-                         subscription_ends_at = $2::timestamp
-                     WHERE id = $3`,
-                    [planToApply, endsAtToApply, userId]
-                );
+                     SET ${setParts.join(', ')}
+                     WHERE id = $${i}`,
+                    params
+                )
             }
         }
 
@@ -177,7 +218,11 @@ export async function POST(request: Request) {
 
     } catch (error) {
         console.error('Create Club Error:', error);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+        const message = error instanceof Error ? error.message : 'Internal Server Error';
+        return NextResponse.json(
+            { error: process.env.NODE_ENV === 'production' ? 'Internal Server Error' : message },
+            { status: 500 }
+        );
     }
 }
 
